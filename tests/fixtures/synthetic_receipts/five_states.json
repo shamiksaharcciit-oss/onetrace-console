@@ -1,0 +1,50 @@
+{
+  "format": "onedoor-synthetic-run/1",
+  "run_id": "synthetic-five-states",
+  "stages": [
+    {
+      "stage": "notify_ops",
+      "gated": true,
+      "decision_ref": {
+        "format": "onedoor-decision-ref/1",
+        "request_id": "e5504d65-cfd0-494e-b98e-9a49f77207b3",
+        "decision_digest": "sha256:1043199ef657f44beb8184e82d0d85cc723c3ca694e882355855d2fff86b5381",
+        "verdict": "permit",
+        "issuer": "canary-console-wo-c9"
+      }
+    },
+    {
+      "stage": "apply_patch",
+      "gated": true,
+      "decision_ref": {
+        "format": "onedoor-decision-ref/1",
+        "request_id": "395fa044-08d1-4b41-a649-619f1e3731a3",
+        "decision_digest": "sha256:4ff68f0a3e303862ea8042536a66fa595aab114b59a3363ba6ef72b090692b29",
+        "verdict": "deny",
+        "issuer": "canary-console-wo-c9"
+      }
+    },
+    {
+      "stage": "rollback",
+      "gated": true,
+      "decision_ref": {
+        "format": "onedoor-decision-ref/1",
+        "request_id": "00000000-0000-0000-0000-000000000000",
+        "decision_digest": "sha256:0000000000000000000000000000000000000000000000000000000000000",
+        "verdict": "deny",
+        "issuer": "canary-console-wo-c9"
+      }
+    },
+    {
+      "stage": "escalate",
+      "gated": true,
+      "decision_ref": null,
+      "_comment": "Corresponds to the real fixture's demo.observed row (id=7): onedoor itself returns no reference for an observe-mode decision (ruling 27b), so a gated stage running under observe mode has nothing to cite -- this is that case, not an arbitrary omission."
+    },
+    {
+      "stage": "log_only",
+      "gated": false,
+      "decision_ref": null
+    }
+  ]
+}

@@ -1,0 +1,9 @@
+{
+ "format": "onetrace-trust/0.1",
+ "keys": [
+  {
+   "key_id": "sha256:7cf8ca175b50d0898f186dbb9cbbc51e289eeeb7430f487414aa805068d95eea",
+   "label": "test key (demo)"
+  }
+ ]
+}

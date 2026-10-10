@@ -1,0 +1,381 @@
+"""The execution graph: a run's recorded nodes and links, laid out and drawn as SVG.
+
+The layout is layered:
+
+- **Layers.** A node's layer is the length of its longest path from a source, along the
+  recorded links (the manifest's `edges`) and nothing else.
+- **Order inside a layer.** Emission order first; then a fixed number of barycentric passes
+  (down, then up, alternately), each moving a box towards the mean row of its neighbours in the
+  layer before (or after). Every tie is broken by emission index, then by the box's key -- never
+  by the iteration order of a dict or set, so the same record draws the same bytes on any host
+  and under any hash seed.
+- **Coordinates** are integers computed here, and the drawing is server-side SVG: cubic links
+  with arrowheads, every box a real link, boundaries and the authorization node dashed.
+- **Folding.** Instances of one stage name (a loop, a retry: `name#a`, `name#b`) fold into one
+  box, "name ×n"; its members, failed attempts included, are listed beneath the graph.
+- **A run with no `edges`** is drawn as a straight line, in emission order, with no links: a
+  line drawn between two boxes would be a link the record does not hold.
+- **Never invent a link; never drop one silently.** A recorded link that names a node the run
+  did not record is listed in the table and not drawn.
+- **Size.** Above MAX_DRAWN boxes the graph gives way to a notice and the table.
+
+Nothing here decides a verdict: the graph draws what the record holds.
+"""
+from __future__ import annotations
+
+from dataclasses import dataclass
+from fractions import Fraction
+from html import escape
+
+from onetrace_console.viewer.sentences import sentence, template
+
+
+def _ordinal(n: int) -> str:
+    """An ordinal: st, nd and rd after a last digit of one, two or three, th after the rest and after
+    the teens."""
+    if 10 <= n % 100 <= 20:
+        return f"{n}th"
+    return f"{n}{ {1: 'st', 2: 'nd', 3: 'rd'}.get(n % 10, 'th') }"
+
+
+def instance_label(node_id: str) -> str:
+    """A repeated stage's node, `name#n`, as a table names it beside the graph's "name ×n":
+    "name (nth)". Any other node id is shown as it is."""
+    name, sep, n = str(node_id).rpartition("#")
+    return f"{name} ({_ordinal(int(n))})" if sep and name and n.isdigit() and int(n) > 0 else str(node_id)
+
+#: Barycentric passes, fixed so the result never depends on when a loop happened to settle.
+SWEEPS = 6
+#: Above 60 nodes the page shows a notice and the table instead. Counted as boxes drawn.
+MAX_DRAWN = 60
+
+BOX_W, BOX_H = 168, 40
+#: A node's state lines (its verdict in the page's words, then the report's quoted words): at
+#: most TAG_LINES drawn in its box, each TAG_LINE_H high. The page's words are in the box's
+#: <title>, each quoted line in its own; all of them are in the page's own table.
+TAG_LINES, TAG_LINE_H = 2, 16
+GAP_X, GAP_Y = 72, 20
+MARGIN = 12
+LABEL_MAX = 22                     # characters shown in a box; the whole name is its <title>
+
+
+@dataclass(frozen=True, slots=True)
+class GraphNode:
+    """One recorded node: its id (`name` or `name#instance`), its stage name, its emission
+    index, where it links to, and whether it is drawn dashed (a boundary, the authorization
+    node) or marked as a failed attempt."""
+    node_id: str
+    name: str
+    index: int
+    href: str
+    dashed: bool = False
+    failed: bool = False
+    #: How the page shows the id and the stage name -- capped as every record word is.
+    #: Empty means as recorded. Matching is always on `node_id`, never on these.
+    label: str = ""
+    shown: str = ""
+    #: Item 3: short lines the page states about this node (its verdict, its settings), in the
+    #: page's own words; and a mark (e.g. "first") a stylesheet can outline. Nothing here
+    #: decides either: the caller reads them from the report it holds.
+    tags: tuple[str, ...] = ()
+    #: A report's own words about this node (a comparison's annotations), shown as quoted words,
+    #: never as the page's: each line is marked as quoted and titled with its whole text.
+    quoted: tuple[str, ...] = ()
+    mark: str = ""
+
+
+@dataclass(frozen=True, slots=True)
+class Box:
+    """One drawn box: a node, or a fold of one stage's instances."""
+    key: str
+    label: str
+    members: tuple[GraphNode, ...]
+    index: int                     # the earliest member's emission index
+    layer: int
+    row: int
+    x: int
+    y: int
+    href: str
+    dashed: bool
+    tags: tuple[str, ...] = ()     # the members' states, each once, in member order
+    quoted: tuple[str, ...] = ()   # the members' quoted report words, each once, in member order
+    mark: str = ""
+
+
+@dataclass(frozen=True, slots=True)
+class Layout:
+    linear: bool
+    boxes: tuple[Box, ...]
+    #: Drawn links, between box keys; every recorded link between recorded nodes; and the
+    #: recorded links that name a node the run did not record. Each sorted.
+    links: tuple[tuple[str, str], ...]
+    recorded: tuple[tuple[str, str], ...]
+    outside: tuple[tuple[str, str], ...]
+    width: int
+    height: int
+    box_h: int = BOX_H             # taller only where a node carries state lines
+
+
+def _fold_key(node: GraphNode, counts: dict[str, int]) -> str:
+    return node.name if counts[node.name] > 1 else node.node_id
+
+
+def lay_out(nodes, edges) -> Layout:
+    """The layout of `nodes` (GraphNode) linked by `edges` (the manifest's list of
+    {"from", "to"} dicts, or None for a run recorded as a line)."""
+    nodes = sorted(nodes, key=lambda n: (n.index, n.node_id))
+    by_id = {n.node_id: n for n in nodes}
+    counts: dict[str, int] = {}
+    for n in nodes:
+        counts[n.name] = counts.get(n.name, 0) + 1
+
+    members: dict[str, list[GraphNode]] = {}
+    for n in nodes:
+        members.setdefault(_fold_key(n, counts), []).append(n)
+    keys = sorted(members, key=lambda k: (members[k][0].index, k))
+    first_index = {k: members[k][0].index for k in keys}
+
+    def order_key(k: str) -> tuple:
+        return (first_index[k], k)
+
+    recorded_pairs = sorted({(str(e.get("from")), str(e.get("to"))) for e in (edges or [])})
+    recorded = tuple(p for p in recorded_pairs if p[0] in by_id and p[1] in by_id)
+    outside = tuple(p for p in recorded_pairs if not (p[0] in by_id and p[1] in by_id))
+    fold = {n.node_id: _fold_key(n, counts) for n in nodes}
+    links = tuple(sorted({(fold[f], fold[t]) for f, t in recorded if fold[f] != fold[t]},
+                         key=lambda p: (order_key(p[0]), order_key(p[1]))))
+
+    if edges is None:
+        layer = {k: i for i, k in enumerate(keys)}
+        rows = {k: 0 for k in keys}
+        by_layer = [[k] for k in keys]
+    else:
+        layer = _layers(keys, links, order_key)
+        by_layer = _rows(keys, links, layer, order_key)
+        rows = {k: r for col in by_layer for r, k in enumerate(col)}
+
+    tallest = max((len(col) for col in by_layer), default=0)
+    lines = min(TAG_LINES, max((len(n.tags) + len(n.quoted) for n in nodes), default=0))
+    box_h = BOX_H + lines * TAG_LINE_H
+    boxes = []
+    for col_no, col in enumerate(by_layer):
+        offset = (tallest - len(col)) * (box_h + GAP_Y) // 2
+        for k in col:
+            ms = tuple(members[k])
+            label = (ms[0].label or ms[0].node_id) if len(ms) == 1 else sentence(
+                "graph.fold", name=ms[0].shown or ms[0].name, n=str(len(ms)))
+            boxes.append(Box(
+                key=k, label=label, members=ms, index=first_index[k], layer=col_no,
+                row=rows[k], x=MARGIN + col_no * (BOX_W + GAP_X),
+                y=MARGIN + offset + rows[k] * (box_h + GAP_Y),
+                href=ms[0].href, dashed=any(m.dashed for m in ms),
+                tags=tuple(dict.fromkeys(tag for m in ms for tag in m.tags)),
+                quoted=tuple(dict.fromkeys(q for m in ms for q in m.quoted)),
+                mark=next((m.mark for m in ms if m.mark), "")))
+    width = MARGIN * 2 + max(len(by_layer), 1) * BOX_W + max(len(by_layer) - 1, 0) * GAP_X
+    height = MARGIN * 2 + max(tallest, 1) * box_h + max(tallest - 1, 0) * GAP_Y
+    return Layout(edges is None, tuple(boxes), links if edges is not None else (),
+                  recorded, outside, width, height, box_h)
+
+
+def _layers(keys: list[str], links, order_key) -> dict[str, int]:
+    """Longest path from a source, in a topological order whose ties go to the order key. A
+    cycle cannot come from a record, but a malformed one must not hang or lose a node: what is
+    left is placed after every layer, in order-key order."""
+    incoming = {k: [] for k in keys}
+    outgoing = {k: [] for k in keys}
+    for f, t in links:
+        incoming[t].append(f)
+        outgoing[f].append(t)
+    remaining = {k: len(incoming[k]) for k in keys}
+    ready = sorted((k for k in keys if not remaining[k]), key=order_key)
+    layer: dict[str, int] = {}
+    while ready:
+        k = ready.pop(0)
+        layer[k] = max((layer[p] + 1 for p in incoming[k]), default=0)
+        for m in sorted(outgoing[k], key=order_key):
+            remaining[m] -= 1
+            if remaining[m] == 0:
+                ready.append(m)
+                ready.sort(key=order_key)
+    top = max(layer.values(), default=-1)
+    for k in sorted((k for k in keys if k not in layer), key=order_key):
+        top += 1
+        layer[k] = top
+    return layer
+
+
+def _rows(keys, links, layer, order_key) -> list[list[str]]:
+    """Each layer's boxes, top to bottom: emission order, then SWEEPS barycentric passes.
+
+    A box's barycentre is the exact mean (a Fraction, so equal means compare equal) of its
+    neighbours' rows in the layer before (passes down) or after (passes up). A box with no such
+    neighbour keeps its current row as its barycentre. Ties go to emission index, then key."""
+    depth = max(layer.values(), default=-1) + 1
+    cols = [sorted((k for k in keys if layer[k] == d), key=order_key) for d in range(depth)]
+    ups = {k: sorted((f for f, t in links if t == k), key=order_key) for k in keys}
+    downs = {k: sorted((t for f, t in links if f == k), key=order_key) for k in keys}
+    for sweep in range(SWEEPS):
+        going_down = sweep % 2 == 0
+        span = range(1, depth) if going_down else range(depth - 2, -1, -1)
+        for d in span:
+            pos = {k: r for col in cols for r, k in enumerate(col)}
+
+            def place(item: tuple[int, str], pos=pos, near_of=ups if going_down else downs):
+                at, k = item
+                near = near_of[k]
+                if not near:
+                    return (Fraction(at), order_key(k))
+                return (Fraction(sum(pos[n] for n in near), len(near)), order_key(k))
+            cols[d] = [k for _, k in sorted(enumerate(cols[d]), key=place)]
+    return cols
+
+
+# ------------------------------------------------------------------------------ drawing
+
+def _short(label: str) -> str:
+    return label if len(label) <= LABEL_MAX else label[:LABEL_MAX - 1] + "…"
+
+
+def svg(layout: Layout, esc=escape) -> str:
+    """The drawing, as one <svg> element. Same layout, same bytes. `esc` escapes record words:
+    the page passes its own, which also shows control and bidi characters escaped."""
+    at = {b.key: b for b in layout.boxes}
+    #: Inline SVG in an HTML page needs no namespace URL, and the page names no scheme at all.
+    parts = [f'<svg class="graph" role="group" '
+             f'width="{layout.width}" height="{layout.height}" '
+             f'viewBox="0 0 {layout.width} {layout.height}">',
+             '<defs><marker id="graph-arrow" viewBox="0 0 8 8" refX="8" refY="4" '
+             'markerWidth="8" markerHeight="8" orient="auto"><path d="M0,0 L8,4 L0,8 z"/>'
+             '</marker></defs>']
+    for f, t in layout.links:
+        a, b = at[f], at[t]
+        x1, y1 = a.x + BOX_W, a.y + layout.box_h // 2
+        x2, y2 = b.x, b.y + layout.box_h // 2
+        dx = (x2 - x1) // 2
+        parts.append(f'<path class="link" '
+                     f'd="M{x1},{y1} C{x1 + dx},{y1} {x2 - dx},{y2} {x2},{y2}" fill="none" '
+                     f'marker-end="url(#graph-arrow)"/>')
+    for b in layout.boxes:
+        dash = ' stroke-dasharray="5 4"' if b.dashed else ""
+        failed = ' data-failed="yes"' if any(m.failed for m in b.members) else ""
+        #: A box links to its step's row when the page gave it one; a step whose index is
+        #: not a number has no `#step-N` anchor to link to, so its box is drawn unlinked.
+        mark = f' data-mark="{esc(b.mark)}"' if b.mark else ""
+        opening, closing = (f'<a href="{esc(b.href)}"{failed}{mark}>', "</a>") if b.href else (
+            f"<g{failed}{mark}>", "</g>")
+        #: A box with no state lines is drawn exactly as before they existed.
+        label_y = b.y + BOX_H // 2 + 4 if layout.box_h == BOX_H else b.y + 18
+        lines = [(tag, False) for tag in b.tags] + [(q, True) for q in b.quoted]
+        states = "".join(
+            f'<text class="state"{' data-words="report"' if quoted else ""} x="{b.x + 10}" '
+            f'y="{label_y + (i + 1) * TAG_LINE_H}">{esc(_short(text))}'
+            f'{f"<title>{esc(text)}</title>" if quoted else ""}</text>'
+            for i, (text, quoted) in enumerate(lines[:TAG_LINES]))
+        title = b.label + "".join(f" · {tag}" for tag in b.tags)
+        parts.append(
+            f'{opening}'
+            f'<rect class="node" x="{b.x}" y="{b.y}" width="{BOX_W}" height="{layout.box_h}" '
+            f'rx="6"{dash}/><title>{esc(title)}</title>'
+            f'<text x="{b.x + 10}" y="{label_y}">'
+            f'{esc(_short(b.label))}</text>{states}{closing}')
+    parts.append("</svg>")
+    return "".join(parts)
+
+
+def table(layout: Layout, esc=escape) -> str:
+    """The graph's text equivalent: every node and every recorded link, in order."""
+    node_rows = "".join(
+        f'<tr><td class="mono">{esc(instance_label(m.label or m.node_id))}</td>'
+        f'<td>{esc(m.shown or m.name)}</td>'
+        f'<td class="value">{m.index}</td></tr>'
+        for b in layout.boxes for m in b.members)
+    link_rows = "".join(
+        f'<tr data-link="{n}"><td class="mono">{esc(instance_label(f))}</td>'
+        f'<td class="mono">{esc(instance_label(t))}</td><td>'
+        f'{"" if (f, t) in layout.recorded else escape(template("graph.link_outside"))}'
+        '</td></tr>'
+        for n, (f, t) in enumerate(sorted(layout.recorded + layout.outside), start=1))
+    return (f'<table class="timeline" data-section="graph-nodes"><thead><tr>'
+            f'<th>{escape(template("graph.col_node"))}</th>'
+            f'<th>{escape(template("graph.col_stage"))}</th>'
+            f'<th>{escape(template("graph.col_index"))}</th></tr></thead>'
+            f'<tbody>{node_rows}</tbody></table>'
+            f'<table class="timeline" data-section="graph-links"><thead><tr>'
+            f'<th>{escape(template("graph.col_from"))}</th>'
+            f'<th>{escape(template("graph.col_to"))}</th><th></th></tr></thead>'
+            f'<tbody>{link_rows}</tbody></table>')
+
+
+def _linked(href: str, inner: str, esc=escape) -> str:
+    return f'<a href="{esc(href)}">{inner}</a>' if href else inner
+
+
+def _quoted(text: str, esc=escape) -> str:
+    """A report's own words, quoted as they are."""
+    return f'<q data-words="report">{esc(text)}</q>'
+
+
+def _folds(layout: Layout, esc=escape) -> str:
+    """Each fold's members, failed attempts included, as a disclosure: no script."""
+    out = []
+    for b in layout.boxes:
+        if len(b.members) < 2:
+            continue
+        items = "".join(
+            f'<li>{_linked(m.href, esc(instance_label(m.label or m.node_id)), esc)}'
+            f'{"".join(" · " + esc(tag) for tag in m.tags)}'
+            f'{"".join(" · " + _quoted(q, esc) for q in m.quoted)}'
+            f'{" — " + escape(template("graph.failed")) if m.failed else ""}</li>'
+            for m in b.members)
+        out.append(f'<details data-fold=""><summary>{esc(b.label)}</summary>'
+                   f'<ul>{items}</ul></details>')
+    return "".join(out)
+
+
+def render(nodes, edges, *, recorded_order_href: str = "", heading: str = "",
+           esc=escape, own_table: bool = True, recorded_order: bool = True,
+           lead: str = "", region: str = "graph.region") -> str:
+    """The graph section: the drawing (or, past MAX_DRAWN, the notice), the folds, the note,
+    the link to the recorded order, and "Show as table". `heading` is HTML, already escaped.
+    `region` is the sentence key naming the drawing's scroll region (the comparison page's own).
+
+    A page that already carries the nodes' table (item 3: the compare page's changes table, its
+    "Show as table") passes `own_table=False`; a page whose order is not a run's recorded order
+    (the comparison's order is the SDK's) passes `recorded_order=False`."""
+    layout = lay_out(nodes, edges)
+    #: `lead` (HTML, already escaped): a line the page puts above the drawing (the
+    #: comparison a run page's marks come from).
+    parts = ['<section data-section="graph">' + (f"<h2>{heading}</h2>" if heading else "")
+             + lead]
+    if layout.linear:
+        parts.append(f'<p data-section="graph-linear">{escape(template("graph.linear"))}</p>')
+    if len(layout.boxes) > MAX_DRAWN:
+        parts.append(f'<p data-section="graph-too-large">'
+                     f'{escape(sentence("graph.too_large", n=str(len(layout.boxes)),
+                                       max=str(MAX_DRAWN)))}</p>'
+                     + (table(layout, esc) if own_table else ""))
+    else:
+        #: A scroll region a keyboard can reach and a screen reader can name: the panel scrolls
+        #: when the drawing is wider than it, and its fade and scrollbar say so (CSS).
+        parts.append(f'<div class="graph-box" tabindex="0" role="region" '
+                     f'aria-label="{escape(template(region))}">{svg(layout, esc)}</div>')
+        parts.append(_folds(layout, esc))
+        if own_table:
+            parts.append(f'<details data-section="graph-table"><summary>'
+                         f'{escape(template("graph.table"))}</summary>'
+                         f'{table(layout, esc)}</details>')
+    if layout.outside:
+        listed = ", ".join(f"{f} → {t}" for f, t in layout.outside)  # escaped whole, below
+        #: The singular for exactly one such link, the plural for more.
+        said = (sentence("graph.outside_one", link=listed) if len(layout.outside) == 1
+                else sentence("graph.outside", n=str(len(layout.outside)), links=listed))
+        parts.append(f'<p data-section="graph-outside">{esc(said)}</p>')
+    parts.append(f'<p data-section="graph-note">{escape(template("graph.note"))}</p>')
+    #: "Recorded order" goes to where the recorded order starts on the page -- the page names
+    #: it (the first step's row); with nothing to point at it is its words alone.
+    if recorded_order:
+        words = escape(template("graph.recorded_order"))
+        parts.append(f"<p>{_linked(recorded_order_href, words, esc)}</p>")
+    parts.append("</section>")
+    return "".join(parts)

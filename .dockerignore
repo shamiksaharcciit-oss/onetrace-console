@@ -1,0 +1,14 @@
+# The build context is exactly what the Dockerfiles' COPY lines read, and nothing else: everything
+# is left out, then each COPY source of every Dockerfile in the repository is let back in.
+# tests/test_dockerignore.py parses every Dockerfile and fails if a COPY source is left out here.
+*
+!requirements.lock
+!tools/install_pinned.py
+!src/
+!LICENSE
+!config/container.json
+!deploy/fly/public.json
+# Byte-code and an editable install's metadata are never part of an image, even inside src/.
+**/__pycache__/
+**/*.pyc
+**/*.egg-info/

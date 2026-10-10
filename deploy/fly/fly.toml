@@ -1,0 +1,29 @@
+# The hosted read-only demo of onetrace-console on Fly.io.
+#
+# No app name, region, organisation, token or domain is committed here: the operator names the
+# app on their own machine when deploying (deploy/fly/README.md). The image is
+# deploy/fly/Dockerfile, built from the repository root.
+
+[http_service]
+  # The port deploy/fly/public.json listens on, inside the machine.
+  internal_port = 8080
+  force_https = true
+
+  # Cost: an idle machine stops, and the next request starts it again. Nothing is computed at
+  # start, so a cold start costs a moment, not a re-check. To keep one machine always on instead,
+  # set auto_stop_machines = "off" and min_machines_running = 1.
+  auto_stop_machines = "stop"
+  auto_start_machines = true
+  min_machines_running = 0
+
+  [http_service.concurrency]
+    type = "requests"
+    soft_limit = 20
+    hard_limit = 50
+
+  [[http_service.checks]]
+    method = "GET"
+    path = "/health"
+    interval = "30s"
+    timeout = "5s"
+    grace_period = "10s"

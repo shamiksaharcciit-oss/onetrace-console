@@ -1,0 +1,32 @@
+# The runtime store: received run bundles and the reports over them. Never tracked —
+# this repository is code, and a stored run belongs to whoever ran it.
+store/
+
+# Local installs and build output
+.venv/
+venv*/
+build/
+dist/
+*.egg-info/
+__pycache__/
+*.pyc
+
+# requirements.local and .pins/ are gone: every pin comes by hash from PyPI (see PINS.md),
+# and the viewer is part of the console's own package. `venv*/` was added above after a
+# scratch venv (`venv3/`, made by a relative `python -m venv venv3` run from this repo's own
+# root by mistake) was nearly committed -- caught by reading `git status` before committing,
+# the same way two built wheels were once caught in another repository.
+
+# pytest temporaries, kept beside the project (see --basetemp in pyproject.toml)
+.pytest-basetemp/
+
+# The SDK's own exam/ fixture tree, fetched by tools/fetch_sdk_fixtures.py from PyPI's
+# hash-verified sdist -- never a git clone. Git-ignored: it is a materialised,
+# re-fetchable cache, the same role .pins/ used to play, from a public source instead of
+# a private one.
+.sdk-fixtures/
+.wheel-cache/
+
+
+# The recorder's lock file, left beside a finished run; not part of the run.
+examples/reference-demo/runs/*/.lock

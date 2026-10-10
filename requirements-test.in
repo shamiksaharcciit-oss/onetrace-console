@@ -1,0 +1,7 @@
+pytest==9.1.1
+pluggy==1.6.0
+pip==25.0.1
+pytest-xdist==3.8.0
+# setuptools builds the console's own wheel inside the suite (tests/test_packaging.py), with no
+# network: the version that builds the vendored viewer wheel.
+setuptools==83.0.0

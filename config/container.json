@@ -1,0 +1,28 @@
+{
+  "host": "0.0.0.0",
+  "port": 8080,
+  "store_root": "/data",
+  "max_request_body": 67108864,
+  "max_members": 512,
+  "max_member_size": 16777216,
+  "max_total_extracted_size": 67108864,
+  "request_timeout_seconds": 30.0,
+  "extensions": {
+    "onedoor": false
+  },
+  "max_decision_rows": 100000,
+  "max_decision_line_length": 262144,
+  "access_log_max_segment_bytes": 5242880,
+  "sign_in": {
+    "enabled": true,
+    "tls_cert_path": "/etc/onetrace-console/tls/cert.pem",
+    "tls_key_path": "/etc/onetrace-console/tls/key.pem",
+    "session_idle_timeout_seconds": 1800,
+    "session_absolute_timeout_seconds": 43200,
+    "rate_limit_max_attempts_per_account": 10,
+    "rate_limit_max_attempts_per_client": 20,
+    "rate_limit_window_seconds": 300,
+    "rate_limit_max_concurrent_hashes": 2,
+    "insecure_cookie_for_local_dev": false
+  }
+}

@@ -1,0 +1,16 @@
+# E10 layer 1 of 3, carried here from the canary repository, and for the same reason.
+#
+# `* -text` turns OFF git's line-ending translation for every file in this repository.
+# It is not a style preference. This console stores RECEIVED data: run folders as an
+# emitter wrote them, and the verifier's reports over those bytes. A checkout that
+# rewrote one byte of a receipt would destroy the only thing the receipt is for, and it
+# would do it silently and with a green exit code, because from git's point of view it
+# was being helpful.
+#
+# The other two layers live where they always do: exclusion lists in pyproject.toml keep
+# every formatter, linter and auto-fixer out of the received-data paths, and digest tests
+# assume both earlier layers have already failed and ask the only question that survives
+# that assumption -- are the bytes still the bytes?
+#
+# A preventive control that cannot be observed failing is not a control.
+* -text

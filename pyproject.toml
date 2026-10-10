@@ -1,0 +1,106 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "onetrace-console"
+version = "0.1.0"
+description = "The onetrace console: every run in one place, read from the reports the verifier and the verbs produced."
+readme = "PYPI_DESCRIPTION.md"     # the README with absolute image links: tools/pypi_description.py
+requires-python = ">=3.12"
+license = { text = "Apache-2.0" }
+authors = [{ name = "Shamik Saha" }]
+
+# Abstract here, pinned in requirements.lock. Nothing is vendored.
+#
+# There is no web framework and no database driver, and that is a decision rather than an
+# omission. The console ships as a CONTAINER THE CUSTOMER RUNS -- no shared back end, no
+# assumed network access, no data sent home -- so every dependency is a thing the
+# customer must trust and a thing that must be present with no index reachable. The
+# server is `http.server`, the store is files, the index is `sqlite3`, the tar is
+# `tarfile`, the digests are `hashlib`: all standard library. See DESIGN_GAPS.md.
+dependencies = [
+    "onetrace==0.2.0",                 # the SDK this release was tested with: the verbs
+    "onetrace-verify[crypto]==0.2.0",  # the verifier, with what it needs to check signatures
+]
+
+[project.optional-dependencies]
+test = ["pytest>=8"]
+
+[project.scripts]
+onetrace-console = "onetrace_console.__main__:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+# The console serves IBM Plex itself, so the fonts and their OFL text are
+# package data (the container runs from src/ and carries them either way).
+[tool.setuptools.package-data]
+onetrace_console = ["static/fonts/*.woff2", "static/fonts/OFL.txt", "static/fonts/FONTS.md",
+                    "requirements.lock", "reference_demo/trust.json", "reference_demo/runs/**/*",
+                    "viewer/PROVENANCE.md", "viewer/_vendor/*"]
+
+# ---------------------------------------------------------------------------------
+# E10 layer 2 of 3: exclusion lists
+# ---------------------------------------------------------------------------------
+# Formatters, linters and auto-fixers are byte-rewriting tools. Pointed at a stored run
+# they destroy the evidence they were pointed at, silently, with a green exit code.
+#
+# Layer 1 (`.gitattributes`, `* -text`) stops git from rewriting bytes. THIS layer stops
+# our own tooling. Any tool added later MUST be given the same exclusions in this same
+# place. `store/` is where received bundles land at runtime and is never tracked, but it
+# is named here too: an exclusion that only covers what is committed is an exclusion that
+# stops working the moment someone runs a formatter on a working tree.
+[tool.ruff]
+extend-exclude = ["tests/fixtures", "store", "src/onetrace_console/_received"]
+
+[tool.black]
+extend-exclude = "tests/fixtures|store|src/onetrace_console/_received"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+
+# `--basetemp` is set here, to a repository-local folder git ignores, so the suite stops
+# depending on pytest's cleanup of the system temp folder.
+#
+# WHAT IT FIXES. pytest's default temp root is `<system temp>/pytest-of-<user>`, and its
+# session teardown cleans that directory -- including `cleanup_dead_symlinks`, which stats
+# a `pytest-current` reparse point. On this machine that reparse point became unreadable,
+# `os.stat` raised `PermissionError [WinError 5]`, the exception escaped the exit stack, and
+# **the terminal summary was never written**. Measured with a deliberately failing test
+# added: no `FAILED`, no " failed", no " passed", exit 1 -- byte-indistinguishable from an
+# all-green run. An instrument that cannot state its measurement fails toward whichever
+# answer the reader already expects.
+#
+# With `--basetemp` set, pytest uses this folder and never constructs or cleans that root,
+# so the fault cannot reach the summary line. The ruling's reasoning is the part worth
+# keeping: the dead reparse point had already come back once, so an elevated `rmdir` is a
+# repair and not a fix.
+#
+# THIS IS A MEASURED MECHANISM, NOT A REPRODUCTION, AND THE LABEL IS OWED AN UPDATE.
+# It was accepted as such: two runs left the user's `pytest-of-<user>` folder unchanged and
+# `pytest-current` was never recreated. What was NOT shown is a run printing its summary
+# while the poisoned reparse point was present -- it had already been removed by hand before
+# the change landed.
+#
+#   **When the old `pytest-current` folder next reappears, run the suite against it and
+#   replace this paragraph with the result.** That is a standing obligation from §3, and it
+#   is written here rather than only in the register because this is where the claim lives
+#   and a reader checking the claim will be reading this file.
+#
+# I ARGUED AGAINST A REPOSITORY-SIDE WORKAROUND and was overruled, correctly. My objection
+# was to a root `conftest.py` setting `PYTEST_DEBUG_TEMPROOT`, which would have hidden one
+# machine's broken temp directory inside the repository as a permanent silence. This is a
+# different thing: it is declared in plain sight in the project's own configuration, it is
+# reproducible for everyone, and it keeps a run's temporaries beside the project that made
+# them. It silences nothing.
+#
+# The path is relative, so it resolves against the directory pytest is invoked from. The
+# gate command is run from the repository root; a run started elsewhere puts the folder
+# elsewhere, which is untidy and harmless.
+#
+# No `-q`: suite commands don't use it, so every result shows its summary line. A `-q` set
+# here and a second on the command line make `-qq`, which prints no tally at all, and counts
+# were once read from runs that reported no total. Not repeated here.
+addopts = "--basetemp=.pytest-basetemp"

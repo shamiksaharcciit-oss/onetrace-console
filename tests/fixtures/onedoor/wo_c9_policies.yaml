@@ -1,0 +1,32 @@
+# The fixture's policy: adds one observe-mode action type to the
+# same shape demo.py's own seed uses, so the fixture can show a decision that
+# executes but carries no reference (observe mode returns none).
+policies:
+  - action_type: demo.toggle
+    tier: 1
+    dry_run: false
+    compensating_command: demo.restore
+    undo_window_seconds: 900
+    bounds:
+      enum:
+        target: [demo.lamp]
+        state: ["on", "off"]
+      required: [target, state]
+      strict_params: true
+
+  - action_type: demo.restore
+    tier: 1
+    dry_run: false
+    compensating_command: demo.toggle
+    bounds:
+      strict_params: false
+
+  - action_type: demo.observed
+    tier: 0
+    dry_run: false
+    bounds:
+      enum:
+        target: [demo.lamp]
+        state: ["on", "off"]
+      required: [target, state]
+      strict_params: true

@@ -1,0 +1,60 @@
+{
+ "carried": [
+  {
+   "line": "[NOT-RUN] receipts/01-zeta.json: originality -- record is declared unanchored; this verifier can establish consistency, not originality",
+   "run": "dag-r37-r",
+   "side": "run"
+  },
+  {
+   "line": "[NOT-RUN] receipts/02-alpha.json: originality -- record is declared unanchored; this verifier can establish consistency, not originality",
+   "run": "dag-r37-r",
+   "side": "run"
+  },
+  {
+   "line": "[NOT-RUN] receipts/03-join.json: originality -- record is declared unanchored; this verifier can establish consistency, not originality",
+   "run": "dag-r37-r",
+   "side": "run"
+  }
+ ],
+ "exit": "1",
+ "format": "onetrace-report/0.1",
+ "inputs": {
+  "run": {
+   "kind": "run",
+   "notes": [],
+   "path": "fixtures/r11/two-minimal-nodes",
+   "record_digests": {
+    "MANIFEST.json": "sha256:c8eeb4970a8f18fcfa16483164a5a5c7f31f084066c18434a8fe66eb8ffeb350",
+    "chain_head": "sha256:0c06d629a92086b45cb20fc27d292ef676d0ad177b378adbd37abd87f754183d"
+   },
+   "run_id": "dag-r37-r"
+  }
+ },
+ "mode": "single-run",
+ "nodes": [
+  {
+   "check": "outcome",
+   "kind": "located",
+   "node": "alpha",
+   "words": "refusal at node alpha — source withheld: the right-hand rows were not released"
+  },
+  {
+   "check": "outcome",
+   "kind": "located",
+   "node": "zeta",
+   "words": "refusal at node zeta — source withheld: no rows were released to this node"
+  }
+ ],
+ "preflight": {
+  "run": {
+   "calls": [
+    "verifier-run-1"
+   ],
+   "failed_rows": [],
+   "status": "proceeded"
+  }
+ },
+ "result": "located",
+ "shape": "dag",
+ "verb": "localize"
+}
