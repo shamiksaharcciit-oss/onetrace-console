@@ -33,6 +33,8 @@ from pathlib import Path
 
 import pytest
 
+from onetrace_console import __version__
+
 REPO = Path(__file__).resolve().parent.parent
 BASELINE = REPO / "tests" / "fixtures" / "visible_text" / "baseline.json"
 
@@ -571,195 +573,195 @@ _WORDS_POLISH = 'plain words in place of developer wording'
 EXPLAINED.setdefault('diff[held-a,held-b]', {}).setdefault('gone', {}).update(dict.fromkeys(
     ["Generated <time> by onetrace-console."], _FOOTER_POLISH))
 EXPLAINED.setdefault('diff[held-a,held-b]', {}).setdefault('new', {}).update(dict.fromkeys(
-    ["Generated <time> by onetrace-console 0.1.0."], _FOOTER_POLISH))
+    [f"Generated <time> by onetrace-console {__version__}."], _FOOTER_POLISH))
 EXPLAINED.setdefault('executions-all.html', {}).setdefault('gone', {}).update(dict.fromkeys(
     ["Generated on <time> by onetrace-console."], _FOOTER_POLISH))
 EXPLAINED.setdefault('executions-all.html', {}).setdefault('new', {}).update(dict.fromkeys(
-    ["Generated <time> by onetrace-console 0.1.0."], _FOOTER_POLISH))
+    [f"Generated <time> by onetrace-console {__version__}."], _FOOTER_POLISH))
 EXPLAINED.setdefault('executions-changed-vs-baseline.html', {}).setdefault('gone', {}).update(dict.fromkeys(
     ["Generated on <time> by onetrace-console."], _FOOTER_POLISH))
 EXPLAINED.setdefault('executions-changed-vs-baseline.html', {}).setdefault('new', {}).update(dict.fromkeys(
-    ["Generated <time> by onetrace-console 0.1.0."], _FOOTER_POLISH))
+    [f"Generated <time> by onetrace-console {__version__}."], _FOOTER_POLISH))
 EXPLAINED.setdefault('executions-contradicts.html', {}).setdefault('gone', {}).update(dict.fromkeys(
     ["Generated on <time> by onetrace-console."], _FOOTER_POLISH))
 EXPLAINED.setdefault('executions-contradicts.html', {}).setdefault('new', {}).update(dict.fromkeys(
-    ["Generated <time> by onetrace-console 0.1.0."], _FOOTER_POLISH))
+    [f"Generated <time> by onetrace-console {__version__}."], _FOOTER_POLISH))
 EXPLAINED.setdefault('executions-could-not-check.html', {}).setdefault('gone', {}).update(dict.fromkeys(
     ["Generated on <time> by onetrace-console."], _FOOTER_POLISH))
 EXPLAINED.setdefault('executions-could-not-check.html', {}).setdefault('new', {}).update(dict.fromkeys(
-    ["Generated <time> by onetrace-console 0.1.0."], _FOOTER_POLISH))
+    [f"Generated <time> by onetrace-console {__version__}."], _FOOTER_POLISH))
 EXPLAINED.setdefault('executions-holds.html', {}).setdefault('gone', {}).update(dict.fromkeys(
     ["Generated on <time> by onetrace-console."], _FOOTER_POLISH))
 EXPLAINED.setdefault('executions-holds.html', {}).setdefault('new', {}).update(dict.fromkeys(
-    ["Generated <time> by onetrace-console 0.1.0."], _FOOTER_POLISH))
+    [f"Generated <time> by onetrace-console {__version__}."], _FOOTER_POLISH))
 EXPLAINED.setdefault('executions-missing-a-declared-stage.html', {}).setdefault('gone', {}).update(dict.fromkeys(
     ["Generated on <time> by onetrace-console."], _FOOTER_POLISH))
 EXPLAINED.setdefault('executions-missing-a-declared-stage.html', {}).setdefault('new', {}).update(dict.fromkeys(
-    ["Generated <time> by onetrace-console 0.1.0."], _FOOTER_POLISH))
+    [f"Generated <time> by onetrace-console {__version__}."], _FOOTER_POLISH))
 EXPLAINED.setdefault('executions-missing-not-established.html', {}).setdefault('gone', {}).update(dict.fromkeys(
     ["Generated on <time> by onetrace-console."], _FOOTER_POLISH))
 EXPLAINED.setdefault('executions-missing-not-established.html', {}).setdefault('new', {}).update(dict.fromkeys(
-    ["Generated <time> by onetrace-console 0.1.0."], _FOOTER_POLISH))
+    [f"Generated <time> by onetrace-console {__version__}."], _FOOTER_POLISH))
 EXPLAINED.setdefault('executions-most-recent.html', {}).setdefault('gone', {}).update(dict.fromkeys(
     ["Generated on <time> by onetrace-console."], _FOOTER_POLISH))
 EXPLAINED.setdefault('executions-most-recent.html', {}).setdefault('new', {}).update(dict.fromkeys(
-    ["Generated <time> by onetrace-console 0.1.0."], _FOOTER_POLISH))
+    [f"Generated <time> by onetrace-console {__version__}."], _FOOTER_POLISH))
 EXPLAINED.setdefault('executions-needs-attention.html', {}).setdefault('gone', {}).update(dict.fromkeys(
     ["Generated on <time> by onetrace-console."], _FOOTER_POLISH))
 EXPLAINED.setdefault('executions-needs-attention.html', {}).setdefault('new', {}).update(dict.fromkeys(
-    ["Generated <time> by onetrace-console 0.1.0."], _FOOTER_POLISH))
+    [f"Generated <time> by onetrace-console {__version__}."], _FOOTER_POLISH))
 EXPLAINED.setdefault('executions-not-checked.html', {}).setdefault('gone', {}).update(dict.fromkeys(
     ["Generated on <time> by onetrace-console."], _FOOTER_POLISH))
 EXPLAINED.setdefault('executions-not-checked.html', {}).setdefault('new', {}).update(dict.fromkeys(
-    ["Generated <time> by onetrace-console 0.1.0."], _FOOTER_POLISH))
+    [f"Generated <time> by onetrace-console {__version__}."], _FOOTER_POLISH))
 EXPLAINED.setdefault('executions-nothing-missing.html', {}).setdefault('gone', {}).update(dict.fromkeys(
     ["Generated on <time> by onetrace-console."], _FOOTER_POLISH))
 EXPLAINED.setdefault('executions-nothing-missing.html', {}).setdefault('new', {}).update(dict.fromkeys(
-    ["Generated <time> by onetrace-console 0.1.0."], _FOOTER_POLISH))
+    [f"Generated <time> by onetrace-console {__version__}."], _FOOTER_POLISH))
 EXPLAINED.setdefault('executions-pipeline-p1.html', {}).setdefault('gone', {}).update(dict.fromkeys(
     ["Generated on <time> by onetrace-console."], _FOOTER_POLISH))
 EXPLAINED.setdefault('executions-pipeline-p1.html', {}).setdefault('new', {}).update(dict.fromkeys(
-    ["Generated <time> by onetrace-console 0.1.0."], _FOOTER_POLISH))
+    [f"Generated <time> by onetrace-console {__version__}."], _FOOTER_POLISH))
 EXPLAINED.setdefault('executions-pipeline-p2.html', {}).setdefault('gone', {}).update(dict.fromkeys(
     ["Generated on <time> by onetrace-console."], _FOOTER_POLISH))
 EXPLAINED.setdefault('executions-pipeline-p2.html', {}).setdefault('new', {}).update(dict.fromkeys(
-    ["Generated <time> by onetrace-console 0.1.0."], _FOOTER_POLISH))
+    [f"Generated <time> by onetrace-console {__version__}."], _FOOTER_POLISH))
 EXPLAINED.setdefault('executions-records-agree.html', {}).setdefault('gone', {}).update(dict.fromkeys(
     ["Generated on <time> by onetrace-console."], _FOOTER_POLISH))
 EXPLAINED.setdefault('executions-records-agree.html', {}).setdefault('new', {}).update(dict.fromkeys(
-    ["Generated <time> by onetrace-console 0.1.0."], _FOOTER_POLISH))
+    [f"Generated <time> by onetrace-console {__version__}."], _FOOTER_POLISH))
 EXPLAINED.setdefault('executions-run-id-reused.html', {}).setdefault('gone', {}).update(dict.fromkeys(
     ["Generated on <time> by onetrace-console."], _FOOTER_POLISH))
 EXPLAINED.setdefault('executions-run-id-reused.html', {}).setdefault('new', {}).update(dict.fromkeys(
-    ["Generated <time> by onetrace-console 0.1.0."], _FOOTER_POLISH))
+    [f"Generated <time> by onetrace-console {__version__}."], _FOOTER_POLISH))
 EXPLAINED.setdefault('home.html + counts.html', {}).setdefault('gone', {}).update(dict.fromkeys(
     ["Generated <time> by onetrace-console."], _FOOTER_POLISH))
 EXPLAINED.setdefault('home.html + counts.html', {}).setdefault('new', {}).update(dict.fromkeys(
-    ["Generated <time> by onetrace-console 0.1.0."], _FOOTER_POLISH))
+    [f"Generated <time> by onetrace-console {__version__}."], _FOOTER_POLISH))
 EXPLAINED.setdefault('incidents-i-contradicts.html', {}).setdefault('gone', {}).update(dict.fromkeys(
     ["Generated <time> by onetrace-console."], _FOOTER_POLISH))
 EXPLAINED.setdefault('incidents-i-contradicts.html', {}).setdefault('new', {}).update(dict.fromkeys(
-    ["Generated <time> by onetrace-console 0.1.0."], _FOOTER_POLISH))
+    [f"Generated <time> by onetrace-console {__version__}."], _FOOTER_POLISH))
 EXPLAINED.setdefault('incidents-i-could-not-check.html', {}).setdefault('gone', {}).update(dict.fromkeys(
     ["Generated <time> by onetrace-console."], _FOOTER_POLISH))
 EXPLAINED.setdefault('incidents-i-could-not-check.html', {}).setdefault('new', {}).update(dict.fromkeys(
-    ["Generated <time> by onetrace-console 0.1.0."], _FOOTER_POLISH))
+    [f"Generated <time> by onetrace-console {__version__}."], _FOOTER_POLISH))
 EXPLAINED.setdefault('incidents-i-header-disagrees.html', {}).setdefault('gone', {}).update(dict.fromkeys(
     ["Generated <time> by onetrace-console."], _FOOTER_POLISH))
 EXPLAINED.setdefault('incidents-i-header-disagrees.html', {}).setdefault('new', {}).update(dict.fromkeys(
-    ["Generated <time> by onetrace-console 0.1.0."], _FOOTER_POLISH))
+    [f"Generated <time> by onetrace-console {__version__}."], _FOOTER_POLISH))
 EXPLAINED.setdefault('incidents-i-runid-reused.html', {}).setdefault('gone', {}).update(dict.fromkeys(
     ["Generated <time> by onetrace-console."], _FOOTER_POLISH))
 EXPLAINED.setdefault('incidents-i-runid-reused.html', {}).setdefault('new', {}).update(dict.fromkeys(
-    ["Generated <time> by onetrace-console 0.1.0."], _FOOTER_POLISH))
+    [f"Generated <time> by onetrace-console {__version__}."], _FOOTER_POLISH))
 EXPLAINED.setdefault('incidents.html', {}).setdefault('gone', {}).update(dict.fromkeys(
     ["Generated <time> by onetrace-console."], _FOOTER_POLISH))
 EXPLAINED.setdefault('incidents.html', {}).setdefault('new', {}).update(dict.fromkeys(
-    ["Generated <time> by onetrace-console 0.1.0."], _FOOTER_POLISH))
+    [f"Generated <time> by onetrace-console {__version__}."], _FOOTER_POLISH))
 EXPLAINED.setdefault('notice/failed', {}).setdefault('gone', {}).update(dict.fromkeys(
     ["Generated <time> by onetrace-console."], _FOOTER_POLISH))
 EXPLAINED.setdefault('notice/failed', {}).setdefault('new', {}).update(dict.fromkeys(
-    ["Generated <time> by onetrace-console 0.1.0."], _FOOTER_POLISH))
+    [f"Generated <time> by onetrace-console {__version__}."], _FOOTER_POLISH))
 EXPLAINED.setdefault('notice/unchecked', {}).setdefault('gone', {}).update(dict.fromkeys(
     ["Generated <time> by onetrace-console."], _FOOTER_POLISH))
 EXPLAINED.setdefault('notice/unchecked', {}).setdefault('new', {}).update(dict.fromkeys(
-    ["Generated <time> by onetrace-console 0.1.0."], _FOOTER_POLISH))
+    [f"Generated <time> by onetrace-console {__version__}."], _FOOTER_POLISH))
 EXPLAINED.setdefault('notice/unreadable', {}).setdefault('gone', {}).update(dict.fromkeys(
     ["Generated <time> by onetrace-console."], _FOOTER_POLISH))
 EXPLAINED.setdefault('notice/unreadable', {}).setdefault('new', {}).update(dict.fromkeys(
-    ["Generated <time> by onetrace-console 0.1.0."], _FOOTER_POLISH))
+    [f"Generated <time> by onetrace-console {__version__}."], _FOOTER_POLISH))
 EXPLAINED.setdefault('policy/policy-issuer-rule.html', {}).setdefault('gone', {}).update(dict.fromkeys(
     ["Generated <time> by onetrace-console."], _FOOTER_POLISH))
 EXPLAINED.setdefault('policy/policy-issuer-rule.html', {}).setdefault('new', {}).update(dict.fromkeys(
-    ["Generated <time> by onetrace-console 0.1.0."], _FOOTER_POLISH))
+    [f"Generated <time> by onetrace-console {__version__}."], _FOOTER_POLISH))
 EXPLAINED.setdefault('policy/policy-verdict-denied.html', {}).setdefault('gone', {}).update(dict.fromkeys(
     ["Generated <time> by onetrace-console."], _FOOTER_POLISH))
 EXPLAINED.setdefault('policy/policy-verdict-denied.html', {}).setdefault('new', {}).update(dict.fromkeys(
-    ["Generated <time> by onetrace-console 0.1.0."], _FOOTER_POLISH))
+    [f"Generated <time> by onetrace-console {__version__}."], _FOOTER_POLISH))
 EXPLAINED.setdefault('policy/policy-verdict-executed.html', {}).setdefault('gone', {}).update(dict.fromkeys(
     ["Generated <time> by onetrace-console."], _FOOTER_POLISH))
 EXPLAINED.setdefault('policy/policy-verdict-executed.html', {}).setdefault('new', {}).update(dict.fromkeys(
-    ["Generated <time> by onetrace-console 0.1.0."], _FOOTER_POLISH))
+    [f"Generated <time> by onetrace-console {__version__}."], _FOOTER_POLISH))
 EXPLAINED.setdefault('policy/policy-verdict-proposed.html', {}).setdefault('gone', {}).update(dict.fromkeys(
     ["Generated <time> by onetrace-console."], _FOOTER_POLISH))
 EXPLAINED.setdefault('policy/policy-verdict-proposed.html', {}).setdefault('new', {}).update(dict.fromkeys(
-    ["Generated <time> by onetrace-console 0.1.0."], _FOOTER_POLISH))
+    [f"Generated <time> by onetrace-console {__version__}."], _FOOTER_POLISH))
 EXPLAINED.setdefault('policy/policy.html', {}).setdefault('gone', {}).update(dict.fromkeys(
     ["Generated <time> by onetrace-console."], _FOOTER_POLISH))
 EXPLAINED.setdefault('policy/policy.html', {}).setdefault('new', {}).update(dict.fromkeys(
-    ["Generated <time> by onetrace-console 0.1.0."], _FOOTER_POLISH))
+    [f"Generated <time> by onetrace-console {__version__}."], _FOOTER_POLISH))
 EXPLAINED.setdefault('policy/policy/<key>-08d1-4b41-a649-<key>.html', {}).setdefault('gone', {}).update(dict.fromkeys(
     ["Generated <time> by onetrace-console."], _FOOTER_POLISH))
 EXPLAINED.setdefault('policy/policy/<key>-08d1-4b41-a649-<key>.html', {}).setdefault('new', {}).update(dict.fromkeys(
-    ["Generated <time> by onetrace-console 0.1.0."], _FOOTER_POLISH))
+    [f"Generated <time> by onetrace-console {__version__}."], _FOOTER_POLISH))
 EXPLAINED.setdefault('policy/policy/<key>-6972-457f-a26d-<key>.html', {}).setdefault('gone', {}).update(dict.fromkeys(
     ["Generated <time> by onetrace-console."], _FOOTER_POLISH))
 EXPLAINED.setdefault('policy/policy/<key>-6972-457f-a26d-<key>.html', {}).setdefault('new', {}).update(dict.fromkeys(
-    ["Generated <time> by onetrace-console 0.1.0."], _FOOTER_POLISH))
+    [f"Generated <time> by onetrace-console {__version__}."], _FOOTER_POLISH))
 EXPLAINED.setdefault('policy/policy/<key>-bdc3-4a22-bb79-<key>.html', {}).setdefault('gone', {}).update(dict.fromkeys(
     ["Generated <time> by onetrace-console."], _FOOTER_POLISH))
 EXPLAINED.setdefault('policy/policy/<key>-bdc3-4a22-bb79-<key>.html', {}).setdefault('new', {}).update(dict.fromkeys(
-    ["Generated <time> by onetrace-console 0.1.0."], _FOOTER_POLISH))
+    [f"Generated <time> by onetrace-console {__version__}."], _FOOTER_POLISH))
 EXPLAINED.setdefault('policy/policy/<key>-c0dd-4040-b704-<key>.html', {}).setdefault('gone', {}).update(dict.fromkeys(
     ["Generated <time> by onetrace-console."], _FOOTER_POLISH))
 EXPLAINED.setdefault('policy/policy/<key>-c0dd-4040-b704-<key>.html', {}).setdefault('new', {}).update(dict.fromkeys(
-    ["Generated <time> by onetrace-console 0.1.0."], _FOOTER_POLISH))
+    [f"Generated <time> by onetrace-console {__version__}."], _FOOTER_POLISH))
 EXPLAINED.setdefault('policy/policy/<key>-cfd0-494e-b98e-<key>.html', {}).setdefault('gone', {}).update(dict.fromkeys(
     ["Generated <time> by onetrace-console."], _FOOTER_POLISH))
 EXPLAINED.setdefault('policy/policy/<key>-cfd0-494e-b98e-<key>.html', {}).setdefault('new', {}).update(dict.fromkeys(
-    ["Generated <time> by onetrace-console 0.1.0."], _FOOTER_POLISH))
+    [f"Generated <time> by onetrace-console {__version__}."], _FOOTER_POLISH))
 EXPLAINED.setdefault('run[forged]/answer.html', {}).setdefault('gone', {}).update(dict.fromkeys(
     ["Generated on <time> by onetrace viewer 0.1 (preview)."], _FOOTER_POLISH))
 EXPLAINED.setdefault('run[forged]/answer.html', {}).setdefault('new', {}).update(dict.fromkeys(
-    ["Generated <time> by onetrace-console 0.1.0."], _FOOTER_POLISH))
+    [f"Generated <time> by onetrace-console {__version__}."], _FOOTER_POLISH))
 EXPLAINED.setdefault('run[forged]/authorization.html', {}).setdefault('gone', {}).update(dict.fromkeys(
     ["Generated <time> by onetrace-console."], _FOOTER_POLISH))
 EXPLAINED.setdefault('run[forged]/authorization.html', {}).setdefault('new', {}).update(dict.fromkeys(
-    ["Generated <time> by onetrace-console 0.1.0."], _FOOTER_POLISH))
+    [f"Generated <time> by onetrace-console {__version__}."], _FOOTER_POLISH))
 EXPLAINED.setdefault('run[forged]/case.html', {}).setdefault('gone', {}).update(dict.fromkeys(
     ["Generated on <time> by onetrace viewer 0.1 (preview)."], _FOOTER_POLISH))
 EXPLAINED.setdefault('run[forged]/case.html', {}).setdefault('new', {}).update(dict.fromkeys(
-    ["Generated <time> by onetrace-console 0.1.0."], _FOOTER_POLISH))
+    [f"Generated <time> by onetrace-console {__version__}."], _FOOTER_POLISH))
 EXPLAINED.setdefault('run[held-a]/answer.html', {}).setdefault('gone', {}).update(dict.fromkeys(
     ["Generated on <time> by onetrace viewer 0.1 (preview)."], _FOOTER_POLISH))
 EXPLAINED.setdefault('run[held-a]/answer.html', {}).setdefault('new', {}).update(dict.fromkeys(
-    ["Generated <time> by onetrace-console 0.1.0."], _FOOTER_POLISH))
+    [f"Generated <time> by onetrace-console {__version__}."], _FOOTER_POLISH))
 EXPLAINED.setdefault('run[held-a]/authorization.html', {}).setdefault('gone', {}).update(dict.fromkeys(
     ["Generated <time> by onetrace-console."], _FOOTER_POLISH))
 EXPLAINED.setdefault('run[held-a]/authorization.html', {}).setdefault('new', {}).update(dict.fromkeys(
-    ["Generated <time> by onetrace-console 0.1.0."], _FOOTER_POLISH))
+    [f"Generated <time> by onetrace-console {__version__}."], _FOOTER_POLISH))
 EXPLAINED.setdefault('run[held-a]/case.html', {}).setdefault('gone', {}).update(dict.fromkeys(
     ["Generated on <time> by onetrace viewer 0.1 (preview)."], _FOOTER_POLISH))
 EXPLAINED.setdefault('run[held-a]/case.html', {}).setdefault('new', {}).update(dict.fromkeys(
-    ["Generated <time> by onetrace-console 0.1.0."], _FOOTER_POLISH))
+    [f"Generated <time> by onetrace-console {__version__}."], _FOOTER_POLISH))
 EXPLAINED.setdefault('run[held-b]/answer.html', {}).setdefault('gone', {}).update(dict.fromkeys(
     ["Generated on <time> by onetrace viewer 0.1 (preview)."], _FOOTER_POLISH))
 EXPLAINED.setdefault('run[held-b]/answer.html', {}).setdefault('new', {}).update(dict.fromkeys(
-    ["Generated <time> by onetrace-console 0.1.0."], _FOOTER_POLISH))
+    [f"Generated <time> by onetrace-console {__version__}."], _FOOTER_POLISH))
 EXPLAINED.setdefault('run[held-b]/authorization.html', {}).setdefault('gone', {}).update(dict.fromkeys(
     ["Generated <time> by onetrace-console."], _FOOTER_POLISH))
 EXPLAINED.setdefault('run[held-b]/authorization.html', {}).setdefault('new', {}).update(dict.fromkeys(
-    ["Generated <time> by onetrace-console 0.1.0."], _FOOTER_POLISH))
+    [f"Generated <time> by onetrace-console {__version__}."], _FOOTER_POLISH))
 EXPLAINED.setdefault('run[held-b]/case.html', {}).setdefault('gone', {}).update(dict.fromkeys(
     ["Generated on <time> by onetrace viewer 0.1 (preview)."], _FOOTER_POLISH))
 EXPLAINED.setdefault('run[held-b]/case.html', {}).setdefault('new', {}).update(dict.fromkeys(
-    ["Generated <time> by onetrace-console 0.1.0."], _FOOTER_POLISH))
+    [f"Generated <time> by onetrace-console {__version__}."], _FOOTER_POLISH))
 EXPLAINED.setdefault('run[preview]/case.html', {}).setdefault('gone', {}).update(dict.fromkeys(
     ["Generated on <time> by onetrace viewer 0.1 (preview)."], _FOOTER_POLISH))
 EXPLAINED.setdefault('run[preview]/case.html', {}).setdefault('new', {}).update(dict.fromkeys(
-    ["Generated <time> by onetrace-console 0.1.0."], _FOOTER_POLISH))
+    [f"Generated <time> by onetrace-console {__version__}."], _FOOTER_POLISH))
 EXPLAINED.setdefault('run[r11]/answer.html', {}).setdefault('gone', {}).update(dict.fromkeys(
     ["Generated on <time> by onetrace viewer 0.1 (preview)."], _FOOTER_POLISH))
 EXPLAINED.setdefault('run[r11]/answer.html', {}).setdefault('new', {}).update(dict.fromkeys(
-    ["Generated <time> by onetrace-console 0.1.0."], _FOOTER_POLISH))
+    [f"Generated <time> by onetrace-console {__version__}."], _FOOTER_POLISH))
 EXPLAINED.setdefault('run[r11]/authorization.html', {}).setdefault('gone', {}).update(dict.fromkeys(
     ["Generated <time> by onetrace-console."], _FOOTER_POLISH))
 EXPLAINED.setdefault('run[r11]/authorization.html', {}).setdefault('new', {}).update(dict.fromkeys(
-    ["Generated <time> by onetrace-console 0.1.0."], _FOOTER_POLISH))
+    [f"Generated <time> by onetrace-console {__version__}."], _FOOTER_POLISH))
 EXPLAINED.setdefault('run[r11]/case.html', {}).setdefault('gone', {}).update(dict.fromkeys(
     ["Generated on <time> by onetrace viewer 0.1 (preview)."], _FOOTER_POLISH))
 EXPLAINED.setdefault('run[r11]/case.html', {}).setdefault('new', {}).update(dict.fromkeys(
-    ["Generated <time> by onetrace-console 0.1.0."], _FOOTER_POLISH))
+    [f"Generated <time> by onetrace-console {__version__}."], _FOOTER_POLISH))
 EXPLAINED.setdefault('run[forged]/answer.html', {}).setdefault('new', {}).update(dict.fromkeys(
     ["Receipt · step 1 of 2 · alpha", "Receipt · step 2 of 2 · beta"], _RECEIPT_POLISH))
 EXPLAINED.setdefault('run[forged]/case.html', {}).setdefault('gone', {}).update(dict.fromkeys(
@@ -943,6 +945,152 @@ NEW_PAGES: dict[str, str] = {
     "run[r11]/receipt.html": "the run receipt, board 5",
 }
 
+#: The Overview's cards in 0.1.1's look: a one-line subtitle, the page's rule folded under "How
+#: these counts work", each card's count with one short line and its definition behind a "?",
+#: and the states at 0 folded into one line that still names each. Measured, not typed.
+_OVERVIEW_011 = "the Overview's cards: one line under each count, the definitions folded"
+EXPLAINED.setdefault("home.html + counts.html", {}).setdefault("gone", {}).update(dict.fromkeys(
+    ["The baseline is the run each was compared with; this console picks none. 3 of 4 runs are no comparison's candidate."], _OVERVIEW_011))
+EXPLAINED.setdefault("home.html + counts.html", {}).setdefault("new", {}).update(dict.fromkeys(
+    ["0 of 4 in the other states: Couldn't check, No verdict recorded", "2 of 4 Verified · 2 of 4 Contradicts its record", "3 incidents raised from 2 of 4 runs.", "3 of 4 runs are no comparison's candidate.", "?", "Below the count: each verdict the check recorded, as a count of runs; All counts has each in full.", "How these counts work", "Stored in 2 pipelines.", "The baseline is the run each was compared with; this console picks none.", "The runs delivered to this console, and what the evidence for each one establishes."], _OVERVIEW_011))
+
+#: 0.1.1's colour rule: "Not anchored" is the anchoring rung's own state, evidence not made, never a
+#: "No"; its evidence says what the check found, as the signing rung's does. Measured, not typed.
+_NOT_ANCHORED_011 = "'Not anchored' as the anchoring rung's own state"
+for _page in ["run[forged]/case.html", "run[held-a]/case.html", "run[held-b]/case.html", "run[preview]/case.html", "run[r11]/case.html"]:
+    EXPLAINED.setdefault(_page, {}).setdefault("gone", {})["No · not anchored"] = _NOT_ANCHORED_011
+    EXPLAINED.setdefault(_page, {}).setdefault("new", {})[
+        "Not anchored · no anchor beside the chain"] = _NOT_ANCHORED_011
+
+#: The SDK the comparison ran with is named as installed: 0.2.1 since console 0.1.1's pin, the
+#: 0.2.0 line it replaces declared earlier. Measured, not typed.
+_SDK_021 = "the comparison names the installed SDK, 0.2.1"
+EXPLAINED.setdefault("diff[held-a,held-b]", {}).setdefault("new", {}).update(dict.fromkeys(
+    ["Compared with onetrace 0.2.1, build wheel:<hex>, at <time>."], _SDK_021))
+
+#: Two times, each named: "Received" is when this console took a run in, and the run's own start
+#: time, from its record, stands beside it under "Ran". Measured, not typed.
+_TWO_TIMES = "the run's own time beside the time this console received it, each named"
+_TWO_TIMES_PAGES: dict[str, dict[str, list[str]]] = {'home.html + counts.html': {'gone': ['Latest received', 'Received'], 'new': ['<time>', 'Contradicts itself · nb2-cand · received <time>', 'Latest received by this console', 'Ran', 'Received by this console']}}
+for _page, _kinds in _TWO_TIMES_PAGES.items():
+    for _kind, _texts in _kinds.items():
+        EXPLAINED.setdefault(_page, {}).setdefault(_kind, {}).update(dict.fromkeys(_texts, _TWO_TIMES))
+
+#: The runs lists in the console's words: "Every run stored here" or "The runs in this list" in
+#: place of the free file's "The runs this page was given", and "When it ran" for "ran".
+#: Measured, not typed.
+_LIST_WORDS = "the runs lists say what they hold and when each run ran"
+_LIST_WORDS_PAGES: dict[str, dict[str, list[str]]] = {
+    'executions-all.html': {'gone': ['The runs this page was given', 'ran'], 'new': ['Every run stored here', 'When it ran']},
+    'executions-changed-vs-baseline.html': {'gone': ['The runs this page was given', 'ran'], 'new': ['The runs in this list', 'When it ran']},
+    'executions-contradicts.html': {'gone': ['The runs this page was given', 'ran'], 'new': ['The runs in this list', 'When it ran']},
+    'executions-could-not-check.html': {'gone': ['The runs this page was given', 'ran'], 'new': ['The runs in this list', 'When it ran']},
+    'executions-holds.html': {'gone': ['The runs this page was given', 'ran'], 'new': ['The runs in this list', 'When it ran']},
+    'executions-missing-a-declared-stage.html': {'gone': ['The runs this page was given', 'ran'], 'new': ['The runs in this list', 'When it ran']},
+    'executions-missing-not-established.html': {'gone': ['The runs this page was given', 'ran'], 'new': ['The runs in this list', 'When it ran']},
+    'executions-most-recent.html': {'gone': ['The runs this page was given', 'ran'], 'new': ['The runs in this list', 'When it ran']},
+    'executions-needs-attention.html': {'gone': ['The runs this page was given', 'ran'], 'new': ['The runs in this list', 'When it ran']},
+    'executions-not-checked.html': {'gone': ['The runs this page was given', 'ran'], 'new': ['The runs in this list', 'When it ran']},
+    'executions-nothing-missing.html': {'gone': ['The runs this page was given', 'ran'], 'new': ['The runs in this list', 'When it ran']},
+    'executions-pipeline-p1.html': {'gone': ['The runs this page was given', 'ran'], 'new': ['The runs in this list', 'When it ran']},
+    'executions-pipeline-p2.html': {'gone': ['The runs this page was given', 'ran'], 'new': ['The runs in this list', 'When it ran']},
+    'executions-records-agree.html': {'gone': ['The runs this page was given', 'ran'], 'new': ['The runs in this list', 'When it ran']},
+    'executions-run-id-reused.html': {'gone': ['The runs this page was given', 'ran'], 'new': ['The runs in this list', 'When it ran']},
+}
+for _page, _kinds in _LIST_WORDS_PAGES.items():
+    for _kind, _texts in _kinds.items():
+        EXPLAINED.setdefault(_page, {}).setdefault(_kind, {}).update(dict.fromkeys(_texts, _LIST_WORDS))
+
+#: The run page's head in place of the viewer's header: the run's id and pipeline as its title and
+#: crumbs; its stages, its record's format, when it ran and when this console received it; four of
+#: the ladder's rungs as the ladder states them; and tabs to the run's other pages. Measured, not
+#: typed.
+_RUN_HEAD = "the run page's head: who the run is, its two times, four rungs, its tabs"
+_RUN_HEAD_PAGES: dict[str, dict[str, list[str]]] = {
+    'run[forged]/case.html': {'gone': ['Case', 'The run, step by step', 'nb2-cand'], 'new': ['2 of 2 declared stages · recorded in the format stage-receipt-chain/0.2 · ran <time> · received by this console <time>', 'Committed by a known time Not anchored', 'Graph Table Inputs & outputs Receipt', 'Ran as approved a straight-line run: there is no plan to compare', 'Records agree No', 'Runs / P2 / nb2-cand', 'Signed by a known recorder Unsigned', 'nb2-cand · P2']},
+    'run[held-a]/case.html': {'gone': ['Case', 'The run, step by step', 'nb2-base'], 'new': ['2 of 2 declared stages · recorded in the format stage-receipt-chain/0.2 · ran <time> · received by this console <time>', 'Committed by a known time Not anchored', 'Graph Table Inputs & outputs Receipt', 'Ran as approved a straight-line run: there is no plan to compare', 'Records agree Yes', 'Runs / P2 / nb2-base', 'Signed by a known recorder Unsigned', 'nb2-base · P2']},
+    'run[held-b]/case.html': {'gone': ['Case', 'The run, step by step', 'nb2-cand'], 'new': ['2 of 2 declared stages · recorded in the format stage-receipt-chain/0.2 · ran <time> · received by this console <time>', 'Committed by a known time Not anchored', 'Graph Table Inputs & outputs Receipt', 'Ran as approved a straight-line run: there is no plan to compare', 'Records agree No', 'Runs / P2 / nb2-cand', 'Signed by a known recorder Unsigned', 'nb2-cand · P2']},
+    'run[preview]/case.html': {'gone': ['Case', 'The run, step by step', 'ingest-r1-chunker-3.4'], 'new': ['9 of 9 declared stages · recorded in the format stage-receipt-chain/0.0-preview · ran <time> · received by this console <time>', 'Committed by a known time Not anchored', 'Graph Table Inputs & outputs Receipt', 'Ran as approved a straight-line run: there is no plan to compare', "Records agree Couldn't check", 'Runs / P1 / ingest-r1-chunker-3.4', 'Signed by a known recorder Unsigned', 'ingest-r1-chunker-3.4 · P1']},
+    'run[r11]/case.html': {'gone': ['Case', 'The run, step by step', 'dag-r37-r'], 'new': ['3 of 3 declared stages · recorded in the format stage-receipt-chain/0.1 · ran <time> · received by this console <time>', 'Committed by a known time Not anchored', 'Graph Table Inputs & outputs Receipt', 'Ran as approved Yes', 'Records agree Not checked', 'Runs / P1 / dag-r37-r', 'Signed by a known recorder Unsigned', 'dag-r37-r · P1']},
+}
+for _page, _kinds in _RUN_HEAD_PAGES.items():
+    for _kind, _texts in _kinds.items():
+        EXPLAINED.setdefault(_page, {}).setdefault(_kind, {}).update(dict.fromkeys(_texts, _RUN_HEAD))
+
+
+#: The commands as a reader types them: the SDK's own, over the two run folders by their run ids,
+#: in place of the stored placeholder form. Measured, not typed.
+_TYPED_COMMANDS = "each command as a reader types it, over the two run folders"
+_TYPED_COMMANDS_PAGES: dict[str, dict[str, list[str]]] = {'diff[held-a,held-b]': {'gone': ['python -m onetrace diff RUN_A RUN_B --out OUT', 'python -m onetrace localize RUN_A RUN_B --out OUT'], 'new': ['Command: onetrace diff runs/nb2-base runs/nb2-cand --text', 'onetrace diff runs/nb2-base runs/nb2-cand', 'onetrace localize runs/nb2-base runs/nb2-cand']}}
+for _page, _kinds in _TYPED_COMMANDS_PAGES.items():
+    for _kind, _texts in _kinds.items():
+        EXPLAINED.setdefault(_page, {}).setdefault(_kind, {}).update(dict.fromkeys(_texts, _TYPED_COMMANDS))
+
+#: The graph's boxes as a list in reading order, which a narrow screen shows in place of the
+#: drawing (hidden at full width; its words are the boxes' own). Measured, not typed.
+_GRAPH_LIST = "the graph's boxes as a list, for a narrow screen"
+_GRAPH_LIST_PAGES: dict[str, dict[str, list[str]]] = {'run[preview]/case.html': {'new': ['answer', 'cleaned', 'converted', 'document in', 'embedded', 'indexed', 'prompt built', 'retrieved', 'split']}}
+for _page, _kinds in _GRAPH_LIST_PAGES.items():
+    for _kind, _texts in _kinds.items():
+        EXPLAINED.setdefault(_page, {}).setdefault(_kind, {}).update(dict.fromkeys(_texts, _GRAPH_LIST))
+
+#: The runs lists' own table: the run, its pipeline, when it ran and when this console received it,
+#: how far it got, and the three answers the store holds per run, each as its page says it; a list
+#: with no run, one line. Measured, not typed.
+_RUNS_TABLE = "the runs lists' own table, and one line where a list has no run"
+_RUNS_TABLE_PAGES: dict[str, dict[str, list[str]]] = {
+    'executions-all.html': {'gone': ['2', '3', '<time> → <time>', 'Steps', 'What it was for', 'alpha → beta', 'zeta → alpha → join'], 'new': ['2 of 2 declared stages', '3 of 3 declared stages', '<time>', 'Committed by a known time', 'How far it got', 'No', 'Not anchored', 'Not checked', 'P1', 'P2', 'Pipeline', 'Received by this console', 'Records agree', 'Signed by a known recorder', 'Unsigned', 'Yes']},
+    'executions-changed-vs-baseline.html': {'gone': ['Run', 'Steps', 'What it was for'], 'new': ['No run is listed here.']},
+    'executions-contradicts.html': {'gone': ['2', '<time> → <time>', 'Steps', 'What it was for', 'alpha → beta'], 'new': ['2 of 2 declared stages', '<time>', 'Committed by a known time', 'How far it got', 'No', 'Not anchored', 'P2', 'Pipeline', 'Received by this console', 'Records agree', 'Signed by a known recorder', 'Unsigned']},
+    'executions-could-not-check.html': {'gone': ['Run', 'Steps', 'What it was for'], 'new': ['No run is listed here.']},
+    'executions-holds.html': {'gone': ['3', 'Steps', 'What it was for', 'zeta → alpha → join'], 'new': ['2 of 2 declared stages', '3 of 3 declared stages', '<time>', 'Committed by a known time', 'How far it got', 'Not anchored', 'Not checked', 'P1', 'P2', 'Pipeline', 'Received by this console', 'Records agree', 'Signed by a known recorder', 'Unsigned', 'Yes']},
+    'executions-missing-a-declared-stage.html': {'gone': ['Run', 'Steps', 'What it was for'], 'new': ['No run is listed here.']},
+    'executions-missing-not-established.html': {'gone': ['Run', 'Steps', 'What it was for'], 'new': ['No run is listed here.']},
+    'executions-most-recent.html': {'gone': ['2', '3', '<time> → <time>', 'Steps', 'What it was for', 'alpha → beta', 'zeta → alpha → join'], 'new': ['2 of 2 declared stages', '3 of 3 declared stages', '<time>', 'Committed by a known time', 'How far it got', 'No', 'Not anchored', 'Not checked', 'P1', 'P2', 'Pipeline', 'Received by this console', 'Records agree', 'Signed by a known recorder', 'Unsigned', 'Yes']},
+    'executions-needs-attention.html': {'gone': ['2', '<time> → <time>', 'Steps', 'What it was for', 'alpha → beta'], 'new': ['2 of 2 declared stages', '<time>', 'Committed by a known time', 'How far it got', 'No', 'Not anchored', 'P2', 'Pipeline', 'Received by this console', 'Records agree', 'Signed by a known recorder', 'Unsigned']},
+    'executions-not-checked.html': {'gone': ['Run', 'Steps', 'What it was for'], 'new': ['No run is listed here.']},
+    'executions-nothing-missing.html': {'gone': ['2', '3', '<time> → <time>', 'Steps', 'What it was for', 'alpha → beta', 'zeta → alpha → join'], 'new': ['2 of 2 declared stages', '3 of 3 declared stages', '<time>', 'Committed by a known time', 'How far it got', 'No', 'Not anchored', 'Not checked', 'P1', 'P2', 'Pipeline', 'Received by this console', 'Records agree', 'Signed by a known recorder', 'Unsigned', 'Yes']},
+    'executions-pipeline-p1.html': {'gone': ['3', '<time> → <time>', 'Steps', 'What it was for', 'zeta → alpha → join'], 'new': ['3 of 3 declared stages', '<time>', 'Committed by a known time', 'How far it got', 'Not anchored', 'Not checked', 'P1', 'Pipeline', 'Received by this console', 'Records agree', 'Signed by a known recorder', 'Unsigned']},
+    'executions-pipeline-p2.html': {'gone': ['2', '<time> → <time>', 'Steps', 'What it was for', 'alpha → beta'], 'new': ['2 of 2 declared stages', '<time>', 'Committed by a known time', 'How far it got', 'No', 'Not anchored', 'P2', 'Pipeline', 'Received by this console', 'Records agree', 'Signed by a known recorder', 'Unsigned', 'Yes']},
+    'executions-records-agree.html': {'gone': ['Steps', 'What it was for'], 'new': ['2 of 2 declared stages', '<time>', 'Committed by a known time', 'How far it got', 'Not anchored', 'P2', 'Pipeline', 'Received by this console', 'Records agree', 'Signed by a known recorder', 'Unsigned', 'Yes']},
+    'executions-run-id-reused.html': {'gone': ['2', '<time> → <time>', 'Steps', 'What it was for', 'alpha → beta'], 'new': ['2 of 2 declared stages', '<time>', 'Committed by a known time', 'How far it got', 'No', 'Not anchored', 'P2', 'Pipeline', 'Received by this console', 'Records agree', 'Signed by a known recorder', 'Unsigned']},
+}
+for _page, _kinds in _RUNS_TABLE_PAGES.items():
+    for _kind, _texts in _kinds.items():
+        EXPLAINED.setdefault(_page, {}).setdefault(_kind, {}).update(dict.fromkeys(_texts, _RUNS_TABLE))
+
+#: The answer and authorization pages carry the run page's head (the authorization page without its
+#: four answers, as it must never read as a pass). Measured, not typed.
+_PAGE_HEADS = "the run's head on its answer and authorization pages"
+_PAGE_HEADS_PAGES: dict[str, dict[str, list[str]]] = {
+    'run[forged]/answer.html': {'gone': ['Answer', 'Where this answer came from', 'nb2-cand'], 'new': ['2 of 2 declared stages · recorded in the format stage-receipt-chain/0.2 · ran <time> · received by this console <time>', 'Committed by a known time Not anchored', 'Graph Table Inputs & outputs Receipt', 'Ran as approved a straight-line run: there is no plan to compare', 'Records agree No', 'Runs / P2 / nb2-cand', 'Signed by a known recorder Unsigned', 'nb2-cand · P2']},
+    'run[forged]/authorization.html': {'new': ['2 of 2 declared stages · recorded in the format stage-receipt-chain/0.2 · ran <time> · received by this console <time>', 'Graph Table Inputs & outputs Receipt', 'Runs / P2 / nb2-cand', 'nb2-cand · P2']},
+    'run[held-a]/answer.html': {'gone': ['Answer', 'Where this answer came from', 'nb2-base'], 'new': ['2 of 2 declared stages · recorded in the format stage-receipt-chain/0.2 · ran <time> · received by this console <time>', 'Committed by a known time Not anchored', 'Graph Table Inputs & outputs Receipt', 'Ran as approved a straight-line run: there is no plan to compare', 'Records agree Yes', 'Runs / P2 / nb2-base', 'Signed by a known recorder Unsigned', 'nb2-base · P2']},
+    'run[held-a]/authorization.html': {'new': ['2 of 2 declared stages · recorded in the format stage-receipt-chain/0.2 · ran <time> · received by this console <time>', 'Graph Table Inputs & outputs Receipt', 'Runs / P2 / nb2-base', 'nb2-base · P2']},
+    'run[held-b]/answer.html': {'gone': ['Answer', 'Where this answer came from', 'nb2-cand'], 'new': ['2 of 2 declared stages · recorded in the format stage-receipt-chain/0.2 · ran <time> · received by this console <time>', 'Committed by a known time Not anchored', 'Graph Table Inputs & outputs Receipt', 'Ran as approved a straight-line run: there is no plan to compare', 'Records agree No', 'Runs / P2 / nb2-cand', 'Signed by a known recorder Unsigned', 'nb2-cand · P2']},
+    'run[held-b]/authorization.html': {'new': ['2 of 2 declared stages · recorded in the format stage-receipt-chain/0.2 · ran <time> · received by this console <time>', 'Graph Table Inputs & outputs Receipt', 'Runs / P2 / nb2-cand', 'nb2-cand · P2']},
+    'run[r11]/answer.html': {'gone': ['Answer', 'Where this answer came from', 'dag-r37-r'], 'new': ['3 of 3 declared stages · recorded in the format stage-receipt-chain/0.1 · ran <time> · received by this console <time>', 'Committed by a known time Not anchored', 'Graph Table Inputs & outputs Receipt', 'Ran as approved Yes', 'Records agree Not checked', 'Runs / P1 / dag-r37-r', 'Signed by a known recorder Unsigned', 'dag-r37-r · P1']},
+    'run[r11]/authorization.html': {'new': ['3 of 3 declared stages · recorded in the format stage-receipt-chain/0.1 · ran <time> · received by this console <time>', 'Graph Table Inputs & outputs Receipt', 'Runs / P1 / dag-r37-r', 'dag-r37-r · P1']},
+}
+for _page, _kinds in _PAGE_HEADS_PAGES.items():
+    for _kind, _texts in _kinds.items():
+        EXPLAINED.setdefault(_page, {}).setdefault(_kind, {}).update(dict.fromkeys(_texts, _PAGE_HEADS))
+
+#: The incidents lists draw a table -- the rule's chip, the run, its pipeline, when it was raised --
+#: and each incident has its own page, which the chip opens. Measured, not typed.
+_INCIDENT_TABLE = "the incidents lists' own table; each incident's quote moved to its own page"
+_INCIDENT_TABLE_PAGES: dict[str, dict[str, list[str]]] = {
+    'incidents-i-contradicts.html': {'gone': ['the report it came from'], 'new': ['<time>', 'Contradicts itself', 'Incident', 'P2', 'Pipeline', 'Raised', 'Run', 'nb2-cand · <hex>']},
+    'incidents-i-runid-reused.html': {'gone': ['run_id reused', 'the report it came from'], 'new': ['<time>', 'Incident', 'P2', 'Pipeline', 'Raised', 'Run', 'Run id reused', 'nb2-cand · <hex>']},
+    'incidents.html': {'gone': ['run_id reused', 'the report it came from'], 'new': ['<time>', 'Contradicts itself', 'Incident', 'P2', 'Pipeline', 'Raised', 'Run', 'Run id reused', 'nb2-cand · <hex>']},
+}
+for _page, _kinds in _INCIDENT_TABLE_PAGES.items():
+    for _kind, _texts in _kinds.items():
+        EXPLAINED.setdefault(_page, {}).setdefault(_kind, {}).update(dict.fromkeys(_texts, _INCIDENT_TABLE))
+NEW_PAGES.update({
+    "incidents/i-contradicts-<key>.html": "one incident's own page, the Check board",
+    "incidents/i-runid-reused-<key>.html": "one incident's own page, the Check board",
+})
 
 @pytest.fixture(scope="module")
 def now(tmp_path_factory):

@@ -24,13 +24,16 @@ PINS_DOC = REPO / "PINS.md"
 
 #: The three hashes this channel has independently verified, named once here. If a pin is
 #: moved, this fails and names what disagreed -- the point of writing them out at all.
-#: The SDK's two: 0.2.0 from PyPI, the wheels' sha256 as RC2's SHA256SUMS gives
-#: them (ci's build of fce500e656e83ee05cb9f6f223779be4a37ec0ce), which PyPI serves.
-ONETRACE_WHL_SHA256 = "0e8df2304582e1ab7f6ed7309b3d0ac4c4654897cd77e1c96194ce8a708ee481"
+#: The SDK's two: onetrace 0.2.1 from PyPI, its wheel's sha256 as PyPI serves it (the build its
+#: release cleared; written here by script from PyPI's JSON), and onetrace-verify 0.2.0, as RC2's
+#: SHA256SUMS gives it (ci's build of fce500e656e83ee05cb9f6f223779be4a37ec0ce), which PyPI serves.
+ONETRACE_WHL_SHA256 = "f55ca407d9ac1dd0451878c44a3c980e8b977b04ab0818d42e9eac780eaeb608"
 ONETRACE_VERIFY_WHL_SHA256 = "74b3c862bdf997ec71b20de02c6bbdb445b89ffc0017497b3ed6ce91b2bce89c"
-#: The pinned SDK's version, as both distributions and `onetrace.__version__` report it.
-PINNED_SDK_VERSION = "0.2.0"
-ONETRACE_LOCK_KEY = "onetrace==0.2.0"
+#: The pinned SDK's version, as its distribution and `onetrace.__version__` report it; and the
+#: verifier's, now a patch behind it (the two are released in series: 0.2.x with 0.2.x).
+PINNED_SDK_VERSION = "0.2.1"
+PINNED_VERIFY_VERSION = "0.2.0"
+ONETRACE_LOCK_KEY = "onetrace==0.2.1"
 ONETRACE_VERIFY_LOCK_KEY = "onetrace-verify==0.2.0"
 
 _REQ = re.compile(

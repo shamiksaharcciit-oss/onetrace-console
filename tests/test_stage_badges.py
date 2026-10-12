@@ -6,7 +6,7 @@ words; the signing badge keeps its placeholder until the third build.
 | Yes | "Committed by a known time · Yes · existed by {time} · {source} (the whole run's record)" |
 | Couldn't check | "Committed by a known time · Couldn't check · {the verifier's reason}" |
 | No, the check failed | "Committed by a known time · No · the check says: {detail}" |
-| No anchor row | "Committed by a known time · No · not anchored" |
+| No anchor row | "Committed by a known time · Not anchored · no anchor beside the chain" |
 | No own check | the record-declared rung, as on the run page |
 
 The FAIL is the pinned verifier's own; PASS and NOT-RUN edit that stored report's one anchor row,
@@ -61,15 +61,15 @@ def test_a_failed_check_says_what_the_check_says(anchored):
                            "record"), said
 
 
-def test_no_anchor_row_is_no_not_anchored(demo):  # noqa: F811
+def test_no_anchor_row_is_not_anchored(demo):  # noqa: F811
     run, store = demo
-    assert _badges(run, store) == {"Committed by a known time · No · not anchored"}
+    assert _badges(run, store) == {"Committed by a known time · Not anchored · no anchor beside the chain"}
 
 
-def test_a_record_declaring_an_anchor_it_does_not_have_is_no_not_anchored(declared):
+def test_a_record_declaring_an_anchor_it_does_not_have_is_not_anchored(declared):
     """The record's declaration is not read while an own check exists."""
     run, store = declared
-    assert _badges(run, store) == {"Committed by a known time · No · not anchored"}
+    assert _badges(run, store) == {"Committed by a known time · Not anchored · no anchor beside the chain"}
 
 
 def test_without_an_own_check_it_is_the_record_declared_rung_as_on_the_run_page(anchored):

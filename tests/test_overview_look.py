@@ -100,11 +100,12 @@ def test_each_pill_s_colour_comes_from_the_state_it_stands_for(ten_runs, examine
     assert set(ATTENTION_TONE) == set(ATTENTION_WORDS)
     assert set(BASELINE_TONE) == {"same", "changed", "couldnt-check", "not-compared"}
     assert ATTENTION_TONE["contradicts"] == "bad" and ATTENTION_TONE["changed"] == "neu"
-    #: Couldn't check is no finding, and is never drawn as one.
-    assert ATTENTION_TONE["couldnt-check"] == BASELINE_TONE["couldnt-check"] == "cco"
-    assert ATTENTION_TONE["couldnt-check"] != ATTENTION_TONE["missing-stage"]
+    #: By the one rule (tones.py): a check that couldn't be done, or wasn't, is amber; a stage
+    #: found missing is a check that failed, red; a change is no fault, neutral.
+    assert ATTENTION_TONE["couldnt-check"] == BASELINE_TONE["couldnt-check"] == "cc"
+    assert ATTENTION_TONE["missing-stage"] == "bad"
     assert BASELINE_TONE["couldnt-check"] != BASELINE_TONE["changed"]
-    assert ATTENTION_TONE["not-checked"] == "neu"
+    assert ATTENTION_TONE["not-checked"] == "cc"
     items = re.findall(r'<li data-attention="([^"]+)">(.*?)</li>',
                        _section(home, "needs-attention"), re.S)
     assert items, "the fixture needs a run needing attention"
@@ -113,7 +114,8 @@ def test_each_pill_s_colour_comes_from_the_state_it_stands_for(ten_runs, examine
         assert (pill.group(1), unescape(pill.group(2))) == (ATTENTION_TONE[kind],
                                                             ATTENTION_WORDS[kind]), (kind, html)
     rows = dict(re.findall(r'<tr data-recent="([^"]+)">(.*?)</tr>', home, re.S))
-    verdict_tone = {HOLDS: "ok", CONTRADICTS: "bad", COULD_NOT_CHECK: "cco"}
+    from onetrace_console import tones
+    verdict_tone = {v: tones.tone(tones.VERDICT, v) for v in tones.VERDICT}
     states = set()
     for run in store.runs():
         if run.key not in rows:
@@ -214,3 +216,16 @@ def test_every_page_the_console_draws_carries_the_skin_and_no_viewer_page_does(t
     for page in viewer:
         assert 'class="cp"' not in page
     examined(len(console) + len(viewer), "pages read for the skin")
+
+
+def test_a_needs_attention_item_keeps_its_run_name_on_a_line_and_puts_its_time_under_it(examined):
+    """Its time ("· received <date> UTC" and how long ago) never wraps, so beside a long run name it
+    squeezed the name until the name broke a few characters to a line. The item wraps instead: the
+    name keeps at least 16em, and the time goes under it, to the right, when there is no room."""
+    from onetrace_console.frame import stylesheet
+    css = stylesheet().decode("utf-8")
+    rules = (r"\.cp \[data-attention\]\{flex-wrap:wrap\}",
+             r"\.cp \[data-attention\]>span:first-child\{flex:1 1 16em;min-width:0\}",
+             r"\.cp \[data-attention\]>\.value\{margin-left:auto\}")
+    examined(len(rules), "rules")
+    assert all(re.search(r, css) for r in rules), [r for r in rules if not re.search(r, css)]

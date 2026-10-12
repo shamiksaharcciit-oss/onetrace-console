@@ -123,20 +123,20 @@ def _says(run, store) -> tuple[str, str, str]:
     return row, pill, _case_rung(run, store)
 
 
-def test_a_run_with_no_anchor_reads_no_not_anchored_as_its_run_page_does(demo):  # noqa: F811
+def test_a_run_with_no_anchor_reads_not_anchored_as_its_run_page_does(demo):  # noqa: F811
     run, store = demo
     _read_by_the_viewer(json.loads(store.get(run.check_report).decode("utf-8")))
     row, pill, rung = _says(run, store)
-    assert row == "Anchor No · not anchored" and pill == "No", (row, pill)
+    assert row == "Anchor Not anchored · no anchor beside the chain" and pill == "Not anchored", (row, pill)
     assert row == f"Anchor {rung}"
 
 
-def test_a_record_declaring_an_anchor_it_does_not_have_reads_no_not_anchored(declared):
+def test_a_record_declaring_an_anchor_it_does_not_have_reads_not_anchored(declared):
     """What the record declares is not read; the verifier found no anchor row."""
     run, store = declared
     _read_by_the_viewer(json.loads(store.get(run.check_report).decode("utf-8")))
     row, pill, rung = _says(run, store)
-    assert row == "Anchor No · not anchored" and pill == "No", (row, pill)
+    assert row == "Anchor Not anchored · no anchor beside the chain" and pill == "Not anchored", (row, pill)
     assert row == f"Anchor {rung}"
 
 

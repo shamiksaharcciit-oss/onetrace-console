@@ -24,6 +24,7 @@ from pathlib import Path
 import pytest
 
 from onetrace_console.viewer.page import CSS
+from onetrace_console.textdiff_page import SUFFIX as TEXT_PAGE
 
 REPO = Path(__file__).resolve().parent.parent
 FADE = 48          #: px, at the edge with more to see
@@ -112,10 +113,14 @@ _REGION = re.compile(r'<div class="graph-box" tabindex="0" role="region" aria-la
 
 def test_each_graph_panel_is_a_named_region_a_keyboard_reaches(pages, examined):
     from onetrace_console.viewer.sentences import template
-    compare = [h for rel, h in pages.items() if rel.startswith("diff/")]
+    compare = [h for rel, h in pages.items() if rel.startswith("diff/") and not rel.endswith(TEXT_PAGE)]  # a Diff page, not its text diff's own
     runs = [h for rel, h in pages.items() if rel.endswith("/case.html")]
     examined(len(compare) + len(runs), "pages with a graph")
     assert compare and runs
+    #: 0.1.1's demo store compares graph-shaped pairs (P2, P3) and straight-line ones (P1); each
+    #: comparison page draws one graph, a straight-line pair's as a line, and it is the named region.
+    shaped = [h for h in compare if 'data-shape="dag"' in h]
+    assert shaped and len(shaped) < len(compare), "both shapes are among the demo's comparisons"
     for html in compare:
         assert html.count('class="graph-box"') == 1
         assert _REGION.findall(html) == [template("graph.region.comparison")]
@@ -128,13 +133,16 @@ def test_the_changes_table_scrolls_in_its_own_named_region(pages, examined):
     """In the scroll region every wide table has (`words.scroll_region`): its scrollbar drawn, its
     ring drawn by the frame around it, which the fade's mask cannot clip."""
     from onetrace_console.render import CHANGES_REGION
-    compare = [h for rel, h in pages.items() if rel.startswith("diff/")]
+    compare = [h for rel, h in pages.items() if rel.startswith("diff/") and not rel.endswith(TEXT_PAGE)]  # a Diff page, not its text diff's own
     examined(len(compare), "comparison pages")
     for html in compare:
         wrapped = re.findall(r'<div class="scroll-frame"><div class="scroll-x" data-scroll="changes" '
                              r'tabindex="0" role="region" aria-label="([^"]+)"><table data-section="changes"',
                              html)
-        assert wrapped == [CHANGES_REGION] and html.count('<table data-section="changes"') == 1
+        #: One changes table per verb that draws one: the graph-shaped pair's, the straight-line
+        #: pair's two (diff and localize) -- each in its own region.
+        tables = html.count('<table data-section="changes"')
+        assert tables >= 1 and wrapped == [CHANGES_REGION] * tables
     assert CHANGES_REGION == "Changes, scrolls sideways"
     assert re.search(r"(^|\n)\.scroll-x\{overflow-x:auto;max-width:100%\}", CSS)
     assert re.search(r"(^|\n)\.scroll-x::-webkit-scrollbar\{height:12px\}", CSS)

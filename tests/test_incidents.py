@@ -496,7 +496,7 @@ def test_every_count_on_the_incidents_page_equals_the_list_it_links_to(populated
         href = rule_href(rule_id)
         assert href in pages, f"{rule_id} links to {href}, which was not rendered"
         listed = pages[href]
-        shown = re.findall(r'<li data-incident="', listed)
+        shown = re.findall(r'<tr data-incident="', listed)
         assert len(shown) == len(mine), (
             f"{rule_id}: {len(mine)} incidents but {len(shown)} on {href}")
         runs_with = len({i.subject for i in mine})
@@ -709,7 +709,7 @@ def test_every_per_rule_count_on_home_equals_the_incidents_on_the_page_it_opens(
         assert page_total == len(store.runs()), t.slug
 
         listed = pages[t.href]
-        on_page = re.findall(r'<li data-incident="', listed)
+        on_page = re.findall(r'<tr data-incident="', listed)
         assert len(on_page) == len(grouped[rule_id]), (
             f"{rule_id}: {len(grouped[rule_id])} incidents but {len(on_page)} on {t.href}")
         #: The run count Home shows must be the distinct runs those incidents came from.
@@ -774,6 +774,6 @@ def test_homes_incident_count_carries_its_denominator(populated, examined):
     for rule in raising:
         block = re.search(rf'<li data-tally="{rule.id.lower()}">.*?</li>', home, re.S).group(0)
         assert not re.search(r"<li>\d+ incidents?</li>", block), f"a bare count: {block}"
-        on_page = len(re.findall(r'<li data-incident="', pages[rule_href(rule.id)]))
+        on_page = len(re.findall(r'<tr data-incident="', pages[rule_href(rule.id)]))
         word = "incident" if on_page == 1 else "incidents"
         assert f"{on_page} {word} of {len(every)} raised from stored runs" in block, block

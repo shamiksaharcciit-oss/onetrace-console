@@ -59,9 +59,13 @@ def pages(tmp_path_factory) -> dict[str, str]:
             for p in root.rglob("*.html")}
 
 
-def _one(pages: dict[str, str], pattern: str) -> str:
-    found = [h for rel, h in pages.items() if re.fullmatch(pattern, rel)]
-    assert found, pattern
+def _reference_comparison(pages: dict[str, str]) -> str:
+    """The comparison these items were drawn for: the reference demo's two runs. Since 0.1.1 the
+    demo stores several comparisons, and a page's name is its content's digest, so "the first diff
+    page" would be a different one from build to build: it is picked by its runs, never by order."""
+    found = [h for rel, h in pages.items() if re.fullmatch(r"diff/[0-9a-f]{64}\.html", rel)
+             and "demo-run-1" in h and "demo-run-2" in h]
+    assert len(found) == 1, len(found)
     return found[0]
 
 
@@ -106,7 +110,7 @@ def item1_problems(page: str, *, graph: bool) -> list[str]:
 def test_a_graph_comparison_folds_what_it_cannot_draw_into_one_closed_line(pages, diverging,
                                                                            examined):  # noqa: F811
     from onetrace_console.render import render_diff
-    graph = _one(pages, r"diff/[0-9a-f]{64}\.html")
+    graph = _reference_comparison(pages)
     comparison, store = diverging
     linear = render_diff(comparison, store, generated_at=GENERATED_AT)
     examined(2, "comparison pages")
@@ -115,7 +119,7 @@ def test_a_graph_comparison_folds_what_it_cannot_draw_into_one_closed_line(pages
 
 
 def test_item1_sabotage_the_sections_drawn_again_is_named(pages, examined):
-    graph = _one(pages, r"diff/[0-9a-f]{64}\.html")
+    graph = _reference_comparison(pages)
     planted = graph.replace('<details data-section="not-shown">',
                             '<section data-section="same-change"><h2>Other runs with the same change'
                             '</h2></section><details data-section="not-shown" open>', 1)
@@ -147,7 +151,7 @@ def item2_problems(overview: str, comparison: str) -> list[str]:
 
 
 def test_no_developer_wording_on_the_overview_or_the_comparison(pages, examined):
-    overview, comparison = pages["home.html"], _one(pages, r"diff/[0-9a-f]{64}\.html")
+    overview, comparison = pages["home.html"], _reference_comparison(pages)
     examined(2, "pages")
     assert item2_problems(overview, comparison) == []
 
@@ -157,7 +161,7 @@ def test_no_developer_wording_on_the_overview_or_the_comparison(pages, examined)
                                      ("Repeat this yourself", "Repeat it without us"),
                                      ("tests (1st)", "tests#1")])
 def test_item2_sabotage_each_old_word_put_back_is_named(pages, old, new, examined):
-    comparison = _one(pages, r"diff/[0-9a-f]{64}\.html")
+    comparison = _reference_comparison(pages)
     examined(1, f"{new} planted")
     assert old in comparison
     assert item2_problems(pages["home.html"], comparison.replace(old, new))
@@ -181,11 +185,11 @@ def item3_problems(page: str) -> list[str]:
 
 def test_the_comparison_says_once_at_the_top_who_a_and_b_are(pages, examined):
     examined(1, "comparison page")
-    assert item3_problems(_one(pages, r"diff/[0-9a-f]{64}\.html")) == []
+    assert item3_problems(_reference_comparison(pages)) == []
 
 
 def test_item3_sabotage_the_graph_card_says_it_again(pages, examined):
-    page = _one(pages, r"diff/[0-9a-f]{64}\.html")
+    page = _reference_comparison(pages)
     ab = re.search(r'<p data-section="runs-ab">.*?</p>', page, re.S).group(0)
     planted = page.replace('<section data-section="graph">', '<section data-section="graph">' + ab, 1)
     examined(1, "planted page")
@@ -199,7 +203,15 @@ SHARED = ("Held under the checks that ran; not anchored, so none of these steps 
 PER_STEP = "Held under the checks that ran; not anchored, so it can't be shown to be the record"
 
 
+def _unlabelled(html: str) -> str:
+    """The page without the narrow screen's column labels (`words.labelled`), so a table reads as
+    its cells were drawn before them; nothing else changes."""
+    import re as _re
+    return _re.sub(r' data-label="[^"]*"', "", html)
+
+
 def item4_problems(case: str) -> list[str]:
+    case = _unlabelled(case)
     out = []
     table = re.search(r'<section data-section="timeline">(.*?)</section>', case, re.S)
     if table is None:
@@ -245,7 +257,7 @@ def test_the_step_table_says_the_shared_reason_once_and_names_each_receipt(pages
 @pytest.mark.parametrize("planted", ["the shared reason per step", "a full timestamp in a step",
                                      "an unnamed receipt"])
 def test_item4_sabotage_each_old_form_is_named(pages, planted, examined):
-    case = next(h for rel, h in pages.items() if rel.endswith("/case.html"))
+    case = _unlabelled(next(h for rel, h in pages.items() if rel.endswith("/case.html")))
     if planted == "the shared reason per step":
         bad = case.replace('<td><p>Checked — it holds.</p></td>',
                            "<td><p>Checked — it holds.</p><p>" + PER_STEP + ".</p></td>", 1)

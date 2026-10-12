@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.1.1]
+
+- **A richer demo.** `onetrace-console demo` now records 30 runs of four small example pipelines when you start it: a question-and-answer pipeline over an example shop's refund policy, the reference demo's coding agent, a support-ticket triage, and a support reply drafted by a stub whose wording varies from run to run. The draft leaves the refund window as `{days}` on purpose; a later policy stage fills in the number. They make no network calls and use no hosted model. Some are altered after recording on purpose, so the console has something to find.
+- **One look on every page,** and one rule for colour: green when a check ran and held, red when it ran and failed, amber when it couldn't be done or wasn't done, grey when the evidence wasn't made. Every coloured label keeps its words. "Unsigned" and "Not anchored" are now their own states.
+- **The Overview** has a one-line summary, a count and one line per card, and each definition behind a "?". Times show "2 h ago" beside the time.
+- **The comparison page** opens with where the two runs first differ and the command that repeats it, draws a graph for runs recorded as a straight line too, lists the settings that changed, and says so when the two runs come from different pipelines.
+- **The text diff** shows line numbers, coloured lines, struck-through removed words, and a count of lines removed and added.
+- **Windows:** the console now reads the SDK's output correctly whatever the system's code page. Before, a text diff with an em dash or an accented letter couldn't be read.
+- `--help` and `-h` print the usage and succeed; a stopped `demo --public` removes its temporary folder; the console has an icon; the port-in-use message names `--port`.
+
 ## [0.1.0]
 
 The first release.

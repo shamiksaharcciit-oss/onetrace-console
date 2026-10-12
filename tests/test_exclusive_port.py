@@ -72,4 +72,7 @@ def test_a_second_console_on_the_same_port_refuses_with_a_clear_message(first, t
     err = capsys.readouterr().err
     assert f"refusing to start: cannot listen on 127.0.0.1:{port}" in err
     assert "another process" in err
+    #: 0.1.1: the fix names the command-line flag too, not only the configuration file.
+    assert "fix: stop that process, or give this console another port: --port N on the command " \
+           "line, or port in its configuration file." in err
     assert "Traceback" not in err

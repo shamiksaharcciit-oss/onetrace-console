@@ -1,7 +1,7 @@
 # The hosted read-only demo
 
-A live onetrace-console that anyone can open and nobody can change. It serves the reference
-demo's two runs and their comparison, built into the image, with a banner on every page. Every
+A live onetrace-console that anyone can open and nobody can change. It serves the demo store's
+runs and their comparisons, recorded when the image is built, with a banner on every page. Every
 write is refused before its body is read, and the access log goes to the machine's output.
 
 The files here:

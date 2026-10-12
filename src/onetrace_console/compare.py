@@ -69,6 +69,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from onetrace_console.checks import materialise
+from onetrace_console.child import utf8_env
 from onetrace_console.ingest import bundle
 from onetrace_console.store import StoredRun, Store, digest
 
@@ -378,7 +379,7 @@ def _run_verb(verb: str, folder_a: Path, folder_b: Path, out: Path, timeout: int
                str(folder_a), str(folder_b), "--out", str(out))
     shown = f"python -m onetrace {verb} RUN_A RUN_B --out OUT"
     try:
-        proc = subprocess.run(command, capture_output=True, timeout=timeout)
+        proc = subprocess.run(command, capture_output=True, timeout=timeout, env=utf8_env())
     except subprocess.TimeoutExpired:
         # A timeout is not a verdict and is not a refusal by the SDK. It is this runner
         # failing to obtain an answer, and it says so in its own name.
@@ -407,7 +408,7 @@ def _run_text_diff(folder_a: Path, folder_b: Path, out: Path, timeout: int, stor
              + (f" --max-lines {max_lines}" if max_lines is not None else ""))
     verb = TEXT_DIFF if max_lines is None else f"{TEXT_DIFF} --max-lines {max_lines}"
     try:
-        proc = subprocess.run(command, capture_output=True, timeout=timeout)
+        proc = subprocess.run(command, capture_output=True, timeout=timeout, env=utf8_env())
     except subprocess.TimeoutExpired:
         return VerbRun(verb=verb, command=command, shown_command=shown, exit_status="",
                        stdout_key=store.put(b""), note=f"{TIMED_OUT} after {timeout}s")

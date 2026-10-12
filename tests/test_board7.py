@@ -29,6 +29,9 @@ from onetrace_console.textdiff_view import TextDiffUnreadable
 from tests.test_checks import FIXED_RAN_AT, _require_installed
 from tests.test_pages import GENERATED_AT
 from tools.fetch_sdk_fixtures import WARRANTY, check as fixtures_ready
+#: The SDK run as the console runs it (compare.py): UTF-8 forced on the child's output, so the bytes
+#: compared are the console's, on a machine whose default encoding is not UTF-8 too.
+from onetrace_console.child import utf8_env  # noqa: E402
 
 RUNS = WARRANTY / "runs"
 SECTION = '<section data-section="where-started">'
@@ -112,9 +115,11 @@ def test_the_golden_fixture_renders_the_warranty_trace(golden, examined):
     load = table.split("<tr data-output")[1]
     assert '<mark class="del">twelve</mark>' in load and '<mark class="ins">six</mark>' in load
     assert table.count('data-badge="verified"') == table.count("<tr data-output") == 6
-    #: Point 6, and the command.
+    #: Point 6, and the command a reader types: the SDK's own, over the two run folders.
+    from onetrace_console.render import typed_command
     assert LIMIT in text
-    assert SHOWN_COMMAND in text
+    assert typed_command(comparison, store, "diff", text=True) in text
+    assert "RUN_A" not in text
 
 
 def test_the_trace_is_its_own_run_its_json_the_sdks_bytes_and_the_text_diff_unchanged(golden,
@@ -126,7 +131,7 @@ def test_the_trace_is_its_own_run_its_json_the_sdks_bytes_and_the_text_diff_unch
     #: The recorded command, by hand over the same folders, prints the same bytes.
     argv = list(run.command)
     argv[argv.index("--out") + 1] = str(tmp_path / "by-hand")
-    assert subprocess.run(argv, capture_output=True).stdout == store.get(run.stdout_key)
+    assert subprocess.run(argv, capture_output=True, env=utf8_env()).stdout == store.get(run.stdout_key)
     #: The text diff's own run is still `--no-follow`, its trace "not followed".
     plain = comparison.verb(TEXT_DIFF)
     assert "--no-follow" in plain.command
@@ -270,7 +275,7 @@ def test_runs_the_trace_cannot_reach_change_nothing(store, tmp_path):
     argv = list(run.command)
     argv[argv.index("--runs-root") + 1] = str(tmp_path / "every")
     argv[argv.index("--out") + 1] = str(tmp_path / "out-every")
-    every = subprocess.run(argv, capture_output=True).stdout
+    every = subprocess.run(argv, capture_output=True, env=utf8_env()).stdout
     assert json.loads(every) == json.loads(store.get(run.stdout_key))
 
 
@@ -348,7 +353,8 @@ def test_an_unreadable_trace_says_so_and_keeps_the_limit_line(golden):
         for v in comparison.verbs))
     board = unescape(_board(render_diff(broken, store, generated_at=GENERATED_AT)))
     assert "This console can't read this text diff: " in board and LIMIT in board
-    assert run.shown_command in board
+    from onetrace_console.render import typed_command
+    assert typed_command(comparison, store, "diff", text=True) in board
 
 
 # ------------------------------------------------------------------------- visible text
@@ -365,7 +371,8 @@ BOARD7_NEW = {
     "The ingest chain": _ITEM11,
     "Changed text, from the source document to the answer": _ITEM11,
     LIMIT: "the limit line, always shown",
-    f"Command: {SHOWN_COMMAND}": "WO-B7 §3: the trace run's command, shown on the page",
+    #: The command as a reader types it, over the golden pair's two run folders.
+    'Command: onetrace diff runs/query-v1 runs/query-v2 --text': "the trace's command, as a reader types it",
     "first difference: retrieve — output text changed; settings unchanged; corpus link changed; "
     "input help_centre changed": _SDK,
     "traced into the linked ingest runs: ingest-v1 -> ingest-v2": _SDK,

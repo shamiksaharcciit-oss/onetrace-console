@@ -22,6 +22,9 @@ import pytest
 
 from onetrace_console.textdiff_view import FORMAT, TextDiffUnreadable, read_textdiff, render_textdiff
 from tools.fetch_sdk_fixtures import WARRANTY, check as fixtures_ready
+#: The SDK run as the console runs it (compare.py): UTF-8 forced on the child's output, so the bytes
+#: compared are the console's, on a machine whose default encoding is not UTF-8 too.
+from onetrace_console.child import utf8_env  # noqa: E402
 
 RUNS = WARRANTY / "runs"
 
@@ -40,7 +43,7 @@ def _sdk_textdiff(baseline: Path, candidate: Path) -> str:
     with tempfile.TemporaryDirectory(prefix="onetrace-textdiff-") as out:
         proc = subprocess.run([sys.executable, "-m", "onetrace", "diff", str(baseline),
                                str(candidate), "--text", "--json", "--no-follow", "--out", out],
-                              capture_output=True, text=True)
+                              capture_output=True, text=True, encoding="utf-8", env=utf8_env())
     assert proc.stdout.strip(), proc.stderr[-600:]
     return proc.stdout
 
@@ -52,7 +55,8 @@ def golden() -> dict:
 
 
 def _node(html: str, node: str) -> str:
-    found = re.search(rf'<article data-node="{node}">(.*?)</article>', html, re.S)
+    #: Each stage's diff is a fold: its heading in the summary, its article inside.
+    found = re.search(rf'<details data-node-fold="{node}"(?: open)?>(.*?)</details>', html, re.S)
     assert found, f"no node {node}"
     return found.group(1)
 
@@ -66,9 +70,12 @@ def test_the_golden_warranty_pair_renders_twelve_to_six(golden, examined):
     assert [n["node"] for n in golden["nodes"]] == ["retrieve", "prompt", "answer"]
     answer = _node(html, "answer")
     assert '<mark class="del">twelve</mark>' in answer and '<mark class="ins">six</mark>' in answer
-    assert "answer · downstream" in unescape(answer)
+    #: In the page's own words for the verdict, sentence case (0.1.1).
+    assert "answer · Changed after it" in unescape(answer)
     #: Each output shown carries the badge, and every one of the three is verified.
-    assert html.count('data-badge="verified"') == 3
+    #: Three outputs shown, each said verified on both sides (0.1.1: one chip per side).
+    assert html.count('data-badge="verified"') == 6
+    assert html.count('data-side="baseline">Baseline: verified') == 3
     assert unescape(re.search(r"<p data-first-line>(.*?)</p>", html).group(1)) == golden["first_line"]
 
 
@@ -180,3 +187,37 @@ def test_a_raw_control_character_in_shown_text_is_refused(golden):
 
 def test_an_exit_that_disagrees_with_the_envelope_is_refused(golden):
     _refused(dict(golden, exit="0"), "disagrees with its envelope")
+
+
+def settings_problems(html: str) -> list[str]:
+    """A stage's settings lines in the text diff: each setting by its short name (its whole path in
+    the tooltip), with an arrow; a recorded fingerprint (a digest) only under its Details."""
+    import re as _re
+    out = []
+    main, _, details = html.partition("<details data-settings-details>")
+    for line in _re.findall(r"<p data-settings>(.*?)</p>", main, _re.S):
+        if " -&gt; " in line or " -> " in line:
+            out.append(f"an ASCII arrow: {line}")
+        if _re.search(r">[^<]*\.[^<]*</span>:", line) or _re.match(r"\s*[\w]+\.[\w.]+:", line):
+            out.append(f"a whole path shown: {line}")
+        if "digest" in _re.sub(r'title="[^"]*"|data-setting-path="[^"]*"', "", line):
+            out.append(f"a fingerprint outside Details: {line}")
+    return out
+
+
+def test_settings_lines_by_short_name_fingerprints_under_details(examined):
+    from onetrace_console.textdiff_view import _settings
+    lines = ["settings: 2 changed", "  instrument.config_digest: aaa2d6fad586 -> a034738a4cba",
+             "  constants.chunk_size: 1024 -> 512"]
+    html = _settings(lines)
+    examined(len(lines), "settings lines")
+    assert settings_problems(html) == []
+    assert 'title="constants.chunk_size">chunk_size</span>: 1024 → 512' in html
+    assert html.index("<details data-settings-details>") < html.index("config_digest")
+
+
+def test_sabotage_long_names_ascii_arrows_or_a_loose_fingerprint_are_named(examined):
+    examined(3, "planted lines")
+    assert settings_problems("<p data-settings>constants.chunk_size: 1024 -&gt; 512</p>")
+    assert settings_problems('<p data-settings><span title="x">a</span>: 1 -&gt; 2</p>')
+    assert settings_problems('<p data-settings><span title="instrument.config_digest">config_digest</span>: a → b</p>')

@@ -68,9 +68,14 @@ def test_on_0_2_0_the_forged_rows_read_and_the_digest_is_quoted_escaped(uploaded
     verifier escaped it (its backslashes then doubled by the page), and nothing raw."""
     base, _, answers = uploaded
     _, case = _get(base, f"/runs/{answers['b']['run_key']}/case.html")
-    _, incidents = _get(base, "/incidents-i-contradicts.html")
+    _, listed = _get(base, "/incidents-i-contradicts.html")
+    #: The incident's own page, from its row on the rule's list: the verifier's rows are quoted there.
+    own = re.search(r'<tr data-incident="[0-9a-f]+">.*?<a href="(incidents/[^"]+)">.*?'
+                    + re.escape(f"runs/{answers['b']['run_key']}/case.html"), listed.decode("utf-8"), re.S)
+    assert own, "the forged run's incident is listed, linked to its page"
+    _, incident = _get(base, "/" + own.group(1))
     examined(2, "run page and incident page read")
-    for page in (case.decode("utf-8"), incidents.decode("utf-8")):
+    for page in (case.decode("utf-8"), incident.decode("utf-8")):
         assert 'data-rows="unreadable"' not in page and NOTE not in unescape(page)
         for raw in ("\r", "\t"):
             assert raw not in page, repr(raw)
@@ -121,9 +126,11 @@ def test_a_stored_report_whose_rows_a_record_broke_is_shown_whole_and_escaped(st
 
 
 def test_its_incident_quotes_the_output_whole_and_escaped(store, examined):
-    from onetrace_console.incident_pages import render_rule_list
-    _broken_rows(store)
-    page = render_rule_list(store, "I-CONTRADICTS", generated_at="2026-10-06T12:00:00+00:00")
+    from onetrace_console.incident_pages import render_incident_page
+    from onetrace_console.incidents import derive
+    run = _broken_rows(store)
+    (incident,) = [i for i in derive(store) if i.subject == run.key and i.rule == "I-CONTRADICTS"]
+    page = render_incident_page(incident, store, generated_at="2026-10-06T12:00:00+00:00")
     quoted = _pre(page, 'data-rows="unreadable"')
     examined(1, "incident quote")
     assert NOTE in unescape(page)

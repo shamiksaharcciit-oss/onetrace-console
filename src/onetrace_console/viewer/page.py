@@ -56,7 +56,7 @@ h1{font-size:var(--fs-h1);margin:2px 0 0;font-weight:600}
   padding:14px 16px;margin-bottom:22px}
 .strip.ok{border-color:var(--line);background:var(--ok-bg)}
 .strip.bad{border-color:var(--line);background:var(--bad-bg)}
-.strip .lead{font-size:17px;font-weight:600}
+.strip .lead{font-size:15px;font-weight:600}
 .strip.ok .lead{color:var(--ok-ink)} .strip.bad .lead{color:var(--bad-ink)}
 .strip .beside{color:var(--ink);margin-top:6px}
 section{margin:0 0 24px}
@@ -67,22 +67,22 @@ h2{font-size:13px;text-transform:uppercase;letter-spacing:.1em;color:var(--ink-m
 .card h3{font-size:15px;margin:0 0 4px;font-weight:600}
 .card .step{color:var(--ink-faint);font-family:var(--font-mono);font-size:12px}
 .card p{margin:4px 0}
-.grid{display:grid;grid-template-columns:170px 1fr;gap:4px 12px;font-size:13.5px;margin:6px 0}
-.grid .k{color:var(--ink-faint);text-transform:uppercase;font-size:11.5px;letter-spacing:.06em;
+.grid{display:grid;grid-template-columns:170px 1fr;gap:4px 12px;font-size:13px;margin:6px 0}
+.grid .k{color:var(--ink-faint);text-transform:uppercase;font-size:12px;letter-spacing:.06em;
   padding-top:2px}
 .mono,.value,code,pre{font-family:var(--font-mono);font-variant-numeric:tabular-nums}
-.fp{font-family:var(--font-mono);font-size:12.5px;overflow-wrap:anywhere}
+.fp{font-family:var(--font-mono);font-size:12px;overflow-wrap:anywhere}
 q[data-words]{quotes:"\\201C" "\\201D";color:var(--ink);font-style:italic}
 q[data-words="check"]{font-style:normal;font-family:var(--font-mono);font-size:13px}
 details{margin:6px 0}
 summary{cursor:pointer;color:var(--ink-muted);font-size:13px}
 pre{background:var(--surface-sunk);border:1px solid var(--line-soft);border-radius:6px;
-  padding:10px;overflow-x:auto;white-space:pre-wrap;overflow-wrap:anywhere;font-size:12.5px;
+  padding:10px;overflow-x:auto;white-space:pre-wrap;overflow-wrap:anywhere;font-size:12px;
   margin:6px 0}
 ul.plain{list-style:none;padding:0;margin:0}
 ul.plain li{margin:0 0 8px}
-table.timeline{width:100%;border-collapse:collapse;font-size:13.5px}
-table.timeline th{color:var(--ink-faint);text-align:left;font-weight:500;font-size:11.5px;
+table.timeline{width:100%;border-collapse:collapse;font-size:13px}
+table.timeline th{color:var(--ink-faint);text-align:left;font-weight:500;font-size:12px;
   text-transform:uppercase;letter-spacing:.06em;border-bottom:1px solid var(--line);
   padding:6px 8px}
 table.timeline td{border-bottom:1px solid var(--line-soft);padding:8px;vertical-align:top}
@@ -92,6 +92,7 @@ table.timeline td{border-bottom:1px solid var(--line-soft);padding:8px;vertical-
 footer{border-top:1px solid var(--line);margin-top:28px;padding-top:12px;color:var(--ink-muted);
   font-size:13px}
 .graph-box{overflow-x:auto;margin:0 0 8px}
+.graph-list{display:none}
 .last-failed{background:var(--cc-bg);color:var(--cc-ink);border-radius:6px;padding:8px 12px;
   margin:10px 0;font-weight:600}
 .graph-box::-webkit-scrollbar{height:12px}
@@ -140,7 +141,8 @@ svg.graph text{fill:var(--ink);font-family:var(--font-mono);font-size:12px}
 #: Board 1's navigation and boards 2 and 3's pages, for pages drawn inside the
 #: console's frame only (the free file never carries FRAME_CSS): the nav at board 1's sizes; the
 #: page at the board's width and padding, not the free file's 920px column; each section a panel;
-#: the tables as board 1's; each rung's state a pill, drawn by its state (`RUNG_PILL`). The
+#: the tables as board 1's. Each rung's state is a chip of the console's one chip family
+#: (`frame.CHIP_CSS`), coloured by its state (`tones.RUNG`). The
 #: brand's 20px is a token, `--nav-brand-size`, defined once on the frame's navigation:
 #: the skin's own block is the sealed v1, which the viewer does not edit.
 #: Board 1's 15px headings stay a literal, as accepted.
@@ -168,32 +170,13 @@ nav.frame footer{margin-top:auto;border:0;padding:16px 14px 0;color:var(--nav-in
 .shell .page table.timeline td{font-size:var(--fs-body);padding:11px 12px;
   border-bottom:1px solid var(--line-soft)}
 .shell .page table.timeline tr:last-child td{border-bottom:none}
-.shell .page tr[data-rung]>td:last-child>span:first-child{display:inline-block;
-  font-size:var(--fs-small);font-weight:500;padding:3px 8px;border-radius:var(--r-pill);
-  margin-right:4px}
-.shell .page tr[data-state=yes]>td:last-child>span:first-child{background:var(--ok-bg);color:var(--ok-ink)}
-.shell .page tr[data-state=no]>td:last-child>span:first-child{background:var(--cc-bg);
-  color:var(--cc-ink)}
-.shell .page tr[data-state=couldnt-check]>td:last-child>span:first-child{background:var(--neu-bg);
-  color:var(--cc-ink);box-shadow:inset 0 0 0 1px var(--cc-ink)}
-.shell .page :is(tr[data-state=not-checked],tr[data-state=not-yet-available],
-  tr[data-state=no-records],tr[data-state=signed-untrusted])>td:last-child>span:first-child{background:var(--neu-bg);color:var(--neu-ink)}
 @media (max-width:760px){.shell{flex-direction:column}nav.frame{flex-basis:auto}}
 @media print{nav.frame{display:none}}
 """
 
-#: Each rung state's pill, by the state alone, as specified: (fill, ink,
-#: outline). Yes is green. No is a finding -- the evidence shows the stage absent -- so filled
-#: amber, not red: red is the verdict strip's. Couldn't check is no finding at all, so it is not
-#: drawn as No: an amber outline on the neutral fill. Not checked, not yet available and no
-#: records are neutral. The pill's words carry the meaning; the colour never says more. Held
-#: against FRAME_CSS.
-RUNG_PILL = {"yes": ("ok", "ok", None), "no": ("cc", "cc", None),
-             "couldnt-check": ("neu", "cc", "cc"), "not-checked": ("neu", "neu", None),
-             "not-yet-available": ("neu", "neu", None), "no-records": ("neu", "neu", None),
-             #: "Signed, key not trusted": never Yes; neutral, as not checked
-             #: is -- its words carry the meaning (proposed with the Signed half).
-             "signed-untrusted": ("neu", "neu", None)}
+#: Each rung state's chip colour is not decided here: `onetrace_console.tones` holds the one rule
+#: for every page, and `frame.CHIP_CSS` draws it. The chip's words carry the state; the colour
+#: never says more.
 
 #: The marker a framed page's nav holds; the console's server puts the navigation and the footer
 #: in its place when it serves the page, since only it knows the session and its extensions.
@@ -482,7 +465,10 @@ def _style() -> str:
     sheet = _FRAME.get()
     if sheet is None:
         return f"<style>\n{root_css()}\n{CSS}</style>\n"
-    return f'<link rel="stylesheet" href="{escape(sheet)}">\n'
+    #: The console's own icon, beside its stylesheet; the free file, framed by nothing, has none.
+    icon = sheet.rsplit("/", 1)[0] + "/favicon.svg"
+    return (f'<link rel="stylesheet" href="{escape(sheet)}">\n'
+            f'<link rel="icon" href="{escape(icon)}" type="image/svg+xml">\n')
 
 
 def _top(m: PageModel, kind_key: str, title_key: str) -> str:
@@ -837,7 +823,9 @@ def _graph(m: PageModel) -> str:
     #: recorded order starts.
     return graph_render(m.graph_nodes, m.graph_edges,
                         recorded_order_href=f"#step-{first}" if first.isdigit() else "",
-                        heading=_t("section.graph"), esc=escape, lead=_marked_from(m))
+                        heading=_t("section.graph"), esc=escape, lead=_marked_from(m),
+                        wrap=m.graph_wrap, wrap_labels=bool(m.graph_wrap),
+                        **({"tag_lines": m.graph_tag_lines} if m.graph_tag_lines else {}))
 
 
 def _marked_from(m: PageModel) -> str:

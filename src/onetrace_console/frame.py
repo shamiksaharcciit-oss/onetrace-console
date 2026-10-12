@@ -65,10 +65,62 @@ PAGE_CSS = """
 .cp h1{margin:0;font-size:var(--fs-h1);font-weight:600}
 .cp h2{margin:0;font-size:15px;font-weight:600;color:var(--ink);text-transform:none;
   letter-spacing:0}
-.cp>[data-section=what]{font-size:var(--fs-nav);color:var(--ink-muted);margin-top:-12px}
+.cp>[data-section=subtitle]{font-size:var(--fs-nav);color:var(--ink-muted);margin-top:-12px}
+.cp>[data-section=how]{margin-top:-10px}
+.cp>[data-section=how]>summary{font-size:var(--fs-small)}
+.cp>[data-section=how] [data-section=what]{margin:6px 0 0;font-size:var(--fs-small);
+  color:var(--ink-muted)}
+.cp [data-card]{position:relative}
+.cp [data-card] details.def{margin:6px 0 0}
+.cp [data-card] details.def>summary{position:absolute;top:12px;right:12px;width:20px;height:20px;
+  border:1px solid var(--line-node);border-radius:var(--r-num);text-align:center;line-height:18px;
+  font-size:var(--fs-small);color:var(--ink-muted);list-style:none}
+.cp [data-card] details.def>summary:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.cp .zero,.cp .zero a{color:var(--ink-faint)}
+.cp .rel{color:var(--ink-muted)}
 .cp>[data-section=banner]{background:var(--cc-bg);border:1px solid var(--line);
   border-radius:var(--r-card);padding:10px 14px;font-size:var(--fs-body);color:var(--cc-ink)}
 .cp [data-section=cards]{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px}
+.cp>[data-section=banner].notice{background:var(--neu-bg);color:var(--neu-ink)}
+.cp>.crumbs{margin:0;font-size:var(--fs-small);color:var(--ink-muted)}
+.cp>[data-section=instrument]{margin:-8px 0 0;color:var(--ink-muted);overflow-wrap:anywhere}
+.cp .io{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:14px;align-items:start}
+.cp .io>section{background:var(--surface);border:1px solid var(--line);border-radius:var(--r-card);
+  padding:14px 16px;min-width:0}
+.cp .io table.board td{vertical-align:top}
+.cp .io table.board td p{margin:0 0 4px}
+.cp .io .note{font-size:var(--fs-small);color:var(--ink-muted)}
+.cp .io nav.tabs{display:flex;flex-wrap:wrap;gap:6px 20px;border-bottom:1px solid var(--line);
+  margin:0 0 10px}
+.cp .io nav.tabs a{padding:6px 2px;text-decoration:none}
+.cp .io .fp{color:var(--ink-muted)}
+.cp>.title{display:flex;flex-wrap:wrap;align-items:center;gap:10px 14px}
+.cp>.title>p{margin:0;display:flex;flex-wrap:wrap;gap:6px}
+.cp .io>.side{display:flex;flex-direction:column;gap:14px;min-width:0}
+.cp .io>.side>section{background:var(--surface);border:1px solid var(--line);
+  border-radius:var(--r-card);padding:14px 16px;min-width:0}
+.cp pre.term{background:var(--nav-bg);color:var(--nav-ink);border-radius:var(--r-ctl);
+  padding:12px 14px;margin:0;font-size:var(--fs-small);white-space:pre}
+.cp [data-section=printed] h3{margin:14px 0 4px;font-size:var(--fs-body)}
+.cp[data-view=receipt] .io{grid-template-columns:minmax(0,1.4fr) minmax(0,1fr)}
+.cp[data-view=text-diff] .io{grid-template-columns:minmax(0,300px) minmax(0,1fr)}
+.cp[data-view=text-diff] [data-section=outputs]{display:flex;flex-direction:column;gap:14px}
+.cp[data-view=text-diff] [data-pane-output]{scroll-margin-top:12px}
+.cp[data-view=text-diff] [data-pane-output] h3{margin:0 0 4px;font-size:var(--fs-body)}
+.cp[data-view=text-diff] [data-pane-output]:target{outline:2px solid var(--line-strong);outline-offset:6px;border-radius:2px}
+.cp[data-view=text-diff] [data-section=changed] li a{display:block;padding:4px 6px;overflow-wrap:anywhere}
+.cp[data-view=text-diff] [data-section=changed] :is(h2,h3){margin:0 0 6px;font-size:15px}
+.cp[data-view=text-diff] [data-section=changed] ul{margin:0}
+.cp[data-view=text-diff] [data-section=changed] li{margin:0}
+.cp[data-view=text-diff] [data-section=changed] [data-input]{margin:0 0 6px;font-size:var(--fs-small);color:var(--ink-muted)}
+.cp [data-scroll=printed]{max-height:448px;overflow:auto}
+.cp[data-view=receipt] table[data-section=receipt] td,
+.cp[data-view=receipt] table[data-section=receipt] td :is(.mono,q,code,span){white-space:normal;
+  overflow-wrap:anywhere}
+.cp .io .fp,.cp .io .fp .mono{overflow-wrap:anywhere}
+.cp[data-view=incident] [data-section=which] li{overflow-wrap:anywhere}
+.cp[data-view=incident] [data-scroll=found-rows]{max-height:448px;overflow:auto}
+.cp[data-view=incident] pre[data-found=summary]{white-space:pre-wrap;overflow-wrap:anywhere}
 .cp [data-card]{background:var(--surface);border:1px solid var(--line);border-radius:var(--r-card);
   padding:16px}
 .cp [data-card] h3{margin:0;font-size:var(--fs-body);font-weight:400;color:var(--ink-muted)}
@@ -91,13 +143,9 @@ PAGE_CSS = """
 .cp [data-attention]{display:flex;justify-content:space-between;gap:12px;
   font-size:var(--fs-body);padding:6px 0;border-bottom:1px solid var(--line-soft)}
 .cp [data-attention]:last-child{border-bottom:none}
-.cp .pill{display:inline-block;font-size:var(--fs-small);font-weight:500;padding:3px 8px;
-  border-radius:var(--r-pill);margin-right:4px}
-.cp .ok{background:var(--ok-bg);color:var(--ok-ink)}
-.cp .cc{background:var(--cc-bg);color:var(--cc-ink)}
-.cp .cco{background:var(--neu-bg);color:var(--cc-ink);box-shadow:inset 0 0 0 1px var(--cc-ink)}
-.cp .bad{background:var(--bad-bg);color:var(--bad-ink)}
-.cp .neu{background:var(--neu-bg);color:var(--neu-ink)}
+.cp [data-attention]{flex-wrap:wrap}
+.cp [data-attention]>span:first-child{flex:1 1 16em;min-width:0}
+.cp [data-attention]>.value{margin-left:auto}
 .cp :is([data-section=recent-runs],[data-section=pipelines],[data-section=by-day]){padding:6px 0 0}
 .cp :is([data-section=recent-runs],[data-section=pipelines],[data-section=by-day])>.head{padding:8px 18px}
 .cp :is([data-section=recent-runs],[data-section=pipelines],[data-section=by-day])>p{padding:0 18px}
@@ -109,6 +157,11 @@ PAGE_CSS = """
 .cp table.board th:first-child,.cp table.board td:first-child{padding-left:18px}
 .cp table.board tr:last-child td{border-bottom:none}
 .cp table.board td.value,.cp [data-attention]>.value{white-space:nowrap}
+.cp table.board td.value:has(time),.cp [data-section=recent-runs] table.board td.value{white-space:normal}
+.cp table.board td .rel{display:block}
+.cp details[data-node-fold]>summary>h3{display:inline;margin:0}
+.cp [data-section=recent-runs] table.board td:first-child,
+.cp [data-section=recent-runs] table.board td:first-child *{overflow-wrap:normal;word-break:normal}
 .cp ul[data-section=counts]>li{padding:6px 0;border-bottom:1px solid var(--line-soft)}
 .cp>footer{margin-top:12px}
 .cp :where(section[data-group]){background:var(--surface);border:1px solid var(--line);
@@ -133,10 +186,31 @@ PAGE_CSS = """
 .cp [data-section=first-difference]{background:var(--surface);border:1px solid var(--line);
   border-radius:var(--r-card);padding:16px 20px}
 .cp [data-section=first-difference] p{margin:2px 0;font-size:var(--fs-nav)}
-.cp [data-section=first-difference]:not([data-shape=dag]) p:first-child{font-size:15px;
+.cp [data-section=first-difference]:has(>[data-part]){display:grid;
+  grid-template-columns:minmax(0,1fr) minmax(0,2fr);gap:6px 24px}
+.cp [data-section=first-difference] [data-part=where] p:first-child{font-size:15px;
   font-weight:600;color:var(--bad-ink)}
+.cp [data-section=first-difference] [data-part=where] p+p{font-weight:600}
 .cp [data-section=first-difference][data-shape=dag] p{font-weight:600}
-.cp [data-section=first-difference] p:last-child{font-weight:600}
+.cp [data-section=first-difference] [data-part=what] p:last-of-type{font-weight:600}
+.cp [data-section=first-difference] [data-part=what] pre{margin:8px 0 0}
+.cp [data-section=different-pipelines]{background:var(--cc-bg);color:var(--cc-ink);
+  border-radius:var(--r-card);padding:10px 14px;font-size:var(--fs-body)}
+.cp [data-section=settings-changed] details>summary{font-size:var(--fs-body)}
+.cp svg.graph text{font-family:var(--font-sans)}
+.cp [data-textdiff] [data-counts]{margin:2px 0 6px;font-size:var(--fs-small);color:var(--ink-muted)}
+.cp pre[data-hunk]{white-space:normal;padding:6px 0}
+.cp pre[data-hunk]>span[data-op]{display:block;white-space:pre-wrap;padding:0 12px 0 0}
+.cp pre[data-hunk]>span[data-op="-"]{background:var(--bad-bg)}
+.cp pre[data-hunk]>span[data-op="+"]{background:var(--ok-bg)}
+.cp pre[data-hunk] .ln{display:inline-block;width:3.5em;padding-right:8px;text-align:right;
+  color:var(--ink-muted);user-select:none}
+.cp mark.del{background:transparent;color:var(--bad-ink);font-weight:600;text-decoration:line-through}
+.cp mark.ins{background:transparent;color:var(--ok-ink);font-weight:600}
+.cp svg.graph [data-tone=ok] .node{fill:var(--ok-bg);stroke:var(--ok-ink)}
+.cp svg.graph [data-tone=bad] .node{fill:var(--bad-bg);stroke:var(--bad-ink)}
+.cp svg.graph [data-tone=cc] .node{fill:var(--cc-bg);stroke:var(--cc-ink)}
+.cp svg.graph [data-tone=neu] .node{fill:var(--neu-bg);stroke:var(--line-node)}
 .cp table[data-section=changes]{background:var(--surface);border:1px solid var(--line);
   border-radius:var(--r-card);border-collapse:separate;border-spacing:0;width:100%}
 .cp table[data-section=changes] th{font-size:var(--fs-small);color:var(--ink-muted);
@@ -150,9 +224,7 @@ PAGE_CSS = """
 .cp table[data-section=changes] td[data-result="FIRST DIFFERENCE"]{color:var(--bad-ink);font-weight:600}
 .cp pre{background:var(--surface);border:1px solid var(--line);border-radius:var(--r-ctl);
   padding:10px 12px;overflow-x:auto;max-width:100%;font-size:var(--fs-small)}
-.cp>p[data-state=no-records]{align-self:flex-start;margin-top:-8px;font-size:var(--fs-small);
-  font-weight:500;padding:3px 8px;border-radius:var(--r-pill);background:var(--neu-bg);
-  color:var(--neu-ink)}
+.cp>p[data-state=no-records]{align-self:flex-start;margin-top:-8px}
 .cp>[data-section=run]{font-size:var(--fs-body);color:var(--ink-muted)}
 .cp [data-section=authorization] h2{font-size:15px}
 .cp [data-section=authorization] p{font-size:var(--fs-nav)}
@@ -162,7 +234,12 @@ PAGE_CSS = """
 .cp [data-section=authorization] p[data-section=authorization-note]{font-size:var(--fs-small);
   color:var(--ink-muted)}
 @media (max-width:1100px){.cp [data-section=cards]{grid-template-columns:repeat(2,minmax(0,1fr))}
-  .cp .panels{grid-template-columns:minmax(0,1fr)}}
+  .cp .panels{grid-template-columns:minmax(0,1fr)}
+  .cp .io,.cp[data-view=receipt] .io,.cp[data-view=text-diff] .io{grid-template-columns:minmax(0,1fr)}}
+@media (max-width:760px){.cp [data-section=first-difference]:has(>[data-part]){
+  grid-template-columns:minmax(0,1fr)}
+  .cp [data-attention]{flex-direction:column;gap:2px}
+  .cp [data-attention]>.value,.cp [data-attention]>.value .rel{text-align:left}}
 .cp details>summary{font-size:var(--fs-body);color:var(--ink-muted);cursor:pointer}
 .cp [data-section$=-envelope],.cp [data-section=pair],.cp [data-section=sdk]{font-size:var(--fs-body);
   color:var(--ink-muted)}
@@ -178,6 +255,90 @@ PAGE_CSS = """
   scrollbar-width:auto;scrollbar-color:var(--line-strong) var(--surface-sunk)}}
 """
 
+#: The one chip (0.1.1's one shared style). Every state chip, wherever a page draws it -- the console's
+#: pills, the run ladder's rung states, a stage page's two badges, the "No records" chip -- has
+#: this one shape, and one of the skin's four tones, by the one rule for every page (`tones.py`):
+#: green when a check ran and held, red when it ran and failed, amber when it couldn't be done or
+#: wasn't done, neutral when the evidence wasn't made. Every chip keeps its words. A
+#: couldn't-check note -- a sentence, not a chip -- is an amber block, as the last-attempt-failed
+#: line is. Held by tests/test_shared_style.py and tests/test_tones.py.
+CHIP_SHAPE = ("display:inline-block;font-size:var(--fs-small);font-weight:500;padding:3px 8px;"
+              "border-radius:var(--r-pill);margin-right:4px")
+_RUNG = ".shell .page tr[data-rung]"
+#: The runs list's answer cells (F1): the same chips, in a viewer page's frame.
+_ANSWER = ".shell .page td[data-answer]"
+_BADGE = ".cp tr[data-badge]"
+_STATE = ">td:last-child>span:first-child"
+
+
+def _states(tone: str) -> str:
+    """Every rung and badge state the one rule gives `tone`, as selectors."""
+    from onetrace_console import tones
+    return ",".join(f"{row}[data-state={s}]{_STATE}" for s in tones.RUNG
+                    if tones.tone(tones.RUNG, s) == tone for row in (_RUNG, _BADGE))
+
+
+CHIP_CSS = (
+    f".cp .pill,{_ANSWER} .pill,{_RUNG}{_STATE},{_BADGE}{_STATE},.cp>p[data-state=no-records]{{{CHIP_SHAPE}}}\n"
+    f".cp .ok,{_ANSWER} .ok,{_states('ok')}{{background:var(--ok-bg);color:var(--ok-ink)}}\n"
+    f".cp .cc,{_ANSWER} .cc,{_states('cc')}{{background:var(--cc-bg);color:var(--cc-ink)}}\n"
+    f".cp .bad,{_ANSWER} .bad,{_states('bad')}{{background:var(--bad-bg);color:var(--bad-ink)}}\n"
+    f".cp .neu,{_ANSWER} .neu,.cp>p[data-state=no-records],{_states('neu')}"
+    f"{{background:var(--neu-bg);color:var(--neu-ink)}}\n"
+    f".cp :is(p,section,td)[data-state=couldnt-check]{{background:var(--cc-bg);color:var(--cc-ink);"
+    f"border-radius:var(--r-ctl);padding:8px 12px}}\n"
+    #: A graph's marks, in the console's stylesheet only (the free file never marks a graph):
+    #: the first difference outlined in the bad ink, a failed attempt's box in the amber. The
+    #: words stay with them: the node's state line, and the fold's "failed attempt".
+    f"svg.graph [data-mark=first] .node{{stroke:var(--bad-ink);stroke-width:2}}\n"
+    #: Part V's "First recorded change": the same outline, amber -- a comparison's marker, not a
+    #: check's result, so never red.
+    #: Specific enough to win over the box's tone (`.cp svg.graph [data-tone=neu] .node`).
+    f".cp svg.graph [data-mark=recorded-change][data-tone] .node{{stroke:var(--cc-ink);stroke-width:2}}\n"
+    f"svg.graph [data-failed=yes] .node{{stroke:var(--cc-ink);stroke-width:1.5}}\n"
+    #: What the layout check (tools/layout_check.py) found past the edge at 390, each fixed in
+    #: the console's stylesheet only: the relative time under its time in "Needs attention"; a
+    #: run's id, and a long command, breaking where they must (copied, the same characters).
+    f".cp [data-attention]>.value .rel{{display:block;text-align:right}}\n"
+    f".shell .page table.timeline .mono{{overflow-wrap:anywhere}}\n"
+    f".cp code{{overflow-wrap:anywhere}}\n"
+    #: A runs list with no run in it: its one line, grey as the Overview's zeros are.
+    f".shell .page p.zero[data-section=no-runs]{{color:var(--ink-faint)}}\n"
+    #: A receipt card's quoted names (an input such as "receipt:lookup_account#2") break where
+    #: they must at 390, inside the card's grid, rather than reaching past the window.
+    f".shell .page .card .grid>*{{min-width:0}}\n"
+    f".shell .page .card .grid q[data-words]{{overflow-wrap:anywhere}}\n")
+
+#: On a narrow screen every table in a region stacks: each row a block, each cell under its column's
+#: header (`words.labelled`), long values wrapping where they must. Nothing is cut off, and nothing
+#: but a verifier-output or code block scrolls sideways (`tools/layout_check.py`, SCROLL_ALLOWED).
+NARROW_CSS = """
+.shell .graph-box svg.graph{max-width:100%;height:auto}
+@media (max-width:760px){
+.shell .graph-box svg.graph{display:none}
+.shell .graph-list{display:block;list-style:none;margin:0;padding:0}
+.shell .graph-list>li{display:flex;flex-direction:column;gap:2px;border:1px solid var(--line-node);
+  border-radius:var(--r-ctl);padding:8px 10px;background:var(--surface);overflow-wrap:anywhere}
+.shell .graph-list>li+li{margin-top:14px;position:relative}
+.shell .graph-list>li[data-reads-previous=yes]::before{content:"";position:absolute;left:20px;
+  top:-15px;height:14px;border-left:2px solid var(--line-strong)}
+.shell .graph-list>li[data-list-mark=recorded-change]{border-color:var(--cc-ink);border-width:2px}
+.shell .graph-list>li[data-list-mark=first]{border-color:var(--bad-ink);border-width:2px}
+.shell .graph-list .state{font-size:var(--fs-small);color:var(--ink-muted)}
+.shell .scroll-x{overflow:visible;mask-image:none;-webkit-mask-image:none}
+.shell .scroll-x :is(table,thead,tbody,tr,th,td){display:block;width:auto;min-width:0}
+.shell .scroll-x thead{display:none}
+.shell .scroll-x tr{padding:8px 0;border-bottom:1px solid var(--line-soft)}
+.shell .scroll-x tr:last-child{border-bottom:none}
+.shell .scroll-x :is(th,td){border:none;padding:2px 0;text-align:left;white-space:normal;
+  overflow-wrap:anywhere}
+.shell .scroll-x td :is(.mono,code,q,span,time,a){white-space:normal;overflow-wrap:anywhere}
+.shell .scroll-x td[data-label]::before{content:attr(data-label);display:block;
+  font-size:var(--fs-small);color:var(--ink-muted)}
+.shell .scroll-x tr>:first-child:not([data-label]){font-weight:500}
+}
+"""
+
 #: The public mode's banner, in the navigation (`banner()`): only a public console's pages carry it.
 PUBLIC_CSS = """
 nav.frame [data-frame=banner]{margin:0 0 14px;padding:10px 14px;border-radius:var(--r-ctl);
@@ -188,7 +349,8 @@ nav.frame [data-frame=banner] code{font-family:var(--font-mono);overflow-wrap:an
 
 @lru_cache(maxsize=1)
 def stylesheet() -> bytes:
-    """The fonts' faces, the skin's tokens, the viewer's stylesheet and the frame's rules."""
+    """The fonts' faces, the skin's tokens, the viewer's stylesheet, the frame's rules, the console
+    pages' rules and the one chip family."""
     from onetrace_console.viewer.page import CSS, FRAME_CSS
     from onetrace_console.viewer.tokens import root_css
     shipped = sorted(p.name for p in _FONTS.glob("*.woff2"))
@@ -198,7 +360,9 @@ def stylesheet() -> bytes:
         f"@font-face{{font-family:'{family}';font-weight:{weight};font-style:normal;"
         f"font-display:swap;src:url(/static/fonts/{name}) format('woff2')}}\n"
         for name, (family, weight) in _FACES.items())
-    return (faces + root_css() + "\n" + CSS + FRAME_CSS + PAGE_CSS + PUBLIC_CSS).encode("utf-8")
+    from onetrace_console.run_head import HEAD_CSS
+    return (faces + root_css() + "\n" + CSS + FRAME_CSS + PAGE_CSS + CHIP_CSS
+            + PUBLIC_CSS + HEAD_CSS + NARROW_CSS).encode("utf-8")
 
 
 def items(onedoor: bool) -> tuple[tuple[str, str, str], ...]:
@@ -243,8 +407,9 @@ def sealed_footer(sign_in: bool, *, public: bool = False) -> str:
 
 def banner() -> str:
     """The public mode's banner, the first thing under the brand on every page."""
-    from onetrace_console.public import BANNER, BANNER_COMMAND
-    return f'<p data-frame="banner">{escape(BANNER)} <code>{escape(BANNER_COMMAND)}</code></p>'
+    from onetrace_console.public import BANNER, BANNER_COMMAND, banner_runs
+    return (f'<p data-frame="banner">{escape(BANNER)} <code>{escape(BANNER_COMMAND)}</code> '
+            f'{escape(banner_runs())}</p>')
 
 
 def nav(rel: str, *, onedoor: bool, foot: str, public: bool = False) -> str:

@@ -18,9 +18,10 @@ onetrace-console {version}
   onetrace-console --version
   onetrace-console pins        what this build is pinned to
   onetrace-console demo [--open] [--port N]
-                               copy the reference demo's two runs into
-                               ./onetrace-console-demo, load them, compare them, and serve
-                               them on 127.0.0.1, printing the pages' addresses
+                               record the demo's runs (small example pipelines, no
+                               network calls) into ./onetrace-console-demo, load them,
+                               compare them, and serve them on 127.0.0.1, printing the
+                               pages' addresses
   onetrace-console demo --public [--open] [--port N]
                                the same demo, read-only: every write refused, a banner on
                                every page, built in a temporary folder and served on 127.0.0.1
@@ -28,10 +29,14 @@ onetrace-console {version}
                                build the read-only demo into a new folder and exit; a
                                configuration with "public": true serves its store as it is
   onetrace-console <runs folder> [--compare A B] [--open] [--port N]
+                   [--trust FILE] [--tsa-cert FILE --tsa-root FILE]
                                load every run folder in <runs folder> and serve them on
                                127.0.0.1, store in ./store. Compares nothing unless
                                --compare names two run folders (A is the baseline);
                                --open opens the page in your browser
+                               --trust FILE: the signing keys you trust (onetrace-trust/0.1)
+                               --tsa-cert FILE: the RFC 3161 time-stamp authority you trust
+                               --tsa-root FILE: the root it chains to (may be repeated)
   onetrace-console serve       with ONETRACE_CONSOLE_CONFIG naming a configuration file:
                                listen and serve as that file says. With none named: local
                                mode -- 127.0.0.1:8080 only, no sign-in, store in ./store
@@ -65,6 +70,11 @@ onetrace-console {version}
 
 def main(argv: list[str] | None = None) -> int:
     argv = list(sys.argv[1:] if argv is None else argv)
+    if argv and argv[0] in ("--help", "-h"):
+        #: Asked for: the usage on standard output, and success. Anything not understood
+        #: still gets it on standard error, with 2.
+        print(USAGE.format(version=__version__))
+        return 0
     if argv and argv[0] in ("--version", "-V"):
         print(__version__)
         return 0

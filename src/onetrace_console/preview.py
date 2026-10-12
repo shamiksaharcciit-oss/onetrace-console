@@ -150,6 +150,8 @@ def implemented_formats_the_verifier_accepts(store: Store, formats) -> dict[str,
     """
     import shutil
     import subprocess
+
+    from onetrace_console.child import utf8_env
     import sys
     import tempfile
     from pathlib import Path
@@ -165,7 +167,8 @@ def implemented_formats_the_verifier_accepts(store: Store, formats) -> dict[str,
                 {"format": fmt, "run_id": "probe", "chain_head": "sha256:" + "0" * 64,
                  "chain": []}, separators=(",", ":")).encode("utf-8"))
             proc = subprocess.run([sys.executable, str(verifier), "MANIFEST.json"],
-                                  cwd=str(folder), capture_output=True, text=True)
+                                  cwd=str(folder), capture_output=True, text=True,
+                                  encoding="utf-8", env=utf8_env())
             refused_for_format = proc.returncode != 0 and re.search(
                 re.escape(VERIFIER_FORMAT_CHECK), proc.stdout) is not None
             out[fmt] = not refused_for_format

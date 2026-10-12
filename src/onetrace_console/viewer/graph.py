@@ -82,6 +82,12 @@ class GraphNode:
     #: never as the page's: each line is marked as quoted and titled with its whole text.
     quoted: tuple[str, ...] = ()
     mark: str = ""
+    #: The tone of the node's state, by the console's one colour rule ("ok", "cc", "bad",
+    #: "neu"), for a stylesheet to colour the box by; its words stay in `tags`. Empty: no tone.
+    tone: str = ""
+    #: The node ids whose receipts this node's receipt records reading (its `receipt:<id>`
+    #: inputs). A run recorded as a line draws a link only where one of these is recorded.
+    reads: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -100,6 +106,7 @@ class Box:
     tags: tuple[str, ...] = ()     # the members' states, each once, in member order
     quoted: tuple[str, ...] = ()   # the members' quoted report words, each once, in member order
     mark: str = ""
+    tone: str = ""
 
 
 @dataclass(frozen=True, slots=True)
@@ -114,15 +121,30 @@ class Layout:
     width: int
     height: int
     box_h: int = BOX_H             # taller only where a node carries state lines
+    label_lines: int = 1           # 2 where a long name wraps onto a second line
+    tag_lines: int = TAG_LINES     # at most this many state lines drawn in a box
 
 
 def _fold_key(node: GraphNode, counts: dict[str, int]) -> str:
     return node.name if counts[node.name] > 1 else node.node_id
 
 
-def lay_out(nodes, edges) -> Layout:
+def _label_lines(label: str) -> list[str]:
+    """A name in at most two lines of LABEL_MAX characters, broken at a space where there is one;
+    the second line cut with "…" if the name is longer still. The whole name is the <title>."""
+    if len(label) <= LABEL_MAX:
+        return [label]
+    cut = label.rfind(" ", 1, LABEL_MAX + 1)
+    cut = cut if cut > 0 else LABEL_MAX
+    return [label[:cut], _short(label[cut:].strip())]
+
+
+def lay_out(nodes, edges, *, wrap: int = 0, wrap_labels: bool = False,
+            tag_lines: int = TAG_LINES) -> Layout:
     """The layout of `nodes` (GraphNode) linked by `edges` (the manifest's list of
-    {"from", "to"} dicts, or None for a run recorded as a line)."""
+    {"from", "to"} dicts, or None for a run recorded as a line). `wrap`, for a line only: at
+    most that many boxes to a row, the line continuing on the next row, so a long line fits
+    its page's width instead of scrolling; 0 keeps one row."""
     nodes = sorted(nodes, key=lambda n: (n.index, n.node_id))
     by_id = {n.node_id: n for n in nodes}
     counts: dict[str, int] = {}
@@ -146,6 +168,19 @@ def lay_out(nodes, edges) -> Layout:
                          key=lambda p: (order_key(p[0]), order_key(p[1]))))
 
     if edges is None:
+        #: A line has no recorded graph, but each receipt records the receipts it read: those are
+        #: its links, listed in the table, and drawn between boxes next to each other in the order.
+        reads = sorted({(n2, n.node_id) for n in nodes for n2 in n.reads
+                        if n2 in by_id and fold[n2] != fold[n.node_id]})
+        recorded = tuple(reads)
+        nxt = {a: b for a, b in zip(keys, keys[1:])}
+        links = tuple(sorted({(fold[f], fold[t]) for f, t in reads if nxt.get(fold[f]) == fold[t]},
+                             key=lambda p: (order_key(p[0]), order_key(p[1]))))
+    if edges is None and wrap > 0 and len(keys) > wrap:
+        layer = {k: i % wrap for i, k in enumerate(keys)}
+        rows = {k: i // wrap for i, k in enumerate(keys)}
+        by_layer = [[k for k in keys if layer[k] == c] for c in range(wrap)]
+    elif edges is None:
         layer = {k: i for i, k in enumerate(keys)}
         rows = {k: 0 for k in keys}
         by_layer = [[k] for k in keys]
@@ -155,11 +190,17 @@ def lay_out(nodes, edges) -> Layout:
         rows = {k: r for col in by_layer for r, k in enumerate(col)}
 
     tallest = max((len(col) for col in by_layer), default=0)
-    lines = min(TAG_LINES, max((len(n.tags) + len(n.quoted) for n in nodes), default=0))
+    lines = min(tag_lines, max((len(n.tags) + len(n.quoted) for n in nodes), default=0))
     box_h = BOX_H + lines * TAG_LINE_H
+    label_lines = 1
+    if wrap_labels and any(len(n.label or n.node_id) > LABEL_MAX or len(n.shown or n.name) > LABEL_MAX
+                           for n in nodes):
+        label_lines = 2
+        box_h += TAG_LINE_H
     boxes = []
     for col_no, col in enumerate(by_layer):
-        offset = (tallest - len(col)) * (box_h + GAP_Y) // 2
+        #: A wrapped line's rows start at the top, as text does; a graph's layers are centred.
+        offset = 0 if edges is None else (tallest - len(col)) * (box_h + GAP_Y) // 2
         for k in col:
             ms = tuple(members[k])
             label = (ms[0].label or ms[0].node_id) if len(ms) == 1 else sentence(
@@ -171,11 +212,12 @@ def lay_out(nodes, edges) -> Layout:
                 href=ms[0].href, dashed=any(m.dashed for m in ms),
                 tags=tuple(dict.fromkeys(tag for m in ms for tag in m.tags)),
                 quoted=tuple(dict.fromkeys(q for m in ms for q in m.quoted)),
-                mark=next((m.mark for m in ms if m.mark), "")))
+                mark=next((m.mark for m in ms if m.mark), ""),
+                tone=next((m.tone for m in ms if m.tone), "")))
     width = MARGIN * 2 + max(len(by_layer), 1) * BOX_W + max(len(by_layer) - 1, 0) * GAP_X
     height = MARGIN * 2 + max(tallest, 1) * box_h + max(tallest - 1, 0) * GAP_Y
-    return Layout(edges is None, tuple(boxes), links if edges is not None else (),
-                  recorded, outside, width, height, box_h)
+    return Layout(edges is None, tuple(boxes), links, recorded, outside, width, height, box_h,
+                  label_lines, tag_lines)
 
 
 def _layers(keys: list[str], links, order_key) -> dict[str, int]:
@@ -250,6 +292,14 @@ def svg(layout: Layout, esc=escape) -> str:
              '</marker></defs>']
     for f, t in layout.links:
         a, b = at[f], at[t]
+        if layout.linear and b.row != a.row:
+            #: A wrapped line: down from the row's last box, back along the gap, down into the next.
+            x1, x2 = a.x + BOX_W // 2, b.x + BOX_W // 2
+            y1, y2 = a.y + layout.box_h, b.y
+            mid = y1 + GAP_Y // 2
+            parts.append(f'<path class="link" d="M{x1},{y1} L{x1},{mid} L{x2},{mid} L{x2},{y2}" '
+                         f'fill="none" marker-end="url(#graph-arrow)"/>')
+            continue
         x1, y1 = a.x + BOX_W, a.y + layout.box_h // 2
         x2, y2 = b.x, b.y + layout.box_h // 2
         dx = (x2 - x1) // 2
@@ -262,23 +312,27 @@ def svg(layout: Layout, esc=escape) -> str:
         #: A box links to its step's row when the page gave it one; a step whose index is
         #: not a number has no `#step-N` anchor to link to, so its box is drawn unlinked.
         mark = f' data-mark="{esc(b.mark)}"' if b.mark else ""
+        mark += f' data-tone="{esc(b.tone)}"' if b.tone else ""
         opening, closing = (f'<a href="{esc(b.href)}"{failed}{mark}>', "</a>") if b.href else (
             f"<g{failed}{mark}>", "</g>")
         #: A box with no state lines is drawn exactly as before they existed.
         label_y = b.y + BOX_H // 2 + 4 if layout.box_h == BOX_H else b.y + 18
+        names = _label_lines(b.label) if layout.label_lines == 2 else [_short(b.label)]
+        below = label_y + (layout.label_lines - 1) * TAG_LINE_H
         lines = [(tag, False) for tag in b.tags] + [(q, True) for q in b.quoted]
         states = "".join(
             f'<text class="state"{' data-words="report"' if quoted else ""} x="{b.x + 10}" '
-            f'y="{label_y + (i + 1) * TAG_LINE_H}">{esc(_short(text))}'
+            f'y="{below + (i + 1) * TAG_LINE_H}">{esc(_short(text))}'
             f'{f"<title>{esc(text)}</title>" if quoted else ""}</text>'
-            for i, (text, quoted) in enumerate(lines[:TAG_LINES]))
+            for i, (text, quoted) in enumerate(lines[:layout.tag_lines]))
         title = b.label + "".join(f" · {tag}" for tag in b.tags)
         parts.append(
             f'{opening}'
             f'<rect class="node" x="{b.x}" y="{b.y}" width="{BOX_W}" height="{layout.box_h}" '
             f'rx="6"{dash}/><title>{esc(title)}</title>'
-            f'<text x="{b.x + 10}" y="{label_y}">'
-            f'{esc(_short(b.label))}</text>{states}{closing}')
+            + "".join(f'<text x="{b.x + 10}" y="{label_y + i * TAG_LINE_H}">{esc(name)}</text>'
+                      for i, name in enumerate(names))
+            + f'{states}{closing}')
     parts.append("</svg>")
     return "".join(parts)
 
@@ -316,6 +370,24 @@ def _quoted(text: str, esc=escape) -> str:
     return f'<q data-words="report">{esc(text)}</q>'
 
 
+def as_list(layout: Layout, esc=escape) -> str:
+    """The same boxes as a list in reading order, for a screen too narrow for the drawing: each
+    box's name (linked as in the drawing), its lines, and whether it reads the box before it, as
+    its receipt records. Hidden unless a stylesheet shows it."""
+    drawn = set(layout.links)
+    order = sorted(layout.boxes, key=lambda b: (b.row, b.layer) if layout.linear else (b.index, b.key))
+    items = []
+    for prev, b in zip([None, *order], order):
+        reads = prev is not None and (prev.key, b.key) in drawn
+        lines = "".join(f'<span class="state">{esc(t)}</span>' for t in b.tags) + "".join(
+            f'<span class="state">{_quoted(q, esc)}</span>' for q in b.quoted)
+        items.append(f'<li data-reads-previous="{"yes" if reads else "no"}"'
+                     + (f' data-list-mark="{esc(b.mark)}"' if b.mark else "")
+                     + (f' data-list-tone="{esc(b.tone)}"' if b.tone else "") + ">"
+                     + _linked(b.href, esc(b.label), esc) + lines + "</li>")
+    return f'<ol class="graph-list">{"".join(items)}</ol>'
+
+
 def _folds(layout: Layout, esc=escape) -> str:
     """Each fold's members, failed attempts included, as a disclosure: no script."""
     out = []
@@ -335,7 +407,8 @@ def _folds(layout: Layout, esc=escape) -> str:
 
 def render(nodes, edges, *, recorded_order_href: str = "", heading: str = "",
            esc=escape, own_table: bool = True, recorded_order: bool = True,
-           lead: str = "", region: str = "graph.region") -> str:
+           lead: str = "", region: str = "graph.region", wrap: int = 0,
+           wrap_labels: bool = False, tag_lines: int = TAG_LINES) -> str:
     """The graph section: the drawing (or, past MAX_DRAWN, the notice), the folds, the note,
     the link to the recorded order, and "Show as table". `heading` is HTML, already escaped.
     `region` is the sentence key naming the drawing's scroll region (the comparison page's own).
@@ -343,7 +416,7 @@ def render(nodes, edges, *, recorded_order_href: str = "", heading: str = "",
     A page that already carries the nodes' table (item 3: the compare page's changes table, its
     "Show as table") passes `own_table=False`; a page whose order is not a run's recorded order
     (the comparison's order is the SDK's) passes `recorded_order=False`."""
-    layout = lay_out(nodes, edges)
+    layout = lay_out(nodes, edges, wrap=wrap, wrap_labels=wrap_labels, tag_lines=tag_lines)
     #: `lead` (HTML, already escaped): a line the page puts above the drawing (the
     #: comparison a run page's marks come from).
     parts = ['<section data-section="graph">' + (f"<h2>{heading}</h2>" if heading else "")
@@ -359,7 +432,8 @@ def render(nodes, edges, *, recorded_order_href: str = "", heading: str = "",
         #: A scroll region a keyboard can reach and a screen reader can name: the panel scrolls
         #: when the drawing is wider than it, and its fade and scrollbar say so (CSS).
         parts.append(f'<div class="graph-box" tabindex="0" role="region" '
-                     f'aria-label="{escape(template(region))}">{svg(layout, esc)}</div>')
+                     f'aria-label="{escape(template(region))}">{svg(layout, esc)}'
+                     f'{as_list(layout, esc)}</div>')
         parts.append(_folds(layout, esc))
         if own_table:
             parts.append(f'<details data-section="graph-table"><summary>'

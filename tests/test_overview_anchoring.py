@@ -88,7 +88,7 @@ def test_a_form_at_zero_is_left_out(demo):  # noqa: F811
 def test_each_run_is_counted_as_its_own_page_reads_it(anchored, declared, demo):  # noqa: F811
     """The stored reading is the run page's rung, from the pinned verifier's own check: its FAIL on
     a placeholder anchor; a record declaring an anchor it does not have; and no anchor."""
-    states = {"No · not anchored": "not-anchored"}
+    states = {"Not anchored · no anchor beside the chain": "not-anchored"}
     for run, store in (anchored, declared, demo):
         rung = _case_rung(run, store)
         if rung.startswith("No · the check says:"):

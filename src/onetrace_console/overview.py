@@ -162,6 +162,19 @@ def _vs_baseline_graph(comparison, store: Store) -> tuple[str, str]:
     return "couldnt-check", "Couldn't check"
 
 
+def ran_at(run: StoredRun) -> str:
+    """When the run itself started, as its record says (the run list's "ran"), or "" where the
+    record gives no time this console can read. Never the time the console took the run in."""
+    try:
+        row = load_json_bounded(run.list_row, "the run's list row") if run.list_row else {}
+    except ValueError:
+        return ""
+    ran = row.get("case_ran") if isinstance(row, dict) else None
+    if not isinstance(ran, str) or not ran:
+        return ""
+    return ran.split(" \u2192 ", 1)[0].strip()
+
+
 def last_failed(run) -> list[list[str]]:
     """[[stage, error type], ...], the declared stages whose last recorded
     attempt failed, as derived when the run was checked. Empty where none did, where the run was

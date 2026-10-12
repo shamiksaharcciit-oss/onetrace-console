@@ -57,7 +57,6 @@ import socket
 import sys
 import threading
 import time
-import time
 import traceback
 from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -72,10 +71,13 @@ from onetrace_console.store import Store
 #: The console's own static files: the bundled IBM Plex fonts and their OFL
 #: text, served to anyone -- the signed-out sign-in page uses them -- at exactly these paths and no
 #: others. Built from the shipped folder, so a file added there is served only by being shipped.
-_STATIC_TYPES = {".woff2": "font/woff2", ".txt": "text/plain; charset=utf-8"}
+_STATIC_TYPES = {".woff2": "font/woff2", ".txt": "text/plain; charset=utf-8",
+                 ".svg": "image/svg+xml"}
 STATIC_FILES = {f"/static/fonts/{p.name}": p
                 for p in sorted((Path(__file__).parent / "static" / "fonts").glob("*"))
                 if p.suffix in _STATIC_TYPES}
+#: The console's icon, in the skin's navigation colours; console pages link it (viewer/page.py).
+STATIC_FILES["/static/favicon.svg"] = Path(__file__).parent / "static" / "favicon.svg"
 
 PAGES_DIRNAME = "pages"
 #: Where local accounts live, relative to the store's own root. A sibling of
@@ -197,6 +199,14 @@ def _render_diff_page(comparison, store: Store, root: Path) -> str:
     html = render_diff(comparison, store, generated_at=_now())
     rel = f"diff/{comparison.key}.html"
     _write(root, rel, html)
+    #: Its text diff on a page of its own, where it has one shown; where it has none, no page --
+    #: never one left from an earlier drawing.
+    from onetrace_console.textdiff_page import page_name, render_text_diff_page
+    text = render_text_diff_page(comparison, store, generated_at=_now())
+    if text is not None:
+        _write(root, f"diff/{page_name(comparison)}", text)
+    else:
+        (root / PAGES_DIRNAME / "diff" / page_name(comparison)).unlink(missing_ok=True)
     return rel
 
 
@@ -221,24 +231,27 @@ def _render_startup_pages(store: Store, root: Path, config: Config | None = None
             except Exception:  # noqa: BLE001 - the run keeps what it had; logged
                 import traceback
                 traceback.print_exc(file=sys.stderr)
-    #: A run whose stored check ran with another trust file than the one set now
-    #: is checked again, so its Signed rung is the current file's -- and said, never silent.
-    from onetrace_console.checks import run_and_record, stored_trust_record, trust_record
-    trust_file = getattr(config, "trust_file", None) if config is not None else None
-    current = trust_record(trust_file)
+    #: A run whose stored check ran with another trust file, or another time-stamp authority,
+    #: than the ones set now is checked again, so its Signed and Committed rungs are the current
+    #: files' -- and said, never silent. The same files: not checked again.
+    from onetrace_console.checks import (check_options, run_and_record, stored_trust_record,
+                                         stored_tsa_record, trust_record, tsa_record)
+    options = check_options(config)
+    current = trust_record(options["trust_file"])
+    current_tsa = tsa_record(options["tsa_cert"], options["tsa_roots"])
     rechecked = 0
     for run in store.runs():
-        recorded = stored_trust_record(run, store)
-        if recorded is not None and recorded != current:
+        recorded, recorded_tsa = stored_trust_record(run, store), stored_tsa_record(run, store)
+        if recorded is not None and (recorded != current or recorded_tsa != current_tsa):
             try:
-                run_and_record(run, store, trust_file=trust_file)
+                run_and_record(run, store, **options)
                 rechecked += 1
             except Exception:  # noqa: BLE001 - the run keeps its earlier check; logged
                 import traceback
                 traceback.print_exc(file=sys.stderr)
     if rechecked:
-        print(f"onetrace-console: the trust file is now {current}; {rechecked} stored run(s) "
-              f"checked again with it", file=sys.stderr)
+        print(f"onetrace-console: the trust file is now {current} and the time-stamp authority "
+              f"{current_tsa}; {rechecked} stored run(s) checked again with them", file=sys.stderr)
     for run in store.runs():
         _render_run_pages(run, store, root, config)
     for key in store.unreadable_run_keys:
@@ -251,8 +264,9 @@ def _render_startup_pages(store: Store, root: Path, config: Config | None = None
             #: confirmation review).
             from onetrace_console.pages import refusal
             from onetrace_console.unreadable import render_failed_page
-            _write(root, f"diff/{comparison.key}.html",
-                   render_failed_page(refusal(e)[0], generated_at=_now()))
+            from onetrace_console.textdiff_page import page_name
+            for name in (f"diff/{comparison.key}.html", f"diff/{page_name(comparison)}"):
+                _write(root, name, render_failed_page(refusal(e)[0], generated_at=_now()))
     for key in store.unreadable_comparison_keys:
         _render_unreadable_record_pages(store, root, key, kind="comparison")
     _render_all_pages(store, root, config)
@@ -274,8 +288,9 @@ def _render_unreadable_record_pages(store: Store, root: Path, key: str, *, kind:
     reason = (f"the stored {kind} record {said} cannot be read, so nothing is drawn from it; "
               f"the Overview names it")
     page = render_failed_page(reason, generated_at=_now())
+    from onetrace_console.textdiff_page import SUFFIX
     names = ([f"runs/{key}/{n}" for n in (ANSWER, CASE, AUTHORIZATION)] if kind == "run"
-             else [f"diff/{key}.html"])
+             else [f"diff/{key}.html", f"diff/{key}{SUFFIX}"])
     for name in names:
         _write(root, name, page)
 
@@ -329,6 +344,11 @@ class ConsoleServer6(ConsoleServer):
     address_family = socket.AF_INET6
 
 
+#: One intake at a time: a run delivered by `POST /v1/runs` and one the folder watcher takes in
+#: (`watch.py`) each write the store and draw pages, and never at once.
+INTAKE_LOCK = threading.RLock()
+
+
 class Handler(BaseHTTPRequestHandler):
     store_root: Path       # set by `main()` before the server starts
     store: Store           # ditto
@@ -349,6 +369,8 @@ class Handler(BaseHTTPRequestHandler):
     #: Local mode's port, or `None` in config-file mode. When set, every
     #: request passes `_local_guard` first.
     local_port: int | None = None
+    #: The folder watcher (`watch.py`), in `onetrace-console <runs folder>` mode only.
+    watcher: object = None
 
     server_version = "onetrace-console/0.1"
 
@@ -622,6 +644,10 @@ class Handler(BaseHTTPRequestHandler):
         path = urlsplit(self.path).path
         if path == "/health":
             self._respond(200, b"ok\n", "text/plain")
+            return
+        if path == "/v1/folder" and self.watcher is not None:
+            #: What the watcher knows: read by the Overview's and the runs list's notice.
+            self._respond_json(200, self.watcher.state.as_json())
             return
         if path == "/signin" and self.config.sign_in.get("enabled"):
             self._handle_signin_get()
@@ -906,6 +932,11 @@ class Handler(BaseHTTPRequestHandler):
         from onetrace_console.checks import run_and_record
         from onetrace_console.ingest import Rejection, accept
 
+        with INTAKE_LOCK:
+            self._ingest_locked(body, accept, Rejection)
+
+    def _ingest_locked(self, body: bytes, accept, Rejection) -> None:
+        from onetrace_console.checks import run_and_record
         accepted = accept(body, self.store, limits=self.config)
         if isinstance(accepted, Rejection):
             self._respond_json(accepted.status, {
@@ -915,8 +946,8 @@ class Handler(BaseHTTPRequestHandler):
                 "from_verifier": accepted.from_verifier,
             })
             return
-        run = run_and_record(accepted.run, self.store,
-                             trust_file=getattr(self.config, "trust_file", None))
+        from onetrace_console.checks import check_options
+        run = run_and_record(accepted.run, self.store, **check_options(self.config))
         _render_run_pages(run, self.store, self.store_root, self.config)
         _render_all_pages(self.store, self.store_root, self.config)
         self._respond_json(200, {
@@ -1135,7 +1166,7 @@ def _public_store(store_root: Path):
 
 
 def main(argv: list[str] | None = None, *, overrides: dict | None = None, prepare=None,
-         open_browser: bool = False, announce=None) -> int:
+         open_browser: bool = False, announce=None, watch=None) -> int:
     """`ONETRACE_CONSOLE_CONFIG` is the only environment variable this console reads
     Host, port, the store's root, and every upload-hardening
     limit all come from the one file it names -- `onetrace_console.config.load_from_env()`.
@@ -1359,7 +1390,8 @@ def main(argv: list[str] | None = None, *, overrides: dict | None = None, prepar
         print(f"refusing to start: cannot listen on {config.host}:{config.port}: "
               f"{e.strerror or e}. Is another process (perhaps another console) already "
               f"listening there?\nfix: stop that process, or give this console another "
-              f"port in its configuration file.", file=sys.stderr)
+              f"port: --port N on the command line, or port in its configuration file.",
+              file=sys.stderr)
         return 1
     scheme = "http"
     if ssl_context is not None:
@@ -1410,13 +1442,46 @@ def main(argv: list[str] | None = None, *, overrides: dict | None = None, prepar
         webbrowser.open(f"{base}/{opened}")
     for text, path in lines[-1:]:
         print(text if path is None else f"{text} {base}/{path}", flush=True)
+    #: `watch(store, store_root, config)`: the folder watcher, started once the first pages are
+    #: drawn, stopped before the server closes.
+    watcher = watch(store, store_root, config) if watch is not None else None
+    if watcher is not None:
+        Handler.watcher = watcher
+        watcher.start()
     try:
-        server.serve_forever()
+        with _sigterm_as_interrupt():
+            server.serve_forever()
     except KeyboardInterrupt:
         pass
     finally:
+        if watcher is not None:
+            watcher.stop()
+            Handler.watcher = None
         server.server_close()
     return 0
+
+
+class _sigterm_as_interrupt:
+    """While serving, SIGTERM (a container stopping, a test's terminate) ends the console as
+    Ctrl+C does: serving stops and every `with` around it unwinds -- `demo --public`'s temporary
+    folder is removed. Only from the main thread, where Python delivers signals; elsewhere, and
+    where the platform has no catchable SIGTERM (Windows' TerminateProcess), nothing changes."""
+
+    def __enter__(self):
+        import signal
+        import threading
+        self._old = None
+        if threading.current_thread() is threading.main_thread() and hasattr(signal, "SIGTERM"):
+            def interrupt(signum, frame):
+                raise KeyboardInterrupt
+            self._old = signal.signal(signal.SIGTERM, interrupt)
+        return self
+
+    def __exit__(self, *exc):
+        if self._old is not None:
+            import signal
+            signal.signal(signal.SIGTERM, self._old)
+        return False
 
 
 if __name__ == "__main__":

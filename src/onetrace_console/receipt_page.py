@@ -6,9 +6,12 @@ page's own "Committed by a known time" rung, read by the viewer from the console
 signature row and the "Signed" pill its "Signed by a known recorder" rung, so the pages cannot
 disagree. The graph row gives
 the verifier's own edge rows from that run, as the verifier wrote them, and nothing where it wrote
-none: never a guessed state and never a later version's promise. "Check it yourself" gives the command: no `[crypto]`
-and no `--trust`, which belong to signed runs. "What this receipt does not say" is
-fixed text, all four lines.
+none: never a guessed state and never a later version's promise. "Check it yourself" gives the
+command this run needs, read from what its record carries: `[crypto]` and `--trust trust.json` (a
+trust file in the onetrace-trust/0.1 format) where it carries a signature, and the time-stamp
+authority's files, or the block headers, where it carries an anchor of that method; and below it,
+in the black box, what the console's own run of the verifier printed, as it wrote it. "What this
+receipt does not say" is fixed text, all four lines.
 """
 from __future__ import annotations
 
@@ -123,13 +126,98 @@ def _recorded_with(steps: list[dict]) -> str:
     return NO_SDK_VERSION
 
 
+#: The check's own reach, in the ruled words: it makes no network calls ("offline" is not said).
+NO_NETWORK = "The check makes no network calls and needs no account."
+TRUST_FILE = "trust.json"
+TRUST_NOTE = ("trust.json is the signing keys you trust, each with your label for it, in the "
+              "onetrace-trust/0.1 format: ")
+TRUST_SHAPE = '{"format": "onetrace-trust/0.1", "keys": [{"key_id": "...", "label": "..."}]}'
+TSA_NOTE = ("tsa-cert.pem and tsa-root.pem are the time-stamp authority's certificate you trust and "
+            "the root it chains to.")
+HEADERS_NOTE = "headers.json is the Bitcoin block headers for the run's OpenTimestamps anchor."
+OUTPUT_HEAD = "What the check printed"
+OUTPUT_LEAD = ("This console's own run of the verifier over the stored record, at {at}: {command}, "
+               "exit {exit}. File paths are shortened to their names; the output is as it wrote it, "
+               "a row longer than the page shows cut with the count of what is left out.")
+NO_OUTPUT = "The check's output could not be read, so none is shown."
+
+
+def _anchor_methods(run: StoredRun, store: Store) -> set[str]:
+    """The method each anchor in the record names (`anchors/*.json`), as recorded."""
+    methods = set()
+    for path, key in run.listing:
+        if path.startswith("anchors/") and path.endswith(".json"):
+            try:
+                method = load_json_bounded(store.get(key).decode("utf-8"), path).get("method")
+            except Exception:  # noqa: BLE001 - an anchor this can't read names no method here
+                continue
+            if isinstance(method, str):
+                methods.add(method)
+    return methods
+
+
+def _command(run: StoredRun, store: Store) -> tuple[str, list[str]]:
+    """(the commands, the notes under them) this run's check needs, from what its record carries."""
+    signed = any(path.startswith("signatures/") for path, _ in run.listing)
+    methods = _anchor_methods(run, store)
+    crypto = signed or bool(methods)
+    args, notes = ["--require-artifacts"], []
+    if signed:
+        args += ["--trust", TRUST_FILE]
+        notes.append(escape(TRUST_NOTE) + f'<code>{escape(TRUST_SHAPE)}</code>')
+    if "rfc3161" in methods:
+        args += ["--tsa-cert", "tsa-cert.pem", "--tsa-root", "tsa-root.pem"]
+        notes.append(escape(TSA_NOTE))
+    if "opentimestamps" in methods:
+        args += ["--headers", "headers.json"]
+        notes.append(escape(HEADERS_NOTE))
+    install = 'pip install "onetrace-verify[crypto]"' if crypto else "pip install onetrace-verify"
+    return f"{install}\nonetrace-verify {' '.join(args)} .", notes
+
+
+def _printed(run: StoredRun, store: Store) -> str:
+    """The black box: the console's own run of the verifier, its output verbatim."""
+    from pathlib import PurePath
+
+    from onetrace_console.pages import _envelope
+    from onetrace_console.words import time_html
+    try:
+        envelope = _envelope(run, store, required=False)
+    except Exception:  # noqa: BLE001 - said, never guessed
+        envelope = None
+    if not isinstance(envelope, dict) or not isinstance(envelope.get("stdout"), str):
+        return (f'<section data-section="printed"><h3>{escape(OUTPUT_HEAD)}</h3>'
+                f"<p>{escape(NO_OUTPUT)}</p></section>")
+    command = " ".join(PurePath(a).name if ("/" in a or "\\" in a) else a
+                       for a in envelope.get("command") or [] if isinstance(a, str))
+    lead = escape(OUTPUT_LEAD).replace("{at}", time_html(str(envelope.get("ran_at", ""))))
+    lead = lead.replace("{command}", f"<code>{escape(command)}</code>")
+    lead = lead.replace("{exit}", escape(str(envelope.get("exit_status", ""))))
+    #: Drawn as the run page draws the verifier's rows: each row whole up to the viewer's cap, a
+    #: longer one cut with the viewer's own marker; the whole row stays in the stored report.
+    from onetrace_console.viewer.page import _escape_rows
+    out = envelope["stdout"].replace("\r\n", "\n")
+    return (f'<section data-section="printed"><h3>{escape(OUTPUT_HEAD)}</h3><p>{lead}</p>'
+            + scroll_region(f'<pre class="term" data-section="verifier-output">{_escape_rows(out)}</pre>',
+                            "What the check printed, scrolls", "printed")
+            + "</section>")
+
+
+def _crumbs(run: StoredRun, store: Store) -> str:
+    from onetrace_console.stage_pages import _crumbs as stage_crumbs
+    return stage_crumbs(run, store).replace("/ Inputs &amp; outputs</p>", "/ Receipt</p>")
+
+
 def _row(name: str, label: str, value: str) -> str:
     return f'<tr data-row="{name}"><th>{escape(label)}</th><td>{value}</td></tr>'
 
 
-def render_receipt(run: StoredRun, store: Store, *, generated_at: str, anchored, signed) -> str:
-    """`anchored` and `signed`: the run page's "Committed by a known time" and "Signed by a known
-    recorder" rungs, from the same model."""
+def render_receipt(run: StoredRun, store: Store, *, generated_at: str, anchored, signed,
+                   agree=None) -> str:
+    """`anchored`, `signed` and `agree`: the run page's "Committed by a known time", "Signed by a
+    known recorder" and "Records agree" rungs, from the same model; each pill takes its rung's
+    tone by the one colour rule (neutral where no rung is given)."""
+    from onetrace_console import tones
     from onetrace_console.render import _document, _recorded_of_declared
     from onetrace_console.stage_pages import _files, _read, _stage_name, _steps
     files = _files(run, store)
@@ -156,10 +244,18 @@ def render_receipt(run: StoredRun, store: Store, *, generated_at: str, anchored,
              if isinstance(t, str)]
     recorded = span_html(min(times), max(times)) if times else "no time recorded"
     counts = _counts(run, store)
-    pills = escape(_agree(run, store)) + (
+    agreed = escape(_agree(run, store)) + (
         f" · {counts[0]} of {counts[1]} checks" if counts else " · the check report could not be read")
     anchor_state, anchor_said = _rung_said(anchored)
     signed_state, signed_said = _rung_said(signed)
+
+    def pill(rung, words: str) -> str:
+        tone = tones.tone(tones.RUNG, rung.state) if rung is not None else tones.TONE[tones.NOT_MADE]
+        return f'<span class="pill {tone}">{words}</span>'
+    #: The chips keep the " · " between them: the line reads as one line, copied or read aloud.
+    pills = " · ".join((pill(agree, agreed), pill(signed, f"Signed: {signed_state}"),
+                      pill(anchored, f"Anchored: {anchor_state}")))
+    command, notes = _command(run, store)
     href = record_href(run)
     rows = "".join((
         _row("run", "Run", run_named(store, run.key)),
@@ -178,23 +274,30 @@ def render_receipt(run: StoredRun, store: Store, *, generated_at: str, anchored,
         _row("anchor", "Anchor", anchor_said),
     ))
     body = (
-        '<div class="cp">'
-        f"<h1>{escape(TITLE)}</h1>"
-        f'<p data-section="pills">{pills} · Signed: {signed_state} · '
-        f"Anchored: {anchor_state}</p>"
+        '<div class="cp" data-view="receipt">'
+        + _crumbs(run, store)
+        + f'<div class="title"><h1>{escape(TITLE)}</h1>'
+        f'<p data-section="pills">{pills}</p></div>'
+        '<div class="io">'
+        '<section data-section="facts">'
         + scroll_region(f'<table class="timeline" data-section="receipt">{rows}</table>',
                         "The receipt, scrolls sideways", "receipt")
         + '<details data-section="view-json"><summary>View JSON</summary>'
-        f'<pre data-section="manifest">{verbatim(manifest_text)}</pre></details>'
+        f'<pre data-section="manifest">{verbatim(manifest_text)}</pre></details></section>'
+        '<div class="side">'
         '<section data-section="check-yourself"><h2>Check it yourself</h2>'
         f'<p>Download <a href="{escape(href, quote=True)}" download>this run\'s record</a>, '
         "unpack it, and in its folder run:</p>"
-        "<pre><code>pip install onetrace-verify\n"
-        "onetrace-verify --require-artifacts .</code></pre>"
-        "<p>It runs offline, with no account.</p></section>"
+        #: Each line escaped on its own: the page's escape draws a line break as a visible
+        #: character, and the command is two lines to type.
+        + "<pre><code>" + "\n".join(escape(line) for line in command.split("\n")) + "</code></pre>"
+        + "".join(f'<p class="note">{n}</p>' for n in notes)
+        + f"<p>{escape(NO_NETWORK)}</p>"
+        + _printed(run, store)
+        + "</section>"
         '<section data-section="does-not-say"><h2>What this receipt does not say</h2>'
         '<ul class="plain">' + "".join(f"<li>{escape(line)}</li>" for line in DOES_NOT_SAY)
-        + "</ul></section>"
+        + "</ul></section></div></div>"
         '<p data-section="back"><a href="case.html">The run, step by step</a></p>'
         + generated_footer(generated_at)
         + "</div>")

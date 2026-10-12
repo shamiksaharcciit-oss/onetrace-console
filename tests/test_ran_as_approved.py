@@ -27,9 +27,9 @@ def test_a_graph_run_checked_by_the_pinned_verifier_ran_as_approved(runs, examin
     two graph rows (no subject) can be read. So on the exam's three graph runs, which follow
     their plan, the rung says yes in its own words -- where, read from the text
     alone, it could only say the check that ran can't say."""
-    from tests.test_pins import PINNED_SDK_VERSION
+    from tests.test_pins import PINNED_VERIFY_VERSION
     found, store = runs
-    assert version("onetrace-verify") == PINNED_SDK_VERSION
+    assert version("onetrace-verify") == PINNED_VERIFY_VERSION
     examined(len(found), "graph runs' case pages read for the plan rung")
     for name, run in found.items():
         state, said = _rung(_case(run, store))

@@ -3,8 +3,9 @@
 Every row is derived from the record or the console's own verifier run -- a test per row, each with
 a sabotage that states the row without its evidence. The signature row and the graph's "all in the
 approved graph" read "not available until onetrace 0.2.0", never a guessed state, until the third
-build; the anchor row is the run page's own rung since step 3 (tests/test_step3_receipt_anchor.py). "Check it yourself" gives the 0.1.2 command, no [crypto] and no --trust; "What this receipt
-does not say" is the work order's fixed text.
+build; the anchor row is the run page's own rung since step 3 (tests/test_step3_receipt_anchor.py).
+"Check it yourself" gives the command the run's record needs (tests/test_receipt_look.py holds it for
+unsigned, signed and anchored runs); "What this receipt does not say" is the work order's fixed text.
 """
 from __future__ import annotations
 
@@ -142,7 +143,7 @@ def test_the_header_pills_are_the_verifier_s_counts(demo):  # noqa: F811
     pills = re.sub(r"\s+", " ", unescape(re.sub(r"<[^>]+>", " ", re.search(
         r'<p data-section="pills">(.*?)</p>', _receipt(run, store), re.S).group(1))))
     assert f"{report.count('pass')} of {total} checks" in pills
-    assert "Signed: Signed, key not trusted" in pills and pills.rstrip().endswith("Anchored: No")
+    assert "Signed: Signed, key not trusted" in pills and pills.rstrip().endswith("Anchored: Not anchored")
 
 
 def _pills(run, store) -> str:
@@ -188,15 +189,19 @@ def test_view_json_is_the_manifest_as_delivered(demo):  # noqa: F811
         encoding="utf-8")
 
 
-def test_check_it_yourself_is_the_0_1_2_command_without_crypto(demo):  # noqa: F811
+def test_check_it_yourself_is_the_command_this_run_needs(demo):  # noqa: F811
+    """The demo's day 1 carries a signature, so its check needs the crypto extra and a trust file,
+    named in the onetrace-trust/0.1 format; and the page says the check makes no network calls --
+    never "offline", the ruled wording."""
     run, store = demo
+    assert any(p.startswith("signatures/") for p, _ in run.listing)
     found = re.search(r'<section data-section="check-yourself">(.*?)</section>',
                       _receipt(run, store), re.S).group(1)
     text = unescape(found)
-    assert "pip install onetrace-verify" in text
-    assert "onetrace-verify --require-artifacts ." in text
-    assert "offline" in text and "no account" in text
-    assert "[crypto]" not in text and "--trust" not in text
+    assert 'pip install "onetrace-verify[crypto]"' in text
+    assert "onetrace-verify --require-artifacts --trust trust.json ." in text
+    assert "onetrace-trust/0.1" in text
+    assert "makes no network calls" in text and "no account" in text and "offline" not in text
     assert f'href="/runs/{run.key}/record.tar"' in found
 
 

@@ -24,7 +24,8 @@ POLICY = "policy.html"
 
 def _document(title: str, body: str) -> str:
     from onetrace_console.render import _document as core_document
-    return core_document(title, body)
+    #: In `.cp`, as every page the console draws itself, so the one style reaches it.
+    return core_document(title, f'<div class="cp">\n{body}\n</div>')
 
 
 def _limit_sentence() -> str:

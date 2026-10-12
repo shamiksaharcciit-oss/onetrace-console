@@ -23,7 +23,7 @@ from onetrace_console.bounded_json import TooDeep, load_json_bounded
 import math
 import os
 from dataclasses import dataclass, field, fields
-from pathlib import Path
+from pathlib import Path, PurePath
 
 #: The one environment variable.
 ENV_VAR = "ONETRACE_CONSOLE_CONFIG"
@@ -149,6 +149,12 @@ class Config:
     #: trusted", never Yes. The console never makes, edits or guesses a trust file: a file the
     #: verifier can't read is its own `--trust` FAIL row, shown as it is.
     trust_file: str | None = None
+    #: The RFC 3161 time-stamp authority this console's operator trusts: its certificate, and the
+    #: root (or roots) it chains to, paths to PEM or DER files, or absent (the default). Set, every
+    #: check runs the verifier with `--tsa-cert <file>` and a `--tsa-root <file>` for each root, so
+    #: a run's RFC 3161 anchor can read Yes; absent, such an anchor reads "Couldn't check".
+    tsa_cert: str | None = None
+    tsa_roots: list[str] = field(default_factory=list)
 
     #: The read-only public mode, for a demo anyone may open: every write refused before its
     #: body is read, the pages served as they were built and never drawn again, and a banner on
@@ -299,6 +305,25 @@ def _from_mapping(data: dict, *, source: str) -> Config:
             fix=f"give trust_file the path of an onetrace-trust/0.1 file in {source}, or remove the "
                 f"key to check without one (a valid signature then reads \"Signed, key not "
                 f"trusted\").")
+    if "tsa_cert" in data and data["tsa_cert"] is not None and not _fits(
+            "tsa_cert", "str", data["tsa_cert"]):
+        raise ConfigError(
+            f"{source}: tsa_cert must be a path ({_WANT['str']}) or null, got {data['tsa_cert']!r}",
+            fix=f"give tsa_cert the path of the time-stamp authority's certificate in {source}, or "
+                f"remove the key (an RFC 3161 anchor then reads \"Couldn't check\").")
+    if "tsa_roots" in data:
+        roots = data["tsa_roots"]
+        if not (isinstance(roots, list) and all(_fits("tsa_roots", "str", r) for r in roots)):
+            raise ConfigError(
+                f"{source}: tsa_roots must be a list of paths ({_WANT['str']}), got {roots!r}",
+                fix=f"give tsa_roots a list of the root certificates' paths in {source}, for "
+                    f"example [\"tsa-root.pem\"], or remove the key.")
+        data = {**data, "tsa_roots": list(roots)}
+    if bool(data.get("tsa_cert")) != bool(data.get("tsa_roots")):
+        raise ConfigError(
+            f"{source}: tsa_cert and tsa_roots go together: the verifier checks a time-stamp "
+            f"authority's certificate against the root it chains to.",
+            fix=f"set both tsa_cert and tsa_roots in {source}, or neither.")
     if "extensions" in data or "sign_in" in data:
         data = dict(data)
         if "extensions" in data:
@@ -344,7 +369,35 @@ def load(path: Path) -> Config:
         raise ConfigError(f"{path}: the top level must be a JSON object, got "
                           f"{type(data).__name__}",
                           fix='write the configuration as one JSON object, {"key": value, ...}.')
-    return _from_mapping(data, source=str(path))
+    config = _from_mapping(data, source=str(path))
+    #: A relative path in the file is read from the file's own folder, as a reader of the file
+    #: expects -- never from wherever the console happened to be started.
+    return resolve_paths(config, path.parent)
+
+
+def from_folder(value: str, base, flavour=PurePath) -> str:
+    """A configured path, read from `base` only if it is relative: a path with a root or a drive
+    (`/srv/x`, `C:\\x`, `\\\\host\\share\\x`, even `D:x`) is kept exactly as given, on every
+    system -- on Windows `/srv/x` has no drive, but it has a root, and is not relative. Never
+    resolved: a configured path names what the operator wrote, not where a link happens to lead.
+    `flavour` is the system's own path rules; a test passes the other system's."""
+    if flavour(value).anchor:
+        return value
+    base = flavour(base)
+    if not base.anchor:
+        base = flavour(os.getcwd()) / base
+    return str(base / value)
+
+
+def resolve_paths(config: Config, base: Path) -> Config:
+    """`config` with each relative trust file, TSA certificate and TSA root read from `base`."""
+    from dataclasses import replace
+
+    def absolute(value):
+        return value if value is None else from_folder(value, base)
+    return replace(config, trust_file=absolute(config.trust_file),
+                   tsa_cert=absolute(config.tsa_cert),
+                   tsa_roots=[absolute(r) for r in config.tsa_roots])
 
 
 def load_from_env() -> Config:

@@ -68,9 +68,10 @@ def _text(html: str) -> str:
 
 
 def _item(page: str, kind: str, name: str) -> str:
-    found = re.search(rf'<li data-{kind}="{re.escape(name)}">(.*?)</li>', page, re.S)
+    #: An output is a list item; an input, a row of the inputs table.
+    found = re.search(rf'<(li|tr) data-{kind}="{re.escape(name)}">(.*?)</\1>', page, re.S)
     assert found, f"no {kind} {name!r} on the page"
-    return found.group(1)
+    return found.group(2)
 
 
 @pytest.fixture

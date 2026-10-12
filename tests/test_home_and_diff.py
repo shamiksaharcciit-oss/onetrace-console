@@ -21,7 +21,7 @@ import io
 import json
 import re
 import tarfile
-from html import escape
+from html import escape, unescape
 from dataclasses import replace
 from pathlib import Path
 
@@ -76,12 +76,19 @@ def _diff_rows(page: str) -> list[tuple[str, str]]:
 
 
 
+def _unlabelled(html: str) -> str:
+    """The page without the narrow screen's column labels (`words.labelled`), so a table reads as
+    its cells were drawn before them; nothing else changes."""
+    import re as _re
+    return _re.sub(r' data-label="[^"]*"', "", html)
+
+
 def test_the_first_difference_is_marked_in_the_table(diverging, examined):
     """Board 6: the first differing stage is marked in the table itself, not only in a
     sentence under it. Later rows say they changed AFTER it -- the ladder establishes the
     order, not that the first difference caused them."""
     comparison, store = diverging
-    page = render_diff(comparison, store, generated_at=GENERATED_AT)
+    page = _unlabelled(render_diff(comparison, store, generated_at=GENERATED_AT))
     rows = _diff_rows(page)
     examined(len(rows), "rows of the diverging pair's changes table")
     words = [re.findall(r'<td data-result="[^"]*">([^<·]*)', cells)[0].strip() for _, cells in rows]
@@ -92,17 +99,19 @@ def test_the_first_difference_is_marked_in_the_table(diverging, examined):
     assert tables
     for table in tables:
         marked = re.findall(r'<tr ([^>]*data-first-difference="true"[^>]*)>', table)
+        #: Since 0.1.1, diff's table rows carry the anchor the comparison graph's boxes link to.
+        marked = [re.sub(r' id="step-\d+"$', "", m) for m in marked]
         assert marked == ['data-verdict="FIRST DIFFERENCE" data-first-difference="true"'], marked
     assert "as a result" not in page.lower()
 
 
 def _settings_cell(cells: str) -> str:
-    return re.search(r'<td data-section="settings">(.*?)</td>', cells, re.S).group(1)
+    return re.search(r'<td data-section="settings">(.*?)</td>', _unlabelled(cells), re.S).group(1)
 
 
 def test_the_settings_column_names_each_changed_setting(diverging, compared, examined):
-    """Board 6's settings column, from the report's own annotations: each changed field as
-    "old -> new", verbatim and whole. A stage whose output is the same but whose settings
+    """Board 6's settings column, from the report's own annotations: each changed field by its
+    short name (its whole path in its tooltip), as "old → new", the values verbatim and whole. A stage whose output is the same but whose settings
     changed carries it too (the poppler pair). A compared stage with no annotation says no
     recorded setting differs -- not "same", because the SDK also annotates nothing when a
     stage recorded no settings to compare."""
@@ -118,8 +127,13 @@ def test_the_settings_column_names_each_changed_setting(diverging, compared, exa
             if str(i) not in notes:
                 assert settings == "no recorded setting differs", (i, settings)
                 continue
+            text = unescape(re.sub(r"<[^>]+>", "", settings))
             for field, (old, new) in notes[str(i)].items():
-                assert f"{field} {old} -> {new}" in settings, (i, field)
+                #: Shown by its short name, its whole path in the tooltip; its values whole.
+                short = field.rsplit(".", 1)[-1]
+                assert f"{short} {old} → {new}" in text, (i, field)
+                assert f'data-setting-path="{escape(field)}" title="{escape(field)}">{escape(short)}<' \
+                    in settings, (i, field)
 
 
 def test_a_stage_the_sdk_did_not_compare_says_so_in_the_settings_column():
@@ -180,8 +194,9 @@ def _summary(page: str) -> str | None:
 def test_the_summary_names_the_first_difference_and_what_is_not_established(
         diverging, examined):
     """Board 6's stage-level summary: where the first difference is, how many stages were
-    identical before it (with its denominator), that its recorded settings differ and which,
-    how the stages after it came out -- and that WHY it differs is not established. No
+    identical before it (with its denominator), one plain sentence of what differs (each setting
+    by its short name with both values, how many stages after it changed) -- and that WHY it
+    differs is not established. No
     causal word: the ladder gives order, and settings differing beside an output differing
     is not evidence that one produced the other."""
     comparison, store = diverging
@@ -195,13 +210,24 @@ def test_the_summary_names_the_first_difference_and_what_is_not_established(
            f"of {before}" in block
     assert f"Why stage {first['index']} · {first['stage']}'s output differs is not " \
            "established by this evidence." in block
-    assert "recorded settings differ" in block
+    #: One plain sentence (the Compare board's): each differing setting by its short name, with
+    #: both values, never its whole path; the stages the same before it; how many changed after.
     note = next(a for a in report["annotations"] if a["index"] == first["index"])
-    for field in note["differs"]:
-        assert field in block, field
+    text = re.sub(r"\s+", " ", unescape(re.sub(r"<[^>]+>", " ", block)))
+    assert f"{first['stage']}'s settings differ in " in text
+    for field, (old, new) in note["differs"].items():
+        if re.fullmatch(r"sha256:[0-9a-f]{64}", str(old)) or re.fullmatch(r"sha256:[0-9a-f]{64}", str(new)):
+            assert old not in text and new not in text, f"a digest in the sentence: {field}"
+            continue
+        assert f"{field.rsplit('.', 1)[-1]}: {old} → {new}" in text, field
+        assert field not in text or "." not in field, f"the whole path {field}"
+    same = [r["stage"] for r in report["ladder"]
+            if int(r["index"]) < int(first["index"]) and r["verdict"] == "same"]
+    assert all(s in text for s in same) and "the same in both" in text
     after = [r for r in report["ladder"] if int(r["index"]) > int(first["index"])]
-    assert f"Of the {len(after)} stages after it, " \
-           f"{sum(r['verdict'] == 'downstream' for r in after)} differ" in block
+    changed = sum(r["verdict"] == "downstream" for r in after)
+    assert (f"all {changed} stages after it changed too" if changed == len(after)
+            else f"{changed} of the {len(after)} stages after it changed too") in text
     for causal in ("as a result", "caused", "because", "led to", "due to"):
         assert causal not in block.lower(), causal
 
@@ -296,7 +322,7 @@ def test_the_changes_table_is_the_sdks_ladder_row_for_row_in_its_own_order(compa
             (folder / name).write_bytes(store.get(key))
         report = read_report(folder)
 
-    page = render_diff(comparison, store, generated_at=GENERATED_AT)
+    page = _unlabelled(render_diff(comparison, store, generated_at=GENERATED_AT))
     #: Scoped to the DIFF table. The page carries one per verb, and `localize` over two runs
     #: has a ladder too — the first version of this test counted both and found 18 rows for
     #: 9, which was the page being more complete than the test.
@@ -375,12 +401,19 @@ def test_the_sdks_own_report_is_on_the_page_whole(compared, examined):
 
 
 def test_the_command_to_repeat_the_comparison_is_on_the_page(compared, examined):
+    """The command a reader types to repeat each verb: the SDK's own (`onetrace <verb>`), over the
+    two run folders by their run ids -- never the stored placeholder form (RUN_A RUN_B --out OUT)."""
+    from onetrace_console.render import typed_command
     comparison, store = compared
-    page = render_diff(comparison, store, generated_at=GENERATED_AT)
-    shown = {v.verb: v.shown_command for v in comparison.verbs}
+    page = unescape(render_diff(comparison, store, generated_at=GENERATED_AT))
+    from onetrace_console.compare import DIFF, LOCALIZE
+    #: Each verb's own section; the text diff's command is in the text diff's section.
+    shown = {v.verb: typed_command(comparison, store, v.verb) for v in comparison.verbs
+             if v.verb in (DIFF, LOCALIZE)}
     examined(len(shown), "repeat commands that must appear")
     for verb, command in shown.items():
         assert command in page, f"{verb}'s repeat command is missing: {command!r}"
+    assert "RUN_A" not in page and "--out OUT" not in page
 
 
 def test_the_diff_page_keeps_the_limit_sentence(compared, examined):

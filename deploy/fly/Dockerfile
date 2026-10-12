@@ -2,8 +2,9 @@
 #
 #   docker build -f deploy/fly/Dockerfile -t onetrace-console-demo .
 #
-# What it serves is built into the image: the reference demo's two runs, delivered, checked and
-# compared, and every page drawn with the public banner (`onetrace-console demo --public --build`).
+# What it serves is built into the image: the demo store's runs, recorded at build time by its
+# builder, delivered, checked and compared, and every page drawn with the public banner
+# (`onetrace-console demo --public --build`).
 # The built store is owned by root and not writable, and the console runs as another user, so a
 # write the code did not intend fails at the operating system as well. Every machine started from
 # the image serves exactly that store; nothing is checked, compared or drawn at start.
@@ -35,11 +36,12 @@ RUN python tools/install_pinned.py
 RUN printf '#!/bin/sh\nexec python -m onetrace_console "$@"\n' > /usr/local/bin/onetrace-console \
     && chmod +x /usr/local/bin/onetrace-console
 
-# The demo's store, built now, then made read-only: owned by root, no write bit anywhere. The
+# The demo's store, built now, then made read-only: owned by root, readable by every user (the
+# serving user reads it, and checks it against its build record at start), no write bit anywhere. The
 # configuration file and the code are root's too.
 RUN python -m onetrace_console demo --public --build /srv/onetrace-demo \
     && chown -R root:root /srv/onetrace-demo /etc/onetrace-console /app \
-    && chmod -R a-w /srv/onetrace-demo /etc/onetrace-console
+    && chmod -R a+rX,a-w /srv/onetrace-demo /etc/onetrace-console
 
 # The serving user: not root, no home, no shell, owning nothing it serves.
 RUN useradd --no-create-home --uid 10001 --shell /usr/sbin/nologin demo

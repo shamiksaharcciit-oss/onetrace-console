@@ -18,7 +18,7 @@ It needs Python 3.12 or later. It installs from PyPI alone: `onetrace` 0.2.0 and
 onetrace-console demo
 ```
 
-This copies the reference demo's two runs into `onetrace-console-demo/` under the folder you start it from, starts the console, loads both runs, compares them, and prints the pages' addresses. The demo keeps its store and its trust file in that folder too. It runs in local mode, so it refuses to start while `ONETRACE_CONSOLE_CONFIG` is set.
+This records the demo's runs into `onetrace-console-demo/` under the folder you start it from, starts the console, loads them, stores five comparisons, and prints the pages' addresses. The runs come from four small example pipelines that ship with the console: a question-and-answer pipeline over an example shop's refund policy, the reference demo's coding agent, a support-ticket triage, and a support reply drafted by a stub whose wording varies from run to run. The draft leaves the refund window as `{days}` on purpose; a later policy stage fills in the number. They make no network calls and use no hosted model: the embedder is a hashed bag of words, the answerer quotes the text it retrieved, and the times in the records are the times you ran it. Some runs are altered after they were recorded, on purpose, so the console has something to find: one has an output byte changed, one an output file deleted, one is unsigned, and one is signed with a key the demo's trust file doesn't name. The demo keeps its store and its trust file in that folder too. It runs in local mode, so it refuses to start while `ONETRACE_CONSOLE_CONFIG` is set.
 
 ![The overview, with the demo's two runs](docs/screenshots/overview.png)
 

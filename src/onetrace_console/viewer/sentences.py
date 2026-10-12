@@ -669,9 +669,14 @@ PROVISIONAL: dict[str, tuple[str, str]] = {
         "{n} steps are recorded, not replayable.",
         "run ladder canvas: rung 4 with more than one declared step; 019's `rederivable.false` "
         "speaks of one model step"),
-    "rung.anchored.not": (
-        "not anchored",
-        "run ladder canvas: v6 canvas board 2's evidence for the time rung, as drawn"),
+    "rung.anchored.none": (
+        "no anchor beside the chain",
+        "0.1.1's colour rule: \"Not anchored\" is its own state; its evidence, as the signing "
+        "rung's \"no signature beside the chain\""),
+    "rung.anchored.declared_not": (
+        "the record declares itself not anchored",
+        "0.1.1's colour rule: \"Not anchored\" from what the record declares, with no check of "
+        "this console's to read"),
     "rung.anchored.unchecked": (
         "The record says it is anchored. This page does not check an anchor, so it claims no "
         "time from it.",
@@ -784,6 +789,7 @@ LABELS: dict[str, str] = {
     "rung.state.not_checked": "Not checked",
     "rung.state.not_yet": "Not yet available",
     "rung.state.unsigned": "Unsigned",
+    "rung.state.not_anchored": "Not anchored",
     "rung.state.signed_untrusted": "Signed, key not trusted",
     # The execution graph's table and folds, as specified -- see LABELS_RULED_29DB -- and the
     # link to a run page's comparison -- see LABELS_RULED_29DF.

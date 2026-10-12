@@ -13,6 +13,8 @@ one escape rather than a choice of two.
 from __future__ import annotations
 
 from html import escape as _html_escape
+import html as _html
+import re
 
 #: The authorization rung's evidence on every page: this console records no authorization, and
 #: says so plainly.
@@ -56,6 +58,37 @@ def clock(value: str) -> str:
                                          if "." in str(value).split("T", 1)[-1] else "")
 
 
+#: The one script a console page may add to its times (the Overview's): after each `<time>`, how
+#: long ago it was, worked out in the reader's browser from the time's own `datetime` -- " · 2 h
+#: ago". The absolute UTC time is always in the page; without the script, it stands alone. A
+#: public console names this script's hash in its Content-Security-Policy (`public.py`).
+RELATIVE_TIME_SCRIPT = (
+    "<script>document.querySelectorAll('time[datetime]').forEach(function(t){"
+    "var d=Date.parse(t.getAttribute('datetime'));if(isNaN(d))return;"
+    "var s=Math.floor((Date.now()-d)/1000);if(s<0)return;"
+    "var w=s<60?'just now':s<3600?Math.floor(s/60)+' min ago':"
+    "s<86400?Math.floor(s/3600)+' h ago':Math.floor(s/86400)+' d ago';"
+    "var e=document.createElement('span');e.className='rel';e.textContent=' \u00b7 '+w;"
+    "t.after(e)})</script>")
+
+
+#: The watched folder's notice (`watch.py`): every few seconds it asks the console what the
+#: watcher has (`GET /v1/folder`) and, when new runs have been taken in since the page was drawn,
+#: shows "2 new runs. Show them" -- never reloading or moving the page under the reader. The line
+#: saying when the folder was last read is kept current too. Without the script the page says
+#: when it was drawn, and a reload shows the new runs.
+WATCH_SCRIPT = (
+    "<script>(function(){var s=document.querySelector('[data-section=watched]');if(!s)return;"
+    "var v=+s.getAttribute('data-version'),t=+s.getAttribute('data-taken'),"
+    "ms=1000*+s.getAttribute('data-interval');function poll(){fetch('/v1/folder',"
+    "{cache:'no-store'}).then(function(r){return r.ok?r.json():null}).then(function(d){if(!d)"
+    "return;var l=s.querySelector('[data-part=last-read]');if(l&&d.last_read){l.setAttribute("
+    "'datetime',d.last_read);l.textContent=d.last_read.replace('T',' ').replace('+00:00',' UTC')}"
+    "if(d.version>v){var n=d.taken-t,p=s.querySelector('[data-part=notice]');p.hidden=false;"
+    "p.firstChild.textContent=(n>0?n+(n==1?' new run. ':' new runs. '):'The folder changed. ');}"
+    "}).catch(function(){})}setInterval(poll,Math.max(ms,1000))})()</script>")
+
+
 def time_html(value, *, attrs: str = "", text: str | None = None) -> str:
     """A time as a page shows it: the one display form, inside `<time>` carrying the value as
     recorded. A value that does not read as a time is shown escaped as it is, in no `<time>`."""
@@ -76,11 +109,39 @@ def span_html(started, ended, *, attrs: str = "") -> str:
 
 
 def scroll_region(inner: str, label: str, name: str) -> str:
-    """A table wider than a narrow screen, in a scroll region of its own: it scrolls inside its
-    panel, never the whole page, says so by its scrollbar and its fade, and a keyboard reaches it.
-    The frame around it draws its focus ring, which the fade's mask would clip on the region."""
+    """A table in a region of its own, named for a screen reader and reached by a keyboard. In the
+    console, on a narrow screen, its rows stack, each cell under its column's header (`labelled`),
+    so nothing in it is cut off and nothing scrolls sideways; the free file keeps the scroll."""
     return (f'<div class="scroll-frame"><div class="scroll-x" data-scroll="{escape(name)}" '
-            f'tabindex="0" role="region" aria-label="{escape(label)}">{inner}</div></div>')
+            f'tabindex="0" role="region" aria-label="{escape(label)}">{labelled(inner)}</div></div>')
+
+
+_THEAD = re.compile(r"<thead>(.*?)</thead>", re.S)
+_TBODY = re.compile(r"(<tbody>)(.*?)(</tbody>)", re.S)
+_ROW = re.compile(r"(<tr\b[^>]*>)(.*?)(</tr>)", re.S)
+_CELL = re.compile(r"<td\b")
+
+
+def labelled(inner: str) -> str:
+    """`inner` with each body cell of its table labelled by its column's header (`data-label`, the
+    header's text), so a stacked row still says what each value is. A table with no header row is
+    returned as it is: its first cell is the row's label."""
+    head = _THEAD.search(inner)
+    if head is None:
+        return inner
+    labels = [" ".join(_html.unescape(re.sub(r"<[^>]+>", " ", h)).split())
+              for h in re.findall(r"<th\b[^>]*>(.*?)</th>", head.group(1), re.S)]
+    if not any(labels):
+        return inner
+
+    def row(m: re.Match) -> str:
+        n = iter(range(10_000))
+        cells = _CELL.sub(lambda c: (f'<td data-label="{_html_escape(labels[i], quote=True)}"'
+                                     if (i := next(n)) < len(labels) and labels[i] else "<td"),
+                          m.group(2))
+        return m.group(1) + cells + m.group(3)
+
+    return _TBODY.sub(lambda b: b.group(1) + _ROW.sub(row, b.group(2)) + b.group(3), inner, count=1)
 
 
 def generated_footer(generated_at) -> str:

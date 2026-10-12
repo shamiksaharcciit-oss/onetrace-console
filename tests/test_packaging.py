@@ -18,24 +18,26 @@ from pathlib import Path
 
 import pytest
 
+from tests.test_pins import PINNED_SDK_VERSION
+
 REPO = Path(__file__).resolve().parent.parent
 META = tomllib.loads((REPO / "pyproject.toml").read_text(encoding="utf-8"))["project"]
 
 
-def test_the_version_is_0_1_0_everywhere(examined):
+def test_the_version_is_0_1_1_everywhere(examined):
     import onetrace_console
     examined(3, "places the version is stated")
-    assert META["version"] == "0.1.0"
-    assert onetrace_console.__version__ == "0.1.0"
+    assert META["version"] == "0.1.1"
+    assert onetrace_console.__version__ == "0.1.1"
     out = subprocess.run([sys.executable, "-m", "onetrace_console", "--version"], capture_output=True,
                          text=True, env={**os.environ, "PYTHONPATH": str(REPO / "src")})
-    assert out.stdout.strip() == "0.1.0", out
+    assert out.stdout.strip() == "0.1.1", out
 
 
 def test_the_metadata_names_the_sdk_it_was_tested_with(examined):
     deps = META["dependencies"]
     examined(len(deps), "declared dependencies")
-    assert "onetrace==0.2.0" in deps
+    assert "onetrace==0.2.1" in deps
     assert "onetrace-verify[crypto]==0.2.0" in deps
     assert META["requires-python"] == ">=3.12"
     assert len(META["authors"]) == 1 and META["authors"][0].get("name", "").strip(), META["authors"]
@@ -111,13 +113,14 @@ def test_a_plain_pip_install_compares_with_the_same_report_as_the_pinned_install
         subprocess.run([sys.executable, "-c", f"import sys; from setuptools import build_meta as b; "
                         f"print(b.{build}(sys.argv[1]))", str(dist)], cwd=tree, check=True,
                        capture_output=True, env=clean)
-    console_whl = next(dist.glob("onetrace_console-0.1.0-*.whl"))
-    _check_the_viewer_ships_without_its_tests(console_whl, next(dist.glob("onetrace_console-0.1.0.tar.gz")))
-    #: The wheel carries the demo's runs and trust file, so `onetrace-console demo` works installed.
+    console_whl = next(dist.glob("onetrace_console-0.1.1-*.whl"))
+    _check_the_viewer_ships_without_its_tests(console_whl, next(dist.glob("onetrace_console-0.1.1.tar.gz")))
+    #: The wheel carries the demo store's builder and trust file, so `onetrace-console demo` works
+    #: installed: it builds the demo's runs where it is started (0.1.1).
     import zipfile
-    demo = REPO / "src" / "onetrace_console" / "reference_demo"
-    want = {f"onetrace_console/reference_demo/{p.relative_to(demo).as_posix()}"
-            for p in demo.rglob("*") if p.is_file()}
+    demo = REPO / "src" / "onetrace_console" / "demo_store"
+    want = {f"onetrace_console/demo_store/{p.relative_to(demo).as_posix()}"
+            for p in demo.rglob("*") if p.is_file() and "__pycache__" not in p.parts}
     with zipfile.ZipFile(console_whl) as whl:
         assert want and want <= set(whl.namelist()), sorted(want - set(whl.namelist()))[:5]
     venv = tmp_path / "venv"
@@ -140,9 +143,10 @@ def test_a_plain_pip_install_compares_with_the_same_report_as_the_pinned_install
     #: temporary folder may sit inside a git checkout, where a later source would answer instead.
     named = subprocess.run([str(py), "-c", "from onetrace_console.compare import sdk_build_digest; "
                             "print(sdk_build_digest())"], capture_output=True, text=True, env=clean)
-    assert named.stdout.startswith("record:0.2.0:"), (named.stdout, named.stderr[-1500:])
+    assert named.stdout.startswith(f"record:{PINNED_SDK_VERSION}:"), (named.stdout, named.stderr[-1500:])
     listed = subprocess.run([str(py), "-m", "pip", "list"], capture_output=True, text=True, env=clean).stdout
-    assert "onetrace-console" in listed and "0.1.0" in listed, listed
+    from onetrace_console import __version__
+    assert "onetrace-console" in listed and __version__ in listed, listed
     here = _compare_report(sys.executable, {"PYTHONPATH": str(REPO / "src")}, tmp_path / "pinned")
     there = _compare_report(str(py), {}, tmp_path / "plain")
     examined(2, "comparisons of the same two runs: the pinned install and a plain one")

@@ -35,7 +35,7 @@ import pytest
 from tests.test_folder_load import REPO, _Console, _free_port
 from tools import container_check
 
-PACKAGE_DEMO = REPO / "src" / "onetrace_console" / "reference_demo"
+PACKAGE_DEMO = REPO / "src" / "onetrace_console" / "demo_store"
 
 
 def _tree(root: Path) -> dict[str, tuple[str, int]]:
@@ -416,14 +416,23 @@ def test_the_checker_names_each_header_dropped(served, examined):
     assert container_check.page_problems(status, headers, body) == []
     for name in container_check.HEADERS:
         dropped = {k: v for k, v in headers.items() if k != name.lower()}
-        assert container_check.page_problems(status, dropped, body) == [f"no {name} header"], name
+        problems = container_check.page_problems(status, dropped, body)
+        assert problems[0] == f"no {name} header", name
+        #: The Overview carries the relative-times script (0.1.1): with no policy, that script is
+        #: also one the policy doesn't name, and the checker says so too.
+        extra = ["an inline script the policy does not name"] if name == "Content-Security-Policy" else []
+        assert [p.split(" (")[0] for p in problems[1:]] == extra, (name, problems)
 
 
 def test_the_policy_names_the_one_inline_script_and_the_checker_catches_another(served, examined):
     base, _folder, _c = served
     status, headers, body = container_check.fetch(base, "/executions-all.html")
     examined(1, "page")
-    assert body.count(b"<script>") == 1, "the runs list carries the print helper once"
+    from onetrace_console.viewer.page import PRINT_SCRIPT
+    from onetrace_console.words import RELATIVE_TIME_SCRIPT
+    #: The runs list carries the print helper and the relative times, each once, each named.
+    assert body.count(b"<script>") == 2
+    assert body.count(PRINT_SCRIPT.encode()) == 1 and body.count(RELATIVE_TIME_SCRIPT.encode()) == 1
     assert container_check.page_problems(status, headers, body) == []
     planted = body.replace(b"</body>", b"<script>alert(1)</script></body>", 1)
     problems = container_check.page_problems(status, headers, planted)
@@ -442,7 +451,8 @@ def test_a_runs_record_download_is_a_read_and_answers(served, examined):
     base, folder, _c = served
     keys = sorted(p.name for p in (folder / "store" / "pages" / "runs").iterdir() if p.is_dir())
     examined(len(keys), "record downloads")
-    assert len(keys) == 2, keys
+    from onetrace_console.demo_store import runs
+    assert len(keys) == len(runs()), keys
     for key in keys:
         status, headers, body = container_check.fetch(base, f"/runs/{key}/record.tar")
         assert status == 200 and headers["content-type"] == "application/x-tar" and body, key
@@ -495,20 +505,45 @@ def test_a_public_start_writes_nothing_and_draws_nothing(built, tmp_path, examin
     assert after == before, sorted(k for k in set(before) | set(after) if before.get(k) != after.get(k))
 
 
-def test_the_built_store_is_the_packaged_demo_compared_and_drawn(built, examined):
+def test_the_built_store_is_the_builders_demo_compared_and_drawn(built, examined):
+    """0.1.1: the image's store is the demo store's builder's -- its runs,
+    its trust file (the packaged one), its comparisons -- under a build record that holds
+    every byte of it."""
+    from onetrace_console.demo_store import COMPARISONS, check_build_record, runs
     from onetrace_console.store import Store
-    shipped = {k: v[0] for k, v in _tree(PACKAGE_DEMO / "runs").items()}
-    assert {k: v[0] for k, v in _tree(built / "runs").items()} == shipped and shipped
+    assert sorted(p.name for p in (built / "runs").iterdir()) == sorted(r.folder for r in runs())
     assert (built / "trust.json").read_bytes() == (PACKAGE_DEMO / "trust.json").read_bytes()
+    assert check_build_record(built) == []
+    record = json.loads((built / "BUILD_RECORD.json").read_text(encoding="utf-8"))
+    assert record["covers"] == ["runs", "store", "trust.json"]
     store = Store(built / "store" / "store")
-    runs, comparisons = list(store.runs()), list(store.comparisons())
-    examined(len(runs) + len(comparisons), "stored runs and comparisons")
-    assert sorted(r.run_id for r in runs) == ["demo-run-1", "demo-run-2"], [r.run_id for r in runs]
-    assert len(comparisons) == 1
+    stored, comparisons = list(store.runs()), list(store.comparisons())
+    examined(len(stored) + len(comparisons), "stored runs and comparisons")
+    assert sorted(r.run_id for r in stored) == sorted(r.run_id or r.folder for r in runs())
+    assert len(comparisons) == len(COMPARISONS)
     pages = set(_pages(built))
-    assert {"home.html", f"diff/{comparisons[0].key}.html"} <= pages
-    for run in runs:
+    assert {"home.html"} | {f"diff/{c.key}.html" for c in comparisons} <= pages
+    for run in stored:
         assert {f"runs/{run.key}/{n}" for n in ("answer.html", "case.html")} <= pages
+
+
+@pytest.mark.parametrize("where", ["store/pages/home.html", "runs/p1-01-baseline-set1/MANIFEST.json",
+                                   "trust.json"])
+def test_public_over_a_demo_edited_after_its_build_is_refused(built, tmp_path, where, examined):
+    """One byte changed anywhere the build record covers, and a public console doesn't start."""
+    copy = tmp_path / "demo"
+    shutil.copytree(built, copy)
+    target = copy / where
+    data = bytearray(target.read_bytes())
+    data[len(data) // 2] ^= 0x01
+    target.write_bytes(bytes(data))
+    config = _config(tmp_path, copy)
+    code, out = _start(tmp_path, config)
+    examined(1, "start")
+    if where == "trust.json":
+        _refused(code, out, "not the packaged demo's trust file")
+    else:
+        _refused(code, out, f"{where} was changed", "--build")
 
 
 def test_building_into_a_folder_that_is_not_new_and_empty_is_refused(tmp_path, examined):

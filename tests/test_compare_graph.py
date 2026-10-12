@@ -37,6 +37,13 @@ def dag_pages(store):
     return pages
 
 
+def _unlabelled(html: str) -> str:
+    """The page without the narrow screen's column labels (`words.labelled`), so a table reads as
+    its cells were drawn before them; nothing else changes."""
+    import re as _re
+    return _re.sub(r' data-label="[^"]*"', "", html)
+
+
 def _graph(page: str) -> str:
     found = re.search(r'<section data-section="graph">.*?</section>', page, re.S)
     assert found, "no graph on the compare page"
@@ -82,7 +89,7 @@ def test_the_union_of_both_runs_nodes_and_links_with_the_sdk_s_own_words(dag_pag
 
 
 def test_the_order_is_the_sdk_s_and_every_node_links_to_its_row(dag_pages):
-    page = dag_pages["PQ"]
+    page = _unlabelled(dag_pages["PQ"])
     rows = re.findall(r'<tr data-node-row="(\d+)"[^>]*><td><span id="step-(\d+)"></span>[^<]*</td>'
                       r'<td class="mono">([^<]*)</td>', page)
     assert [node for _, _, node in rows] == ["omega", "zeta", "alpha", "join"], "the SDK's order"
@@ -103,10 +110,14 @@ def test_the_table_is_the_page_s_own_and_the_graph_does_not_repeat_it(dag_pages)
     assert "Recorded order" not in _graph(page), "a comparison's order is the SDK's, not a run's"
 
 
-def test_a_comparison_of_two_linear_runs_is_drawn_as_it_always_was(compared):  # noqa: F811
+def test_a_comparison_of_two_linear_runs_is_drawn_as_a_line_with_its_table(compared):  # noqa: F811
+    """0.1.1: a straight-line pair is drawn too -- the stage table's stages, as a line, with no
+    link between them, since neither record holds one -- and its changes table stays."""
     comparison, store = compared
     page = render_diff(comparison, store, generated_at=GENERATED_AT)
-    assert 'data-section="graph"' not in page and 'data-section="changes"' in page
+    graph = re.search(r'<section data-section="graph">.*?</section>', page, re.S)
+    assert graph and 'data-section="graph-linear"' in graph.group(0)
+    assert 'class="link"' not in graph.group(0) and 'data-section="changes"' in page
 
 
 def _ab_label(page: str) -> str:

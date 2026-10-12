@@ -234,7 +234,7 @@ def test_a_store_where_nothing_needs_attention_says_so(store):
 
 def test_recent_runs_show_what_each_run_records_and_how_it_compares(ten_runs):
     from onetrace_console.home import MOST_RECENT, VERDICT_LABELS, verdict_of
-    from onetrace_console.overview import pipelines, vs_baseline
+    from onetrace_console.overview import pipelines, ran_at, vs_baseline
     store, _ = ten_runs
     home = render_all(store, generated_at=GENERATED_AT)[HOME]
     table = _section(home, "recent-runs")
@@ -250,6 +250,7 @@ def test_recent_runs_show_what_each_run_records_and_how_it_compares(ten_runs):
                        + (f"; {run.retries} retr{'y' if run.retries == 1 else 'ies'} recorded"
                           if run.retries else ""),
                        vs_baseline(run, store)[1], VERDICT_LABELS[verdict_of(run)],
+                       short_time(ran_at(run)) if ran_at(run) else "not recorded",
                        short_time(run.received_at)], tds
         assert f'datetime="{run.received_at}"' in cells, "the time's whole value is in its <time>"
         assert f'href="runs/{key}/case.html"' in cells

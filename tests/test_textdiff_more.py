@@ -10,6 +10,7 @@
 from __future__ import annotations
 
 import json
+from html import escape
 import subprocess
 from dataclasses import replace
 
@@ -22,6 +23,9 @@ from onetrace_console.textdiff_view import read_textdiff
 from tests.test_checks import FIXED_RAN_AT, _require_installed
 from tests.test_compare import EXAM, _deliver, _require_exam
 from tests.test_pages import GENERATED_AT
+#: The SDK run as the console runs it (compare.py): UTF-8 forced on the child's output, so the bytes
+#: compared are the console's, on a machine whose default encoding is not UTF-8 too.
+from onetrace_console.child import utf8_env  # noqa: E402
 
 MORE = f"{TEXT_DIFF} --max-lines {TEXT_DIFF_MORE_LINES}"
 
@@ -45,7 +49,7 @@ def test_the_text_diff_is_a_run_of_its_own_and_its_json_is_the_sdks_bytes(pq, ex
     #: The recorded command, run by hand over the same two folders, prints the same bytes.
     argv = list(run.command)
     argv[argv.index("--out") + 1] = str(tmp_path / "by-hand")
-    again = subprocess.run(argv, capture_output=True).stdout
+    again = subprocess.run(argv, capture_output=True, env=utf8_env()).stdout
     assert store.get(run.stdout_key) == again
     doc = read_textdiff(again)
     assert doc.get("corpus_traces") in (None, []) or all(
@@ -120,7 +124,7 @@ def test_a_stored_comparison_of_the_golden_pair_shows_twelve_to_six_on_its_diff_
     section = page[page.index('<section data-section="text-diff">'):]
     section = section[:section.index("</section>")]
     assert '<mark class="del">twelve</mark>' in section and '<mark class="ins">six</mark>' in section
-    assert section.count('data-badge="verified"') == 3
+    assert section.count('data-badge="verified"') == 6     # one chip per side, since 0.1.1
 
 
 def test_the_page_asks_for_more_only_where_an_output_was_cut(warranty):
@@ -142,7 +146,12 @@ def test_the_page_asks_for_more_only_where_an_output_was_cut(warranty):
     cut_run = replace(run, stdout_key=store.put(doc_bytes))
     cut_cmp = replace(comparison, verbs=tuple(cut_run if v is run else v for v in comparison.verbs))
     page = render_diff(cut_cmp, store, generated_at=GENERATED_AT)
-    assert f"POST /text-diff/more?c={comparison.key}" in page
+    #: A command the reader can type, the SDK's own line cap; no route of this console is named.
+    from onetrace_console.render import typed_command
+    assert f"Some outputs are cut at 200 lines. To see up to {TEXT_DIFF_MORE_LINES} lines per output: " in page
+    assert escape(typed_command(comparison, store, "diff", text=True)
+                  + f" --max-lines {TEXT_DIFF_MORE_LINES}") in page
+    assert "/text-diff/more" not in page
     assert "… 7 more lines" in page
 
 

@@ -117,17 +117,50 @@ def _titles(page: str) -> dict[str, str]:
 #: The page before and after differs in exactly one place, measured by diffing the two renderings:
 #: the banner's "checked on" time is a <time> element reading "2026-09-26 10:00 UTC", its full value
 #: (2026-09-26T12:00:00+02:00) kept in the element.
-UNMARKED_R_CASE_SHA256 = "47406d079f96605c111af274fcce1b72a3119fd73e3f5edca961fecea019885d"
+#: Moved by 0.1.1's type scale (the one shared style), from 47406d079f96605c111af274fcce1b72a3119fd73e3f5edca961fecea019885d.
+#: Measured by diffing the two renderings: only the inlined stylesheet's font sizes differ -- 17px
+#: to 15px (the strip's lead), 13.5px to 13px (.grid, table.timeline), 12.5px to 12px (.fp, pre),
+#: 11.5px to 12px (.grid .k, table.timeline th). No word, element or attribute moves.
+#: Moved by 0.1.1's colour rule, from 2052d9e95eeabf5de121ceefb60e18a955fb07dfba8944dbe2260398a9ca5f33.
+#: Measured by diffing the two renderings: two rungs' states only -- the signing rung's
+#: data-state "no" to "unsigned" (its words unchanged), and the anchoring rung's "no" with
+#: "No · not anchored" to "not-anchored" with "Not anchored · no anchor beside the chain".
+#: Moved by the version, 0.1.0 to 0.1.1, from 12d02707dc514462dd18ae0c57ee77662748f842a43ba46abb8d9110d2982433.
+#: Measured by diffing the two renderings: the footer's "onetrace-console 0.1.0." only.
+#: Moved by the run page's head, from 0762e213bd912524f4fa66531fdda9c3e23b266be42aedbeb4fb32b0136a6452.
+#: Measured by diffing the two renderings: the viewer's header ("Case", "The run, step by step",
+#: the run id) is replaced by the head section (crumbs; the run id and its pipeline label as the
+#: title; "3 of 3 declared stages · recorded in the format ... · ran <time> · received by this
+#: console <time>"; the four rungs as the ladder states them; tabs to #graph, #timeline,
+#: stage-1.html, receipt.html; a space between each rung's question and state, and between
+#: tabs), and an empty anchor before the graph and the step table. Nothing else moves. The received time and the label are normalised above (_RECEIVED, _LABEL).
+#: Moved by the release polish, merged from 0.1.1, from e76f06092894779af0674c36aca0016b4b3e7c81df43632f6e38ec8f53fc70e8.
+#: Measured by diffing the two renderings, 14 edits of three kinds only: a `data-label` on each of
+#: the 12 body cells of the page's headed tables (a narrow screen's column labels); the viewer's
+#: stylesheet hiding the graph's narrow-screen list (`.graph-list{display:none}`); and that list,
+#: the graph's boxes in reading order, each saying whether it reads the box before it. This run
+#: records no reads, so no line is drawn. No word, and no other element or attribute, moves.
+#: Moved by the head on the run's other pages, from cd6522684f466657a748ed3d7614e3b8c9142a858c439fd814e7555a264dfb00.
+#: Measured by diffing the two renderings: one edit, ` class="run-title"` on the head's title.
+UNMARKED_R_CASE_SHA256 = "5a3853b83f21088410c1edc1792ed15c50f6b5f32b249656e3f20db69b46a0c1"
 _VERIFIER_PATH = re.compile(r"\S*onetrace_verify[/\\]verify\.py")
 _FINGERPRINT = re.compile(r"<!--fingerprint-->[0-9a-f]{64}<!--/fingerprint-->")
 _VERIFIER_BLOCK = re.compile(r'(<pre data-layer="3">)(\[[A-Z][A-Z-]* *\] .*?)(</pre>)', re.S)
 _VERIFIER_EOL = re.compile(r"\r+\n")
+#: The time this console received the run, in the run page's head: the console's clock at
+#: delivery, which differs between any two deliveries of the same record.
+_RECEIVED = re.compile(r'received by this console <time datetime="[^"]*" title="[^"]*">[^<]*</time>')
+#: The run's pipeline label in the head (its crumbs and its title): labels follow the order the
+#: pipelines first arrived in, which differs between deliveries whose arrivals share a second.
+_LABEL = re.compile(r'( / | · )P\d+(</h1>| / )')
 
 
 def _machine_free(page: str) -> str:
     page = _VERIFIER_BLOCK.sub(lambda m: m.group(1) + _VERIFIER_EOL.sub("\n", m.group(2))
                                + m.group(3), page)
     page = _VERIFIER_PATH.sub("<verifier>", page)
+    page = _RECEIVED.sub("received by this console <time>", page)
+    page = _LABEL.sub(lambda m: m.group(1) + "P<n>" + m.group(2), page)
     return _FINGERPRINT.sub("<!--fingerprint--><fingerprint><!--/fingerprint-->", page)
 
 

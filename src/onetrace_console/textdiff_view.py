@@ -243,6 +243,50 @@ def _marked(text: str, spans: list, mark: str) -> str:
     return "".join(out)
 
 
+def _counts(out: dict) -> str:
+    """How many lines the shown hunks remove and add, counted from their own `op` fields."""
+    ops = [line["op"] for hunk in out["hunks"] for line in hunk["lines"]]
+    removed, added = ops.count("-"), ops.count("+")
+    said = f"{removed} {'line' if removed == 1 else 'lines'} removed · {added} added"
+    if "truncated" in out:
+        said += ", in the lines shown"
+    return f"<p data-counts>{_html(said)}</p>"
+
+
+#: The SDK's settings line, indented under its "settings: N changed": `  name: old -> new`.
+_SETTING = re.compile(r"\s*(?P<name>[^\s:]+): (?P<old>.*) -> (?P<new>.*)")
+_HEXISH = re.compile(r"(?:sha256:)?[0-9a-f]{8,}…?")
+
+
+def _is_fingerprint(line: str) -> bool:
+    """A settings line naming a recorded fingerprint (a digest), not a setting a reader can read."""
+    m = _SETTING.fullmatch(line)
+    return bool(m) and (m["name"].endswith("digest")
+                        or (_HEXISH.fullmatch(m["old"]) is not None and _HEXISH.fullmatch(m["new"]) is not None))
+
+
+def _settings_line(text: str) -> str:
+    """A settings line, its `old -> new` shown with an arrow, the setting by its short name with its
+    whole path in its tooltip; a line not of that shape, the SDK's words as written."""
+    m = _SETTING.fullmatch(text)
+    if not m or "." not in m["name"]:
+        return _html(text).replace(" -&gt; ", " → ")
+    short = m["name"].rsplit(".", 1)[-1]
+    return (f'<span class="mono" data-setting-path="{_html(m["name"])}" title="{_html(m["name"])}">'
+            f'{_html(short)}</span>: {_html(m["old"])} → {_html(m["new"])}')
+
+
+def _settings(lines: list[str]) -> str:
+    """A stage's settings lines: the readable ones, then its recorded fingerprints under a small
+    Details of their own."""
+    plain = "".join(f"<p data-settings>{_settings_line(s)}</p>" for s in lines if not _is_fingerprint(s))
+    prints = [s for s in lines if _is_fingerprint(s)]
+    if prints:
+        plain += ('<details data-settings-details><summary>Details</summary>'
+                  + "".join(f"<p data-settings>{_settings_line(s)}</p>" for s in prints) + "</details>")
+    return plain
+
+
 def _render_output(out: dict) -> str:
     name = _html(out["name"]) if out["name"] is not None else ""
     head = (f'<p class="output-head"><code>{name}</code> '
@@ -253,15 +297,19 @@ def _render_output(out: dict) -> str:
         #: Never an unverified output's lines, notes or badge: the SDK's reason, word for word.
         return (f'<div data-output data-verified="false">{head}</p>'
                 f'<p data-not-shown>{_html(out.get("reason", ""))}</p></div>')
-    parts = [f'<div data-output data-verified="true">{head} '
-             f'<span class="pill ok" data-badge="verified">{VERIFIED}</span></p>']
+    #: Shown only when both sides' bytes match their receipts, so each side is said verified.
+    chips = " ".join(f'<span class="pill ok" data-badge="verified" data-side="{side}">'
+                     f"{side.capitalize()}: {VERIFIED}</span>" for side in ("baseline", "candidate"))
+    parts = [f'<div data-output data-verified="true">{head} {chips}</p>', _counts(out)]
     if out["notes"]:
         parts.append('<pre data-notes>' + "\n".join(_html(n) for n in out["notes"]) + "</pre>")
     for hunk in out["hunks"]:
         lines = []
         for line in hunk["lines"]:
             mark = {"-": "del", "+": "ins"}.get(line["op"], "")
-            lines.append(f'<span data-op="{_html(line["op"])}">{_html(line["op"])} '
+            numbers = "".join(f'<span class="ln" data-side="{side}">{_html(line[side] or "")}</span>'
+                              for side in ("baseline", "candidate"))
+            lines.append(f'<span data-op="{_html(line["op"])}">{numbers}{_html(line["op"])} '
                          f'{_marked(line["text"], line["spans"], mark)}</span>')
         note = f'<p data-hunk-note>{_html(hunk["note"])}</p>' if "note" in hunk else ""
         parts.append(f'{note}<pre data-hunk>' + "\n".join(lines) + "</pre>")
@@ -279,14 +327,20 @@ def render_textdiff(doc: dict) -> str:
     parts = ['<div data-textdiff="shown">']
     if "first_line" in doc:
         parts.append(f'<p data-first-line>{_html(doc["first_line"])}</p>')
+    #: Each stage's diff folded, only the first difference open, so the page is as long as the
+    #: change a reader came for; every other stage one click away, its lines as capped as before.
     for node in doc.get("nodes", []):
-        parts.append(f'<article data-node="{_html(node["node"])}">'
-                     f'<h3>{_html(node["node"])} · {_html(node["verdict"])}</h3>')
+        from onetrace_console.render import _RESULT_WORDS
+        verdict = _RESULT_WORDS.get(node["verdict"], node["verdict"])
+        opened = " open" if node["verdict"] == "FIRST DIFFERENCE" else ""
+        parts.append(f'<details data-node-fold="{_html(node["node"])}"{opened}><summary>'
+                     f'<h3>{_html(node["node"])} · {_html(verdict)}</h3></summary>'
+                     f'<article data-node="{_html(node["node"])}">')
         if node.get("presence"):
             parts.append(f'<p>{_html(node["presence"])}</p>')
-        parts.extend(f'<p data-settings>{_html(s)}</p>' for s in node["settings"])
+        parts.append(_settings(node["settings"]))
         parts.extend(f'<p data-input>{_html(s)}</p>' for s in node["inputs"])
         parts.extend(_render_output(out) for out in node["outputs"])
-        parts.append("</article>")
+        parts.append("</article></details>")
     parts.append("</div>")
     return "".join(parts)

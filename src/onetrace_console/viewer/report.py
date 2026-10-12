@@ -36,6 +36,7 @@ from pathlib import Path
 
 from onetrace_console.bounded_json import TooDeep, load_json_bounded
 from onetrace_console.viewer.depth import too_deep
+from onetrace_console.child import utf8_env
 
 REPORT_FORMAT = "onetrace-viewer/check-report/0.1"
 
@@ -191,7 +192,7 @@ def capture(run_dir: Path, verifier: Path | None, manifest_name: str = "MANIFEST
         verifier = Path(verifier).resolve()
         cmd = [sys.executable, str(verifier), *args, manifest_name]
     try:
-        p = subprocess.run(cmd, cwd=run_dir, capture_output=True, timeout=timeout)
+        p = subprocess.run(cmd, cwd=run_dir, capture_output=True, timeout=timeout, env=utf8_env())
     except subprocess.TimeoutExpired:
         # Recorded, not raised: a check that did not finish said nothing, and the report says
         # so (the second confirmation review, B2: raised, it left a stored run with no report,
@@ -394,7 +395,7 @@ def _cli_run(run_dir: Path, module: str, shown_as: str, args: tuple[str, ...],
     """One `--json` run of the CLI, kept as the reader would repeat it: command, exit, stdout."""
     try:
         p = subprocess.run([sys.executable, "-m", module, *args, manifest_name], cwd=run_dir,
-                           capture_output=True, timeout=timeout)
+                           capture_output=True, timeout=timeout, env=utf8_env())
     except subprocess.TimeoutExpired:
         return {"command": [shown_as, *args, manifest_name], "exit_status": "",
                 "unfinished": f"did not finish within {timeout} seconds"}
@@ -404,7 +405,8 @@ def _cli_run(run_dir: Path, module: str, shown_as: str, args: tuple[str, ...],
 
 def capture_cli(run_dir: Path, *, outputs: bool, module: str = "onetrace_verify.cli",
                 shown_as: str = "onetrace-verify", manifest_name: str = "MANIFEST.json",
-                timeout: int = 120, trust: Path | None = None) -> dict:
+                timeout: int = 120, trust: Path | None = None,
+                tsa: tuple[Path, list[Path]] | None = None) -> dict:
     """The check as the installed CLI, three ways.
 
     1. `onetrace-verify MANIFEST.json`: the verdict and the check's own words (the envelope).
@@ -418,9 +420,14 @@ def capture_cli(run_dir: Path, *, outputs: bool, module: str = "onetrace_verify.
 
     `trust`: the reader's trust file of signing keys, passed to all three as
     `--trust <file>` and kept in each command as it was run; None runs them without it.
+    `tsa`: the time-stamp authority's certificate and roots, passed to all three as
+    `--tsa-cert <file>` and a `--tsa-root <file>` for each root; None runs them without.
     """
     run_dir = Path(run_dir).resolve()
     trusted = ("--trust", str(trust)) if trust is not None else ()
+    if tsa is not None:
+        cert, roots = tsa
+        trusted += ("--tsa-cert", str(cert)) + tuple(a for r in roots for a in ("--tsa-root", str(r)))
     envelope = capture(run_dir, None, manifest_name, timeout, module=module, shown_as=shown_as,
                        args=trusted)
     if envelope.get("unfinished"):

@@ -31,7 +31,12 @@ REPO = Path(__file__).resolve().parent.parent
 #: The pin is now 0.2.0 from PyPI. RC2's SHA256SUMS (ci's build of
 #: fce500e656e83ee05cb9f6f223779be4a37ec0ce), which PyPI serves. The development
 #: builds before it were committed in a wheelhouse folder on the 0.2.0 branch only; that folder is gone.
-#: 0.1.2 (kept below as history) is no longer pinned.
+#: 0.1.2 (kept below as history) is no longer pinned. Since console 0.1.1, onetrace is 0.2.1
+#: from PyPI (its two files, as PyPI serves them, written here by script); onetrace-verify stays 0.2.0.
+RELEASE_0_2_1 = {
+    "onetrace-0.2.1-py3-none-any.whl": "f55ca407d9ac1dd0451878c44a3c980e8b977b04ab0818d42e9eac780eaeb608",
+    "onetrace-0.2.1.tar.gz": "b8d464936d907ac311bbb2969fbb20801cabff46682ba361429603ef7b2a4ff3",
+}
 RELEASE_COMMIT = "fce500e656e83ee05cb9f6f223779be4a37ec0ce"
 RELEASE_0_2_0 = {
     "onetrace-0.2.0-py3-none-any.whl": "0e8df2304582e1ab7f6ed7309b3d0ac4c4654897cd77e1c96194ce8a708ee481",
@@ -50,18 +55,18 @@ ACCEPTED_29AG = {
 }
 
 
-def test_the_lock_pins_exactly_the_0_2_0_wheels(examined):
+def test_the_lock_pins_exactly_the_0_2_1_and_0_2_0_wheels(examined):
     entries = lock_entries()
     examined(3, "pins checked against RC2's SHA256SUMS")
     from tests.test_pins import CRYPTO_PINS
     #: The crypto extra's five, from PyPI, are held by tests/test_signed_run.py.
     assert set(entries) - CRYPTO_PINS == {
-        "onetrace==0.2.0", "onetrace-verify==0.2.0"} and CRYPTO_PINS <= set(entries), entries
+        "onetrace==0.2.1", "onetrace-verify==0.2.0"} and CRYPTO_PINS <= set(entries), entries
     assert {k: v for k, v in entries.items() if k not in CRYPTO_PINS} == {
-        "onetrace==0.2.0": RELEASE_0_2_0["onetrace-0.2.0-py3-none-any.whl"],
+        "onetrace==0.2.1": RELEASE_0_2_1["onetrace-0.2.1-py3-none-any.whl"],
         "onetrace-verify==0.2.0": RELEASE_0_2_0["onetrace_verify-0.2.0-py3-none-any.whl"],
     }, entries
-    assert ONETRACE_WHL_SHA256 == RELEASE_0_2_0["onetrace-0.2.0-py3-none-any.whl"]
+    assert ONETRACE_WHL_SHA256 == RELEASE_0_2_1["onetrace-0.2.1-py3-none-any.whl"]
     assert ONETRACE_VERIFY_WHL_SHA256 == RELEASE_0_2_0["onetrace_verify-0.2.0-py3-none-any.whl"]
 
 
@@ -106,10 +111,10 @@ def test_the_wheel_cache_names_what_the_lock_pins(examined):
     entries = lock_entries()
     examined(len(w.WHEELS), "cached wheels checked against the lock")
     assert w.SOURCE == "pypi"
-    assert set(w.WHEELS) == {"onetrace==0.2.0", "onetrace-verify==0.2.0"}
+    assert set(w.WHEELS) == {"onetrace==0.2.1", "onetrace-verify==0.2.0"}
     for req, (name, sha) in w.WHEELS.items():
         assert entries[req] == sha, (req, sha)
-        assert RELEASE_0_2_0[name] == sha, (name, sha)
+        assert {**RELEASE_0_2_0, **RELEASE_0_2_1}[name] == sha, (name, sha)
 
 
 def _fake_exam(root: Path) -> None:
@@ -141,12 +146,14 @@ def test_a_fixture_cache_from_another_sdist_is_not_ready(tmp_path, monkeypatch, 
     assert f.check(), "a cache from the accepted sdist was refused"
 
 
-def test_both_installed_distributions_are_0_2_0(examined):
+def test_both_installed_distributions_are_the_pinned_ones(examined):
+    """onetrace 0.2.1 and onetrace-verify 0.2.0, since console 0.1.1."""
+    from tests.test_pins import PINNED_SDK_VERSION, PINNED_VERIFY_VERSION
     examined(2, "installed distributions read")
-    for dist in ("onetrace", "onetrace-verify"):
+    for dist, want in (("onetrace", PINNED_SDK_VERSION), ("onetrace-verify", PINNED_VERIFY_VERSION)):
         got = importlib.metadata.version(dist)
-        assert got == "0.2.0", (
-            f"{dist} {got} is installed, not the pinned 0.2.0 -- install "
+        assert got == want, (
+            f"{dist} {got} is installed, not the pinned {want} -- install "
             f"with `python tools/install_pinned.py`")
 
 

@@ -338,7 +338,7 @@ started from, in local mode. As `serve.py` lays it out:
 | `store/runs/` | one record per stored run: its folder listing (path to object), its verdict and the report it came from |
 | `store/comparisons/` | one record per comparison |
 | `store/decision_exports/` | one record per decision export, when the decisions extension (configuration key `extensions.onedoor`) is on |
-| `pages/` | the rendered HTML, derived from `store/` and redrawn on every start, upload and compare: `pages/runs/<run key>/` for each run's pages, `pages/diff/` for each comparison's |
+| `pages/` | the rendered HTML, derived from `store/` and redrawn on every start, upload and compare: `pages/runs/<run key>/` for each run's pages, `pages/diff/` for each comparison's, `pages/incidents/` for each incident's own page |
 | `access_log/` | the access log: `NNNNNN.jsonl` segments, each entry chained to the one before, and `HEAD.json` |
 | `accounts/` | sign-in accounts, in sign-in mode only (local mode refuses to start on a store that holds them) |
 | `tokens/` | ingester tokens, in sign-in mode only |

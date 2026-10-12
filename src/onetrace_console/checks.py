@@ -224,6 +224,43 @@ def trust_record(trust_file: str | None) -> str:
         return TRUST_UNREADABLE
 
 
+#: What a stored check records of the time-stamp authority it ran with: "none" where none was
+#: given (and for a report stored before this), or the sha256 of its certificate and of each root,
+#: "sha256:<cert>;sha256:<root>,...", or "unreadable" where a file could not be read to hash it.
+NO_TSA = "none"
+
+
+def tsa_record(tsa_cert: str | None, tsa_roots=()) -> str:
+    if not tsa_cert:
+        return NO_TSA
+    import hashlib
+    try:
+        cert = "sha256:" + hashlib.sha256(Path(tsa_cert).read_bytes()).hexdigest()
+        roots = ",".join("sha256:" + hashlib.sha256(Path(r).read_bytes()).hexdigest() for r in tsa_roots)
+    except OSError:
+        return TRUST_UNREADABLE
+    return f"{cert};{roots}"
+
+
+def check_options(config) -> dict:
+    """What every check runs with, from the console's configuration: the trust file, and the
+    time-stamp authority's certificate and roots."""
+    return {"trust_file": getattr(config, "trust_file", None) if config is not None else None,
+            "tsa_cert": getattr(config, "tsa_cert", None) if config is not None else None,
+            "tsa_roots": tuple(getattr(config, "tsa_roots", ()) or ()) if config is not None else ()}
+
+
+def stored_tsa_record(run: StoredRun, store: Store) -> str | None:
+    """The time-stamp authority the run's stored check ran with, or None where it has no
+    readable report. A report stored before the record was kept ran with none."""
+    from onetrace_console.home import _envelope
+    envelope = _envelope(run, store)
+    if envelope is None:
+        return None
+    recorded = envelope.get("tsa", NO_TSA)
+    return recorded if isinstance(recorded, str) else None
+
+
 def stored_trust_record(run: StoredRun, store: Store) -> str | None:
     """The trust file the run's stored check ran with, or None where it has no readable report."""
     from onetrace_console.home import _envelope
@@ -234,9 +271,11 @@ def stored_trust_record(run: StoredRun, store: Store) -> str | None:
     return recorded if isinstance(recorded, str) else None
 
 
-def check(run_dir: Path, *, ran_at: str | None = None, trust_file: str | None = None) -> CheckResult:
+def check(run_dir: Path, *, ran_at: str | None = None, trust_file: str | None = None,
+          tsa_cert: str | None = None, tsa_roots=()) -> CheckResult:
     """Run the verifier over a run folder and read its own summary. No opinions added.
-    `trust_file`: the console's configured trust file, passed as `--trust`."""
+    `trust_file`: the console's configured trust file, passed as `--trust`; `tsa_cert` and
+    `tsa_roots`: the time-stamp authority's certificate and roots, as `--tsa-cert`/`--tsa-root`."""
     from onetrace_console.viewer.report import ReportUnreadable, capture_cli, parse
 
     run_dir = Path(run_dir)
@@ -251,8 +290,10 @@ def check(run_dir: Path, *, ran_at: str | None = None, trust_file: str | None = 
     shipped_verifier()                  # the verifier is installed, or this refuses as before
     envelope = capture_cli(run_dir, outputs=(run_dir / "artifacts").is_dir(),
                            timeout=CHECK_TIMEOUT_SECONDS,
-                           trust=Path(trust_file) if trust_file else None)
+                           trust=Path(trust_file) if trust_file else None,
+                           tsa=(Path(tsa_cert), [Path(r) for r in tsa_roots]) if tsa_cert else None)
     envelope["trust_file"] = trust_record(trust_file)
+    envelope["tsa"] = tsa_record(tsa_cert, tsa_roots)
     if ran_at is not None:
         # Fixed inputs for a test that needs a stable envelope. A live `ran_at` is what it
         # is; it is never rewritten after the fact.
@@ -457,7 +498,8 @@ def rederive(run: StoredRun, store: Store) -> StoredRun:
 
 
 def run_and_record(run: StoredRun, store: Store, *, ran_at: str | None = None,
-                   trust_file: str | None = None) -> StoredRun:
+                   trust_file: str | None = None, tsa_cert: str | None = None,
+                   tsa_roots=()) -> StoredRun:
     """Check a stored run, store the report verbatim, and update the run's record."""
     #: A run that cannot be laid out here as it was stored is not checked at all -- the verifier
     #: is never asked about a folder that is not the run -- and is recorded as could not check,
@@ -473,7 +515,8 @@ def run_and_record(run: StoredRun, store: Store, *, ran_at: str | None = None,
             derived["list_row"] = json.dumps({"refused": f"{type(e).__name__}: {e}",
                                               "from_viewer": False})
         if folder is not None:
-            result = check(folder, ran_at=ran_at, trust_file=trust_file)
+            result = check(folder, ran_at=ran_at, trust_file=trust_file, tsa_cert=tsa_cert,
+                           tsa_roots=tsa_roots)
             derived = derived_from(folder, result.envelope)
             shutil.rmtree(folder, ignore_errors=True)
             report_key = store.put(json.dumps(result.envelope, indent=1, sort_keys=True,

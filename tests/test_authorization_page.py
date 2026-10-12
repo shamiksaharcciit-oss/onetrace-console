@@ -134,7 +134,8 @@ def test_the_page_opens_offline(pages):
     console's own stylesheet, served by the console itself."""
     page = pages[AUTHORIZATION]
     assert not re.search(r'(src|href)="(https?:)?//', page)
-    assert re.findall(r"<link[^>]*>", page, re.I) == ['<link rel="stylesheet" href="/static/console.css">']
+    assert re.findall(r"<link[^>]*>", page, re.I) == ['<link rel="stylesheet" href="/static/console.css">',
+                                                       '<link rel="icon" href="/static/favicon.svg" type="image/svg+xml">']
     assert "<script src" not in page.lower()
 
 

@@ -37,6 +37,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from onetrace_console.store import create_exclusively
+from onetrace_console.child import utf8_env
 
 #: Where a staging directory is made. `None` means the OS temp root, which is outside the
 #: store by construction. A caller may name somewhere else; it is checked, not trusted.
@@ -121,7 +122,7 @@ def ask_the_verifier(folder: Path, *, timeout: int = 180) -> VerifierSaid:
 
     verifier = shipped_verifier()
     proc = subprocess.run([sys.executable, str(verifier), "MANIFEST.json"],
-                          cwd=str(folder), capture_output=True, timeout=timeout)
+                          cwd=str(folder), capture_output=True, timeout=timeout, env=utf8_env())
     text = proc.stdout.decode("utf-8", errors="replace")
     return VerifierSaid(text=text, exit_status=str(proc.returncode),
                         rows=tuple(text.splitlines()))

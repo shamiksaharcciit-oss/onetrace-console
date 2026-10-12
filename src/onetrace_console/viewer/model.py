@@ -253,6 +253,11 @@ class PageModel:
     #: (the baseline run, when that comparison was stored, a link to its page, whether its
     #: report passed the strict reader). None: no comparison, and the page is as it always was.
     graph_source: tuple | None = None
+    #: At most this many boxes to a row for a run recorded as a line, the line reading on row by
+    #: row in the record's order; 0 keeps one row (the free file's drawing).
+    graph_wrap: int = 0
+    #: At most this many state lines in a box; 0 keeps the graph's own (the free file's drawing).
+    graph_tag_lines: int = 0
     #: The manifest index of the step that wrote the answer, "" where none
     #: did; the answer page's receipt disclosure holds that step's receipt card.
     answer_step: str = ""
@@ -949,9 +954,12 @@ def _checked_lists(record: Record, report: Report) -> tuple[tuple[CheckCount, ..
 _YES, _NO = ("yes", "rung.state.yes"), ("no", "rung.state.no")
 _COULDNT = ("couldnt-check", "rung.state.couldnt_check")
 _NOT_CHECKED = ("not-checked", "rung.state.not_checked")
-#: Two state words of the signing rung's own. Unsigned is No's finding in its own word (the record
-#: holds no signature, as "not anchored" is No); "Signed, key not trusted" is never Yes.
-_UNSIGNED = ("no", "rung.state.unsigned")
+#: Two state words of the signing rung's own. Unsigned is its own state: the record holds no
+#: signature, which is evidence not made, never a check that failed; "Signed, key not trusted" is
+#: never Yes. The anchoring rung's "Not anchored" is its own state for the same reason (0.1.1's
+#: colour rule: `tones.py`).
+_UNSIGNED = ("unsigned", "rung.state.unsigned")
+_NOT_ANCHORED = ("not-anchored", "rung.state.not_anchored")
 _SIGNED_UNTRUSTED = ("signed-untrusted", "rung.state.signed_untrusted")
 
 #: A key the record does not carry, told apart from one it carries with a null value.
@@ -1204,7 +1212,7 @@ def _anchored(record: Record) -> Rung:
     if "anchor" in record.manifest:
         states.append(_anchor_state(record.manifest["anchor"]))
     if "unanchored" in states:
-        return _rung("anchored", _NO, line("rung.anchored.not"))
+        return _rung("anchored", _NOT_ANCHORED, line("rung.anchored.declared_not"))
     if "unreadable" in states:
         return _rung("anchored", _COULDNT, line("rung.anchored.unreadable"))
     if all(st == "absent" for st in states):
@@ -1267,8 +1275,8 @@ def committed_by_time(record: Record, report: Report | None, own_check: bool) ->
     if read is None:
         return _anchored(record)
     if read.kind == "not-anchored":
-        #: "Not anchored", in the canvas's fixed words for the rung.
-        return _rung("anchored", _NO, line("rung.anchored.not"))
+        #: "Not anchored", the rung's own state: the check found no anchor beside the chain.
+        return _rung("anchored", _NOT_ANCHORED, line("rung.anchored.none"))
     if read.kind == "yes":
         return _rung("anchored", _YES, line("rung.anchored.yes", time=(read.time, "value"),
                                             source=(read.source, "report")))
@@ -1698,6 +1706,11 @@ def _graph_nodes(record: Record, boundary_steps: tuple[str, ...]) -> tuple:
         index = int(s.manifest_index) if s.manifest_index.isdigit() else position
         outcome = s.data.get("outcome") if isinstance(s.data.get("outcome"), dict) else {}
         coverage = s.data.get("coverage") if isinstance(s.data.get("coverage"), dict) else {}
+        #: The receipts this one records reading: its inputs named `receipt:<node id>`.
+        inputs = s.data.get("inputs") if isinstance(s.data.get("inputs"), list) else []
+        reads = tuple(i["name"][len("receipt:"):] for i in inputs
+                      if isinstance(i, dict) and isinstance(i.get("name"), str)
+                      and i["name"].startswith("receipt:"))
         nodes.append(GraphNode(
             node_id=node_id, name=name, index=index,
             #: In-page links are `#step-N` only (core, 2 October): a step whose manifest index
@@ -1706,7 +1719,7 @@ def _graph_nodes(record: Record, boundary_steps: tuple[str, ...]) -> tuple:
             label=name_shown(node_id), shown=name_shown(name),
             #: The timeline's own rule for a boundary row (`_step_view` and the case page).
             dashed=bool(coverage.get("boundaries")) or s.manifest_index in boundary_steps,
-            failed=outcome.get("class") == "error"))
+            failed=outcome.get("class") == "error", reads=reads))
     return tuple(nodes)
 
 

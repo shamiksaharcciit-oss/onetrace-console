@@ -33,23 +33,47 @@ REFUSAL = ("This is a read-only demo of onetrace-console. Nothing can be uploade
 #: The banner every page carries in public mode, in the release's own wording.
 BANNER = "A read-only demo of onetrace-console. Install it:"
 BANNER_COMMAND = "pip install onetrace-console"
+#: What the demo's runs are: said on every page, as the README says it. The count is the
+#: builder's own pipeline list, never a typed word (`banner_runs`).
+BANNER_RUNS = ("Its runs come from {count} small example pipelines, recorded when this demo "
+               "was built, with no network calls and no hosted model.")
+#: A count as the page's words say it.
+COUNT_WORDS = ("no", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten")
 
 #: What a public page's footer says its mode is.
 FOOTER_MODE = "Read-only demo"
 
 
-def _script_hash() -> str:
-    """The CSP hash of the one inline script the pages carry, computed from the script itself."""
-    from onetrace_console.viewer.page import PRINT_SCRIPT
-    body = PRINT_SCRIPT.removeprefix("<script>").removesuffix("</script>")
+def count_word(n: int) -> str:
+    return COUNT_WORDS[n] if n < len(COUNT_WORDS) else str(n)
+
+
+def banner_runs() -> str:
+    """The banner's sentence on the demo's runs, its count read from the demo's builder."""
+    from onetrace_console.demo_store import pipeline_names
+    return BANNER_RUNS.format(count=count_word(len(pipeline_names())))
+
+
+def _script_hash(script: str) -> str:
+    """The CSP hash of one inline script, computed from the script itself."""
+    body = script.removeprefix("<script>").removesuffix("</script>")
     return "'sha256-" + base64.b64encode(hashlib.sha256(body.encode("utf-8")).digest()).decode() + "'"
+
+
+def inline_scripts() -> tuple[str, ...]:
+    """Every inline script a page may carry: the print helper on the viewer's pages, and the
+    Overview's relative times."""
+    from onetrace_console.viewer.page import PRINT_SCRIPT
+    from onetrace_console.words import RELATIVE_TIME_SCRIPT, WATCH_SCRIPT
+    return (PRINT_SCRIPT, RELATIVE_TIME_SCRIPT, WATCH_SCRIPT)
 
 
 def content_security_policy() -> str:
     """Nothing loads but the console's own stylesheet and fonts, the pages' own `<style>`, inline
-    images, and the one script whose hash is named. No form may post, no page may frame it."""
+    images, and the scripts whose hashes are named. No form may post, no page may frame it."""
+    hashes = " ".join(_script_hash(s) for s in inline_scripts())
     return ("default-src 'none'; style-src 'self' 'unsafe-inline'; font-src 'self'; "
-            f"img-src 'self' data:; script-src {_script_hash()}; base-uri 'none'; "
+            f"img-src 'self' data:; script-src {hashes}; base-uri 'none'; "
             "form-action 'none'; frame-ancestors 'none'")
 
 
@@ -72,11 +96,29 @@ class Refusal:
 def demo_trust_bytes() -> bytes:
     """The packaged demo's trust file, the only one a public console may name."""
     from importlib.resources import files
-    return (files("onetrace_console") / "reference_demo" / "trust.json").read_bytes()
+    return (files("onetrace_console") / "demo_store" / "trust.json").read_bytes()
+
+
+#: A public console that can't read its own store or build record: refused in one line, never a
+#: traceback, so the host's log stays the access log and nothing else.
+UNREADABLE = ("public is true and {path} cannot be read ({why}). A public console checks the demo "
+              "it serves against the build record before it starts, and can't check what it can't read.")
+UNREADABLE_FIX = ("make the demo's folder readable, not writable, by the user the console runs as "
+                  "(chmod -R a+rX,a-w <folder>), or build it again with onetrace-console demo "
+                  "--public --build <folder>.")
 
 
 def start_refusal(config, store_root: Path) -> Refusal | None:
-    """Why a public console must not start with this configuration and store, or None."""
+    """Why a public console must not start with this configuration and store, or None. A file it
+    can't read while checking is a refusal like any other, never an exception."""
+    try:
+        return _start_refusal(config, store_root)
+    except OSError as e:
+        return Refusal(UNREADABLE.format(path=e.filename or store_root,
+                                         why=e.strerror or type(e).__name__), UNREADABLE_FIX)
+
+
+def _start_refusal(config, store_root: Path) -> Refusal | None:
     from onetrace_console.serve import ACCOUNTS_DIRNAME, PAGES_DIRNAME, TOKENS_DIRNAME
     if config.sign_in.get("enabled"):
         return Refusal("public is true and sign_in.enabled is true. A public console has no "
@@ -94,7 +136,7 @@ def start_refusal(config, store_root: Path) -> Refusal | None:
     if not same:
         return Refusal(f"public is true and trust_file is {trust!r}, which is not the packaged "
                        f"demo's trust file. A public console serves the demo, signed with the "
-                       f"demo's test key.",
+                       f"demo's key.",
                        "name the trust.json that onetrace-console demo --public --build wrote "
                        "beside the store.")
     held = [name for name in (ACCOUNTS_DIRNAME, TOKENS_DIRNAME)
@@ -111,6 +153,14 @@ def start_refusal(config, store_root: Path) -> Refusal | None:
                        f"none itself.",
                        "build the store first with onetrace-console demo --public --build "
                        "<folder>, and name its store folder as store_root.")
+    from onetrace_console.demo_store import check_build_record
+    problems = check_build_record(Path(trust).parent)
+    if problems:
+        return Refusal(f"public is true and the demo built beside {trust} is not the one its "
+                       f"builder recorded: {'; '.join(problems[:5])}"
+                       f"{' and more' if len(problems) > 5 else ''}. A public console serves "
+                       f"only the demo exactly as it was built.",
+                       "build it again with onetrace-console demo --public --build <folder>.")
     return None
 
 

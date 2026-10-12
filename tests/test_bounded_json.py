@@ -35,6 +35,11 @@ AT, PAST = RULED, RULED + 1
 #: One call stays bare for good: the measurement of where json.loads itself fails.
 ALLOWED: dict[tuple[str, int], str] = {
     ("viewer/depth.py", 99): "a measurement of where json.loads itself fails; it must call it bare",
+    #: The reference demo's pipeline, run by the demo store as P2: byte for byte
+    #: examples/reference-demo/demo.py, so it can't be edited. It parses two
+    #: files it wrote itself a moment before, at build time; nothing it reads was received.
+    ("demo_store/reference_pipeline.py", 120): "P2's own documents.json, written by it at build time",
+    ("demo_store/reference_pipeline.py", 131): "P2's own test-results.json, written by it at build time",
 }
 
 

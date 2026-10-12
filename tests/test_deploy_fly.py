@@ -64,7 +64,8 @@ def test_public_json_is_a_public_configuration_on_the_port_fly_toml_names(examin
     dockerfile = (DEPLOY / "Dockerfile").read_text(encoding="utf-8")
     built = re.search(r"demo --public --build (\S+)", dockerfile).group(1)
     assert config.store_root == f"{built}/store" and config.trust_file == f"{built}/trust.json"
-    assert f"chmod -R a-w {built}" in dockerfile and "USER demo" in dockerfile
+    #: Readable by every user (the serving user checks the build record at start), writable by none.
+    assert f"chmod -R a+rX,a-w {built}" in dockerfile and "USER demo" in dockerfile
     assert "COPY deploy/fly/public.json /etc/onetrace-console/public.json" in dockerfile
     assert "ONETRACE_CONSOLE_CONFIG=/etc/onetrace-console/public.json" in dockerfile
 

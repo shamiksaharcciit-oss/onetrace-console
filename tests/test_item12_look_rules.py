@@ -18,9 +18,11 @@ HIDING = re.compile(r"display\s*:\s*none|visibility\s*:\s*hidden|opacity\s*:\s*0
 
 
 def _sheets() -> dict[str, str]:
+    """The look's rules: the console pages', the frame's, and the one chip family's (0.1.1 moved
+    every state chip's rules there). The whole served stylesheet is held by tests/test_shared_style.py."""
     from onetrace_console.viewer.page import FRAME_CSS
-    from onetrace_console.frame import PAGE_CSS
-    return {"PAGE_CSS": PAGE_CSS, "FRAME_CSS": FRAME_CSS}
+    from onetrace_console.frame import CHIP_CSS, PAGE_CSS
+    return {"PAGE_CSS": PAGE_CSS, "FRAME_CSS": FRAME_CSS, "CHIP_CSS": CHIP_CSS}
 
 
 def test_no_rule_of_the_look_hides_text(examined):

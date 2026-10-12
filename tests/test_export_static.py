@@ -222,11 +222,16 @@ def test_no_link_is_absolute_and_every_relative_link_resolves_in_the_export(expo
             assert not value.startswith("/"), (rel, value)
             if value.startswith("#"):
                 continue
-            target = posixpath.normpath(posixpath.join(posixpath.dirname(rel), value))
+            path, _, anchor = value.partition("#")
+            target = posixpath.normpath(posixpath.join(posixpath.dirname(rel), path))
             #: Every link resolves, served and exported: the two that were dead on the served
             #: pages too -- "the report it came from" and "all incidents" -- are fixed in the
-            #: console, so nothing is excused here.
+            #: console, so nothing is excused here. A link to a place on another page
+            #: (`case.html#graph`, a run's head on its other pages) resolves to that page, and the
+            #: place is there.
             assert target in known, (rel, value)
+            if anchor:
+                assert f'id="{anchor}"' in (out / target).read_text(encoding="utf-8"), (rel, value)
     css = (out / "static" / "console.css").read_text(encoding="utf-8")
     for value in re.findall(r"url\(([^)]*)\)", css):
         count += 1

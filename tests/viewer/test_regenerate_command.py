@@ -15,7 +15,9 @@ from html import unescape
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[2]
-RUN = REPO / "src" / "onetrace_console" / "reference_demo" / "runs" / "day-1"
+#: The reference demo's day-1 run. Since 0.1.1 the package ships no runs (the demo store builds
+#: them), so the committed copy in examples/ is read: the same bytes the package carried.
+RUN = REPO / "examples" / "reference-demo" / "runs" / "day-1"
 
 
 def _generate(cwd: Path, argv: list[str]) -> subprocess.CompletedProcess:

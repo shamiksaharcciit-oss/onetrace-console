@@ -103,12 +103,20 @@ def test_store_runs_tied_on_arrival_are_by_run_id_then_key_whatever_the_listing(
 README_LINE = "Runs that arrive in the same second are ordered by run key."
 
 
+def _unlabelled(html: str) -> str:
+    """The page without the narrow screen's column labels (`words.labelled`), so a table reads as
+    its cells were drawn before them; nothing else changes."""
+    import re as _re
+    return _re.sub(r' data-label="[^"]*"', "", html)
+
+
 def _pipeline_rows(home: str) -> list[tuple[str, str]]:
     """(label, declared stages) for each row of the Overview's pipelines table, as rendered."""
     import re
     from html import unescape
     return [(label, unescape(stages)) for label, stages in re.findall(
-        r'<tr data-pipeline="[^"]*"><td>([^<]*)</td><td data-words="record">([^<]*)</td>', home)]
+        r'<tr data-pipeline="[^"]*"><td>([^<]*)</td><td data-words="record">([^<]*)</td>',
+        _unlabelled(home))]
 
 
 def test_two_runs_ingested_in_one_second_p1_is_the_lower_key_across_renders_and_a_restart(

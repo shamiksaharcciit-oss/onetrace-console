@@ -90,7 +90,8 @@ def test_the_text_diff_is_on_a_pair_where_nothing_differs_too(same_page):
     words = _words(_section(same_page, "text-diff"))
     assert words.startswith("The text diff Shown with at most 200 lines per output"), words
     assert PLACEHOLDER not in words
-    assert "python -m onetrace diff RUN_A RUN_B --text --json --no-follow" in words
+    assert re.search(r"Command: onetrace diff runs/\S+ runs/\S+ --text", words), words
+    assert "RUN_A" not in words
 
 
 def test_the_compare_page_promises_no_excerpts_its_text_diff_is_on_the_page(dag_pages):  # noqa: F811
@@ -118,5 +119,5 @@ def test_every_stage_page_asks_the_ladder_s_two_questions(demo):  # noqa: F811
                           re.S)
         assert [(n, _words(r)) for n, r in rows] == [
             ("1", "Signed by a known recorder Signed, key not trusted · " + _DEMO_KEY),
-            ("2", "Committed by a known time No · not anchored")], (name, rows)
+            ("2", "Committed by a known time Not anchored · no anchor beside the chain")], (name, rows)
         assert page.index('data-section="outputs"') < page.index('data-section="badges"')

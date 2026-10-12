@@ -374,15 +374,20 @@ def test_both_runs_are_signed_by_the_demo_key_the_trust_file_names():
 
 
 def test_the_demo_trust_file_is_the_demos_only():
-    """Shipped with the demo and nowhere else: the console's own default names none. The package
-    carries the demo for `onetrace-console demo`, and its trust file is the demo's, byte for byte."""
+    """Two trust files, each a demo's own, and nowhere else: the console's own default names none.
+    This example's names its deleted test key. The package's is the demo store's (0.1.1,
+    the trust question): its builder's, byte for byte, naming the public-seed key with a label that
+    says what such a key proves."""
     import subprocess
+    from onetrace_console.demo_store import keys
     tracked = subprocess.run(["git", "ls-files"], cwd=DEMO.parent.parent, capture_output=True,
                              text=True, check=True).stdout.split()
-    shipped = "src/onetrace_console/reference_demo/trust.json"
+    shipped = "src/onetrace_console/demo_store/trust.json"
     assert [p for p in tracked if p.endswith("trust.json")] == ["examples/reference-demo/trust.json",
                                                                 shipped]
-    assert (REPO / shipped).read_bytes() == (DEMO / "trust.json").read_bytes()
+    assert (REPO / shipped).read_bytes() == keys.trust_file_bytes()
+    ((entry),) = json.loads((REPO / shipped).read_text(encoding="utf-8"))["keys"]
+    assert entry["label"] == keys.TRUSTED_LABEL and "not who signed it" in entry["label"]
     default = json.loads((DEMO.parent.parent / "config" / "default.json").read_text(encoding="utf-8"))
     assert default["trust_file"] is None
 

@@ -47,6 +47,229 @@ def rule_href(rule_id: str) -> str:
     return f"incidents-{rule_id.lower()}.html"
 
 
+#: Each rule's chip, in the page's own words (an extension's rule: its id).
+RULE_CHIP = {"I-CONTRADICTS": "Contradicts itself", "I-HEADER-DISAGREES": "Header disagrees",
+             "I-COULD-NOT-CHECK": "Couldn't check", "I-RUNID-REUSED": "Run id reused"}
+INCIDENT_DIR = "incidents"
+LIST_COLUMNS = ("Incident", "Run", "Pipeline", "Raised")
+FOUND_LEAD = ("The console's own run of the verifier over the stored record, as it wrote it: its "
+              "summary, one fix line for each failing row, and its rows.")
+#: The published errors page, as a reader opens it: the verifier names its source, errors.md;
+#: the page with the same sections is errors.html.
+ERRORS_PAGE = "https://oneproof.dev/onetrace/errors.html"
+ERRORS_SOURCE = "https://oneproof.dev/onetrace/errors.md"
+WHICH_NONE = "The report names no failing row, so no file is named here."
+#: The caution where a signature or an anchor holds over records that contradict themselves.
+CAUTION = ("{what} {covers} the chain head as recorded. {they} {do} not make a changed output file "
+           "match its receipt again.")
+
+
+def incident_href(incident: Incident) -> str:
+    """One incident's own page, from the site's root: its rule and its id's first 16 characters.
+    Drawn for the console's own rules' incidents only."""
+    return f"{INCIDENT_DIR}/{incident.rule.lower()}-{incident.id[:16]}.html"
+
+
+def rule_chip(rule_id: str) -> str:
+    from onetrace_console import tones
+    words = RULE_CHIP.get(rule_id, rule_id)
+    return f'<span class="pill {tones.tone(tones.INCIDENT, rule_id)}">{escape(words)}</span>'
+
+
+def _raised_at(incident: Incident, store: Store) -> str:
+    """When the incident was raised: when this console's check of its run ran, as the stored
+    report records it; "" where there is none."""
+    from onetrace_console.pages import _envelope
+    if incident.subject_kind != "run":
+        return ""
+    try:
+        envelope = _envelope(store.get_run(incident.subject), store, required=False)
+    except Exception:  # noqa: BLE001 - no time read, none said
+        return ""
+    ran = envelope.get("ran_at") if isinstance(envelope, dict) else None
+    return ran if isinstance(ran, str) else ""
+
+
+def _incident_table(incidents: tuple[Incident, ...], store: Store, up: str = "") -> str:
+    """A rule's incidents as rows: its chip (linked to the incident's own page), the run (linked to
+    its page), its pipeline, and when it was raised."""
+    from onetrace_console.overview import pipelines
+    from onetrace_console.words import run_named, scroll_region, time_html
+    label = {r.key: p.label for p in pipelines(store) for r in p.runs}
+    #: Only the console's own rules' incidents have a page of their own; an extension's incident
+    #: (a onedoor decision) is named by its kind and keeps its link to the record it came from.
+    own = {r.id for r in RULES}
+    rows = []
+    for i in incidents:
+        run = (f'<a href="{up}runs/{escape(i.subject)}/case.html">{run_named(store, i.subject)}</a>'
+               if i.subject_kind == "run" else
+               f'{escape(i.subject_kind)} <span class="mono">{escape(i.subject[:12])}</span>'
+               + ("" if i.rule in own else
+                  f' · <a href="{escape(up + i.evidence, quote=True)}">the report it came from</a>'))
+        chip = (f'<a href="{up}{incident_href(i)}">{rule_chip(i.rule)}</a>' if i.rule in own
+                else rule_chip(i.rule))
+        raised = _raised_at(i, store)
+        rows.append(f'<tr data-incident="{escape(i.id[:12], quote=True)}">'
+                    f'<td>{chip}</td>'
+                    f"<td>{run}</td><td>{escape(label.get(i.subject, ''))}</td>"
+                    f'<td class="value">{time_html(raised) if raised else "not recorded"}</td></tr>')
+    head = "".join(f"<th>{c}</th>" for c in LIST_COLUMNS)
+    return scroll_region(f'<table class="board" data-section="incident-rows"><thead><tr>{head}</tr>'
+                         f"</thead><tbody>{''.join(rows)}</tbody></table>", "The incidents", "incidents")
+
+
+def _found(envelope: dict, incident: Incident) -> str:
+    """"What the verifier found": the summary, the fix lines and the rows, each its own block,
+    each as the verifier wrote it and drawn by the run page's rule for the verifier's rows: control
+    characters shown, a line past NAME_CAP cut with what was left out said (the whole report stays
+    in the store). A fix line's address of the published errors page is kept whole and linked.
+    Where a record broke the rows apart, the whole output, escaped, with the viewer's note."""
+    import re as _re
+
+    from onetrace_console.incidents import WHOLE_OUTPUT
+    from onetrace_console.viewer.page import _escape_rows
+    from onetrace_console.words import scroll_region
+    stderr = str(envelope.get("stderr", "")).replace("\r\n", "\n").splitlines()
+    summary = [line for line in stderr if line and not line.startswith("fix ")]
+    fixes = [line for line in stderr if line.startswith("fix ")]
+
+    def linked(line: str) -> str:
+        """The line by the rows' rule; its closing errors-page address kept whole, as the verifier
+        wrote it, and linked to the published page a reader can read, errors.html, at the same
+        section."""
+        found = _re.match(r"(.*; see )https://oneproof\.dev/onetrace/errors\.md#([A-Za-z0-9_-]+)$", line, _re.S)
+        if found is None:
+            return _escape_rows(line)
+        code = found.group(2)
+        return (_escape_rows(found.group(1))
+                + f'<a href="{ERRORS_PAGE}#{code}">{escape(ERRORS_SOURCE)}#{escape(code)}</a>')
+    if incident.field_path == WHOLE_OUTPUT:
+        rows = _quoted(incident)
+    else:
+        out = str(envelope.get("stdout", "")).replace("\r\n", "\n")
+        rows = scroll_region(f'<pre class="term" data-found="rows">{_escape_rows(out)}</pre>',
+                             "The verifier's rows", "found-rows")
+    return ('<section data-section="found"><h2>What the verifier found</h2>'
+            f'<p class="note">{escape(FOUND_LEAD)}</p>'
+            + "".join(f'<pre class="term" data-found="summary">{_escape_rows(line)}</pre>' for line in summary)
+            + "".join(f'<p class="fix" data-found="fix"><code>{linked(line)}</code></p>' for line in fixes)
+            + rows + "</section>")
+
+
+def _which(envelope: dict) -> str:
+    """"Which file, and how": built only from the report's failing rows -- each row's file and the
+    check that failed there, with its detail, as the verifier's --json rows give them. The JSON
+    rows carry a record's words unescaped, so each is drawn as a record word: its control characters
+    shown, cut past NAME_CAP with what was left out said."""
+    from onetrace_console.bounded_json import load_json_bounded
+    from onetrace_console.viewer.page import _named, _rest
+
+    def word(text: str) -> str:
+        return _named(text) + _rest(text, whole=False)
+    rows = []
+    try:
+        doc = load_json_bounded(str((envelope.get("rows_json") or {}).get("stdout", "")), "rows")
+        rows = [r for r in doc.get("rows", []) if isinstance(r, dict) and r.get("result") == "FAIL"]
+    except Exception:  # noqa: BLE001 - no rows read, none named
+        rows = []
+    items = []
+    for r in rows:
+        name, detail = str(r.get("name", "")), str(r.get("detail", ""))
+        path, _, check = name.partition(": ")
+        items.append(f'<li data-fail-row><code>{word(path)}</code>'
+                     + (f" — {word(check)}" if check else "")
+                     + (f": {word(detail)}" if detail else "") + "</li>")
+    body = f'<ul class="plain">{"".join(items)}</ul>' if items else f"<p>{escape(WHICH_NONE)}</p>"
+    return f'<section data-section="which"><h2>Which file, and how</h2>{body}</section>'
+
+
+def _caution(answers: dict[str, str]) -> str:
+    """The amber caution, only where a signature or an anchor holds over records that contradict
+    themselves: neither makes a changed output file match its receipt again."""
+    signed, anchored = answers.get("signed") == "yes", answers.get("anchored") == "yes"
+    if answers.get("records-agree") != "no" or not (signed or anchored):
+        return ""
+    what = ("The signature and the anchor" if signed and anchored
+            else "The signature" if signed else "The anchor")
+    both = signed and anchored
+    said = CAUTION.format(what=what, covers="cover" if both else "covers", they="They" if both else "It",
+                          do="do" if both else "does")
+    return f'<p data-section="caution" data-state="couldnt-check">{escape(said)}</p>'
+
+
+def _four_answers(run, store: Store, generated_at: str) -> tuple[str, dict[str, str]]:
+    """The run page's own four answers, drawn as its head draws them, and {rung: state} for each
+    of its rungs; ("", {}) where the run's page could not be drawn."""
+    import tempfile
+    from pathlib import Path
+
+    from onetrace_console.pages import _model
+    from onetrace_console.run_head import _rungs
+    if store.missing(run):
+        return "", {}
+    with tempfile.TemporaryDirectory(prefix="onetrace-incident-") as tmp:
+        try:
+            model = _model(run, store, generated_at, Path(tmp) / "run", require_report=False)
+        except Exception:  # noqa: BLE001 - the store's three answers are drawn instead
+            return "", {}
+    return _rungs(model), {r.key: r.state for r in model.ladder}
+
+
+def render_incident_page(incident: Incident, store: Store, *, generated_at: str) -> str:
+    """One incident: the run it was raised on and its rule, when it was raised, the run's four
+    answers as its own page draws them, the caution where it applies, what the verifier found and
+    which file and how. No re-check: this console has no such action."""
+    from onetrace_console import tones
+    from onetrace_console.overview import pipelines
+    from onetrace_console.pages import _envelope, run_answers
+    from onetrace_console.render import _document, _limit_sentence
+    from onetrace_console.viewer.sentences import template
+    from onetrace_console.words import named, time_html
+    up = "../"
+    run = store.get_run(incident.subject) if incident.subject_kind == "run" else None
+    label = next((p.label for p in pipelines(store) for r in p.runs if run and r.key == run.key), "")
+    who = (f'<a href="{up}runs/{run.key}/case.html"><span class="mono" data-words="record">'
+           f"{named(run.run_id)}</span></a>" if run else
+           f'<span class="mono">{escape(incident.subject[:12])}</span>')
+    raised = _raised_at(incident, store)
+    parts = [
+        f'<p class="crumbs" data-section="crumbs"><a href="{up}{INCIDENTS}">Incidents</a> / '
+        f"{who}</p>",
+        f'<div class="title"><h1><span class="mono" data-words="record">'
+        f"{named(run.run_id) if run else escape(incident.subject[:12])}</span>"
+        + (f" · {escape(label)}" if label else "") + f"</h1>{rule_chip(incident.rule)}</div>",
+        f'<p data-section="raised">{escape(incident.rule)} · raised when this console checked the run'
+        + (f", {time_html(raised)}" if raised else "") + "</p>",
+    ]
+    envelope = None
+    if run is not None:
+        strip, answers = _four_answers(run, store, generated_at)
+        if not strip:   # the run page's own answers could not be drawn: the store's three, as the lists read them
+            answers = run_answers(run, store)
+            names = {"records-agree": "rung.records-agree", "signed": "rung.signed", "anchored": "rung.anchored"}
+            strip = ('<ul class="seals">' + "".join(
+                f'<li data-head-rung="{k}" data-state="{v}"><span class="q">{escape(template(names[k]))}</span> '
+                f'<span class="pill {tones.tone(tones.RUNG, v)}">'
+                f'{escape(template("rung.state." + v.replace("-", "_")))}</span></li>'
+                for k, v in answers.items()) + "</ul>")
+        parts.append(strip.replace('<ul class="seals">', '<ul class="seals" data-section="answers">', 1))
+        parts.append(_caution(answers))
+        try:
+            envelope = _envelope(run, store, required=False)
+        except Exception:  # noqa: BLE001 - said below
+            envelope = None
+    if isinstance(envelope, dict) and incident.rule == "I-CONTRADICTS":
+        parts.append('<div class="io">' + _found(envelope, incident) + _which(envelope) + "</div>")
+    else:
+        parts.append('<section data-section="quoted"><h2>What the record says</h2>'
+                     + _quoted(incident) + "</section>")
+    parts.append(f'<p class="limit" data-section="limit">{escape(_limit_sentence())}</p>')
+    parts.append(generated_footer(generated_at))
+    body = '<div class="cp" data-view="incident">' + "".join(p for p in parts if p) + "</div>"
+    return _document(f"{RULE_CHIP.get(incident.rule, incident.rule)} · "
+                     f"{run.run_id if run else incident.subject[:12]}", body)
+
+
 def _incident_item(incident: Incident, store: Store | None = None, up: str = "") -> str:
     """One incident: its rule, the run or pair, the quoted field, and the evidence link. A run is
     named by its run id and short key where the store is given; a pair by its key.
@@ -136,7 +359,6 @@ def render_incidents(store: Store, *, generated_at: str,
     for rule in rules:
         mine = grouped[rule.id]
         total = totals.get(rule.unit, 0)
-        items = "".join(_incident_item(i, store) for i in mine)
         groups.append(
             f'<section data-group="{escape(rule.id, quote=True)}">'
             f"<h2>{escape(group_sentence(rule.id, mine, total, unit=rule.unit))}</h2>"
@@ -144,7 +366,7 @@ def render_incidents(store: Store, *, generated_at: str,
             f'Raised when {_code_spans(rule.condition)}. '
             f'<a href="{escape(rule_href(rule.id), quote=True)}">this rule\'s list</a></p>'
             + _notes((extra_notes or {}).get(rule.id, ()))
-            + (f'<ul class="plain">{items}</ul>' if mine else
+            + (_incident_table(mine, store) if mine else
                f'<p data-section="none">This rule raised nothing from the {total} '
                f"{rule.unit}{'s' if total != 1 else ''} stored.</p>")
             + "</section>")
@@ -179,7 +401,6 @@ def render_rule_list(store: Store, rule_id: str, *, generated_at: str,
                    rules=rules)[rule_id]
     rule = next(r for r in rules if r.id == rule_id)
     total = {"run": len(store.runs()), **(extra_totals or {})}.get(rule.unit, 0)
-    items = "".join(_incident_item(i, store) for i in mine)
     body = [
         f"<h1>{escape(group_sentence(rule_id, mine, total, unit=rule.unit))}</h1>",
         f'<p data-section="words">{escape(rule.words)}. Raised when '
@@ -187,7 +408,7 @@ def render_rule_list(store: Store, rule_id: str, *, generated_at: str,
         f"{_code_spans(rule.field)}.</p>",
         _notes((extra_notes or {}).get(rule_id, ())),
         underived_note(store),
-        (f'<ul class="plain" data-group="{escape(rule_id, quote=True)}">{items}</ul>'
+        (f'<div data-group="{escape(rule_id, quote=True)}">{_incident_table(mine, store)}</div>'
          if mine else f'<p data-section="none">This rule raised nothing from the '
                       f"{total} {rule.unit}{'s' if total != 1 else ''} stored.</p>"),
         f'<p class="limit" data-section="limit">{escape(_limit_sentence())}</p>',

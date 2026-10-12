@@ -1,1 +1,0 @@
-{"configured":"(unset)","expected":"auth_env names a real environment","failed":["test_login_redirect","test_token_refresh","test_session_timeout","test_sso_callback"],"passed":"38"}

@@ -36,6 +36,7 @@ from pathlib import Path
 
 from onetrace_console.textdiff_view import (VERIFIED, TextDiffUnreadable, _decimal, _fail, _keys,
                                             _node, _shown, _strings, read_textdiff)
+from onetrace_console.child import utf8_env
 
 TRACE = "diff --text --runs-root"
 SHOWN_COMMAND = "python -m onetrace diff RUN_A RUN_B --text --json --runs-root RUNS_ROOT"
@@ -206,7 +207,7 @@ def trace_run(store, folder_a: Path, folder_b: Path, work: Path, timeout: int, n
     command = (sys.executable, "-m", "onetrace", "diff", str(folder_a), str(folder_b),
                "--text", "--json", "--runs-root", str(root), "--out", str(out))
     try:
-        proc = subprocess.run(command, capture_output=True, timeout=timeout)
+        proc = subprocess.run(command, capture_output=True, timeout=timeout, env=utf8_env())
     except subprocess.TimeoutExpired:
         return VerbRun(verb=TRACE, command=command, shown_command=SHOWN_COMMAND, exit_status="",
                        stdout_key=store.put(b""), note=f"{TIMED_OUT} after {timeout}s")
@@ -356,8 +357,11 @@ def board7_section(comparison, store) -> str:
     if run is None:
         return ""
     head = f'<section data-section="where-started"><h2>{_html(HEADING)}</h2>'
+    from onetrace_console.render import typed_command
+    #: The linked ingest runs are found where the SDK looks by default: the folder holding the
+    #: baseline, `runs/`, so no --runs-root is needed.
     command = (f'<p data-section="where-started-command">Command: '
-               f"<code>{_html(run.shown_command)}</code></p>")
+               f"<code>{_html(typed_command(comparison, store, 'diff', text=True))}</code></p>")
     limit = f'<p class="limit" data-section="where-started-limit">{_html(LIMIT)}</p>'
     if run.note:
         body = (f"<p>This console did not obtain an answer: {_html(run.note)}. Nothing is shown "

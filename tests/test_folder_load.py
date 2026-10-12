@@ -22,13 +22,14 @@ import subprocess
 import sys
 import threading
 import urllib.request
+from html import unescape
 from pathlib import Path
 
 import pytest
 
 REPO = Path(__file__).resolve().parent.parent
 EXAMPLE = REPO / "examples" / "reference-demo"
-SHIPPED = REPO / "src" / "onetrace_console" / "reference_demo"
+SHIPPED = REPO / "src" / "onetrace_console" / "demo_store"
 
 
 def _runs(tmp_path: Path) -> Path:
@@ -142,17 +143,19 @@ def test_a_run_holding_a_link_is_refused(tmp_path, examined):
     assert day2.run is None and "link" in day2.refused, day2.refused
 
 
-# ------------------------------------------------------------------ 3. the demo's runs ship in the package
+# ------------------------------------------------------------------ 3. the demo's builder ships in the package
+#: 0.1.1: the package ships the demo store's builder and its trust file,
+#: not runs. The reference demo's committed runs stay in examples/, outside the store.
 
-def test_the_package_ships_the_reference_demos_own_runs_and_trust_file(examined):
-    def tree(root: Path) -> dict[str, bytes]:
-        return {p.relative_to(root).as_posix(): p.read_bytes()
-                for p in sorted(root.rglob("*")) if p.is_file() and "__pycache__" not in p.parts}
-    want = {**{f"runs/{k}": v for k, v in tree(EXAMPLE / "runs").items()},
-            "trust.json": (EXAMPLE / "trust.json").read_bytes()}
-    got = tree(SHIPPED)
-    examined(len(want), "files of the reference demo")
-    assert got == want
+def test_the_package_ships_the_builders_trust_file_and_the_reference_pipeline_as_is(examined):
+    from onetrace_console.demo_store import keys
+    examined(2, "files the builder ships")
+    assert (SHIPPED / "trust.json").read_bytes() == keys.trust_file_bytes(), \
+        "the packaged trust file is the builder's, byte for byte"
+    assert (SHIPPED / "reference_pipeline.py").read_bytes() == (EXAMPLE / "demo.py").read_bytes(), \
+        "P2 runs the reference demo's pipeline unchanged"
+    assert not (REPO / "src" / "onetrace_console" / "reference_demo").exists(), \
+        "no committed runs ship in the package"
 
 
 def test_the_package_data_names_the_demo(examined):
@@ -161,8 +164,10 @@ def test_the_package_data_names_the_demo(examined):
     globs = data["tool"]["setuptools"]["package-data"]["onetrace_console"]
     examined(len(globs), "package-data globs")
     from fnmatch import fnmatch
-    shipped = [p.relative_to(SHIPPED.parent).as_posix() for p in SHIPPED.rglob("*") if p.is_file()]
-    assert shipped and all(any(fnmatch(p, g) for g in globs) for p in shipped), shipped
+    shipped = [p.relative_to(SHIPPED.parent).as_posix() for p in SHIPPED.rglob("*")
+               if p.is_file() and p.suffix != ".py" and "__pycache__" not in p.parts]
+    assert shipped == ["demo_store/trust.json"], shipped
+    assert all(any(fnmatch(p, g) for g in globs) for p in shipped), shipped
 
 
 # ------------------------------------------------------------------ 4. the commands, as a user runs them
@@ -252,43 +257,60 @@ def test_a_folder_load_serves_the_runs_and_the_comparison_it_was_asked_for(tmp_p
     assert (tmp_path / "store").is_dir(), "the store is ./store under the folder it is started from"
 
 
-def test_the_demo_copies_loads_compares_and_reads_the_signatures_with_its_trust_file(tmp_path, console,
-                                                                                    examined):
+def _demo_runs() -> list[str]:
+    from onetrace_console.demo_store import runs
+    return sorted(r.folder for r in runs())
+
+
+def test_the_demo_builds_loads_compares_and_reads_the_signatures_with_its_trust_file(tmp_path, console,
+                                                                                   examined):
+    from onetrace_console.demo_store import COMPARISONS, keys
     port = _free_port()
     c = console(tmp_path, "demo", "--port", str(port))
     overview = c.until("overview:")
     examined(1, "demo")
     demo = tmp_path / "onetrace-console-demo"
-    assert sorted(p.name for p in (demo / "runs").iterdir()) == ["day-1", "day-2"]
-    assert (demo / "trust.json").read_bytes() == (EXAMPLE / "trust.json").read_bytes()
+    assert sorted(p.name for p in (demo / "runs").iterdir()) == _demo_runs()
+    assert (demo / "trust.json").read_bytes() == (SHIPPED / "trust.json").read_bytes()
     assert (demo / "store").is_dir() and not (tmp_path / "store").exists()
     compared = next(l for l in c.lines if l.strip().startswith("compared"))
-    assert "/diff/" in compared
-    day1 = next(l for l in c.lines if l.strip().startswith("day-1"))
-    receipt = _get(_url(day1).replace("case.html", "receipt.html"))
-    assert "test key (demo)" in receipt, "the signatures were not read with the demo's trust file"
+    assert "/diff/" in compared and COMPARISONS[0][0] in compared and COMPARISONS[0][1] in compared
+    first = next(l for l in c.lines if l.strip().startswith(COMPARISONS[0][0]))
+    receipt = _get(_url(first).replace("case.html", "receipt.html"))
+    assert keys.TRUSTED_LABEL in unescape(receipt), \
+        "the signatures were not read with the demo's trust file"
     assert _url(overview) == f"http://127.0.0.1:{port}/"
 
 
 def test_the_demo_runs_again_in_the_same_folder(tmp_path, console, examined):
+    records = []
     for _ in range(2):
         port = _free_port()
         c = console(tmp_path, "demo", "--port", str(port))
         c.until("overview:")
         c.stop()
+        records.append((tmp_path / "onetrace-console-demo" / "BUILD_RECORD.json").read_bytes())
     examined(2, "demo starts in one folder")
-    assert sorted(p.name for p in (tmp_path / "onetrace-console-demo" / "runs").iterdir()) == ["day-1", "day-2"]
+    assert sorted(p.name for p in (tmp_path / "onetrace-console-demo" / "runs").iterdir()) == _demo_runs()
+    assert records[0] == records[1], "the second start re-used the runs the first built"
 
 
 def test_the_demo_refuses_a_folder_whose_runs_were_changed(tmp_path, console, examined):
-    demo = tmp_path / "onetrace-console-demo" / "runs"
-    shutil.copytree(EXAMPLE / "runs", demo)
-    (demo / "day-2" / "documents.json").write_text("[]", encoding="utf-8")
+    """A hand edit after the build -- one byte of one recorded output -- is named and refused."""
+    c = console(tmp_path, "demo", "--port", str(_free_port()))
+    c.until("overview:")
+    c.stop()
+    runs = tmp_path / "onetrace-console-demo" / "runs"
+    (edited,) = sorted(runs.glob("p1-01-*/artifacts/*-answer/answers.json"))
+    data = bytearray(edited.read_bytes())
+    data[-3] ^= 0x01
+    edited.write_bytes(bytes(data))
     c = console(tmp_path, "demo", "--port", str(_free_port()))
     code, out = c.exited()
     examined(1, "changed demo folder")
     assert code == 1, out
-    assert "documents.json" in out and "onetrace-console-demo" in out, out
+    rel = edited.relative_to(runs.parent).as_posix()
+    assert f"{rel} was changed" in out and "onetrace-console-demo" in out, out
 
 
 def test_the_demo_refuses_when_a_configuration_file_is_named(tmp_path, console, examined):

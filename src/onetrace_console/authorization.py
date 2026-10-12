@@ -51,13 +51,14 @@ BACK = "Back to the run"
 LINK_MARKER = "authorization-link"
 
 
-def render_authorization(run: StoredRun, *, generated_at: str, case: str) -> str:
-    """The page for one run. `case` is the relative link back to that run's case page."""
+def render_authorization(run: StoredRun, *, generated_at: str, case: str, head: str = "") -> str:
+    """The page for one run. `case` is the relative link back to that run's case page; `head`,
+    where the run's pages are drawn, the run's head (as on its run page), above the page's own."""
     from onetrace_console.preview import label
     from onetrace_console.render import _document, _limit_sentence
 
     body = (
-        f"<h1>{escape(TITLE)}</h1>"
+        head + f"<h1>{escape(TITLE)}</h1>"
         f'<p data-state="no-records">{escape(STATE)}</p>'
         f'<p data-section="run">Run <span class="mono" data-words="record">'
         f"{named(run.run_id, record_href(run))}</span></p>"

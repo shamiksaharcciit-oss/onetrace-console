@@ -1,1 +1,0 @@
-{"documents":[{"id":"doc-1","text":"Deployments read auth_env from config/auth.json."},{"id":"doc-2","text":"The test suite expects auth_env to name a real environment."},{"id":"doc-3","text":"Environments: production, staging."}]}
