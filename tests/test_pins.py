@@ -24,17 +24,16 @@ PINS_DOC = REPO / "PINS.md"
 
 #: The three hashes this channel has independently verified, named once here. If a pin is
 #: moved, this fails and names what disagreed -- the point of writing them out at all.
-#: The SDK's two: onetrace 0.2.1 from PyPI, its wheel's sha256 as PyPI serves it (the build its
-#: release cleared; written here by script from PyPI's JSON), and onetrace-verify 0.2.0, as RC2's
-#: SHA256SUMS gives it (ci's build of fce500e656e83ee05cb9f6f223779be4a37ec0ce), which PyPI serves.
-ONETRACE_WHL_SHA256 = "f55ca407d9ac1dd0451878c44a3c980e8b977b04ab0818d42e9eac780eaeb608"
-ONETRACE_VERIFY_WHL_SHA256 = "74b3c862bdf997ec71b20de02c6bbdb445b89ffc0017497b3ed6ce91b2bce89c"
+#: The SDK's two: onetrace 0.2.2 and onetrace-verify 0.2.1 from PyPI, each wheel's sha256 as PyPI
+#: serves it (written here by script from PyPI's JSON).
+ONETRACE_WHL_SHA256 = "5fbefd657d0622d8dad8d9506f118be2b417a9586589d8e50d59fd2a5fa21b1f"
+ONETRACE_VERIFY_WHL_SHA256 = "c001019740798f907ae8a4adace32c597fb749cf52fca0e668c932723a792119"
 #: The pinned SDK's version, as its distribution and `onetrace.__version__` report it; and the
 #: verifier's, now a patch behind it (the two are released in series: 0.2.x with 0.2.x).
-PINNED_SDK_VERSION = "0.2.1"
-PINNED_VERIFY_VERSION = "0.2.0"
-ONETRACE_LOCK_KEY = "onetrace==0.2.1"
-ONETRACE_VERIFY_LOCK_KEY = "onetrace-verify==0.2.0"
+PINNED_SDK_VERSION = "0.2.2"
+PINNED_VERIFY_VERSION = "0.2.1"
+ONETRACE_LOCK_KEY = "onetrace==0.2.2"
+ONETRACE_VERIFY_LOCK_KEY = "onetrace-verify==0.2.1"
 
 _REQ = re.compile(
     r"^(?P<req>\S+)\s*\\?\s*$\n\s*--hash=sha256:(?P<sha>[0-9a-f]{64})",
@@ -238,3 +237,32 @@ def _tracked_here(path: Path) -> bool:
     r = subprocess.run(["git", "ls-files", "--error-unmatch", rel.as_posix()],
                        cwd=REPO, capture_output=True, text=True)
     return r.returncode == 0
+
+
+#: Where each README says which SDK and verifier it installs.
+_INSTALLS = re.compile(r"installs from PyPI alone: `onetrace` (\S+) and `onetrace-verify` (\S+),")
+
+
+def readme_pin_problems(name: str, text: str) -> list[str]:
+    """The versions a README says the console installs, against the exact pins in pyproject.toml."""
+    import tomllib
+    deps = tomllib.loads((REPO / "pyproject.toml").read_text(encoding="utf-8"))["project"]["dependencies"]
+    pinned = dict(re.match(r"([a-z-]+)(?:\[\w+\])?==(\S+)", d).groups() for d in deps
+                  if d.startswith(("onetrace==", "onetrace-verify")))
+    said = _INSTALLS.findall(text)
+    if said != [(pinned["onetrace"], pinned["onetrace-verify"])]:
+        return [f"{name} says it installs {said}, pyproject.toml pins {pinned}"]
+    return []
+
+
+@pytest.mark.parametrize("name", ["README.md", "PYPI_DESCRIPTION.md"])
+def test_each_readme_names_the_versions_the_console_pins(name, examined):
+    examined(1, name)
+    assert readme_pin_problems(name, (REPO / name).read_text(encoding="utf-8")) == []
+
+
+def test_sabotage_a_readme_naming_another_sdk_version_is_named(examined):
+    text = (REPO / "README.md").read_text(encoding="utf-8")
+    stale = text.replace(f"`onetrace` {PINNED_SDK_VERSION} and", "`onetrace` 0.2.0 and", 1)
+    examined(1, "planted README")
+    assert stale != text and readme_pin_problems("README.md", stale) != []

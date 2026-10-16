@@ -27,7 +27,7 @@ the fonts and the records are written, and no served page carries a form.
 
 THE CHECKS IT RUNS ON ITS OWN OUTPUT
 ------------------------------------
-Before it returns, the export is scanned for internal ids (`INTERNAL_ID`) and for requests to
+Before it returns, the export is scanned for project ids (the pattern below) and for requests to
 another host. Either found, and the output folder it made is removed and the export refused. The
 fence scan takes its terms from a file named on the command line; the real terms never come to
 this machine, so here it runs only on a planted test term, in the tests.
@@ -49,7 +49,7 @@ _BANNER_HTML = ('<p data-export="banner" style="margin:0;padding:10px 36px;'
                 'background:var(--cc-bg);color:var(--cc-ink);border-bottom:1px solid var(--line);'
                 f'font-size:var(--fs-body)">{BANNER}</p>')
 
-#: Four forms of an internal id, and the three other forms the
+#: Four forms of a project id, and the three other forms the
 #: project's own ids take. `tests/test_no_internal_ids.py` holds the rendered pages to it too.
 INTERNAL_ID = re.compile(
     r"R-20"                 # a decision id
@@ -202,7 +202,7 @@ def _texts(folder: Path, suffixes: tuple[str, ...]):
 
 
 def internal_ids(folder: Path) -> list[str]:
-    """The internal-id scan over every exported page and stylesheet, as a reader sees them."""
+    """The project-id scan over every exported page and stylesheet, as a reader sees them."""
     return [f"{rel}: …{shown(text)[max(0, m.start() - 50):m.end() + 30]}…"
             for rel, text in _texts(folder, (".html", ".css"))
             for m in INTERNAL_ID.finditer(shown(text))]

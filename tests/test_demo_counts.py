@@ -39,8 +39,13 @@ def doc_problems(name: str, text: str) -> list[str]:
     wanted = [(r"(\w+) small example pipelines", count_word(len(pipeline_names())), "pipelines")]
     if name in DOCS:
         wanted.append((r"stores (\w+) comparisons", count_word(len(COMPARISONS)), "comparisons"))
+        #: The Overview image's description: the runs the image shows are the demo's.
+        wanted.append((r"the demo's (\w+) runs", str(len(runs())), "runs"))
     else:
-        text = text.split("\n## ", 2)[1]     # the changelog's newest entry, the one this release ships
+        #: The changelog's newest entry that says what the demo records: a release that leaves the
+        #: demo's counts as they were (0.1.2's fixes) doesn't say them again.
+        entries = text.split("\n## ")[1:]
+        text = next((e for e in entries if re.search(r"records \w+ runs", e)), entries[0] if entries else "")
         wanted.append((r"records (\w+) runs", str(len(runs())), "runs"))
     for pattern, word, what in wanted:
         found = re.findall(pattern, text)
@@ -87,7 +92,8 @@ def test_sabotage_each_check_catches_its_fault(served, monkeypatch, examined):  
     caught += 1
     for name, old, new in [("README.md", "from four small", "from three small"),
                            ("PYPI_DESCRIPTION.md", "stores five comparisons", "stores four comparisons"),
-                           ("CHANGELOG.md", "records 30 runs", "records 28 runs")]:
+                           ("README.md", "the demo's 31 runs", "the demo's 30 runs"),
+                           ("CHANGELOG.md", "records 31 runs", "records 30 runs")]:
         text = (REPO / name).read_text(encoding="utf-8")
         assert old in text, name
         assert doc_problems(name, text.replace(old, new)) != [], name

@@ -24,7 +24,6 @@ from onetrace_console.bounded_json import load_json_bounded
 import re
 from dataclasses import dataclass
 
-from onetrace_console.checks import CONTRADICTS, COULD_NOT_CHECK
 from onetrace_console.store import StoredRun, Store
 
 PIPELINE_RULE = ("A pipeline here is a declared stage list: runs that declare the same stages, "
@@ -35,17 +34,20 @@ PIPELINE_RULE = ("A pipeline here is a declared stage list: runs that declare th
 #: is its own state (the three-outcome rule), placed after the two the check did reach.
 #: "Last attempt failed" comes after a declared stage missing; the order's own sentence names it
 #: there in the reason's fixed words, so the stated order stays true.
-ATTENTION_RULE = ("Order: contradicts itself, then couldn't check, then not checked, then a "
-                  "declared stage missing, then last attempt failed, then changed vs baseline; "
-                  "newest first within each.")
-ATTENTION_KINDS = ("contradicts", "couldnt-check", "not-checked", "missing-stage",
-                   "last-attempt-failed", "changed")
+ATTENTION_RULE = ("Order: contradicts itself, then couldn't check, then not checked, then no "
+                  "verdict recorded, then a declared stage missing, then last attempt failed, then stopped at a step, then "
+                  "changed vs baseline; newest first within each.")
+ATTENTION_KINDS = ("contradicts", "couldnt-check", "not-checked", "no-verdict", "missing-stage",
+                   "last-attempt-failed", "stopped-at-a-step", "changed")
 ATTENTION_WORDS = {
     "contradicts": "Contradicts itself",
     "couldnt-check": "Couldn't check",
     "not-checked": "Not checked",
+    "no-verdict": "No verdict recorded",
     "missing-stage": "A declared stage missing",
     "last-attempt-failed": "Last attempt failed",
+    #: A step's own rule declined and the steps after it were not reached: rung 3's "Not reached".
+    "stopped-at-a-step": "Stopped at a step",
     "changed": "Changed vs baseline",
 }
 
@@ -69,15 +71,17 @@ def declared_list(run: StoredRun) -> tuple:
 def pipelines(store: Store) -> tuple[Pipeline, ...]:
     """Runs grouped by their declared stage list, labelled in order of first arrival."""
     groups: dict[tuple, list[StoredRun]] = {}
-    for run in sorted(store.runs(), key=lambda r: (r.received_at, r.key)):
+    from onetrace_console.store import arrival_order
+    for run in arrival_order(store.runs(), newest_first=False):
         groups.setdefault(declared_list(run), []).append(run)
     return tuple(Pipeline(f"P{i}", runs[0].declared_stages, tuple(runs),
                           max(0, runs[0].stage_count - len(runs[0].declared_stages)))
                  for i, runs in enumerate(groups.values(), start=1))
 
 
-#: Rung 3's states, as a run's page decides them and its record keeps them.
-NOTHING_MISSING, SOMETHING_MISSING = "yes", "no"
+#: Rung 3's states, as a run's page decides them and its record keeps them. "Not reached": the
+#: run stopped at a step's own rule, and the declared steps after it were never reached.
+NOTHING_MISSING, SOMETHING_MISSING, NOT_REACHED = "yes", "no", "not-reached"
 
 
 def missing_a_declared_stage(run: StoredRun) -> bool:
@@ -91,7 +95,12 @@ def missing_a_declared_stage(run: StoredRun) -> bool:
 def nothing_missing_not_established(run: StoredRun) -> bool:
     """Neither yes nor no: the receipts do not say, or say it in a shape that cannot be read,
     or the viewer could not read the record at all."""
-    return run.nothing_missing not in (NOTHING_MISSING, SOMETHING_MISSING)
+    return run.nothing_missing not in (NOTHING_MISSING, SOMETHING_MISSING, NOT_REACHED)
+
+
+def stopped_at_a_step(run: StoredRun) -> bool:
+    """Rung 3 reads "Not reached": the run stopped at a step's own rule."""
+    return run.nothing_missing == NOT_REACHED
 
 
 def _diff_of(comparison, store: Store) -> dict | None:
@@ -189,20 +198,39 @@ def last_failed(run) -> list[list[str]]:
     return kept if ok else []
 
 
+def declined(run) -> dict | None:
+    """{"stage", "reason", "left"}, the step the run stopped at by its own rule, as derived when
+    the run was checked (`ingest.declined_at`); None where it did not stop at one, where the run
+    was derived before this was, or where the kept value is not that shape."""
+    try:
+        kept = load_json_bounded(getattr(run, "declined", "") or "null", "the step the run stopped at")
+    except ValueError:
+        return None
+    ok = (isinstance(kept, dict) and set(kept) == {"stage", "reason", "left"}
+          and isinstance(kept["stage"], str) and isinstance(kept["reason"], str)
+          and isinstance(kept["left"], list) and all(isinstance(x, str) for x in kept["left"]))
+    return kept if ok else None
+
+
 def attention_kind(run: StoredRun, store: Store) -> str | None:
-    """The first kind of attention a run needs, in the stated order, or None."""
-    if run.check_verdict == CONTRADICTS:
+    """The first kind of attention a run needs, in the stated order, or None. Its "Records
+    agree" is rung 1's state (`records.state`), as its own page reads it."""
+    from onetrace_console import records
+    agree = records.state(run, store)
+    if agree == records.NO:
         return "contradicts"
     from onetrace_console.checks import is_preview_not_verified
-    if run.check_verdict == COULD_NOT_CHECK and not is_preview_not_verified(run):
+    if agree == records.COULDNT and not is_preview_not_verified(run):
         #: A preview run's NOT VERIFIED does not need attention.
         return "couldnt-check"
-    if not run.check_verdict:
-        return "not-checked"
+    if agree in (records.NOT_CHECKED, records.NO_VERDICT):
+        return agree
     if missing_a_declared_stage(run):
         return "missing-stage"
     if last_failed(run):
         return "last-attempt-failed"
+    if stopped_at_a_step(run):
+        return "stopped-at-a-step"
     if vs_baseline(run, store)[0] == "changed":
         return "changed"
     return None
@@ -210,11 +238,10 @@ def attention_kind(run: StoredRun, store: Store) -> str | None:
 
 def needs_attention(store: Store) -> list[tuple[str, StoredRun]]:
     """Every run needing attention, in the order `ATTENTION_RULE` states."""
-    found = [(attention_kind(r, store), r) for r in store.runs()]
+    from onetrace_console.store import arrival_order
+    found = [(attention_kind(r, store), r) for r in arrival_order(store.runs(), newest_first=True)]
     found = [(k, r) for k, r in found if k is not None]
-    #: Stable sorts, last key first: kind, then newest arrival, then key for a fixed order.
-    found.sort(key=lambda kr: kr[1].key)
-    found.sort(key=lambda kr: kr[1].received_at, reverse=True)
+    #: A stable sort by kind keeps arrival order within each: newest first, then run name.
     found.sort(key=lambda kr: ATTENTION_KINDS.index(kr[0]))
     return found
 
@@ -358,15 +385,58 @@ class SameChange:
     in_pipeline: int = 0
     matches: tuple[StoredRun, ...] = ()
     identical: bool = False
+    #: The recorded settings matched on, ((name, the candidate's value), ...): the settings the
+    #: report's annotations say changed at the first difference. Empty where the match is on a
+    #: recorded digest instead (`what`, `digest`).
+    settings: tuple[tuple[str, str], ...] = ()
+    #: Runs of the pipeline whose receipts the store could not read, matched on settings: not
+    #: counted either way, and said so.
+    unread: int = 0
+
+
+#: How the SDK's report names a recorded setting in its annotations (`onetrace.ladder._differs`).
+_SETTING = "assertions.constants."
+
+
+def changed_settings(diff: dict, index: str) -> dict[str, str]:
+    """{setting name: the candidate's value} for each recorded setting the report's annotations say
+    differs at ladder row `index`, where the candidate records one. Empty where the annotations
+    name none there, or cannot be read."""
+    notes = diff.get("annotations")
+    out: dict[str, str] = {}
+    for note in notes if isinstance(notes, list) else ():
+        if not (isinstance(note, dict) and note.get("index") == index and isinstance(note.get("differs"), dict)):
+            continue
+        for field, pair in note["differs"].items():
+            if (isinstance(field, str) and field.startswith(_SETTING) and isinstance(pair, list)
+                    and len(pair) == 2 and isinstance(pair[1], str)):
+                out[field[len(_SETTING):]] = pair[1]
+    return out
+
+
+def settings_at(run: StoredRun, store: Store, stage: str) -> dict | None:
+    """The recorded settings of the run's last receipt for `stage`, as recorded; {} where it
+    recorded none or has no receipt for it; None where the store is missing part of the run."""
+    if store.missing(run):
+        return None
+    from onetrace_console.stage_pages import _stage_name, _steps
+    tries = [s["receipt"] for s in _steps(run, store) if _stage_name(s["receipt"]) == stage]
+    if not tries:
+        return {}
+    assertions = tries[-1].get("assertions")
+    constants = assertions.get("constants") if isinstance(assertions, dict) else None
+    return constants if isinstance(constants, dict) else {}
 
 
 def same_change(comparison, store: Store) -> SameChange:
-    """Other runs carrying the candidate's changed digest at the first differing stage.
+    """Other runs that record the candidate's change at the first differing stage.
 
-    Matched on the recorded digest that differs between the pair at that stage -- settings,
-    else code -- by exact equality, within the candidate's pipeline. Not on the stage's
-    inputs: by the ladder every stage before the first difference is the same in both runs,
-    so the stage's inputs are too, and cannot be what changed.
+    Matched, by exact equality and within the candidate's pipeline, on the recorded settings the
+    report's annotations say changed at that stage: a run matches when its receipt for the stage
+    records the candidate's value of each. Where no recorded setting changed there, on the
+    recorded digest that differs -- settings, else code. Not on the stage's inputs: by the ladder
+    every stage before the first difference is the same in both runs, so the stage's inputs are
+    too, and cannot be what changed.
     """
     diff = _diff_of(comparison, store)
     first = diff.get("first_difference") if diff else None
@@ -387,8 +457,20 @@ def same_change(comparison, store: Store) -> SameChange:
     except StoreError:
         #: A run record the store cannot read: nothing is matched on its account.
         return SameChange("unreadable", index, stage)
-    before = recorded_digests(baseline, store) if baseline else None
-    after = recorded_digests(candidate, store) if candidate else None
+    if baseline is None or candidate is None:
+        return SameChange("unreadable", index, stage)
+    label = {r.key: p.label for p in pipelines(store) for r in p.runs}
+    in_pipeline = [r for r in store.runs() if label[r.key] == label[candidate.key]]
+    changed = changed_settings(diff, index)
+    if changed:
+        held = {r.key: settings_at(r, store, stage) for r in in_pipeline if r.key != candidate.key}
+        matches = tuple(r for r in in_pipeline if held.get(r.key) is not None
+                        and all(held[r.key].get(k) == v for k, v in changed.items()))
+        return SameChange("found", index, stage, "settings", "", label[candidate.key],
+                          len(in_pipeline), matches, settings=tuple(changed.items()),
+                          unread=sum(v is None for v in held.values()))
+    before = recorded_digests(baseline, store)
+    after = recorded_digests(candidate, store)
     if before is None or after is None:
         return SameChange("unreadable", index, stage)
     for key, words in CHANGE_WHAT:
@@ -397,8 +479,6 @@ def same_change(comparison, store: Store) -> SameChange:
             break
     else:
         return SameChange("unchanged", index, stage)
-    label = {r.key: p.label for p in pipelines(store) for r in p.runs}
-    in_pipeline = [r for r in store.runs() if label[r.key] == label[candidate.key]]
     matches = tuple(r for r in in_pipeline if r.key != candidate.key
                     and (recorded_digests(r, store) or {}).get((stage, key)) == value)
     return SameChange("found", index, stage, words, value, label[candidate.key],

@@ -169,7 +169,10 @@ def test_a_built_sdist_s_description_has_no_relative_image_or_link(tmp_path):
         metadata = email.message_from_bytes(t.extractfile(info).read())
     body = metadata.get_payload()
     assert metadata["Description-Content-Type"] == "text/markdown"
-    assert "![The overview, with the demo's two runs](https://raw.githubusercontent.com/" in body
+    #: The README's first image, its alt text as the README gives it, made absolute.
+    alt = re.search(r"!\[([^\]]*)\]\(docs/screenshots/overview\.png\)",
+                    (REPO / "README.md").read_text(encoding="utf-8")).group(1)
+    assert f"![{alt}](https://raw.githubusercontent.com/" in body
     assert RELATIVE.findall(body) == []
     assert PLACEHOLDER not in body
     shipped = {p for p in _tracked() if p.startswith(SCREENSHOTS)}

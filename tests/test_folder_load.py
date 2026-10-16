@@ -251,7 +251,8 @@ def test_a_folder_load_serves_the_runs_and_the_comparison_it_was_asked_for(tmp_p
     assert _url(overview) == base
     compared = next(l for l in c.lines if l.strip().startswith("compared"))
     assert "day-1" in compared and "day-2" in compared and f"{base}diff/" in compared
-    assert "day-1" in out and "day-2" in out and "Verified" in out, out
+    assert "day-1" in out and "day-2" in out and "Records agree" in out, out
+    assert "Verified" not in out, "the start-up list counts the verifier's word, not the run's own page's"
     assert "demo-run-1" in _get(base)
     assert "Where the change started" in _get(_url(compared)) or "model" in _get(_url(compared))
     assert (tmp_path / "store").is_dir(), "the store is ./store under the folder it is started from"

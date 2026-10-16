@@ -29,9 +29,10 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from onetrace_console.config import Config
+from onetrace_console.oserror import shown
 from onetrace_console.ingest import MANIFEST_NAME, SUMS_NAME
 from onetrace_console.store import StoredRun, Store
-from onetrace_console.words import VERDICT_WORDS
+from onetrace_console import records
 
 DEMO_FOLDER = "onetrace-console-demo"
 #: onetrace holds this file in a run's folder while it is recording, and removes it after.
@@ -108,7 +109,8 @@ def deliver_one(run_dir: Path, store: Store, config: Config) -> LoadedRun:
     except _Undeliverable as e:
         return LoadedRun(run_dir.name, None, f"not loaded: {e}")
     except OSError as e:
-        return LoadedRun(run_dir.name, None, f"not loaded: cannot read it: {e}")
+        from onetrace_console.oserror import said
+        return LoadedRun(run_dir.name, None, f"not loaded: cannot read it: {said(e)}")
     accepted = accept(data, store, limits=config)
     if isinstance(accepted, Rejection):
         return LoadedRun(run_dir.name, None,
@@ -162,18 +164,19 @@ def _compare(loaded: list[LoadedRun], pair: tuple[str, str], store: Store):
         return None, f"not compared: {e}"
 
 
-def announce(folder: Path, loaded: Loaded) -> tuple[list[tuple[str, str]], str]:
+def announce(folder: Path, loaded: Loaded, store: Store) -> tuple[list[tuple[str, str]], str]:
     """What to print once the console is listening, as (text, page path or None) pairs, and the
-    page `--open` opens: the comparison when one was made, otherwise the overview ("")."""
+    page `--open` opens: the comparison when one was made, otherwise the overview (""). Each run
+    says its "Records agree" as its own page reads it (`records.said`)."""
     lines: list[tuple[str, str | None]] = []
     ok = [r for r in loaded.runs if r.run is not None]
     lines.append((f"loaded {len(ok)} of {len(loaded.runs)} run folders from {folder}", None))
     width = max(len(r.name) for r in loaded.runs)
     for r in loaded.runs:
         if r.run is None:
-            lines.append((f"  {r.name.ljust(width)}  {r.refused}", None))
+            lines.append((shown(f"  {r.name.ljust(width)}  {r.refused}"), None))
         else:
-            word = VERDICT_WORDS.get(r.run.check_verdict, r.run.check_verdict)
+            word = records.said(r.run, store)
             lines.append((f"  {r.name.ljust(width)}  {word}", f"runs/{r.run.key}/case.html"))
     opened = ""
     if loaded.comparison is not None:
@@ -223,7 +226,7 @@ def build_public(folder: Path) -> tuple[list[tuple[str, str | None]], str]:
     loaded = demo_store.deliver(folder, store, config)
     _render_startup_pages(store, store_root, config)
     demo_store.write_build_record(folder, (demo_store.RUNS_DIRNAME, demo_store.TRUST_NAME, "store"))
-    return announce(folder / demo_store.RUNS_DIRNAME, loaded)
+    return announce(folder / demo_store.RUNS_DIRNAME, loaded, store)
 
 
 def main(argv: list[str], *, demo: bool) -> int:
@@ -308,7 +311,7 @@ def main(argv: list[str], *, demo: bool) -> int:
             loaded = demo_store.deliver(runs.parent, store, config)
         else:
             loaded = load_folder(runs, store, config, compare=pair)
-        return announce(runs, loaded)
+        return announce(runs, loaded, store)
 
     if demo or args.no_watch:
         return serve_main([], overrides=overrides, prepare=prepare, open_browser=args.open)
@@ -339,7 +342,7 @@ class _Watching:
             got = deliver_one(run_dir, self.store, self.config)
             self.loaded.append(got)
             if got.run is None:
-                print(f"onetrace-console: {run_dir.name}: {got.refused}", file=sys.stderr, flush=True)
+                print(shown(f"onetrace-console: {run_dir.name}: {got.refused}"), file=sys.stderr, flush=True)
                 return False
             if self.serving:
                 _render_run_pages(got.run, self.store, self.root, self.config)
@@ -400,7 +403,7 @@ class _Watching:
             print(f"onetrace-console: no finished run in {self.runs} yet; watching it every "
                   f"{self.interval:g} s", file=sys.stderr, flush=True)
             return ([("overview:", "")], "")
-        return announce(self.runs, Loaded(tuple(self.loaded), self.compared, note))
+        return announce(self.runs, Loaded(tuple(self.loaded), self.compared, note), store)
 
     def watch(self, store: Store, root: Path, config: Config):
         from onetrace_console import watch

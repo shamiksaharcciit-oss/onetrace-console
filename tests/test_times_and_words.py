@@ -167,7 +167,7 @@ def _lists(tmp_path, examined):
     _store, pages, _ = _console(tmp_path, tmp_path / "runs")
     examined(2, "lists")
     return ((pages / "executions-all.html").read_text(encoding="utf-8"),
-            (pages / "executions-holds.html").read_text(encoding="utf-8"))
+            (pages / "executions-records-agree.html").read_text(encoding="utf-8"))
 
 
 def test_the_runs_lists_say_what_they_are_and_when_it_ran(tmp_path, examined):

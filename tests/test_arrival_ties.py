@@ -1,14 +1,17 @@
 """Two real runs can arrive in the same second: arrival is recorded to the second. Every ordering
-the console makes by arrival breaks that tie by a field of the run itself, never by the order the
-store happened to list or deliver them (a review question, 2 October, after the visible-text race).
+the console makes by arrival breaks that tie by the run's name (run_id, A to Z), and only two runs
+sharing a name by their key -- never the key first, and never the order the store happened to list
+or deliver them. A key is a digest of the record, which holds its recorded times: the same runs
+built again get other keys, so a key-first tie-break gave the Overview another order on each build
+of the demo.
 
-- `store.runs()`: newest arrival first, then `run_id` (descending, with arrival), then the run's
-  key, ascending -- records are named by their key and read in sorted order.
-- `overview.pipelines()`: P1, P2 ... by first arrival, then by key.
-- `overview.needs_attention()`: by kind, then newest arrival, then by key.
+- `store.runs()`: newest arrival first, then run_id ascending, then key (`store.arrival_order`).
+- `overview.pipelines()`: P1, P2 ... by first arrival, then run_id, then key.
+- `overview.needs_attention()`: by kind, then newest arrival, then run_id, then key.
 
-Each test gives the ordering the same tied runs in two different orders and requires one answer,
-so a missing tiebreak shows as a difference every time, not by chance.
+Each test gives the ordering the same tied runs in two different orders, with keys that sort the
+opposite way to the names, and requires one answer: a missing tie-break, or the key used first,
+shows every time, not by chance. A sabotage puts the key-first tie-break back.
 """
 from __future__ import annotations
 
@@ -31,7 +34,7 @@ def _given_in_order(monkeypatch, store, runs) -> None:
     monkeypatch.setattr(store, "runs", lambda: tuple(runs))
 
 
-def test_pipelines_tied_on_arrival_are_labelled_by_key_whatever_order_they_are_given(
+def test_pipelines_tied_on_arrival_are_labelled_by_run_name_whatever_order_they_are_given(
         ten_runs, monkeypatch, examined):  # noqa: F811
     from onetrace_console.overview import pipelines
     store, made = ten_runs
@@ -42,7 +45,7 @@ def test_pipelines_tied_on_arrival_are_labelled_by_key_whatever_order_they_are_g
                           recorded_count=2))
     runs = _all_at_one_second(store)
     examined(len(runs), "runs stored in one second, across two pipelines")
-    first_by_key = min(runs, key=lambda r: r.key)
+    first_by_name = min(runs, key=lambda r: (r.run_id, r.key))
 
     labelled = []
     for given in (runs, list(reversed(runs))):
@@ -50,10 +53,42 @@ def test_pipelines_tied_on_arrival_are_labelled_by_key_whatever_order_they_are_g
         labelled.append([(p.label, sorted(r.key for r in p.runs)) for p in pipelines(store)])
     assert labelled[0] == labelled[1], "the pipeline labels depend on the order the runs came in"
     p1 = pipelines(store)[0]
-    assert first_by_key.key in {r.key for r in p1.runs}, "P1 is not the pipeline of the first key"
+    assert first_by_name.key in {r.key for r in p1.runs}, "P1 is not the pipeline of the first run name"
+    #: Keys sorting against the names: P1 is still the pipeline of the first run name.
+    swapped = _keys_against_names(runs)
+    first = min(swapped, key=lambda r: r.run_id)
+    for given in (swapped, list(reversed(swapped))):
+        _given_in_order(monkeypatch, store, given)
+        assert first.key in {r.key for r in pipelines(store)[0].runs}, "P1 follows the keys, not the names"
 
 
-def test_needs_attention_tied_on_arrival_lists_each_kind_by_key_whatever_order_given(
+def _keys_against_names(runs) -> list:
+    """The same runs, their keys swapped so that key order is the reverse of run-name order: a
+    key-first tie-break and a name-first one then give opposite answers."""
+    by_name = sorted(runs, key=lambda r: r.run_id)
+    keys = sorted((r.key for r in runs), reverse=True)
+    return [replace(r, key=k) for r, k in zip(by_name, keys)]
+
+
+def name_order_problems(listed: list) -> list[str]:
+    """[(kind, run_id)] in the order shown: within each kind, run names must read A to Z."""
+    out = []
+    for kind in dict.fromkeys(k for k, _ in listed):
+        names = [n for k, n in listed if k == kind]
+        if names != sorted(names):
+            out.append(f"{kind}: {names}")
+    return out
+
+
+def _attention(monkeypatch, store, given) -> list:
+    from onetrace_console import overview
+    _given_in_order(monkeypatch, store, given)
+    #: Every run one kind, so only the arrival tie-break orders them.
+    monkeypatch.setattr(overview, "attention_kind", lambda run, store: "contradicts")
+    return [(kind, r.run_id) for kind, r in overview.needs_attention(store)]
+
+
+def test_needs_attention_tied_on_arrival_lists_each_kind_by_run_name_whatever_order_given(
         ten_runs, monkeypatch, examined):  # noqa: F811
     from onetrace_console.overview import needs_attention
     store, _ = ten_runs
@@ -61,12 +96,27 @@ def test_needs_attention_tied_on_arrival_lists_each_kind_by_key_whatever_order_g
     listed = []
     for given in (runs, list(reversed(runs))):
         _given_in_order(monkeypatch, store, given)
-        listed.append([(kind, r.key) for kind, r in needs_attention(store)])
+        listed.append([(kind, r.run_id) for kind, r in needs_attention(store)])
     examined(len(listed[0]), "runs needing attention, all arrived in one second")
     assert listed[0] == listed[1], "needs attention depends on the order the runs came in"
-    for kind in {k for k, _ in listed[0]}:
-        keys = [key for k, key in listed[0] if k == kind]
-        assert keys == sorted(keys), (kind, "not by key within one arrival second")
+    assert name_order_problems(listed[0]) == []
+    #: Keys sorting against the names: the names still decide.
+    swapped = _keys_against_names(runs)
+    for given in (swapped, list(reversed(swapped))):
+        assert name_order_problems(_attention(monkeypatch, store, given)) == []
+
+
+def test_sabotage_the_key_first_tie_break_is_caught(ten_runs, monkeypatch, examined):  # noqa: F811
+    from onetrace_console import store as store_module
+    store, _ = ten_runs
+    swapped = _keys_against_names(_all_at_one_second(store))
+
+    def key_first(runs, *, newest_first):
+        return sorted(sorted(runs, key=lambda r: r.key), key=lambda r: r.received_at,
+                      reverse=newest_first)
+    monkeypatch.setattr(store_module, "arrival_order", key_first)
+    examined(1, "planted key-first tie-break")
+    assert name_order_problems(_attention(monkeypatch, store, swapped)) != []
 
 
 class _ListedBackwards(type(Path())):
@@ -77,7 +127,7 @@ class _ListedBackwards(type(Path())):
         return reversed(list(super().glob(pattern)))
 
 
-def test_store_runs_tied_on_arrival_are_by_run_id_then_key_whatever_the_listing(
+def test_store_runs_tied_on_arrival_are_by_run_name_then_key_whatever_the_listing(
         ten_runs, examined):  # noqa: F811
     store, made = ten_runs
     #: Two runs sharing a run_id (a reused one) and an arrival second: only the key separates them.
@@ -90,9 +140,8 @@ def test_store_runs_tied_on_arrival_are_by_run_id_then_key_whatever_the_listing(
     runs = store.runs()
     examined(len(runs), "runs stored in one second, two of them sharing a run_id")
     order = [(r.run_id, r.key) for r in runs]
-    expected = sorted(order, key=lambda ik: ik[1])
-    expected = sorted(expected, key=lambda ik: ik[0], reverse=True)
-    assert order == expected, "not run_id descending, then key ascending, within one second"
+    expected = sorted(order)
+    assert order == expected, "not run_id, then key, both ascending, within one second"
     twins = [key for run_id, key in order if run_id == "twin"]
     assert len(twins) == 2 and twins == sorted(twins)
 
@@ -100,7 +149,8 @@ def test_store_runs_tied_on_arrival_are_by_run_id_then_key_whatever_the_listing(
 # ---------------------------------------------------------------------------------------------
 # The product's own tiebreak, on two real runs ingested in one second.
 
-README_LINE = "Runs that arrive in the same second are ordered by run key."
+README_LINE = ("Runs that arrive in the same second are ordered by run name, and two with the same "
+               "name by run key")
 
 
 def _unlabelled(html: str) -> str:
@@ -119,10 +169,10 @@ def _pipeline_rows(home: str) -> list[tuple[str, str]]:
         _unlabelled(home))]
 
 
-def test_two_runs_ingested_in_one_second_p1_is_the_lower_key_across_renders_and_a_restart(
+def test_two_runs_ingested_in_one_second_p1_is_the_first_run_name_across_renders_and_a_restart(
         tmp_path, examined):
     """Two real runs from different pipelines -- the committed r11 run and an SDK-made one --
-    ingested with the same arrival second. P1 goes to the pipeline of the lower run key, and the
+    ingested with the same arrival second. P1 goes to the pipeline of the first run name, and the
     labels are the same on every render and after a restart (a fresh store over the same folder,
     every page rebuilt from it as the console's start-up does)."""
     from onetrace_console.checks import run_and_record
@@ -152,13 +202,13 @@ def test_two_runs_ingested_in_one_second_p1_is_the_lower_key_across_renders_and_
         stored[name] = run_and_record(accepted.run, store, ran_at=FIXED_RAN_AT)
     assert stored["r11"].received_at == stored["sdk"].received_at == SAME
     assert stored["r11"].declared_stages != stored["sdk"].declared_stages, "one pipeline, not two"
-    lower = min(stored.values(), key=lambda r: r.key)
+    lower = min(stored.values(), key=lambda r: (r.run_id, r.key))
     p1_stages = " → ".join(shown_name(s) for s in lower.declared_stages)
     examined(2, "real runs from two pipelines, ingested in one arrival second")
 
     found = pipelines(store)
     assert [p.label for p in found] == ["P1", "P2"]
-    assert [r.key for r in found[0].runs] == [lower.key], "P1 is not the lower run key's"
+    assert [r.key for r in found[0].runs] == [lower.key], "P1 is not the first run name's"
 
     renders = [_pipeline_rows(render_all(store, generated_at=GENERATED_AT)[HOME]) for _ in range(3)]
     assert renders[0][0] == ("P1", p1_stages), renders[0]

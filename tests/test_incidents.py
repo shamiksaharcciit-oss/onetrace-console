@@ -70,7 +70,7 @@ def test_the_sdk_still_has_no_regression_label_so_the_fifth_rule_stays_out(exami
     #: fetches exam/ -- a frozen copy is the only option. See tests/fixtures/spec/
     #: PROVENANCE.md for where it came from.
     fixtures = Path(__file__).resolve().parent / "fixtures" / "spec"
-    spec = fixtures / "Spec_onetrace_Verbs_v1_Addendum_InstrumentChangeDiff_2026-09-13.md"
+    spec = fixtures / "Spec_onetrace_Verbs_v1_Addendum_InstrumentChangeDiff.md"
     assert spec.is_file(), f"the committed spec addendum is not there: {spec}"
     for line in (fixtures / "SHA256SUMS").read_text(encoding="utf-8").splitlines():
         digest, _, rel = line.partition("  ")

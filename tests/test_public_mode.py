@@ -107,7 +107,11 @@ def test_without_the_key_nothing_changes(server, tmp_path, examined):
     examined(2, "requests to a console without the key")
     assert status == 404, (status, body)
     assert status_home == 200 and b'data-frame="banner"' not in page
-    assert "content-security-policy" not in headers
+    #: Without the key, none of public mode's own headers; the content policy every console sends
+    #: (its fonts and scripts its own) is the local one.
+    from onetrace_console.public import content_security_policy
+    assert "strict-transport-security" not in headers and "x-frame-options" not in headers
+    assert headers.get("content-security-policy") == content_security_policy(local=True)
 
 
 @pytest.mark.parametrize("value", ["true", 1, None, [], {}])
@@ -418,9 +422,9 @@ def test_the_checker_names_each_header_dropped(served, examined):
         dropped = {k: v for k, v in headers.items() if k != name.lower()}
         problems = container_check.page_problems(status, dropped, body)
         assert problems[0] == f"no {name} header", name
-        #: The Overview carries the relative-times script (0.1.1): with no policy, that script is
-        #: also one the policy doesn't name, and the checker says so too.
-        extra = ["an inline script the policy does not name"] if name == "Content-Security-Policy" else []
+        #: The Overview carries the relative-times script (0.1.1) and the theme switch's two: with
+        #: no policy, each is also one the policy doesn't name, and the checker says so for each.
+        extra = ["an inline script the policy does not name"] * 3 if name == "Content-Security-Policy" else []
         assert [p.split(" (")[0] for p in problems[1:]] == extra, (name, problems)
 
 
@@ -428,11 +432,14 @@ def test_the_policy_names_the_one_inline_script_and_the_checker_catches_another(
     base, _folder, _c = served
     status, headers, body = container_check.fetch(base, "/executions-all.html")
     examined(1, "page")
+    from onetrace_console.frame import THEME_HEAD_SCRIPT, THEME_SCRIPT
     from onetrace_console.viewer.page import PRINT_SCRIPT
     from onetrace_console.words import RELATIVE_TIME_SCRIPT
-    #: The runs list carries the print helper and the relative times, each once, each named.
-    assert body.count(b"<script>") == 2
-    assert body.count(PRINT_SCRIPT.encode()) == 1 and body.count(RELATIVE_TIME_SCRIPT.encode()) == 1
+    #: The runs list carries the print helper, the relative times and the theme switch's two
+    #: scripts, each once, each named.
+    assert body.count(b"<script>") == 4
+    assert all(body.count(s.encode()) == 1 for s in (PRINT_SCRIPT, RELATIVE_TIME_SCRIPT,
+                                                     THEME_HEAD_SCRIPT, THEME_SCRIPT))
     assert container_check.page_problems(status, headers, body) == []
     planted = body.replace(b"</body>", b"<script>alert(1)</script></body>", 1)
     problems = container_check.page_problems(status, headers, planted)

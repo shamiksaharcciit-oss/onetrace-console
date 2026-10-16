@@ -34,7 +34,9 @@ def test_a_diverged_graph_comparison_is_changed_and_names_its_frontier(runs):
     report = _strict_diff_report(c, store)
     assert report.envelope == "diverged" and len(report.first_difference_frontier) == 2
     assert vs_baseline(found["R"], store) == ("changed", "First differences · zeta, alpha")
-    assert attention_kind(found["R"], store) == "changed"
+    #: The exam's dag-r37 runs keep no output files, so R's records are not checked, which comes
+    #: before "changed" in the attention order; the changed count below still counts it.
+    assert attention_kind(found["R"], store) == "not-checked"
     changed = next(t for t in tallies(store) if t.slug == "changed-vs-baseline")
     assert [r.key for r in changed.runs] == [found["R"].key]
 

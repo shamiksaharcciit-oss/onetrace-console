@@ -36,7 +36,6 @@ from dataclasses import dataclass
 from onetrace_console.checks import CONTRADICTS, COULD_NOT_CHECK, HOLDS
 from onetrace_console.ingest import RUN_ID_REUSED
 from onetrace_console.store import StoredRun, Store
-from onetrace_console.words import NO_VERDICT, VERDICT_WORDS
 
 #: How many of the most recent runs Home lists. A list, not a ranking.
 MOST_RECENT = 5
@@ -45,25 +44,16 @@ MOST_RECENT = 5
 #: not reached. Closed, and each with the sentence Home shows.
 NOT_CHECKED = "not checked"
 
-#: **The recorded value, named as a field, and never a summary of it.**
-#:
-#: These were "the trail holds", "the trail contradicts itself" and so on — this channel's
-#: own paraphrases. The review asked whether they were quoted from fixed viewer wording with a
-#: nameable source; they were not. Measured: nothing in `viewer/sentences.py` says "the trail
-#: holds", and the viewer's own fixed sentence is *"trail was checked on {date} — every step
-#: checks out"*, which is a different claim about a different thing.
-#:
-#: So the label is the verdict itself, in the console's plain words for it (`words.VERDICT_WORDS`):
-#: one word for each value of the design note's closed set, never a paraphrase of what it means.
-#:
-#: The fourth is an absence the design note's closed set does not cover — a run the check
-#: runner has not reached. It states the record's condition and interprets nothing (an
-#: absence sentence, never a blank).
-VERDICT_LABELS: dict[str, str] = {
-    HOLDS: VERDICT_WORDS[HOLDS],
-    CONTRADICTS: VERDICT_WORDS[CONTRADICTS],
-    COULD_NOT_CHECK: VERDICT_WORDS[COULD_NOT_CHECK],
-    NOT_CHECKED: NO_VERDICT,
+#: The runs' "Records agree" counts are rung 1's states, each under its own label
+#: (`records.LABEL`), as each run's own page decides it -- never the verifier's verdict, whose
+#: words ("Verified" and the rest, `words.VERDICT_WORDS`) are its own output's.
+#: What All counts says each state counted, in a sentence ("3 runs of 31 -- whose records agree").
+RECORDS_TALLY = {
+    "yes": ("records-agree", "whose records agree: the check held, with the run's output files present"),
+    "no": ("contradicts", "that contradict their record"),
+    "couldnt-check": ("could-not-check", "whose records couldn't be checked"),
+    "not-checked": ("not-checked", "whose records were not checked"),
+    "no-verdict": ("no-verdict", "with no verdict recorded"),
 }
 
 
@@ -173,10 +163,13 @@ def tallies(store: Store) -> tuple[Tally, ...]:
         Tally(slug="all", label="runs stored", runs=runs, denominator=total),
     ]
 
-    for state, label in VERDICT_LABELS.items():
-        matched = tuple(r for r in runs if verdict_of(r) == state)
+    #: "Records agree", rung 1, one count per state (`records.state`), each opening exactly its runs.
+    from onetrace_console import records
+    for state in records.STATES:
+        slug, label = RECORDS_TALLY[state]
+        matched = records.runs_in(runs, store, state)
         reasons = ()
-        if state == COULD_NOT_CHECK:
+        if state == records.COULDNT:
             #: The reason, because the count alone is not actionable. Distinct reasons only,
             #: in first-seen order, and never summarised into one.
             seen: list[str] = []
@@ -185,18 +178,10 @@ def tallies(store: Store) -> tuple[Tally, ...]:
                 if note not in seen:
                     seen.append(note)
             reasons = tuple(seen)
-        out.append(Tally(slug=state.replace(" ", "-").replace("_", "-"), label=label,
-                         runs=matched, denominator=total, reasons=reasons))
-
-    #: The Overview's "Records agree" (board 1), the run page's rung 1 counted across runs: a
-    #: check that held, run with the run's output files required. The confirmation review found
-    #: the count read from the verdict alone, as rung 1 did.
-    out.append(Tally(slug="records-agree",
-                     label="whose records agree: the check held, with the run's output files "
-                           "present",
-                     runs=tuple(r for r in runs if verdict_of(r) == HOLDS
-                                and artifacts_required(r, store)),
-                     denominator=total))
+        elif state == records.NOT_CHECKED:
+            #: Where the check held without the run's output files required, that is the reason.
+            reasons = tuple(dict.fromkeys(w for r in matched if (w := records.why(r, store))))
+        out.append(Tally(slug=slug, label=label, runs=matched, denominator=total, reasons=reasons))
     out.append(Tally(slug="run-id-reused", label="whose run id was already used by a stored run",
                      runs=tuple(r for r in runs if RUN_ID_REUSED in r.flags),
                      denominator=total))
@@ -216,6 +201,12 @@ def tallies(store: Store) -> tuple[Tally, ...]:
                            "that found a first difference",
                      runs=tuple(r for r in runs if vs_baseline(r, store)[0] == "changed"),
                      denominator=total))
+    from onetrace_console.overview import declined
+    from onetrace_console.viewer.sentences import template
+    out.append(Tally(slug="stopped-by-a-step",
+                     label=template("declined.overview")
+                     + ": a step declined by its own rule, and the run ended there",
+                     runs=tuple(r for r in runs if declined(r) is not None), denominator=total))
     out.append(Tally(slug="needs-attention",
                      label="needing attention first, in the order stated on the Overview",
                      runs=tuple(r for _, r in needs_attention(store)), denominator=total))
@@ -228,6 +219,10 @@ def tallies(store: Store) -> tuple[Tally, ...]:
     out.append(Tally(slug="missing-a-declared-stage", label="missing a declared stage",
                      runs=tuple(r for r in runs if missing_a_declared_stage(r)),
                      denominator=total))
+    from onetrace_console.overview import stopped_at_a_step
+    out.append(Tally(slug="stopped-at-a-step",
+                     label="stopped at a step: the declared steps after it not reached",
+                     runs=tuple(r for r in runs if stopped_at_a_step(r)), denominator=total))
     out.append(Tally(slug="missing-not-established",
                      label="whose declared stages could not be established as all recorded",
                      runs=tuple(r for r in runs if nothing_missing_not_established(r)),

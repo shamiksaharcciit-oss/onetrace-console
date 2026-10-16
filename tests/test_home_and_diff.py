@@ -29,7 +29,7 @@ import pytest
 
 from onetrace_console.checks import CONTRADICTS, COULD_NOT_CHECK, HOLDS, run_and_record
 from onetrace_console.compare import DIFF, compare, report_text
-from onetrace_console.home import MOST_RECENT, NOT_CHECKED, VERDICT_LABELS, tallies, verdict_of
+from onetrace_console.home import MOST_RECENT, NOT_CHECKED, tallies, verdict_of
 from onetrace_console.ingest import RUN_ID_REUSED, SUMS_NAME, accept
 from onetrace_console.render import (COUNTS, DIFF_PAGE, HOME, render_all, render_counts,
                                      render_diff, render_home)
@@ -425,12 +425,18 @@ def test_the_diff_page_keeps_the_limit_sentence(compared, examined):
 
 # ------------------------------------------------------------------ the Home page
 
+#: The rung 1 reading a check with the run's output files required stores with each verdict.
+_AGREE = {HOLDS: "yes", CONTRADICTS: "no", COULD_NOT_CHECK: "couldnt-check", "": ""}
+
+
 def _fake_run(store, base: StoredRun, *, run_id: str, verdict: str, note: str = "",
-              flags: tuple[str, ...] = ()) -> StoredRun:
+              flags: tuple[str, ...] = (), agree: tuple[str, str] | None = None) -> StoredRun:
     """A stored run in a chosen state, for covering states a real store reaches slowly.
 
     The bytes are a real run's; only the fields Home counts are set. Built through the store
-    so it is a genuinely stored run and not a stand-in the page treats differently.
+    so it is a genuinely stored run and not a stand-in the page treats differently. Its "Records
+    agree" (`agree`, and why) is the one its verdict's check would record with the run's output
+    files required, unless given.
     """
     from onetrace_console.store import run_key
     key = run_key(run_id, base.chain_head)
@@ -440,7 +446,8 @@ def _fake_run(store, base: StoredRun, *, run_id: str, verdict: str, note: str = 
                    check_note=note, flags=flags,
                    nothing_missing=base.nothing_missing if verdict else "",
                    anchored=base.anchored if verdict else "",
-                   signed=base.signed if verdict else "")
+                   signed=base.signed if verdict else "",
+                   agree=(agree or (_AGREE[verdict], ""))[0], agree_why=(agree or (_AGREE[verdict], ""))[1])
     store.put_run(made)
     return made
 
@@ -455,7 +462,7 @@ def ten_runs(store):
     made = [checked]
     plan = [
         ("holds-1", HOLDS, "", ()),
-        ("holds-2", HOLDS, "", ()),
+        ("holds-2", HOLDS, "", ()),             # held without its output files required: below
         ("contradicts-1", CONTRADICTS, "", ()),
         ("contradicts-2", CONTRADICTS, "", ()),
         ("cnc-1", COULD_NOT_CHECK, "the report has no summary line", ()),
@@ -466,8 +473,8 @@ def ten_runs(store):
         ("reused-2", CONTRADICTS, "", (RUN_ID_REUSED,)),
     ]
     for run_id, verdict, note, flags in plan:
-        made.append(_fake_run(store, real, run_id=run_id, verdict=verdict, note=note,
-                              flags=flags))
+        made.append(_fake_run(store, real, run_id=run_id, verdict=verdict, note=note, flags=flags,
+                              agree=("not-checked", "no-outputs") if run_id == "holds-2" else None))
     #: Two more states: a run whose manifest declares a stage its chain holds no
     #: receipt for, and a real comparison whose diff found a first difference -- so the
     #: "missing a declared stage" and "changed vs baseline" counts are never examined empty.
@@ -498,6 +505,18 @@ def ten_runs(store):
                             ("contradicts-1", "failed"), ("contradicts-2", "couldnt-check")):
         (run,) = [r for r in store.runs() if r.run_id == run_id]
         store.put_run(replace(run, signed=reading))
+    #: A run stopped by a step's own rule, so "Stopped by a step" is never examined empty: its
+    #: stored reading as the check derives one (`ingest.declined_at`).
+    stopped = _fake_run(store, real, run_id="stopped-1", verdict=HOLDS)
+    store.put_run(replace(stopped, declined=json.dumps(
+        {"stage": "answer", "reason": "over the limit", "left": []})))
+    made.append(store.get_run(stopped.key))
+    #: And one whose rung 3 reads "Not reached", so "stopped at a step" is never examined empty: a
+    #: step declined with a declared step after it, as the check derives both.
+    not_reached = _fake_run(store, real, run_id="stopped-2", verdict=HOLDS)
+    store.put_run(replace(not_reached, nothing_missing="not-reached", declined=json.dumps(
+        {"stage": "answer", "reason": "over the limit", "left": ["deliver"]})))
+    made.append(store.get_run(not_reached.key))
     made = [store.get_run(r.key) for r in made]
     return store, made
 
@@ -510,7 +529,7 @@ def test_the_fixture_store_covers_every_state_and_has_at_least_ten_runs(ten_runs
     assert len(runs) >= 10, f"only {len(runs)} runs; step 4 asks for at least 10"
     states = {verdict_of(r) for r in runs}
     examined(len(states), "distinct verdict states present")
-    assert states == set(VERDICT_LABELS), f"states covered: {sorted(states)}"
+    assert states == {HOLDS, CONTRADICTS, COULD_NOT_CHECK, NOT_CHECKED}, f"states covered: {sorted(states)}"
     assert any(RUN_ID_REUSED in r.flags for r in runs), "no flagged run in the fixture"
     assert any(r.check_note for r in runs), "no could-not-check reason in the fixture"
 
@@ -702,30 +721,30 @@ def test_every_link_on_home_points_at_a_page_that_was_rendered(new_pages, ten_ru
         assert href in new_pages, f"Home links to {href}, which was not rendered"
 
 
-def test_home_names_each_verdict_in_its_plain_word_and_does_not_summarise_it(ten_runs, examined):
-    """Each verdict is shown by one plain word for it, never a paraphrase of what it means.
+def test_home_names_each_records_agree_state_in_its_own_word_and_does_not_summarise_it(ten_runs, examined):
+    """Each run's "Records agree" is counted under rung 1's own label for its state, never a
+    paraphrase of what it means, and never the verifier's own word for its verdict.
 
     The labels once read "the trail holds" and "the trail contradicts itself", a summary in the
-    console's own voice; then they quoted the stored value ("verdict: holds"), which put an
-    internal value in front of a reader. They are now the console's word for each value of the
-    design note's closed set (`words.VERDICT_WORDS`): Verified, Contradicts its record, Couldn't
-    check; and an absence is said as one.
+    console's own voice; then they quoted the stored value ("verdict: holds"); then the verifier's
+    word for each verdict ("Verified"), which counted a check that held without the run's output
+    files required as verified while that run's own page read Not checked. They are now rung 1's
+    labels (`records.LABEL`), counted as each run's page decides it.
     """
+    from onetrace_console import records
     from onetrace_console.checks import VERDICTS
-    from onetrace_console.home import NOT_CHECKED, VERDICT_LABELS
-    from onetrace_console.words import NO_VERDICT, VERDICT_WORDS
 
     store, _ = ten_runs
     home = (render_home(store, generated_at=GENERATED_AT)
             + render_counts(store, generated_at=GENERATED_AT))
-    examined(len(VERDICT_LABELS), "verdict labels checked against the plain words")
+    examined(len(records.STATES), "rung 1 labels checked on Home")
 
-    assert set(VERDICT_WORDS) == set(VERDICTS), "a verdict with no plain word, or a word for none"
+    import html as _html
+    for state in records.STATES:
+        assert records.LABEL[state] in _html.unescape(home), f"Home does not show {records.LABEL[state]!r}"
     for state in VERDICTS:
-        assert VERDICT_LABELS[state] == VERDICT_WORDS[state], (state, VERDICT_LABELS[state])
-        assert VERDICT_WORDS[state] in home, f"Home does not show {VERDICT_WORDS[state]!r}"
         assert f"verdict: {state}" not in home, f"Home shows the stored value {state!r}"
-    assert VERDICT_LABELS[NOT_CHECKED] == NO_VERDICT
+    assert not re.search(r"\bVerified\b", re.sub(r"<[^>]+>", " ", home)), "Home counts runs as 'Verified'"
 
     #: And the paraphrases are gone from the page itself, not merely from the table.
     for gone in ("the trail holds", "the trail contradicts", "not checked yet",

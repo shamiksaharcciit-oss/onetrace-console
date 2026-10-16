@@ -4,8 +4,10 @@
 not checked` on such a run and exits 0 with PASS. Before the viewer learned run-level rows, the
 run's own page read "could not be checked from here" while the ingest answer, Home and the
 Overview said "holds". This test uploads one such run to a real console, through the real
-pinned verifier, and reads every surface that states the run's check, by name, one by one. They
-must all agree with the verifier: it held.
+pinned verifier, and reads every surface that states the run's check, by name, one by one. Each
+surface that presents the verifier's own output agrees with it: it held. Each that counts or lists
+the run says its "Records agree" as its own page's rung 1 does: not checked, since the check held
+without the run's output files required -- never "Verified", and never "couldn't check".
 """
 from __future__ import annotations
 
@@ -52,23 +54,24 @@ def test_a_run_without_artifacts_reads_as_the_verifier_says_on_every_surface(ser
     status, run_answer = _get(base, f"/runs/{key}/answer.html")
     assert status == 200
     surfaces["answer page strip"] = _strip_state(run_answer.decode("utf-8"))
-    # 4. Home's verdict tallies: the one run is counted as held, and under no other verdict
+    examined(len(surfaces), "surfaces that present the verifier's own output")
+    assert set(surfaces.values()) == {"holds"}, surfaces
+    # 4. Rung 1 is its own question: the check ran without --require-artifacts, so "not checked",
+    # never "couldn't check" -- on the run's page, and on every surface that counts or lists it.
+    counted = {"case page rung 1": _rung(case, "records-agree")}
     status, home = _get(base, "/counts.html")  # every count, whole
     assert status == 200
     home = home.decode("utf-8")
     counts = {slug: _tally(home, slug).split(" ", 1)[0]
-              for slug in ("holds", "could-not-check", "contradicts")}
-    surfaces["Home tallies"] = next((s for s, n in counts.items() if n == "1"), "none")
-    assert sorted(counts.values()) == ["0", "0", "1"], counts
-    # 5. the Overview's attention list: a run that held and needs nothing is not in it
-    listed = [kind for kind, item in re.findall(r'<li data-attention="([a-z-]+)">(.*?)</li>', home, re.S)
-              if key in item]
-    assert len(listed) <= 1, listed
-    surfaces["Overview attention"] = listed[0] if listed else "holds"
-
-    examined(len(surfaces), "surfaces that state the run's check")
-    assert set(surfaces.values()) == {"holds"}, surfaces
-    # Rung 1 is its own question: the check ran without --require-artifacts, so "not checked",
-    # never "couldn't check".
-    assert _rung(case, "records-agree") == "not-checked"
+              for slug in ("records-agree", "contradicts", "could-not-check", "not-checked", "no-verdict")}
+    assert sorted(counts.values()) == ["0", "0", "0", "0", "1"], counts
+    counted["Home tallies"] = next(s for s, n in counts.items() if n == "1")
+    # 5. the Overview's attention list: the run is listed under not checked, as its order says
+    status, overview = _get(base, "/")
+    listed = [kind for kind, item in re.findall(r'<li data-attention="([a-z-]+)">(.*?)</li>',
+                                                overview.decode("utf-8"), re.S) if key in item]
+    counted["Overview attention"] = listed[0] if len(listed) == 1 else listed
+    examined(len(counted), "surfaces that count or list the run")
+    assert counted == {"case page rung 1": "not-checked", "Home tallies": "not-checked",
+                       "Overview attention": "not-checked"}, counted
     assert "For the run as a whole" in case and "artifacts not present" in case

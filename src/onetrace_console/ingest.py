@@ -487,6 +487,25 @@ def last_attempt_failed(attempts: list[tuple], declared: list) -> list[list[str]
             if name in last and last[name][0] == "error"]
 
 
+def declined_at(attempts: list[tuple], declared: list) -> dict | None:
+    """The step a run stopped at by its own rule, or None. `attempts` is (stage name, outcome
+    class, outcome status, refusal reason) in the chain's order.
+
+    A run stopped at a step's own rule when its LAST recorded attempt was declined -- the SDK's
+    `refused` class, a step's `Refusal` by its own contract: never a failure, never an error.
+    A refusal with further receipts after it is not a stop: the run went on. The result says the
+    step, the reason the step recorded (empty where it recorded none), and the declared steps left
+    with no receipt, in the declared order -- none where the declining step was the last."""
+    if not attempts:
+        return None
+    name, outcome, _status, reason = (tuple(attempts[-1]) + ("", "", ""))[:4]
+    if outcome != "refused" or not isinstance(name, str):
+        return None
+    seen = {a[0] for a in attempts}
+    return {"stage": name, "reason": reason if isinstance(reason, str) else "",
+            "left": [d for d in dict.fromkeys(declared) if d not in seen]}
+
+
 def _declared_by(receipt: dict, declared: list[str], seen: set[str]) -> None:
     """Add the stages a receipt declares to `declared`, in its order, each once.
 
@@ -781,18 +800,28 @@ def accept(data: bytes, store: Store, *, headers: dict[str, str] | None = None,
     return Accepted(run=run, created=True)
 
 
-def bundle(run: StoredRun, store: Store) -> bytes:
+def bundle(run: StoredRun, store: Store, *, public: bool = False) -> bytes:
     """The delivery rebuilt: every file byte-for-byte, in the order it arrived.
+
+    `public`: a public console's download leaves out `inputs/`, the kept input text, and the
+    lines of `SHA256SUMS` that name its files, so the record holds exactly the files its sums name.
+    Kept text is removable by design: the run verifies without it.
 
     Deterministic on purpose -- fixed mtime, uid, gid and names -- so that the same run
     exports to the same bytes. `GET /v1/runs/{id}/bundle` is the "Export evidence" button
     and the "repeat the check without us" answer, and an export that differed run to run
     would make a reader wonder which copy was the evidence.
     """
+    from onetrace_console.kept_inputs import FOLDER
     buf = io.BytesIO()
     with tarfile.open(fileobj=buf, mode="w") as tar:
         for path, key in run.listing:
+            if public and _under(path, FOLDER):
+                continue
             blob = store.get(key)
+            if public and same_file(path) == same_file(SUMS_NAME):
+                blob = b"".join(line for line in blob.splitlines(keepends=True)
+                                if not _under(_summed_name(line), FOLDER))
             info = tarfile.TarInfo(name=path)
             info.size = len(blob)
             info.mtime = 0
@@ -801,3 +830,16 @@ def bundle(run: StoredRun, store: Store) -> bytes:
             info.uname = info.gname = ""
             tar.addfile(info, io.BytesIO(blob))
     return buf.getvalue()
+
+
+def _under(path: str, folder: str) -> bool:
+    """`path` is `folder` or inside it, as this host resolves names."""
+    p, f = same_file(path), same_file(folder)
+    return p == f or p.startswith(f + os.sep)
+
+
+def _summed_name(line: bytes) -> str:
+    """The file a `SHA256SUMS` line names (`<hex>  <name>` or `<hex> *<name>`), or ""."""
+    text = line.decode("utf-8", errors="replace").rstrip("\r\n")
+    _, sep, name = text.partition(" ")
+    return name[1:] if sep and name[:1] in (" ", "*") else ""

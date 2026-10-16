@@ -73,7 +73,7 @@ def stage_problems(page: str, receipt: dict, run_id: str) -> list[str]:
         if item.get("digest") and item["digest"] not in cells[1]:
             out.append(f"{item['name']}: fingerprint not whole")
     inst = receipt.get("instrument") or {}
-    line = re.search(r'<p data-section="instrument">(.*?)</p>', page, re.S)
+    line = re.search(r'<div data-section="instrument">(.*?)</div>', page, re.S)
     if isinstance(inst.get("id"), str):
         said = _text(line.group(1)) if line else ""
         for field in ("id", "kind", "version", "config_digest"):
@@ -100,6 +100,19 @@ def test_every_stage_page_is_held_to_its_receipt(demo, examined):
             n += 1
     examined(n, "stage pages")
     assert n > 100
+
+
+def test_the_demo_keeps_no_externally_sourced_input(demo, examined):
+    """The demo's own data decides what a public console could show as kept text: no step of any
+    demo run lists an externally sourced input as kept. (The rule that a public console never
+    shows such text is held in tests/test_kept_inputs.py; this holds the data beside it.)"""
+    from onetrace_console.kept_inputs import external_kept
+    from onetrace_console.stage_pages import _steps
+    store, _, _ = demo
+    runs = store.runs()
+    examined(len(runs), "demo runs")
+    assert {run.run_id: external_kept(_steps(run, store)) for run in runs
+            if external_kept(_steps(run, store))} == {}
 
 
 def test_sabotage_a_stage_page_that_strays_from_its_receipt_is_named(demo, examined):

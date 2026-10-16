@@ -19,6 +19,7 @@ import json
 from onetrace_console.bounded_json import load_json_bounded
 
 from onetrace_console.store import Store, StoredRun
+from onetrace_console.viewer.page import fingerprint_html
 from onetrace_console.words import (escape, generated_footer, named, record_href, run_named,
                                      scroll_region, span_html, verbatim)
 
@@ -37,6 +38,13 @@ DOES_NOT_SAY = (
     "that the run was correct at the anchored time (the anchor shows only that the record "
     "existed by then)",
 )
+
+
+def _public_record_note() -> str:
+    """On a public console: its downloads leave out kept inputs (`ingest.bundle`)."""
+    from onetrace_console.frame import rendering_public
+    from onetrace_console.kept_inputs import PUBLIC_RECORD
+    return f'<p class="note" data-section="public-record">{escape(PUBLIC_RECORD)}</p>' if rendering_public() else ""
 
 
 def _edge_rows(run: StoredRun, store: Store) -> list[str]:
@@ -70,27 +78,18 @@ def _counts(run: StoredRun, store: Store) -> tuple[int, int] | None:
 
 
 def _agree(run: StoredRun, store: Store) -> str:
-    """Rung 1, as the run page states it: "Records agree" only for a check that held with the
-    run's output files required."""
-    from onetrace_console.checks import CONTRADICTS, COULD_NOT_CHECK, HOLDS
-    from onetrace_console.home import artifacts_required, outputs_required_exit
-    if run.check_verdict == HOLDS:
-        if artifacts_required(run, store):
-            return "Records agree"
-        #: The check held, but with the run's output files required it did not.
-        if outputs_required_exit(run, store) not in (None, "0"):
-            return "Records agree: no"
-        #: Not counted as agreeing, and said in the Overview's words (board 1).
-        return "Records agree: held without its output files required"
-    if run.check_verdict == CONTRADICTS:
-        return "Records agree: no"
-    if run.check_verdict == COULD_NOT_CHECK:
-        from onetrace_console.checks import PREVIEW_REASON
-        #: A preview-format run says why, in the fixed words.
-        if run.check_note == PREVIEW_REASON:
-            return f"Records agree: couldn't check. {PREVIEW_REASON}"
-        return "Records agree: couldn't check"
-    return "Records agree: not checked"
+    """Rung 1, as the run page states it (`records.state`), with the reason where there is one."""
+    from onetrace_console import records
+    from onetrace_console.checks import PREVIEW_REASON
+    state, why = records.state(run, store), records.why(run, store)
+    words = {records.YES: "yes", records.NO: "no", records.COULDNT: "couldn't check",
+             records.NOT_CHECKED: "not checked", records.NO_VERDICT: "no verdict recorded"}[state]
+    if why:
+        return f"Records agree: {words} ({why})"
+    #: A preview-format run says why, in the fixed words.
+    if state == records.COULDNT and run.check_note == PREVIEW_REASON:
+        return f"Records agree: {words}. {PREVIEW_REASON}"
+    return f"Records agree: {words}"
 
 
 def _outputs(run: StoredRun, store: Store) -> tuple[int, int]:
@@ -264,7 +263,7 @@ def render_receipt(run: StoredRun, store: Store, *, generated_at: str, anchored,
         _row("graph", "The graph", " · ".join([escape(f"{len(steps)} nodes · {links}"),
                                                *(f'<q data-words="check">{escape(row)}</q>'
                                                  for row in _edge_rows(run, store))])),
-        _row("chain-head", "Chain head", f'<span class="mono">{escape(run.chain_head)}</span>'),
+        _row("chain-head", "Chain head", fingerprint_html(run.chain_head)),
         _row("outputs", "Output files",
              escape(f"{matched} of {total} present and matching their receipts")),
         _row("model-stages", "Model stages", "<br>".join(model) or "none declared"),
@@ -292,6 +291,7 @@ def render_receipt(run: StoredRun, store: Store, *, generated_at: str, anchored,
         #: character, and the command is two lines to type.
         + "<pre><code>" + "\n".join(escape(line) for line in command.split("\n")) + "</code></pre>"
         + "".join(f'<p class="note">{n}</p>' for n in notes)
+        + _public_record_note()
         + f"<p>{escape(NO_NETWORK)}</p>"
         + _printed(run, store)
         + "</section>"

@@ -47,9 +47,14 @@ def _items(page: bytes) -> list[tuple[str, str, bool]]:
 
 
 def _footer_text(page: bytes) -> str:
+    """What the footer states: its mode and version. The theme switch beside them, and its script,
+    are each there once and left out of what it states (tests/test_theme_switch.py holds them)."""
+    from onetrace_console.frame import THEME_SCRIPT, THEME_SWITCH
     footer = FOOTER.findall(_nav(page))
     assert len(footer) == 1
-    return " ".join(re.sub(r"<[^>]+>", " ", footer[0]).split())
+    assert footer[0].count(THEME_SWITCH) == 1 and footer[0].count(THEME_SCRIPT) == 1
+    stated = footer[0].replace(THEME_SWITCH, "").replace(THEME_SCRIPT, "")
+    return " ".join(re.sub(r"<[^>]+>", " ", stated).split())
 
 
 @pytest.fixture
@@ -148,6 +153,29 @@ def test_the_footer_states_local_mode_and_the_version(server, examined):
     examined(len(UNFRAMED), "pages")
     for rel in UNFRAMED:
         assert _footer_text(_get(base, f"/{rel}")[1]) == f"Local mode onetrace-console {__version__}"
+
+
+def _package_version() -> str:
+    import tomllib
+    text = (Path(__file__).resolve().parent.parent / "pyproject.toml").read_text(encoding="utf-8")
+    return tomllib.loads(text)["project"]["version"]
+
+
+def test_every_footer_shows_the_package_s_own_version(server, examined):
+    """The version a footer shows is the one pyproject.toml gives the package, not only the
+    module's constant: a served page's, a drawn page's, and the generator line's."""
+    from datetime import datetime, timezone
+
+    from onetrace_console.pages import GENERATOR
+    from onetrace_console.words import generated_footer
+    version = _package_version()
+    base, _ = server
+    for rel in UNFRAMED:
+        assert _footer_text(_get(base, f"/{rel}")[1]).endswith(f" onetrace-console {version}"), rel
+    drawn = generated_footer(datetime(2026, 10, 15, tzinfo=timezone.utc))
+    assert re.search(rf"by onetrace-console {re.escape(version)}\.</p></footer>$", drawn), drawn
+    assert GENERATOR == f"onetrace-console {version}"
+    examined(len(UNFRAMED) + 2, "footers read")
 
 
 def test_the_footer_names_the_signed_in_user(server, examined):

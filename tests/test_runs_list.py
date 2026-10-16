@@ -1,7 +1,8 @@
 """The runs list: one row per run -- the run, linked to its page; its pipeline; when it ran and when
-this console received it; how far it got; and the three answers the store holds per run (records
-agree, signed, committed), each as the run's own page says it. "Ran as approved" is read from each
-run's own report on its page, and is not in the list.
+this console received it; how far it got; and the four answers the store holds per run (records
+agree, signed, committed, ran as approved), each as the run's own page says it. "Ran as approved"
+reads "Couldn't check" where the run doesn't verify: the plan can't be decided then, and the run
+page's own state for it is drawn in the same words.
 
 Every row of the demo's lists is held to its run's own page: each chip's state equals that page's
 rung, the link opens a page this console has, and the times and counts are the run's. Each check
@@ -14,7 +15,10 @@ from html import unescape
 
 import pytest
 
-ANSWERS = ("records-agree", "signed", "anchored")
+ANSWERS = ("records-agree", "signed", "anchored", "approved")
+#: A run page's state that the list words as another: the plan can't be decided where the run
+#: doesn't verify, and the page draws that state in "Couldn't check"'s words too.
+AS_LISTED = {"does-not-verify": "couldnt-check"}
 
 
 def _text(html: str) -> str:
@@ -50,7 +54,7 @@ def row_problems(list_page: str, store, pages) -> list[str]:
         rungs = dict(re.findall(r'<tr data-rung="([^"]+)" data-state="([^"]+)">', case))
         for k in ANSWERS:
             got = re.search(rf'<td[^>]*data-answer="{k}"[^>]*><span class="pill \w+" data-state="([^"]+)">', row)
-            if got is None or got.group(1) != rungs.get(k):
+            if got is None or got.group(1) != AS_LISTED.get(rungs.get(k), rungs.get(k)):
                 out.append(f"{run.run_id}: {k} {got.group(1) if got else None} on the list, {rungs.get(k)} on its page")
         cells = [_text(c) for c in re.findall(r"<td[^>]*>(.*?)</td>", row, re.S)]
         ran = ran_at(run)
@@ -78,8 +82,8 @@ def test_every_row_is_its_run_s_page_in_brief(demo, examined):
     examined(rows, "rows across the runs lists")
     every = (pages / "executions-all.html").read_text(encoding="utf-8")
     assert len(re.findall(r'<tr data-run="', every)) == len(store.runs())
-    assert "Ran as approved" not in _text(re.search(r'<table class="timeline" data-section="runs-table">.*?</thead>',
-                                                    every, re.S).group(0))
+    assert "Ran as approved" in _text(re.search(r'<table class="timeline" data-section="runs-table">.*?</thead>',
+                                                every, re.S).group(0))
 
 
 def test_sabotage_a_row_that_strays_from_its_run_is_named(demo, examined):
@@ -114,3 +118,44 @@ def test_a_list_with_no_run_says_so_in_one_grey_line(demo, examined):
         assert f'<p class="zero" data-section="no-runs">{NO_RUNS}</p>' in html, p.name
         assert "<table" not in re.search(r'<section data-section="executions">.*?</section>', html, re.S).group(0)
         assert "none of the" in _text(html), "its sentence kept"
+
+
+#: Every state the run page's plan rung can decide (`viewer.model.Approval`), and the list's.
+APPROVAL_STATES = {"approved": "yes", "departed": "no", "edges-mismatch": "no", "no-plan": "not-declared",
+                   "not-a-graph-run": "not-a-graph-run", "cant-check": "couldnt-check",
+                   "does-not-verify": "couldnt-check", "couldnt-check": "couldnt-check",
+                   "not-checked": "not-checked"}
+
+
+def test_ran_as_approved_is_listed_in_every_state_the_run_page_decides(examined):
+    """The seven states and the console's two, each listed in the run page's state words; wherever
+    the plan can't be decided, "Couldn't check" -- never "Yes" without the run page's own Yes."""
+    import inspect
+
+    from onetrace_console import tones
+    from onetrace_console.pages import _APPROVED_STATE
+    from onetrace_console.viewer.model import Approval
+    from onetrace_console.viewer.sentences import template
+    named = set(re.findall(r"`([a-z-]+)`", inspect.getdoc(Approval).split("is one of:")[1].split("`detail`")[0]))
+    examined(len(named), "plan rung states")
+    assert named == set(APPROVAL_STATES), named ^ set(APPROVAL_STATES)
+    assert {k: v for k, v in _APPROVED_STATE.items() if k} == APPROVAL_STATES
+    for state in set(APPROVAL_STATES.values()):
+        assert template("rung.state." + state.replace("-", "_")), state
+        assert state in tones.RUNG, state
+    assert [k for k, v in _APPROVED_STATE.items() if v == "yes"] == ["approved"]
+
+
+def test_sabotage_a_run_that_does_not_verify_listed_as_approved_is_named(demo, monkeypatch, examined):
+    from onetrace_console import pages as pages_module
+    from onetrace_console.pages import runs_table
+    store, pages = demo
+    every = (pages / "executions-all.html").read_text(encoding="utf-8")
+    run = next(r for r in store.runs() if r.approved == "approved")
+    monkeypatch.setitem(pages_module._APPROVED_STATE, "approved", "no")
+    bad = re.sub(r'<table class="timeline" data-section="runs-table">.*?</table>', lambda m: re.search(
+        r'<table class="timeline" data-section="runs-table">.*?</table>', runs_table(store.runs(), store), re.S).group(0),
+        every, count=1, flags=re.S)
+    examined(1, "planted list")
+    assert bad != every and any(f"{run.run_id}: approved no on the list, yes on its page" == p
+                                for p in row_problems(bad, store, pages))

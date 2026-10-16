@@ -59,6 +59,23 @@ INSTRUMENT = "Recorded with the stage: instrument"
 CONFIG = "its configuration's fingerprint"
 DIFFERS_FROM = "Differs from {run}"
 
+#: "This step in the other runs": the same step as each other run of the pipeline recorded it.
+OTHER_RUNS = "This step in the other runs"
+OTHER_RUNS_COLUMNS = ("Run", "Outcome", "Settings", "Instrument", "Outputs")
+OTHER_RUNS_NOTE = ("Each other run of {pipeline}, newest first, with this step as its own receipt "
+                   "records it; where a run recorded the step more than once, its last attempt. "
+                   "\"Same as this run\" marks a value equal to this run's, by exact equality. "
+                   "Inputs are not compared across runs: an input that is an earlier step's receipt "
+                   "holds that run's own receipt, so it differs in every run.")
+OTHER_RUNS_SHOWN = 50
+OTHER_RUNS_MORE = "The newest {shown} of {total} other runs in {pipeline} are shown."
+NO_OTHER_RUNS = "No other run in {pipeline}."
+NO_RECEIPT = "no receipt for this step"
+NOT_READ = "not read: the store is missing part of this run"
+LAST_OF = "the last of {n} attempts"
+SAME_AS_THIS = "same as this run"
+NONE_RECORDED = "none recorded"
+
 #: The compare page's verdicts that say this stage differs, and those that say it is the same.
 _DIFFERS = ("FIRST DIFFERENCE", "downstream")
 _SAME = ("same", "reconverged")
@@ -143,8 +160,8 @@ def _is_text(media_type: str) -> bool:
 
 
 def _fingerprint(item: dict) -> str:
-    return (f'<span class="mono">{escape(str(item.get("digest", "")))}</span>'
-            f' · {escape(str(item.get("bytes", "")))} bytes')
+    from onetrace_console.viewer.page import fingerprint_html
+    return f'{fingerprint_html(item.get("digest", ""))} · {escape(str(item.get("bytes", "")))} bytes'
 
 
 #: The chunk view's words, and how many chunks it draws (the rest counted, never dropped silently).
@@ -225,18 +242,22 @@ def _output(step: dict, out: dict, files, store, href: str, n: int = 1) -> str:
 
 
 def _input(item: dict, upstream: dict[str, tuple[str, str, bytes | None]], href: str,
-           receipts: dict[str, tuple[str, str, bytes]] | None = None) -> str:
+           receipts: dict[str, tuple[str, str, bytes]] | None = None, kept=None) -> str:
     """One row of the inputs table: "Recorded as" -- the input's recorded name and its trust class,
     both read from the receipt and nothing else (a `receipt:<stage>` whose stored receipt matches
     links to that stage's page, as "<stage>'s recorded output"); and what is kept -- what was
     checked, then its fingerprint. `upstream`: {recorded output
     digest: (stage, media type, stored bytes or None)} over the stages earlier in the chain.
     `receipts`: {sha256 of a stored receipt: (stage, its chain index, the stored bytes)} over the
-    same stages."""
+    same stages. `kept`: (the input's kept-text reading, whether its receipt lists it as kept),
+    where its receipt declares kept inputs (`kept_inputs.reading`); a listed input is read as kept
+    text first, any other by what was checked, and only then as not kept."""
     name, digest = str(item.get("name", "")), str(item.get("digest", ""))
     match = upstream.get(digest)
     receipt = (receipts or {}).get(digest)
-    if receipt is not None and _verified(receipt[2], digest) and receipt[1].isdigit():
+    if kept is not None and kept[1]:
+        said = kept[0]
+    elif receipt is not None and _verified(receipt[2], digest) and receipt[1].isdigit():
         stage, index, _ = receipt
         said = (f'<p><span class="pill ok">{VERIFIED}</span> '
                 f"{escape(MATCHES_RECEIPT.format(stage=stage))}</p>")
@@ -246,6 +267,8 @@ def _input(item: dict, upstream: dict[str, tuple[str, str, bytes | None]], href:
         stage, media, blob = match
         said = (f'<p><span class="pill ok">{VERIFIED}</span> '
                 f"{escape(MATCHES.format(stage=stage))}</p>" + _content(blob, media, href))
+    elif kept is not None:
+        said = kept[0]
     else:
         said = f"<p>{escape(FINGERPRINT_ONLY)}</p>"
     if not (receipt is not None and _verified(receipt[2], digest) and receipt[1].isdigit()):
@@ -253,7 +276,7 @@ def _input(item: dict, upstream: dict[str, tuple[str, str, bytes | None]], href:
     trust = escape(str(item.get("trust_class", "")))
     return (f'<tr data-input="{escape(name, quote=True)}"><td>{recorded} · '
             f'<span data-trust-class>{trust}</span></td>'
-            f'<td>{said}<p class="fp">{_fingerprint(item)}</p></td></tr>')
+            f'<td>{said}<div class="fp">{_fingerprint(item)}</div></td></tr>')
 
 
 def _verdicts(run: StoredRun, store: Store) -> tuple[str, dict[str, str]] | None:
@@ -304,7 +327,7 @@ def _badges(anchored, signed) -> str:
 
 def _instrument(receipt: dict) -> str:
     """The stage's instrument as its receipt records it: id, kind and version, and its
-    configuration's fingerprint, whole. The settings themselves are not in the receipt, so none
+    configuration's fingerprint, short, its whole value one fold away. The settings themselves are not in the receipt, so none
     is shown. Nothing where the receipt records no instrument."""
     inst = receipt.get("instrument")
     if not isinstance(inst, dict) or not isinstance(inst.get("id"), str):
@@ -315,8 +338,10 @@ def _instrument(receipt: dict) -> str:
             + (f" {escape(version)}" if isinstance(version, str) and version else ""))
     config = inst.get("config_digest")
     if isinstance(config, str) and config:
-        said += f' · {escape(CONFIG)} <span class="mono">{escape(config)}</span>'
-    return f'<p data-section="instrument">{escape(INSTRUMENT)} {said}</p>'
+        from onetrace_console.viewer.page import fingerprint_html
+        said += f' · {escape(CONFIG)} {fingerprint_html(config)}'
+    #: A block, not a paragraph: the fingerprint's fold cannot sit inside a <p>.
+    return f'<div data-section="instrument">{escape(INSTRUMENT)} {said}</div>'
 
 
 def _crumbs(run: StoredRun, store: Store) -> str:
@@ -328,15 +353,23 @@ def _crumbs(run: StoredRun, store: Store) -> str:
             + (f" · {escape(label)}" if label else "") + f"</a> / {escape(CRUMB)}</p>")
 
 
-def _inputs(inputs: list[dict], upstream, href: str, receipts) -> str:
+def _inputs(inputs: list[dict], upstream, href: str, receipts, kept=None, unlisted: int = 0,
+            inputs_note: str = INPUTS_NOTE) -> str:
+    """`kept`: {input name: (reading, listed)} for a receipt that declares kept inputs.
+    `unlisted`: how many files under the run's inputs/ no step lists as kept."""
+    from onetrace_console.kept_inputs import unlisted_note
+    note = (f'<p class="note" data-section="unlisted-inputs">{escape(unlisted_note(unlisted))}</p>'
+            if unlisted else "")
+    kept = kept or {}
     if not inputs:
-        return '<section data-section="inputs"><h2>Inputs</h2><p>none recorded</p></section>'
+        return f'<section data-section="inputs"><h2>Inputs</h2><p>none recorded</p>{note}</section>'
     head = "".join(f"<th>{escape(c)}</th>" for c in INPUT_COLUMNS)
     table = (f'<table class="board" data-section="inputs-table"><thead><tr>{head}</tr></thead><tbody>'
-             + "".join(_input(i, upstream, href, receipts) for i in inputs) + "</tbody></table>")
+             + "".join(_input(i, upstream, href, receipts, kept.get(str(i.get("name", ""))))
+                       for i in inputs) + "</tbody></table>")
     return ('<section data-section="inputs"><h2>Inputs</h2>'
             + scroll_region(table, "Inputs, scrolls sideways", "inputs")
-            + f'<p class="note">{escape(INPUTS_NOTE)}</p></section>')
+            + f'<p class="note">{escape(inputs_note)}</p>{note}</section>')
 
 
 def _outputs(step: dict, outputs: list[dict], files, store, href: str) -> str:
@@ -352,23 +385,138 @@ def _outputs(step: dict, outputs: list[dict], files, store, href: str) -> str:
             + "</ul></section>")
 
 
+def _other_runs(run: StoredRun, store: Store) -> tuple[str, list[tuple[StoredRun, list[dict] | None]], int]:
+    """(the run's pipeline's label, [(each other run of it, its receipts in chain order, or None
+    where the store is missing part of it)] newest first, at most OTHER_RUNS_SHOWN of them, and
+    how many other runs the pipeline holds)."""
+    from onetrace_console.overview import pipelines
+    for p in pipelines(store):
+        if any(r.key == run.key for r in p.runs):
+            others = [r for r in reversed(p.runs) if r.key != run.key]
+            return p.label, [(r, None if store.missing(r) else _steps(r, store))
+                             for r in others[:OTHER_RUNS_SHOWN]], len(others)
+    return "", [], 0
+
+
+def _recorded(receipt: dict) -> tuple[dict, tuple, dict]:
+    """A receipt's settings ({name: value}), instrument (id, version, configuration's
+    fingerprint) and outputs ({name: fingerprint}), as it records them."""
+    assertions = receipt.get("assertions")
+    constants = assertions.get("constants") if isinstance(assertions, dict) else None
+    inst = receipt.get("instrument")
+    inst = inst if isinstance(inst, dict) else {}
+    outputs = {str(o.get("name", "")): str(o.get("digest", ""))
+               for o in receipt.get("outputs") or [] if isinstance(o, dict)}
+    return (constants if isinstance(constants, dict) else {},
+            (inst.get("id"), inst.get("version"), inst.get("config_digest")), outputs)
+
+
+def _value(value, href: str) -> str:
+    """A recorded value in a cell: a fingerprint short, its whole value one fold away; anything
+    else as recorded, within the page's cap."""
+    from onetrace_console.viewer.page import fingerprint_html, _FINGERPRINT
+    text = value if isinstance(value, str) else json.dumps(value, ensure_ascii=False, sort_keys=True)
+    return (fingerprint_html(text) if _FINGERPRINT.fullmatch(text)
+            else f'<span data-words="record">{named(text, href)}</span>')
+
+
+def _same(equal: bool) -> str:
+    return f' <span class="note" data-same="this-run">{escape(SAME_AS_THIS)}</span>' if equal else ""
+
+
+def _other_row(store: Store, other: StoredRun, steps: list[dict] | None, stage: str,
+               mine: tuple[dict, tuple, dict]) -> str:
+    who = run_named(store, other.key)
+    if steps is None:
+        return (f'<tr data-run="{escape(other.key)}" data-outcome="not-read"><td>{who}</td>'
+                f"<td>{escape(NOT_READ)}</td><td></td><td></td><td></td></tr>")
+    tries = [s for s in steps if _stage_name(s["receipt"]) == stage]
+    if not tries:
+        return (f'<tr data-run="{escape(other.key)}" data-outcome="no-receipt"><td>{who}</td>'
+                f"<td>{escape(NO_RECEIPT)}</td><td></td><td></td><td></td></tr>")
+    from types import SimpleNamespace
+
+    from onetrace_console.viewer.model import _outcome_lines
+    from onetrace_console.viewer.page import _line, fingerprint_html
+    last, href = tries[-1], record_href(other)
+    receipt = last["receipt"]
+    if last["index"].isdigit():
+        who = f'<a href="../{escape(other.key)}/{stage_page(last["index"])}">{who}</a>'
+    outcome = receipt.get("outcome")
+    said = _line(_outcome_lines(SimpleNamespace(data=receipt))[1])
+    if len(tries) > 1:
+        said += f' <span class="note">({escape(LAST_OF.format(n=len(tries)))})</span>'
+    constants, (iid, version, config), outputs = _recorded(receipt)
+    settings = ("; ".join(f'<span class="mono" data-words="record">{named(k, href)}</span> {_value(v, href)}'
+                          for k, v in constants.items()) or escape(NONE_RECORDED)) + _same(
+        bool(constants) and constants == mine[0])
+    instrument = ""
+    if isinstance(iid, str):
+        instrument = (f'<span class="mono" data-words="record">{named(iid, href)}</span>'
+                      + (f' <span data-words="record">{escape(version)}</span>'
+                         if isinstance(version, str) and version else "")
+                      + (f"<div>{fingerprint_html(config)}</div>" if isinstance(config, str) and config else "")
+                      + _same((iid, version, config) == mine[1]))
+    shown = "".join(f'<div><span class="mono" data-words="record">{named(n, href)}</span> {_value(d, href)}'
+                    + _same(mine[2].get(n) == d) + "</div>" for n, d in outputs.items())
+    cls = outcome.get("class") if isinstance(outcome, dict) else None
+    return (f'<tr data-run="{escape(other.key)}" data-outcome="{escape(cls if isinstance(cls, str) else "unknown")}">'
+            f"<td>{who}</td><td>{said}</td><td>{settings}</td><td>{instrument}</td>"
+            f"<td>{shown or escape(NONE_RECORDED)}</td></tr>")
+
+
+def _in_other_runs(store: Store, stage: str, receipt: dict, label: str,
+                   others: list[tuple[StoredRun, list[dict] | None]], total: int) -> str:
+    """The section: one row per other run of the pipeline, newest first. Nothing where the run
+    is in no pipeline the store groups."""
+    if not label:
+        return ""
+    head = f'<section data-section="other-runs"><h2>{escape(OTHER_RUNS)}</h2>'
+    if not others:
+        return head + f"<p>{escape(NO_OTHER_RUNS.format(pipeline=label))}</p></section>"
+    mine = _recorded(receipt)
+    cols = "".join(f"<th>{escape(c)}</th>" for c in OTHER_RUNS_COLUMNS)
+    table = (f'<table class="board" data-section="other-runs-table"><thead><tr>{cols}</tr></thead><tbody>'
+             + "".join(_other_row(store, r, steps, stage, mine) for r, steps in others)
+             + "</tbody></table>")
+    more = (f'<p class="note">{escape(OTHER_RUNS_MORE.format(shown=len(others), total=total, pipeline=label))}</p>'
+            if total > len(others) else "")
+    return (head + f'<p class="note">{escape(OTHER_RUNS_NOTE.format(pipeline=label))}</p>'
+            + scroll_region(table, "This step in the other runs, scrolls sideways", "other-runs")
+            + more + "</section>")
+
+
 def render_stage_pages(run: StoredRun, store: Store, *, generated_at: str,
                        anchored, signed) -> dict[str, str]:
     """Every stage page of the run: {stage-<n>.html: page}. Unsealed console pages, framed when
     served, like the Diff page. `anchored`: the anchoring badge, the viewer's `anchor_badge` from
     the model the run's pages are drawn from; `signed`, the signing badge, that
     model's "Signed by a known recorder" rung."""
+    from onetrace_console import kept_inputs
     from onetrace_console.render import _document
     files = _files(run, store)
     steps = _steps(run, store)
     href = record_href(run)
     compared = _verdicts(run, store)
+    label, others, total = _other_runs(run, store)
     pages: dict[str, str] = {}
     upstream: dict[str, tuple[str, str, bytes | None]] = {}
     receipts: dict[str, tuple[str, str, bytes]] = {}
+    version = kept_inputs.recorded_with(steps)
+    unlisted = kept_inputs.unlisted_count(files, steps)
     for step in steps:
         receipt, stage = step["receipt"], _stage_name(step["receipt"])
         inputs = [i for i in receipt.get("inputs") or [] if isinstance(i, dict)]
+        listed = kept_inputs.listed(receipt) if kept_inputs.honoured(version) else []
+        kept = {}
+        for i in inputs:
+            cell = kept_inputs.reading(i, receipt, step["file"], lambda path: _read(files, store, path),
+                                       version)
+            if cell is not None:
+                kept[str(i.get("name", ""))] = (cell, str(i.get("name", "")) in listed)
+        keeps = kept_inputs.declares(receipt) and kept_inputs.honoured(version)
+        banner = kept_inputs.BANNER_KEPT if keeps else BANNER
+        inputs_note = kept_inputs.INPUTS_NOTE_KEPT if keeps else INPUTS_NOTE
         outputs = [o for o in receipt.get("outputs") or [] if isinstance(o, dict)]
         verdict = ""
         if compared is not None and stage in compared[1]:
@@ -385,12 +533,13 @@ def render_stage_pages(run: StoredRun, store: Store, *, generated_at: str,
             f"{run_named(store, run.key)}</p>"
             + _instrument(receipt)
             + f'<p data-section="banner" class="notice"><strong>{escape(SHOWN)}</strong> '
-            f"{escape(BANNER)}</p>"
+            f"{escape(banner)}</p>"
             f"{verdict}"
             '<div class="io">'
-            + _inputs(inputs, upstream, href, receipts)
+            + _inputs(inputs, upstream, href, receipts, kept, unlisted, inputs_note)
             + _outputs(step, outputs, files, store, href)
             + "</div>"
+            + _in_other_runs(store, stage, receipt, label, others, total)
             + _badges(anchored, signed)
             + f'<p data-section="back"><a href="case.html">The run, step by step</a></p>'
             + generated_footer(generated_at)

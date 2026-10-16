@@ -207,6 +207,15 @@ def verbatim_rows(text) -> str:
     return verbatim("\n".join(rows))
 
 
+def path_text(path) -> str:
+    """A folder path the console was given, as written: HTML-escaped, with a control,
+    bidirectional or surrogate character shown as \\uXXXX as `escape` shows it, but its backslashes
+    kept single. `escape` doubles a backslash so that a record's words can't draw as a control
+    character; a path is not a record's words, and on Windows its backslashes are its separators."""
+    from onetrace_console.viewer.page import _UNSHOWN
+    return _html_escape(_UNSHOWN.sub(lambda m: f"\\u{ord(m.group(0)):04x}", str(path)))
+
+
 def verbatim(text) -> str:
     """For a layer that shows words as written (`<pre>`): as `escape`, keeping line breaks and
     tabs, which are how those words are laid out."""

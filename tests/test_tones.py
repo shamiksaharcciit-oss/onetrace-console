@@ -23,15 +23,21 @@ from onetrace_console import tones
 BY_THE_RULE = {
     "RUNG": {"yes": "held", "no": "failed",
              "couldnt-check": "not-done", "does-not-verify": "not-done", "not-checked": "not-done",
-             "signed-untrusted": "not-done",
+             "no-verdict": "not-done", "signed-untrusted": "not-done",
              "unsigned": "not-made", "not-anchored": "not-made", "not-declared": "not-made",
-             "not-a-graph-run": "not-made", "no-records": "not-made", "not-yet-available": "not-made"},
+             "not-a-graph-run": "not-made", "no-records": "not-made", "not-yet-available": "not-made",
+             "not-reached": "declined"},
     "ATTENTION": {"contradicts": "failed", "missing-stage": "failed", "couldnt-check": "not-done",
-                  "not-checked": "not-done", "last-attempt-failed": "not-done", "changed": "not-made"},
+                  "not-checked": "not-done", "no-verdict": "not-done", "last-attempt-failed": "not-done",
+                  "stopped-at-a-step": "declined", "changed": "not-made"},
     "BASELINE": {"same": "held", "changed": "not-made", "couldnt-check": "not-done",
                  "not-compared": "not-made"},
-    "VERDICT": {"holds": "held", "contradicts": "failed", "could_not_check": "not-done",
-                "not checked": "not-done"},
+    #: A run stopped by a step's own rule: its own kind, the declined outline, never red.
+    "STOPPED": {"declined": "declined"},
+    #: A comparison's findings, never a check's result: the first difference amber filled, a step
+    #: changed after it amber outlined, a step the same green.
+    "DIFF": {"same": "held", "reconverged": "held", "FIRST DIFFERENCE": "first-difference",
+             "downstream": "changed-after", "COULD NOT CHECK": "not-done"},
 }
 
 
@@ -39,7 +45,9 @@ BY_THE_RULE = {
 def test_every_state_is_the_kind_the_rule_makes_it(table, examined):
     examined(len(BY_THE_RULE[table]), f"{table} states")
     assert getattr(tones, table) == BY_THE_RULE[table]
-    assert tones.TONE == {"held": "ok", "failed": "bad", "not-done": "cc", "not-made": "neu"}
+    assert tones.TONE == {"held": "ok", "failed": "bad", "not-done": "cc", "not-made": "neu",
+                          "declined": "dec", "first-difference": "fd", "changed-after": "ca"}
+    assert tones.tone(tones.STOPPED, "declined") != tones.TONE[tones.FAILED], "a decline is never red"
 
 
 @pytest.fixture(scope="module")
@@ -66,10 +74,12 @@ def _drawn(css: str) -> dict[str, set[str]]:
     out: dict[str, set[str]] = {}
     for selectors, body in re.findall(r"([^{}]+)\{([^{}]*)\}", css):
         m = re.search(r"background:var\(--(ok|cc|bad|neu)-bg\)", body)
-        if not m:
+        #: The declined outline: the page's own ground, outlined in the accent.
+        tone = m.group(1) if m else "dec" if "outline:1px solid var(--accent)" in body else None
+        if not tone:
             continue
         for state in re.findall(r"tr\[data-(?:rung|badge)\]\[data-state=([a-z-]+)\]", selectors):
-            out.setdefault(state, set()).add(m.group(1))
+            out.setdefault(state, set()).add(tone)
     return out
 
 

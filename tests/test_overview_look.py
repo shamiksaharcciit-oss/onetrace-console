@@ -60,7 +60,7 @@ def test_each_card_leads_with_one_short_line_and_keeps_its_denominator(ten_runs,
     unit = "run" if total == 1 else "runs"
     expected = {
         "runs": f"{total} {unit} stored",
-        "records-agree": f"{len(by['records-agree'].runs)} of {total} {unit} verified",
+        "records-agree": f"{len(by['records-agree'].runs)} of {total} {unit} whose records agree",
         "changed-vs-baseline": f"{len(by['changed-vs-baseline'].runs)} of {total} {unit} changed vs baseline",
         "incidents": f"{len(every)} incident{'' if len(every) == 1 else 's'}",
     }
@@ -88,7 +88,7 @@ def test_each_card_leads_with_one_short_line_and_keeps_its_denominator(ten_runs,
 def test_each_pill_s_colour_comes_from_the_state_it_stands_for(ten_runs, examined, monkeypatch):
     from onetrace_console import home as home_module
     from onetrace_console.checks import CONTRADICTS, COULD_NOT_CHECK, HOLDS
-    from onetrace_console.home import VERDICT_LABELS, verdict_of
+    from onetrace_console import records
     from onetrace_console.overview import ATTENTION_WORDS, vs_baseline
     from onetrace_console.render import ATTENTION_TONE, BASELINE_TONE
     #: Every run in the recent-runs table, so every comparison state the fixture holds is read,
@@ -115,7 +115,6 @@ def test_each_pill_s_colour_comes_from_the_state_it_stands_for(ten_runs, examine
                                                             ATTENTION_WORDS[kind]), (kind, html)
     rows = dict(re.findall(r'<tr data-recent="([^"]+)">(.*?)</tr>', home, re.S))
     from onetrace_console import tones
-    verdict_tone = {v: tones.tone(tones.VERDICT, v) for v in tones.VERDICT}
     states = set()
     for run in store.runs():
         if run.key not in rows:
@@ -125,8 +124,8 @@ def test_each_pill_s_colour_comes_from_the_state_it_stands_for(ten_runs, examine
         state, words = vs_baseline(run, store)
         states.add(state)
         assert pills[0] == (BASELINE_TONE[state], words), (run.run_id, pills)
-        assert pills[1] == (verdict_tone.get(verdict_of(run), "neu"),
-                            VERDICT_LABELS[verdict_of(run)]), (run.run_id, pills)
+        assert pills[1] == (tones.tone(tones.RUNG, records.state(run, store)),
+                            records.said(run, store)), (run.run_id, pills)
     examined(len(items) + len(rows), "pills read")
     assert len(rows) == len(store.runs())
     assert len(states) >= 2, f"the fixture holds one comparison state only: {states}"

@@ -10,9 +10,10 @@ How it decides, every `interval` seconds (2 by default; `--watch-interval N`, `-
   same pages. Taken in once: if the folder changes afterwards, the stored copy stays as recorded
   and the page says the folder now differs; a folder deleted afterwards stays in the store with a
   note that it is no longer there.
-- **Bounded.** At most `MAX_PER_PASS` runs a pass; the rest wait for the next. The loop runs in
-  its own thread, holds the console's intake lock only while it takes a run in, and never stops
-  the console: an error is logged, kept for the page, and the next pass goes on.
+- **A cap on each round.** Each round takes in at most `MAX_PER_PASS` runs; any others wait for the
+  next round. The checking happens in a separate thread. It locks the console's adding of runs only
+  while it adds one, and it never stops the console: a problem is written to the log and kept for
+  the page, and the next round carries on.
 
 Standard library only: polling, never an operating system's file events, so it behaves the same
 on Windows, macOS and Linux.
@@ -117,7 +118,7 @@ class Watcher:
                 continue
             try:
                 stored = self.intake(self.folder / name)
-            except Exception as e:  # noqa: BLE001 - logged and shown; the loop goes on
+            except Exception as e:  # noqa: BLE001 - kept for the page and the log; the next folder is read
                 self.state.errors.append(f"{name}: {type(e).__name__}: {e}")
                 continue
             self._taken[name] = sig

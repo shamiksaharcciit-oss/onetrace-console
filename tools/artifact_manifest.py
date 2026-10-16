@@ -2,7 +2,7 @@
 
 WHY THIS EXISTS
 ---------------
-The release artifacts are rebuilt after internal ids are removed, and the rebuild must
+The release artifacts are rebuilt after project ids are removed, and the rebuild must
 **list every member that differs** from the files built at
 `dae64ce`. Those files live in `onetrace-public/dist/`, and `onetrace-public` is regenerated
 from scratch by `tools/export_public.py` on every run -- so the rebuild overwrites them. A
@@ -129,7 +129,7 @@ def main(argv: list[str]) -> int:
 _NOTE = (
     "The four onetrace / onetrace-verify release files built by standards at "
     "onetrace-sdk-bootstrap HEAD dae64ce, recorded member by member before the rebuild "
-    "that removes internal ids. The bytes are kept outside every repository; this "
+    "that removes project ids. The bytes are kept outside every repository; this "
     "manifest is what makes 'list every member that differs' answerable afterwards. Nothing "
     "here was modified, uploaded or re-pinned."
 )

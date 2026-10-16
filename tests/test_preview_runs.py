@@ -115,7 +115,8 @@ def test_any_other_not_verified_still_raises_and_needs_attention(store, examined
     _require_installed()
     _require_exam()
     run = run_and_record(_deliver(EXAM / "dag-r37" / "run_R", store), store, ran_at=FIXED_RAN_AT)
-    other = replace(run, check_verdict=COULD_NOT_CHECK, check_exit="2",
+    #: With the "Records agree" a NOT VERIFIED check records: couldn't check.
+    other = replace(run, check_verdict=COULD_NOT_CHECK, check_exit="2", agree="couldnt-check", agree_why="",
                     check_note="not verified; the check says: 1 pass, 0 fail, 1 not-run  ->  NOT VERIFIED (x)")
     store.put_run(other)
     examined(2, "incident and attention checked")

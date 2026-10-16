@@ -373,5 +373,5 @@ def test_the_command_exports_and_prints_the_file_list(source, tmp_path, monkeypa
     listed = dict(reversed(line.split("  ", 1)) for line in printed if "  " in line)
     assert listed and set(listed) == {p.relative_to(out).as_posix()
                                       for p in out.rglob("*") if p.is_file()}
-    assert any(line.startswith("internal ids: 0") for line in printed)
+    assert any(line.startswith("project ids: 0") for line in printed)
     assert any(line.startswith("external requests: 0") for line in printed)

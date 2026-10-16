@@ -1,7 +1,7 @@
 """The viewer folder is what its provenance file says it is.
 
 `src/onetrace_console/viewer/PROVENANCE.md` lists every file in the folder with its sha256 at the
-commit it was copied from and its sha256 here. Each file's bytes must give the second column, and the
+commit it was copied from (or that it was added here) and its sha256 here. Each file's bytes must give the second column, and the
 table must list every file: none missing, none extra.
 """
 from __future__ import annotations
@@ -11,7 +11,9 @@ import re
 from pathlib import Path
 
 VIEWER = Path(__file__).resolve().parent.parent / "src" / "onetrace_console" / "viewer"
-ROW = re.compile(r"^\| `([^`]+)` \| `([0-9a-f]{64})` \| `([0-9a-f]{64})` \|$")
+#: A file's row: its sha256 at the commit it was copied from -- or "added here" for a file this
+#: repository added to the folder since -- and its sha256 here.
+ROW = re.compile(r"^\| `([^`]+)` \| (?:`([0-9a-f]{64})`|added here) \| `([0-9a-f]{64})` \|$")
 
 
 def _rows() -> dict[str, tuple[str, str]]:

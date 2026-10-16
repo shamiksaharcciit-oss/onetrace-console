@@ -10,7 +10,7 @@ The console never computes a verdict of its own. It keeps each run's files exact
 pip install onetrace-console
 ```
 
-It needs Python 3.12 or later. It installs from PyPI alone: `onetrace` 0.2.0 and `onetrace-verify` 0.2.0, with the `[crypto]` extra so signatures and anchors are checked. The pages' viewer ships inside the package.
+It needs Python 3.12 or later. It installs from PyPI alone: `onetrace` 0.2.2 and `onetrace-verify` 0.2.1, with the `[crypto]` extra so signatures and anchors are checked. The pages' viewer ships inside the package.
 
 ## See it with the demo's runs
 
@@ -18,9 +18,9 @@ It needs Python 3.12 or later. It installs from PyPI alone: `onetrace` 0.2.0 and
 onetrace-console demo
 ```
 
-This records the demo's runs into `onetrace-console-demo/` under the folder you start it from, starts the console, loads them, stores five comparisons, and prints the pages' addresses. The runs come from four small example pipelines that ship with the console: a question-and-answer pipeline over an example shop's refund policy, the reference demo's coding agent, a support-ticket triage, and a support reply drafted by a stub whose wording varies from run to run. The draft leaves the refund window as `{days}` on purpose; a later policy stage fills in the number. They make no network calls and use no hosted model: the embedder is a hashed bag of words, the answerer quotes the text it retrieved, and the times in the records are the times you ran it. Some runs are altered after they were recorded, on purpose, so the console has something to find: one has an output byte changed, one an output file deleted, one is unsigned, and one is signed with a key the demo's trust file doesn't name. The demo keeps its store and its trust file in that folder too. It runs in local mode, so it refuses to start while `ONETRACE_CONSOLE_CONFIG` is set.
+This records the demo's runs into `onetrace-console-demo/` under the folder you start it from, starts the console, loads them, stores five comparisons, and prints the pages' addresses. The runs come from four small example pipelines that ship with the console: a question-and-answer pipeline over an example shop's refund policy, the reference demo's coding agent, a support-ticket triage, and a support reply drafted by a stub whose wording varies from run to run. The draft names the refund window in words; a later policy stage puts in the number of days. They make no network calls and use no hosted model: the embedder is a hashed bag of words, the answerer quotes the text it retrieved, and the times in the records are the times you ran it. Some runs are altered after they were recorded, on purpose, so the console has something to find: one has an output byte changed, one an output file deleted, one is unsigned, and one is signed with a key the demo's trust file doesn't name. The demo keeps its store and its trust file in that folder too. It runs in local mode, so it refuses to start while `ONETRACE_CONSOLE_CONFIG` is set.
 
-![The overview, with the demo's two runs](https://raw.githubusercontent.com/shamiksaharcciit-oss/onetrace-console/v0.1.1/docs/screenshots/overview.png)
+![The Overview, with the demo's 31 runs from four pipelines](https://raw.githubusercontent.com/shamiksaharcciit-oss/onetrace-console/v0.2.0/docs/screenshots/overview.png)
 
 A read-only copy of the demo is hosted at https://demo.oneproof.dev. To try the read-only mode yourself, run `onetrace-console demo --public`.
 
@@ -30,6 +30,7 @@ A read-only copy of the demo is hosted at https://demo.oneproof.dev. To try the 
 onetrace-console <runs folder>
 onetrace-console <runs folder> --compare <run A> <run B>
 onetrace-console <runs folder> --open
+onetrace-console <runs folder> --trust <file> --tsa-cert <file> --tsa-root <file>
 ```
 
 - `onetrace-console <runs folder>` loads every run folder in it: every folder holding a `MANIFEST.json`. It compares nothing unless you ask.
@@ -38,9 +39,26 @@ onetrace-console <runs folder> --open
 - `--open` opens the console in your browser.
 - `--port N` listens on port N, here and for `demo`. The default is 8080.
 
-![One run's page, with the verifier's result](https://raw.githubusercontent.com/shamiksaharcciit-oss/onetrace-console/v0.1.1/docs/screenshots/run.png)
+### Watching the folder
 
-![A comparison of two runs, with the first stage that changed](https://raw.githubusercontent.com/shamiksaharcciit-oss/onetrace-console/v0.1.1/docs/screenshots/comparison.png)
+While the console runs, it reads the runs folder again every 2 seconds and takes in each new run once it has finished writing: once the run folder holds a `MANIFEST.json`, no `.lock`, and the same files at the same sizes on two reads in a row. A run still being recorded is not shown until then.
+
+- The Overview and the list of every run say which folder is watched and when it was last read. When new runs have been taken in since the page was drawn, the page says so, with a link to show them; it doesn't reload by itself.
+- A run is taken in once. If its folder changes afterwards, the stored copy stays as it was recorded and the page says the folder now differs; a run folder deleted afterwards stays in the store, with a note that it is no longer in the folder.
+- Started on a folder with no finished run in it, the console waits for one. `--compare A B` naming a run folder that isn't there yet waits too, and the comparison is made when both have arrived.
+- The folder is read by polling, the same way on Windows, macOS and Linux.
+- `--watch-interval N` reads it every N seconds instead. `--no-watch` reads it once, at start, and not again; a folder with no run folder in it is then refused.
+
+### Signing and anchoring
+
+- `--trust FILE` names the signing keys you trust, in an `onetrace-trust/0.1` file. A run signed with one of them reads "Signed by a known recorder: Yes", with that key's label from the file. Without `--trust`, a signed run reads "Signed, key not trusted".
+- `--tsa-cert FILE` and `--tsa-root FILE` name the RFC 3161 time-stamp authority you trust and the root its certificate chains to. They go together; `--tsa-root` may be given more than once. With them, a run's anchor is checked, and "Committed by a known time" reads Yes when the check holds. Without them, an anchored run reads "Couldn't check", and the page names the two options to add.
+- Every check runs with these files, and a stored check records which ones it ran with. Started again with the same files, nothing is checked again; with different ones, every run is.
+- A file that can't be read is refused at start, with how to fix it.
+
+![One run's page: what was checked, and the verifier's result](https://raw.githubusercontent.com/shamiksaharcciit-oss/onetrace-console/v0.2.0/docs/screenshots/run.png)
+
+![A comparison of two runs, with the first stage that changed](https://raw.githubusercontent.com/shamiksaharcciit-oss/onetrace-console/v0.2.0/docs/screenshots/comparison.png)
 
 ## What it shows
 
@@ -63,7 +81,7 @@ A run's record does not show:
 
 Started as above, it listens on 127.0.0.1 only, and makes no network calls; `--open` asks your browser to open the local page. A folder load keeps what it stores in a `store` folder under the folder you start it from, and `demo` keeps it in `onetrace-console-demo/`.
 
-To run it for a team, as a container with sign-in, see [OPERATOR_README.md](https://github.com/shamiksaharcciit-oss/onetrace-console/blob/v0.1.1/OPERATOR_README.md).
+To run it for a team, as a container with sign-in, see [OPERATOR_README.md](https://github.com/shamiksaharcciit-oss/onetrace-console/blob/v0.2.0/OPERATOR_README.md).
 
 ## For contributors
 

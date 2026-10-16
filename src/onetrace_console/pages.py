@@ -497,35 +497,37 @@ def _plain_list_words(page: str, every_stored: bool) -> str:
 #: The runs list's columns (F1): the run, its pipeline, its two times, how far it got, and the three
 #: answers the store holds per run, each as the run's own page says it.
 RUN_COLUMNS = ("Run", "Pipeline", "When it ran", "Received by this console", "How far it got",
-               "Records agree", "Signed by a known recorder", "Committed by a known time")
+               "Records agree", "Signed by a known recorder", "Committed by a known time",
+               "Ran as approved")
 #: Each reading the store keeps, as the run page's rung state (`data-state`).
 _SIGNED_STATE = {"yes": "yes", "untrusted": "signed-untrusted", "failed": "no", "unsigned": "unsigned",
                  "couldnt-check": "couldnt-check", "unreadable": "couldnt-check",
                  "not-installed": "not-checked", "": "not-checked"}
 _ANCHORED_STATE = {"yes": "yes", "couldnt-check": "couldnt-check", "failed": "no",
                    "not-anchored": "not-anchored", "": "not-checked"}
+#: "Ran as approved": the run page's states, and "Couldn't check" wherever the plan can't be
+#: decided -- the verifier has no plan row, or the run doesn't verify, so its rows aren't read.
+_APPROVED_STATE = {"approved": "yes", "departed": "no", "edges-mismatch": "no", "no-plan": "not-declared",
+                   "not-a-graph-run": "not-a-graph-run", "cant-check": "couldnt-check",
+                   "does-not-verify": "couldnt-check", "couldnt-check": "couldnt-check",
+                   "not-checked": "not-checked", "": "not-checked"}
 
 
 def run_answers(run: StoredRun, store: Store) -> dict[str, str]:
     """{rung: state} for the three answers the store holds per run, each by the rule the Overview
-    counts it by, so a row, the Overview and the run's own page cannot disagree. "Ran as approved"
-    is not among them: it is read from each run's own report on its page."""
-    from onetrace_console.checks import CONTRADICTS, COULD_NOT_CHECK, HOLDS
-    from onetrace_console.home import artifacts_required, outputs_required_exit, verdict_of
-    verdict = verdict_of(run)
-    if verdict == HOLDS:
-        agree = ("yes" if artifacts_required(run, store)
-                 else "no" if outputs_required_exit(run, store) not in (None, "0") else "not-checked")
-    else:
-        agree = {CONTRADICTS: "no", COULD_NOT_CHECK: "couldnt-check"}.get(verdict, "not-checked")
-    return {"records-agree": agree, "signed": _SIGNED_STATE.get(run.signed, "not-checked"),
-            "anchored": _ANCHORED_STATE.get(run.anchored, "not-checked")}
+    counts it by, so a row, the Overview and the run's own page cannot disagree; and "Ran as
+    approved", as the run's own page reads it, recorded when the run is checked."""
+    from onetrace_console import records
+    return {"records-agree": records.state(run, store), "signed": _SIGNED_STATE.get(run.signed, "not-checked"),
+            "anchored": _ANCHORED_STATE.get(run.anchored, "not-checked"),
+            "approved": _APPROVED_STATE.get(run.approved, "couldnt-check")}
 
 
 def runs_table(runs: list[StoredRun], store: Store) -> str:
     """The runs list's table: one row per run, in the order given, each linked to its page."""
     from onetrace_console import tones
     from onetrace_console.overview import pipelines, ran_at
+    from onetrace_console.run_head import declined_chip
     from onetrace_console.viewer.page import _named
     from onetrace_console.viewer.page import escape as viewer_escape
     from onetrace_console.viewer.sentences import template
@@ -551,9 +553,9 @@ def runs_table(runs: list[StoredRun], store: Store) -> str:
             f'<td>{viewer_escape(label.get(run.key, ""))}</td>'
             f'<td class="value">{time_html(ran) if ran else "not recorded"}</td>'
             f'<td class="value">{time_html(run.received_at)}</td>'
-            f"<td>{viewer_escape(got)}</td>"
+            f"<td>{viewer_escape(got)}{(' ' + stopped) if (stopped := declined_chip(run)) else ''}</td>"
             + "".join(f'<td data-answer="{k}">{chip(answers[k])}</td>'
-                      for k in ("records-agree", "signed", "anchored"))
+                      for k in ("records-agree", "signed", "anchored", "approved"))
             + "</tr>")
     head = "".join(f"<th>{c}</th>" for c in RUN_COLUMNS)
     return scroll_region(f'<table class="timeline" data-section="runs-table"><thead><tr>{head}</tr>'

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "onetrace-console"
-version = "0.1.1"
+version = "0.2.0"
 description = "The onetrace console: every run in one place, read from the reports the verifier and the verbs produced."
 readme = "PYPI_DESCRIPTION.md"     # the README with absolute image links: tools/pypi_description.py
 requires-python = ">=3.12"
@@ -21,12 +21,9 @@ authors = [{ name = "Shamik Saha" }]
 # server is `http.server`, the store is files, the index is `sqlite3`, the tar is
 # `tarfile`, the digests are `hashlib`: all standard library. See DESIGN_GAPS.md.
 dependencies = [
-    "onetrace==0.2.1",                 # the SDK this release was tested with: the verbs
-    "onetrace-verify[crypto]==0.2.0",  # the verifier, with what it needs to check signatures
+    "onetrace==0.2.2",                 # the SDK this release was tested with: the verbs
+    "onetrace-verify[crypto]==0.2.1",  # the verifier, with what it needs to check signatures
 ]
-
-[project.optional-dependencies]
-test = ["pytest>=8"]
 
 [project.scripts]
 onetrace-console = "onetrace_console.__main__:main"
@@ -40,7 +37,7 @@ where = ["src"]
 onetrace_console = ["static/fonts/*.woff2", "static/fonts/OFL.txt", "static/fonts/FONTS.md",
                     "static/favicon.svg",
                     "requirements.lock", "demo_store/trust.json",
-                    "viewer/PROVENANCE.md", "viewer/_vendor/*"]
+                    "viewer/PROVENANCE.md", "viewer/_vendor/*", "viewer/dark_derived.css"]
 
 # ---------------------------------------------------------------------------------
 # E10 layer 2 of 3: exclusion lists

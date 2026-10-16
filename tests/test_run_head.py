@@ -45,9 +45,10 @@ def head_problems(page: str, run_id: str, label: str, baseline: str | None) -> l
         if ladder.get(key) != state:
             out.append(f"rung {key}: head {state}, ladder {ladder.get(key)}")
     chips = _text(head)
-    from onetrace_console.home import VERDICT_LABELS
+    from onetrace_console.records import LABEL
+    from onetrace_console.words import VERDICT_WORDS
     title = _text(re.search(r'<div class="title">(.*?)</div>', head, re.S).group(1))
-    if any(word in title for word in VERDICT_LABELS.values()):
+    if any(word in title for word in (*VERDICT_WORDS.values(), *LABEL.values())):
         out.append("a one-word verdict beside the title")
     if baseline is None and "vs " in chips:
         out.append("a comparison chip with no comparison")
@@ -80,8 +81,8 @@ def test_sabotage_a_head_that_disagrees_with_its_ladder_is_named(tmp_path, exami
     planted = page.replace('<li data-head-rung="records-agree" data-state="yes">',
                            '<li data-head-rung="records-agree" data-state="no">', 1)
     chip = page.replace("</h1>", '</h1><span class="pill bad">Changed vs someone</span>', 1)
-    from onetrace_console.home import VERDICT_LABELS
-    verdict = page.replace("</h1>", f'</h1><span class="pill ok">{VERDICT_LABELS["holds"]}</span>', 1)
+    from onetrace_console.words import VERDICT_WORDS
+    verdict = page.replace("</h1>", f'</h1><span class="pill ok">{VERDICT_WORDS["holds"]}</span>', 1)
     examined(3, "planted pages")
     assert planted != page and chip != page and verdict != page
     assert "a one-word verdict beside the title" in head_problems(verdict, run.run_id, label, None)
@@ -213,9 +214,9 @@ def _boxes_with_titles(page: str) -> list[tuple[str, str]]:
 
 
 def _boxes_drawn(page: str) -> list[tuple[str, str, int]]:
-    """(link, title, state lines drawn) for each box."""
+    """(link, title, state lines drawn) for each box: its chip, and each state line under it."""
     svg = re.search(r'<section data-section="graph".*?<svg class="graph".*?</svg>', page, re.S).group(0)
-    return [(h, unescape(t), body.count('class="state"')) for h, t, body in
+    return [(h, unescape(t), body.count('class="state"') + body.count('<text class="chip"')) for h, t, body in
             re.findall(r'<a href="([^"]+)"[^>]*><rect class="node"[^>]*/><title>([^<]*)</title>(.*?)</a>',
                        svg, re.S)]
 

@@ -265,6 +265,8 @@ class PageModel:
     #: stages whose last recorded attempt failed, as ((stage, error type), ...) in declared order.
     preview_format: str = ""
     last_failed: tuple = ()
+    #: (step, reason, steps left) where the run stopped at a step's own rule (`declined_at_step`).
+    declined: tuple = ()
     #: The check ran as the installed `onetrace-verify`: regenerated with
     #: `generate --cli`, which has no verifier path to name.
     report_cli: bool = False
@@ -601,6 +603,33 @@ def last_attempt_failed(record: Record) -> tuple[tuple[str, str], ...]:
             last[name] = (outcome.get("class"), status if isinstance(status, str) else "")
     return tuple((name, last[name][1]) for name in declared
                  if name in last and last[name][0] == "error")
+
+
+def declined_at_step(record: Record) -> tuple:
+    """For the free file as for the console: where the run stopped at a step's own rule, as
+    (step, the reason it recorded, the declared steps left with no receipt), or () where it did not.
+
+    It stopped there when its LAST recorded attempt was declined (the SDK's `refused` class): a
+    step that declined and was followed by further receipts did not stop the run, and an error is
+    never a decline. The console derives the same from the same receipts (`ingest.declined_at`)."""
+    declared: list[str] = []
+    seen: set = set()
+    last = None
+    for s in record.steps:
+        coverage = s.data.get("coverage")
+        names = coverage.get("declared_stages") if isinstance(coverage, dict) else None
+        for name in names if isinstance(names, list) else ():
+            if isinstance(name, str) and name not in declared:
+                declared.append(name)
+        stage, outcome = s.data.get("stage"), s.data.get("outcome")
+        name = stage.get("name") if isinstance(stage, dict) else None
+        seen.add(name)
+        last = (name, outcome if isinstance(outcome, dict) else {})
+    if last is None or not isinstance(last[0], str) or last[1].get("class") != "refused":
+        return ()
+    reason = last[1].get("reason")
+    return (last[0], reason if isinstance(reason, str) else "",
+            tuple(d for d in declared if d not in seen))
 
 
 def _answer_step(record: Record) -> str:
@@ -952,6 +981,8 @@ def _checked_lists(record: Record, report: Report) -> tuple[tuple[CheckCount, ..
 # the independent review of the first version held this to, finding by finding.
 
 _YES, _NO = ("yes", "rung.state.yes"), ("no", "rung.state.no")
+#: Rung 3 for a run stopped at a step's own rule: the declared steps after it were not reached.
+_NOT_REACHED = ("not-reached", "rung.state.not_reached")
 _COULDNT = ("couldnt-check", "rung.state.couldnt_check")
 _NOT_CHECKED = ("not-checked", "rung.state.not_checked")
 #: Two state words of the signing rung's own. Unsigned is its own state: the record holds no
@@ -1020,6 +1051,24 @@ def _records_agree(record: Record, report: Report | None, strip: Strip,
     return _rung("records-agree", state, strip.sentence)
 
 
+@dataclass(frozen=True, slots=True)
+class AgreeReading:
+    """Rung 1 as the run page decides it, for the console's lists and counts: `kind` is the
+    rung's state (`yes`, `no`, `couldnt-check`, `not-checked`); `why` is `no-outputs` where the
+    check held but did not require the run's output files, the one reason a count says."""
+    kind: str
+    why: str = ""
+
+
+def records_agree_reading(record: Record, report: Report | None,
+                          problem: str | None = None) -> AgreeReading:
+    """Rung 1 over the page's own check, decided by `_records_agree` as the run page decides it:
+    `report` is the parsed report, or None with `problem` where it could not be parsed."""
+    rung = _records_agree(record, report, _strip(record, report, problem), problem, True)
+    no_outputs = rung.evidence == (line("rung.records.no_artifacts"),)
+    return AgreeReading(rung.state, "no-outputs" if no_outputs else "")
+
+
 #: What rung 3 reads from each receipt's coverage, and the shape the format gives it.
 _COVERAGE_FIELDS = (("declared_stages", list), ("emitting_stages", list),
                     ("completeness", str))
@@ -1077,15 +1126,66 @@ def _nothing_missing(record: Record) -> Rung:
     says_complete_and_is_not = any(
         set(c["declared_stages"]) - set(c["emitting_stages"])
         for c in coverages if c["completeness"] == "complete")
+    gapped = [s for s in record.steps if count_gaps(s)]
     if (missing_stages(record) or coverages[-1]["completeness"] != "complete"
             or declared - in_trail or says_complete_and_is_not):
+        stopped = not_reached(record)
+        if stopped and not says_complete_and_is_not and not gapped:
+            step, after = stopped
+            return _rung("nothing-missing", _NOT_REACHED,
+                         line("rung.missing.stopped_at", step=(step, "record")),
+                         line("rung.missing.not_reached", steps=(", ".join(after[:LIST_CAP]), "record")),
+                         *((_more(len(after) - LIST_CAP),) if len(after) > LIST_CAP else ()))
         return _rung("nothing-missing", _NO, line("coverage.incomplete"))
-    gapped = [s for s in record.steps if count_gaps(s)]
     if gapped:
         return _rung("nothing-missing", _NO, *(
             line("unchecked.gaps_at_step", n=(str(count_gaps(s)), "value"),
                  step=_stage_shown(s)) for s in gapped))
     return _rung("nothing-missing", _YES, line("checks.gaps_none"))
+
+
+def _declared_order(record: Record) -> list[str]:
+    """Every stage the receipts declare, in the order they first declare it."""
+    order: list[str] = []
+    for s in record.steps:
+        coverage = s.data.get("coverage")
+        names = coverage.get("declared_stages") if isinstance(coverage, dict) else None
+        for name in names if isinstance(names, list) else ():
+            if isinstance(name, str) and name not in order:
+                order.append(name)
+    return order
+
+
+def _missing_before(declared_before: list[str], in_trail: set) -> tuple[str, ...]:
+    """The declared steps before the declining one with no receipt: these are missing."""
+    return tuple(d for d in declared_before if d not in in_trail)
+
+
+def _recorded_after(declared_after: list[str], in_trail: set) -> tuple[str, ...]:
+    """The declared steps after the declining one that have a receipt: the run did not stop."""
+    return tuple(d for d in declared_after if d in in_trail)
+
+
+def not_reached(record: Record) -> tuple:
+    """(step, the declared steps after it) where rung 3 reads "Not reached": the run's last
+    recorded attempt was declined by the step's own rule, in that step's receipt
+    (`declined_at_step`, never inferred from a missing receipt); every declared step before it
+    has a receipt; and no declared step after it has one. () otherwise: a step missing before
+    the declining one, a run with no recorded decline, and a declined run with receipts for
+    later steps all read as any other run does."""
+    declined = declined_at_step(record)
+    if not declined:
+        return ()
+    step = declined[0]
+    order = _declared_order(record)
+    if step not in order:
+        return ()
+    at = order.index(step)
+    before, after = order[:at], order[at + 1:]
+    in_trail = {_stage(s) for s in record.steps}
+    if not after or _missing_before(before, in_trail) or _recorded_after(after, in_trail):
+        return ()
+    return step, tuple(after)
 
 
 def _unreplayable(record: Record) -> list[str]:
@@ -1661,6 +1761,7 @@ def build_model(record: Record, envelope: dict | None, generated_at: str,
         strip=strip, answer=answer, question=question, answer_step=_answer_step(record),
         preview_format=str(record.manifest.get("format", "")),
         last_failed=last_attempt_failed(record),
+        declined=declined_at_step(record),
         steps=tuple(_step_view(record, report, s) for s in record.steps),
         unchecked=_unchecked(record, report),
         case_ran=_case_ran(record), case_for=case_for, case_for_more=case_for_more,
@@ -1713,7 +1814,7 @@ def _graph_nodes(record: Record, boundary_steps: tuple[str, ...]) -> tuple:
                       and i["name"].startswith("receipt:"))
         nodes.append(GraphNode(
             node_id=node_id, name=name, index=index,
-            #: In-page links are `#step-N` only (core, 2 October): a step whose manifest index
+            #: In-page links are `#step-N` only, as ruled: a step whose manifest index
             #: is not a number gets no link rather than a link of another shape.
             href=f"#step-{s.manifest_index}" if s.manifest_index.isdigit() else "",
             label=name_shown(node_id), shown=name_shown(name),

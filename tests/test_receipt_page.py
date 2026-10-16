@@ -15,6 +15,7 @@ from pathlib import Path
 from html import unescape
 
 from tests.test_stage_pages import DEMO, _pages, demo, tampered  # noqa: F401
+from tests.conftest import whole_folds
 
 PLACEHOLDER = "not available until onetrace 0.2.0"
 
@@ -26,7 +27,7 @@ def _receipt(run, store) -> str:
 def _row(page: str, name: str) -> str:
     found = re.search(rf'<tr data-row="{re.escape(name)}">(.*?)</tr>', page, re.S)
     assert found, f"no {name} row"
-    return re.sub(r"\s+", " ", unescape(re.sub(r"<[^>]+>", " ", found.group(1)))).strip()
+    return re.sub(r"\s+", " ", unescape(re.sub(r"<[^>]+>", " ", whole_folds(found.group(1))))).strip()
 
 
 def _manifest() -> dict:
@@ -140,15 +141,15 @@ def test_the_header_pills_are_the_verifier_s_counts(demo):  # noqa: F811
     from onetrace_console.pages import _envelope
     report = parse(_envelope(run, store))
     total = report.count("pass") + report.count("fail") + report.count("not_run")
-    pills = re.sub(r"\s+", " ", unescape(re.sub(r"<[^>]+>", " ", re.search(
-        r'<p data-section="pills">(.*?)</p>', _receipt(run, store), re.S).group(1))))
+    pills = re.sub(r"\s+", " ", unescape(re.sub(r"<[^>]+>", " ", whole_folds(re.search(
+        r'<p data-section="pills">(.*?)</p>', _receipt(run, store), re.S).group(1)))))
     assert f"{report.count('pass')} of {total} checks" in pills
     assert "Signed: Signed, key not trusted" in pills and pills.rstrip().endswith("Anchored: Not anchored")
 
 
 def _pills(run, store) -> str:
-    return re.sub(r"\s+", " ", unescape(re.sub(r"<[^>]+>", " ", re.search(
-        r'<p data-section="pills">(.*?)</p>', _receipt(run, store), re.S).group(1)))).strip()
+    return re.sub(r"\s+", " ", unescape(re.sub(r"<[^>]+>", " ", whole_folds(re.search(
+        r'<p data-section="pills">(.*?)</p>', _receipt(run, store), re.S).group(1))))).strip()
 
 
 def test_a_check_that_held_without_output_files_required_is_not_said_to_agree(demo):  # noqa: F811
@@ -161,8 +162,10 @@ def test_a_check_that_held_without_output_files_required_is_not_said_to_agree(de
     assert run.check_verdict == "holds"
     envelope = json.loads(store.get(run.check_report).decode("utf-8"))
     envelope.pop("outputs_required")
-    without = replace(run, check_report=store.put(json.dumps(envelope).encode("utf-8")))
-    assert _pills(without, store).startswith("Records agree: held without its output files required")
+    from tests.test_one_reading import reread
+    without = reread(replace(run, check_report=store.put(json.dumps(envelope).encode("utf-8"))), store)
+    assert _pills(without, store).startswith(
+        "Records agree: not checked (held without its output files required)")
 
 
 def test_a_run_holding_its_outputs_and_passing_with_them_required_agrees(demo):  # noqa: F811
@@ -171,7 +174,7 @@ def test_a_run_holding_its_outputs_and_passing_with_them_required_agrees(demo): 
     run, store = demo
     envelope = json.loads(store.get(run.check_report).decode("utf-8"))
     assert envelope["outputs_required"]["exit_status"] == "0"
-    assert _pills(run, store).startswith("Records agree ·")
+    assert _pills(run, store).startswith("Records agree: yes ·")
 
 
 def test_records_agree_only_for_a_check_that_required_the_output_files(demo, monkeypatch):  # noqa: F811
@@ -179,7 +182,7 @@ def test_records_agree_only_for_a_check_that_required_the_output_files(demo, mon
     import onetrace_console.home as home
     monkeypatch.setattr(home, "artifacts_required", lambda r, s: True)
     pills = _pills(run, store)
-    assert pills.startswith("Records agree · "), pills
+    assert pills.startswith("Records agree: yes · "), pills
 
 
 def test_view_json_is_the_manifest_as_delivered(demo):  # noqa: F811
@@ -209,7 +212,7 @@ def test_what_this_receipt_does_not_say_is_the_fixed_text(demo):  # noqa: F811
     run, store = demo
     found = re.search(r'<section data-section="does-not-say">(.*?)</section>',
                       _receipt(run, store), re.S).group(1)
-    text = re.sub(r"\s+", " ", unescape(re.sub(r"<[^>]+>", " ", found)))
+    text = re.sub(r"\s+", " ", unescape(re.sub(r"<[^>]+>", " ", whole_folds(found))))
     for line in ("that the output or the action was correct",
                  "why the model wrote what it wrote",
                  "that the signing key wasn't misused (your trust list is what ties a key to a name)",

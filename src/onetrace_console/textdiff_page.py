@@ -44,12 +44,13 @@ def shown_document(comparison, store: Store) -> dict | None:
     has a first difference; None otherwise -- and then there is no page (an identical pair's text
     diff has nothing to list)."""
     from onetrace_console.compare import text_diff_raw
+    from onetrace_console.kept_inputs import for_this_console
     from onetrace_console.textdiff_view import TextDiffUnreadable, read_textdiff
     found = text_diff_raw(comparison, store)
     if found is None:
         return None
     try:
-        doc = read_textdiff(found[0])
+        doc = for_this_console(read_textdiff(found[0]), comparison, store)
     except TextDiffUnreadable:
         return None
     return doc if doc["shown"] and any(n["verdict"] == "FIRST DIFFERENCE" for n in doc.get("nodes", [])) else None

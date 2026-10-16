@@ -54,11 +54,11 @@ def test_the_forged_run_is_stored_as_contradicts_and_every_surface_says_so(uploa
     assert status == 200
     home = home.decode("utf-8")
     tally = {slug: re.search(rf'<li data-tally="{slug}"><a [^>]*>(\d+)', home).group(1)
-             for slug in ("holds", "contradicts", "could-not-check")}
+             for slug in ("records-agree", "contradicts", "could-not-check")}
     examined(3, "surfaces read")
     assert b["check_verdict"] == "contradicts", b
     assert re.search(r'<section class="strip [a-z]+" data-state="contradicts"', case)
-    assert tally == {"holds": "1", "contradicts": "1", "could-not-check": "0"}, tally
+    assert tally == {"records-agree": "1", "contradicts": "1", "could-not-check": "0"}, tally
 
 
 def test_on_0_2_0_the_forged_rows_read_and_the_digest_is_quoted_escaped(uploaded, examined):
@@ -107,8 +107,9 @@ def _broken_rows(store):
                           "FORGED\tROW\r\n0000'\n"
                           "1 pass, 1 fail, 0 not-run  ->  FAIL\n")
     envelope["exit_status"] = "1"
-    planted = replace(run, check_report=store.put(json.dumps(envelope).encode("utf-8")),
-                      check_exit="1", check_verdict="contradicts", check_note="")
+    from tests.test_one_reading import reread
+    planted = reread(replace(run, check_report=store.put(json.dumps(envelope).encode("utf-8")),
+                             check_exit="1", check_verdict="contradicts", check_note=""), store)
     store.put_run(planted)
     return planted
 

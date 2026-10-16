@@ -61,20 +61,26 @@ def _script_hash(script: str) -> str:
 
 
 def inline_scripts() -> tuple[str, ...]:
-    """Every inline script a page may carry: the print helper on the viewer's pages, and the
-    Overview's relative times."""
+    """Every inline script a page may carry: the print helper on the viewer's pages, the
+    Overview's relative times, the watched folder's notice, and the theme switch's two."""
+    from onetrace_console.frame import THEME_HEAD_SCRIPT, THEME_SCRIPT
     from onetrace_console.viewer.page import PRINT_SCRIPT
     from onetrace_console.words import RELATIVE_TIME_SCRIPT, WATCH_SCRIPT
-    return (PRINT_SCRIPT, RELATIVE_TIME_SCRIPT, WATCH_SCRIPT)
+    return (PRINT_SCRIPT, RELATIVE_TIME_SCRIPT, WATCH_SCRIPT, THEME_HEAD_SCRIPT, THEME_SCRIPT)
 
 
-def content_security_policy() -> str:
+def content_security_policy(*, local: bool = False) -> str:
     """Nothing loads but the console's own stylesheet and fonts, the pages' own `<style>`, inline
-    images, and the scripts whose hashes are named. No form may post, no page may frame it."""
+    images, and the scripts whose hashes are named. No form may post, no page may frame it. A
+    script runs only by its exact hash: never `'unsafe-inline'`, never another host.
+
+    `local`: the console on this machine, which also lets the watched folder's notice ask the
+    console itself what it has taken in (`connect-src 'self'`). Nothing else differs."""
     hashes = " ".join(_script_hash(s) for s in inline_scripts())
     return ("default-src 'none'; style-src 'self' 'unsafe-inline'; font-src 'self'; "
-            f"img-src 'self' data:; script-src {hashes}; base-uri 'none'; "
-            "form-action 'none'; frame-ancestors 'none'")
+            f"img-src 'self' data:; script-src {hashes}; "
+            + ("connect-src 'self'; " if local else "")
+            + "base-uri 'none'; form-action 'none'; frame-ancestors 'none'")
 
 
 def security_headers() -> tuple[tuple[str, str], ...]:

@@ -210,5 +210,32 @@ def test_a_watched_console_has_no_form_and_no_read_now_route(tmp_path, examined)
     examined(len(pages) + 1, "pages and the route")
     for name, page in pages.items():
         assert 'data-section="watched"' in page, name
-        assert not re.search(r"<(form|button)\b", page, re.I), name
+        from tests.test_theme_switch import without_the_console_s_own
+        assert not re.search(r"<(form|button)\b", without_the_console_s_own(page), re.I), name
     assert answered == (404, b"no such route\n"), answered
+
+
+def test_the_watched_line_shows_the_folder_as_written_not_with_doubled_backslashes(tmp_path, monkeypatch,
+                                                                                    examined):
+    """The watched-folder line shows the folder's path as written. On Windows every separator is a
+    backslash, and the page's record-word escape doubled each one (`C:\\\\Users\\\\...`). Here the
+    folder's own name holds a backslash, so the same line is checked on every platform; on Windows
+    its whole path is backslashes."""
+    import html
+    import re
+
+    from onetrace_console.render import watched_section
+    folder = tmp_path / "my\\runs"
+    folder.mkdir(parents=True)
+    monkeypatch.setattr(watch, "CURRENT", watch.Watcher(folder, lambda run_dir: True, interval=1.0))
+    shown = re.search(r"<p>Watching <code>(.*?)</code>", watched_section()).group(1)
+    examined(1, "watched lines")
+    assert html.unescape(shown) == str(folder.resolve()), shown
+    assert "\\\\" not in shown
+
+
+def test_a_watched_path_s_control_characters_are_still_shown_as_escapes(examined):
+    from onetrace_console.words import path_text
+    shown = path_text("C:\\Users\\a\x07b\u202e<c>")
+    examined(1, "paths")
+    assert shown == "C:\\Users\\a\\u0007b\\u202e&lt;c&gt;", shown

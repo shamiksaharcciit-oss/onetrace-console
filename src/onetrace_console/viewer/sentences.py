@@ -26,7 +26,7 @@ never fills a placeholder with text it composed itself.
 ROWS WHOSE INPUTS DO NOT EXIST YET
 -----------------------------------
 Six §4 rows describe the verbs' reports (`localize`, `diff`, `reproduce`), whose format
-arrives with the SDK (2 October), and a seventh (`anchor.anchored`) needs a date the
+arrives with the SDK's verb reports, and a seventh (`anchor.anchored`) needs a date the
 preview format does not define. All seven are carried here verbatim so the table is whole,
 and named in `PENDING_ROWS` with what they wait for. A row that waits is counted and
 named, not silently dropped.
@@ -143,6 +143,8 @@ RULED_024 = "the remaining wording"
 RULED_030 = "the labels decision"
 RULED_031 = "the label-trigger decision"
 RULED_033 = "the duplicate-wording withdrawal"
+RULED_STOPPED = "the declined-runs work order"
+RULED_STOPPED_AT = "stopped-at-a-step wording"
 RULED_BR047 = "the error-origin decision"
 RULED_RATIONALE = "the relayed ruling of 2026-09-25 adopting the recorded-rationale sentence as fresh wording"
 ADOPTED_NOTE_015 = "Note 015 §7, adopted as written in the wording review (023 §4)"
@@ -193,6 +195,20 @@ RULED_PENDING_DELIVERY: dict[str, str] = {
 }
 
 RULED: dict[str, tuple[str, str]] = {
+    #: Rung 3 for a run stopped at a step's own rule. The ruled "Not reached: stopped at {step}" is
+    #: drawn as the rung's state word, "Not reached", then this line.
+    "rung.missing.stopped_at": (
+        "Stopped at {step}.",
+        RULED_STOPPED_AT + ": rung 3 for a run stopped at a step's own rule, the step it stopped at"),
+    "rung.missing.not_reached": (
+        "Declared steps not reached: {steps}.",
+        RULED_STOPPED_AT + ": rung 3, underneath, the declared steps after it"),
+    "declined.chip": (
+        "Declined at {stage}",
+        RULED_STOPPED + ": the chip on the run header and in the runs list, in its words"),
+    "declined.overview": (
+        "stopped by a step",
+        RULED_STOPPED + ": the Overview's count, \"Stopped by a step\", as a count's label"),
     # The free file in the console's specified words. The words
     # are the specified ones, checked against their archived text; `{error}` is its "{error type}".
     "last_failed.one": (
@@ -539,6 +555,22 @@ RULED: dict[str, tuple[str, str]] = {
 #: ladder; the canvas is not a sealed text, so the words are provisional here until they are
 #: fixed, and each entry names the board it is taken from.
 PROVISIONAL: dict[str, tuple[str, str]] = {
+    "fingerprint.whole": (
+        "Each fingerprint in full",
+        "fingerprints short in text and tables (the visual-quality work order): the fold holding "
+        "the whole values; no words ruled yet"),
+    "declined.banner": (
+        "The run stopped at {stage}: the step declined by its own rule, and recorded why: {reason}.",
+        RULED_STOPPED + " asks for a run-page banner with the recorded reason; no words ruled yet"),
+    "declined.banner_no_reason": (
+        "The run stopped at {stage}: the step declined by its own rule, and recorded no reason.",
+        RULED_STOPPED + ", the case the record gives no reason; no words ruled yet"),
+    "declined.left": (
+        "Declared steps left without a receipt: {steps}.",
+        RULED_STOPPED + ": the banner names the declared steps left without a receipt; no words ruled yet"),
+    "declined.none_left": (
+        "No declared step was left without a receipt.",
+        RULED_STOPPED + ", the case the declining step was the last declared one; no words ruled yet"),
     "check.not_run.originality_all": (
         "Held under the checks that ran; not anchored, so none of these steps can be shown to be the "
         "record that was made.",
@@ -787,10 +819,13 @@ LABELS: dict[str, str] = {
     "rung.state.no": "No",
     "rung.state.couldnt_check": "Couldn't check",
     "rung.state.not_checked": "Not checked",
+    "rung.state.no_verdict": "No verdict recorded",
     "rung.state.not_yet": "Not yet available",
     "rung.state.unsigned": "Unsigned",
     "rung.state.not_anchored": "Not anchored",
+    "rung.state.not_a_graph_run": "Not a graph run",
     "rung.state.signed_untrusted": "Signed, key not trusted",
+    "rung.state.not_reached": "Not reached",
     # The execution graph's table and folds, as specified -- see LABELS_RULED_29DB -- and the
     # link to a run page's comparison -- see LABELS_RULED_29DF.
     "graph.col_node": "Node",
@@ -858,6 +893,11 @@ LABELS_RULED_C18E5_22: dict[str, str] = {
     "rung.state.signed_untrusted": "ladder table, signing rung: SIGNED-UNTRUSTED, as the table words it",
 }
 
+#: Rung 3's state word for a run stopped at a step's own rule. Its word stays in LABELS.
+LABELS_RULED_STOPPED_AT: dict[str, str] = {
+    "rung.state.not_reached": RULED_STOPPED_AT + ": rung 3's state where the run stopped at a step",
+}
+
 LABELS_RULED_29GS: dict[str, str] = {
     "rung.approved": "plan rung wording: the plan rung's question, as proposed",
     "rung.state.not_declared": "plan rung wording: the plan rung's no-plan state word, as proposed",
@@ -909,6 +949,9 @@ LABELS_UNRULED: dict[str, str] = {
     "section.ladder": "run ladder canvas: v6 canvas board 2, the ladder's heading",
     "rung.records-agree": "run ladder canvas: v6 canvas board 2, rung 1's question",
     "rung.signed": "run ladder canvas: v6 canvas board 2, rung 2's question",
+    "rung.state.not_a_graph_run":
+        "runs list, plan rung: a straight-line run's state word, where the run page draws no badge "
+        "and one line; the plan rung's \"not a graph run\" state, as proposed",
     "rung.nothing-missing": "run ladder canvas: v6 canvas board 2, rung 3's question",
     "rung.reproduced": "run ladder canvas: v6 canvas board 2, rung 4's question",
     "rung.authorized": "run ladder canvas: v6 canvas board 2, rung 5's question",
@@ -921,6 +964,9 @@ LABELS_UNRULED: dict[str, str] = {
     "rung.state.not_checked":
         "run ladder canvas: the state word for a rung with no evidence to read. Not drawn on the "
         "canvas; this channel's words, kept apart from \"No\" (three-outcome rule)",
+    "rung.state.no_verdict":
+        "the console's runs lists: \"Records agree\" for a run the check has not reached, which has "
+        "no page of its own (records.py)",
     "rung.state.not_yet": "run ladder canvas: v6 canvas board 2's state word for signing",
 }
 

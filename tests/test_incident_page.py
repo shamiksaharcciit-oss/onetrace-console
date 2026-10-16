@@ -112,7 +112,8 @@ def page_problems(page: str, incident, store, pages) -> list[str]:
         out.append("the verifier's rows are not its own")
     import json
 
-    from onetrace_console.viewer.page import _named, _rest
+    from onetrace_console.viewer.model import NAME_CAP
+    from onetrace_console.viewer.page import _named, _rest, fingerprints_in_text
 
     def word(text):   # a record's word, as every page quotes one
         return _named(text) + _rest(text, whole=False)
@@ -122,7 +123,9 @@ def page_problems(page: str, incident, store, pages) -> list[str]:
     for r in failed:
         path, _, check = str(r["name"]).partition(": ")
         wanted.append(f"<code>{word(path)}</code>" + (f" — {word(check)}" if check else "")
-                      + (f": {word(r['detail'])}" if r.get("detail") else ""))
+                      #: The detail capped, each fingerprint in it short with its fold.
+                      + (f": {fingerprints_in_text(r['detail'][:NAME_CAP])}{_rest(r['detail'], whole=False)}"
+                         if r.get("detail") else ""))
     if not named or named != wanted:
         out.append(f"which file: {named} for {wanted}")
     if re.search(r"<form|<button|re-?check|check again", page, re.I):

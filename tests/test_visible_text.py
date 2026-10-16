@@ -12,6 +12,7 @@ Every difference must be declared below, with its reason:
 - `EXPLAINED`: a block gone or new on one page, with why. A wording change is also reported as
   before/after.
 - `NEW_PAGES`: a page that did not exist before, with why.
+- `GONE_PAGES`: a page no longer drawn, on purpose, with why.
 
 Before comparing, both sides lose exactly two things that belong to the machine, not the page
 And nothing else: any path ending in `onetrace_verify/verify.py` becomes
@@ -243,8 +244,6 @@ EXPLAINED: dict[str, dict[str, dict[str, str]]] = {
                 _COUNTS + ": the list's heading, now the page's heading, All counts",
         },
         "new": {
-            "Order: contradicts itself, then couldn't check, then not checked, then a declared stage missing, then last attempt failed, then changed vs baseline; newest first within each.":
-                _LAST_FAILED,
             "2 of 2 declared stages":
                 _DELIVERED,
             "3 of 3 declared stages":
@@ -432,7 +431,7 @@ for _page, _kinds in _STEP2_PAGES.items():
 #: difference by tooling, not typed.
 _B2_0_2_0 = "B2: the 0.2.0 verifier refuses the forged digest, so nb2-cand contradicts and the SDK refuses to compare it"
 _B2_0_2_0_PAGES: dict[str, dict[str, list[str]]] = {
-    "diff[held-a,held-b]": {"gone": ["#", "1", "2", "First difference", "First difference: stage 1 \u00b7 alpha.", "No recorded setting of it differs. Its output differs.", "No recorded settings or code digest at stage 1 \u00b7 alpha differs between the two runs, so there is no recorded change to look for elsewhere.", "No stage comes before it.", "Of the 1 stage after it, 0 differ, 1 is the same again.", "Same again", "The first difference is at stage 1 \u00b7 alpha. No smaller set was reported.", "Why stage 1 \u00b7 alpha's output differs is not established by this evidence.", "alpha", "baseline", "baseline (the baseline run's folder) nb2-base (run) candidate (the candidate run's folder) nb2-cand (run) diff: diverged stage baseline candidate verdict -------------------------------------------------------------------- alpha <hex> ab\\u000d\\u00 FIRST DIFFERENCE beta <hex> <hex> reconverged first difference stage 1, 'alpha' comparisons performed 2; stages identical before the first difference 0 carried: [baseline] [NOT-RUN] receipts/01-alpha.json: originality -- record is declared unanchored; this verifier can establish consistency, not originality [baseline] [NOT-RUN] receipts/02-beta.json: originality -- record is declared unanchored; this verifier can establish consistency, not originality [candidate] [NOT-RUN] receipts/01-alpha.json: originality -- record is declared unanchored; this verifier can establish consistency, not originality [candidate] [NOT-RUN] receipts/02-beta.json: originality -- record is declared unanchored; this verifier can establish consistency, not originality [candidate] [NOT-RUN] run: artifacts -- artifacts not present; output files not checked", "baseline (the baseline run's folder) nb2-base (run) candidate (the candidate run's folder) nb2-cand (run) localize: diverged stage baseline candidate verdict -------------------------------------------------------------------- alpha <hex> ab\\u000d\\u00 FIRST DIFFERENCE beta <hex> <hex> reconverged first difference stage 1, 'alpha' comparisons performed 2; stages identical before the first difference 0 CAUSE at stage 1, 'alpha' instrument instrument unchanged config <hex> -> <hex> neither instrument nor config differs at the first difference; the difference is on the outputs upstream every stage before this one carries an identical output digest BLAST RADIUS COULD NOT CHECK \u2014 no chunk index found by digest among both runs' declared outputs carried: [baseline] [NOT-RUN] receipts/01-alpha.json: originality -- record is declared unanchored; this verifier can establish consistency, not originality [baseline] [NOT-RUN] receipts/02-beta.json: originality -- record is declared unanchored; this verifier can establish consistency, not originality [candidate] [NOT-RUN] receipts/01-alpha.json: originality -- record is declared unanchored; this verifier can establish consistency, not originality [candidate] [NOT-RUN] receipts/02-beta.json: originality -- record is declared unanchored; this verifier can establish consistency, not originality [candidate] [NOT-RUN] run: artifacts -- artifacts not present; output files not checked", "beta", "candidate", "diff: diverged (exit 1)", "localize: diverged (exit 1)", "no recorded setting differs", "result", "settings", "sha256:<hex>", "sha256:ab\\u000d\\u000aFORGED\\u0009ROW\\u000d\\u000a0000000000000000000000000000000000000000", "stage"], "new": ["1 of the 4 incidents raised from stored runs when this page was generated came from this page's reports", "I-CONTRADICTS \u2014 run nb2-cand \u00b7 <hex>, field stdout[FAIL]", "The report names no localized set. That is what it says, not a gap in this page.", "This console can't read a first difference from this comparison's diff report, so it doesn't look for other runs with the same change.", "[FAIL ] receipts/01-alpha.json: digest is sha256: and 64 lower-case hex -- outputs[0].digest: 'sha256:ab\\\\r\\\\nFORGED\\\\tROW\\\\r\\\\n0000000000000000000000000000000000000000'", "all incidents", "baseline (the baseline run's folder) nb2-base (run) candidate (the candidate run's folder) None (run) diff: refused \u2014 does not verify: (the candidate run's folder) REFUSED \u2014 candidate does not verify: [FAIL] receipts/01-alpha.json: digest is sha256: and 64 lower-case hex -- outputs[0].digest: 'sha256:ab\\\\r\\\\nFORGED\\\\tROW\\\\r\\\\n0000000000000000000000000000000000000000' carried: [baseline] [NOT-RUN] receipts/01-alpha.json: originality -- record is declared unanchored; this verifier can establish consistency, not originality [baseline] [NOT-RUN] receipts/02-beta.json: originality -- record is declared unanchored; this verifier can establish consistency, not originality [candidate] [NOT-RUN] receipts/01-alpha.json: originality -- record is declared unanchored; this verifier can establish consistency, not originality [candidate] [NOT-RUN] receipts/02-beta.json: originality -- record is declared unanchored; this verifier can establish consistency, not originality [candidate] [NOT-RUN] run: artifacts -- artifacts not present; output files not checked", "baseline (the baseline run's folder) nb2-base (run) candidate (the candidate run's folder) None (run) localize: refused \u2014 does not verify: (the candidate run's folder) REFUSED \u2014 candidate does not verify: [FAIL] receipts/01-alpha.json: digest is sha256: and 64 lower-case hex -- outputs[0].digest: 'sha256:ab\\\\r\\\\nFORGED\\\\tROW\\\\r\\\\n0000000000000000000000000000000000000000' carried: [baseline] [NOT-RUN] receipts/01-alpha.json: originality -- record is declared unanchored; this verifier can establish consistency, not originality [baseline] [NOT-RUN] receipts/02-beta.json: originality -- record is declared unanchored; this verifier can establish consistency, not originality [candidate] [NOT-RUN] receipts/01-alpha.json: originality -- record is declared unanchored; this verifier can establish consistency, not originality [candidate] [NOT-RUN] receipts/02-beta.json: originality -- record is declared unanchored; this verifier can establish consistency, not originality [candidate] [NOT-RUN] run: artifacts -- artifacts not present; output files not checked", "diff: refused \u2014 does not verify: (the candidate run's folder) (exit 3)", "localize: refused \u2014 does not verify: (the candidate run's folder) (exit 3)", "the report it came from"]},
+    "diff[held-a,held-b]": {"gone": ["#", "1", "2", "First difference", "First difference: stage 1 \u00b7 alpha.", "No recorded setting of it differs. Its output differs.", "No recorded settings or code digest at stage 1 \u00b7 alpha differs between the two runs, so there is no recorded change to look for elsewhere.", "No stage comes before it.", "Of the 1 stage after it, 0 differ, 1 is the same again.", "Same again", "The first difference is at stage 1 \u00b7 alpha. No smaller set was reported.", "Why stage 1 \u00b7 alpha's output differs is not established by this evidence.", "alpha", "baseline", "baseline (the baseline run's folder) nb2-base (run) candidate (the candidate run's folder) nb2-cand (run) diff: diverged stage baseline candidate verdict -------------------------------------------------------------------- alpha <hex> ab\\u000d\\u00 FIRST DIFFERENCE beta <hex> <hex> reconverged first difference stage 1, 'alpha' comparisons performed 2; stages identical before the first difference 0 carried: [baseline] [NOT-RUN] receipts/01-alpha.json: originality -- record is declared unanchored; this verifier can establish consistency, not originality [baseline] [NOT-RUN] receipts/02-beta.json: originality -- record is declared unanchored; this verifier can establish consistency, not originality [candidate] [NOT-RUN] receipts/01-alpha.json: originality -- record is declared unanchored; this verifier can establish consistency, not originality [candidate] [NOT-RUN] receipts/02-beta.json: originality -- record is declared unanchored; this verifier can establish consistency, not originality [candidate] [NOT-RUN] run: artifacts -- artifacts not present; output files not checked", "baseline (the baseline run's folder) nb2-base (run) candidate (the candidate run's folder) nb2-cand (run) localize: diverged stage baseline candidate verdict -------------------------------------------------------------------- alpha <hex> ab\\u000d\\u00 FIRST DIFFERENCE beta <hex> <hex> reconverged first difference stage 1, 'alpha' comparisons performed 2; stages identical before the first difference 0 CAUSE at stage 1, 'alpha' instrument instrument unchanged config <hex> -> <hex> neither instrument nor config differs at the first difference; the difference is on the outputs upstream every stage before this one carries an identical output digest BLAST RADIUS COULD NOT CHECK \u2014 no chunk index found by digest among both runs' declared outputs carried: [baseline] [NOT-RUN] receipts/01-alpha.json: originality -- record is declared unanchored; this verifier can establish consistency, not originality [baseline] [NOT-RUN] receipts/02-beta.json: originality -- record is declared unanchored; this verifier can establish consistency, not originality [candidate] [NOT-RUN] receipts/01-alpha.json: originality -- record is declared unanchored; this verifier can establish consistency, not originality [candidate] [NOT-RUN] receipts/02-beta.json: originality -- record is declared unanchored; this verifier can establish consistency, not originality [candidate] [NOT-RUN] run: artifacts -- artifacts not present; output files not checked", "beta", "candidate", "diff: diverged (exit 1)", "localize: diverged (exit 1)", "no recorded setting differs", "result", "settings", "sha256:<hex>", "sha256:ab\\u000d\\u000aFORGED\\u0009ROW\\u000d\\u000a0000000000000000000000000000000000000000", "stage"], "new": ["1 of the 4 incidents raised from stored runs when this page was generated came from this page's reports", "I-CONTRADICTS \u2014 run nb2-cand \u00b7 <hex>, field stdout[FAIL]", "The report names no localized set. That is what it says, not a gap in this page.", "[FAIL ] receipts/01-alpha.json: digest is sha256: and 64 lower-case hex -- outputs[0].digest: 'sha256:ab\\\\r\\\\nFORGED\\\\tROW\\\\r\\\\n0000000000000000000000000000000000000000'", "all incidents", "baseline (the baseline run's folder) nb2-base (run) candidate (the candidate run's folder) None (run) diff: refused \u2014 does not verify: (the candidate run's folder) REFUSED \u2014 candidate does not verify: [FAIL] receipts/01-alpha.json: digest is sha256: and 64 lower-case hex -- outputs[0].digest: 'sha256:ab\\\\r\\\\nFORGED\\\\tROW\\\\r\\\\n0000000000000000000000000000000000000000' carried: [baseline] [NOT-RUN] receipts/01-alpha.json: originality -- record is declared unanchored; this verifier can establish consistency, not originality [baseline] [NOT-RUN] receipts/02-beta.json: originality -- record is declared unanchored; this verifier can establish consistency, not originality [candidate] [NOT-RUN] receipts/01-alpha.json: originality -- record is declared unanchored; this verifier can establish consistency, not originality [candidate] [NOT-RUN] receipts/02-beta.json: originality -- record is declared unanchored; this verifier can establish consistency, not originality [candidate] [NOT-RUN] run: artifacts -- artifacts not present; output files not checked", "baseline (the baseline run's folder) nb2-base (run) candidate (the candidate run's folder) None (run) localize: refused \u2014 does not verify: (the candidate run's folder) REFUSED \u2014 candidate does not verify: [FAIL] receipts/01-alpha.json: digest is sha256: and 64 lower-case hex -- outputs[0].digest: 'sha256:ab\\\\r\\\\nFORGED\\\\tROW\\\\r\\\\n0000000000000000000000000000000000000000' carried: [baseline] [NOT-RUN] receipts/01-alpha.json: originality -- record is declared unanchored; this verifier can establish consistency, not originality [baseline] [NOT-RUN] receipts/02-beta.json: originality -- record is declared unanchored; this verifier can establish consistency, not originality [candidate] [NOT-RUN] receipts/01-alpha.json: originality -- record is declared unanchored; this verifier can establish consistency, not originality [candidate] [NOT-RUN] receipts/02-beta.json: originality -- record is declared unanchored; this verifier can establish consistency, not originality [candidate] [NOT-RUN] run: artifacts -- artifacts not present; output files not checked", "diff: refused \u2014 does not verify: (the candidate run's folder) (exit 3)", "localize: refused \u2014 does not verify: (the candidate run's folder) (exit 3)", "the report it came from"]},
     "executions-changed-vs-baseline.html": {"gone": ["2", "<time> \u2192 <time>", "alpha \u2192 beta", "nb2-cand"], "new": ["Runs in this list: none of the 4 stored. Nothing is summarised across runs on this page."]},
     "executions-contradicts.html": {"new": ["2", "<time> \u2192 <time>", "Runs in this list: 2 of 4 stored, and this page lists all 2. Nothing is summarised across runs on this page.", "alpha \u2192 beta", "nb2-cand"]},
     "executions-holds.html": {"gone": ["2", "<time> \u2192 <time>", "alpha \u2192 beta", "nb2-cand"], "new": ["Runs in this list: 2 of 4 stored, and this page lists all 2. Nothing is summarised across runs on this page."]},
@@ -967,6 +966,10 @@ for _page in ["run[forged]/case.html", "run[held-a]/case.html", "run[held-b]/cas
 _SDK_021 = "the comparison names the installed SDK, 0.2.1"
 EXPLAINED.setdefault("diff[held-a,held-b]", {}).setdefault("new", {}).update(dict.fromkeys(
     ["Compared with onetrace 0.2.1, build wheel:<hex>, at <time>."], _SDK_021))
+#: 0.2.2 since console 0.2.0's pin. Measured, not typed.
+_SDK_022 = "the comparison names the installed SDK, 0.2.2"
+EXPLAINED.setdefault("diff[held-a,held-b]", {}).setdefault("new", {}).update(dict.fromkeys(
+    ["Compared with onetrace 0.2.2, build wheel:<hex>, at <time>."], _SDK_022))
 
 #: Two times, each named: "Received" is when this console took a run in, and the run's own start
 #: time, from its record, stands beside it under "Ran". Measured, not typed.
@@ -1007,11 +1010,11 @@ for _page, _kinds in _LIST_WORDS_PAGES.items():
 #: typed.
 _RUN_HEAD = "the run page's head: who the run is, its two times, four rungs, its tabs"
 _RUN_HEAD_PAGES: dict[str, dict[str, list[str]]] = {
-    'run[forged]/case.html': {'gone': ['Case', 'The run, step by step', 'nb2-cand'], 'new': ['2 of 2 declared stages · recorded in the format stage-receipt-chain/0.2 · ran <time> · received by this console <time>', 'Committed by a known time Not anchored', 'Graph Table Inputs & outputs Receipt', 'Ran as approved a straight-line run: there is no plan to compare', 'Records agree No', 'Runs / P2 / nb2-cand', 'Signed by a known recorder Unsigned', 'nb2-cand · P2']},
-    'run[held-a]/case.html': {'gone': ['Case', 'The run, step by step', 'nb2-base'], 'new': ['2 of 2 declared stages · recorded in the format stage-receipt-chain/0.2 · ran <time> · received by this console <time>', 'Committed by a known time Not anchored', 'Graph Table Inputs & outputs Receipt', 'Ran as approved a straight-line run: there is no plan to compare', 'Records agree Yes', 'Runs / P2 / nb2-base', 'Signed by a known recorder Unsigned', 'nb2-base · P2']},
-    'run[held-b]/case.html': {'gone': ['Case', 'The run, step by step', 'nb2-cand'], 'new': ['2 of 2 declared stages · recorded in the format stage-receipt-chain/0.2 · ran <time> · received by this console <time>', 'Committed by a known time Not anchored', 'Graph Table Inputs & outputs Receipt', 'Ran as approved a straight-line run: there is no plan to compare', 'Records agree No', 'Runs / P2 / nb2-cand', 'Signed by a known recorder Unsigned', 'nb2-cand · P2']},
-    'run[preview]/case.html': {'gone': ['Case', 'The run, step by step', 'ingest-r1-chunker-3.4'], 'new': ['9 of 9 declared stages · recorded in the format stage-receipt-chain/0.0-preview · ran <time> · received by this console <time>', 'Committed by a known time Not anchored', 'Graph Table Inputs & outputs Receipt', 'Ran as approved a straight-line run: there is no plan to compare', "Records agree Couldn't check", 'Runs / P1 / ingest-r1-chunker-3.4', 'Signed by a known recorder Unsigned', 'ingest-r1-chunker-3.4 · P1']},
-    'run[r11]/case.html': {'gone': ['Case', 'The run, step by step', 'dag-r37-r'], 'new': ['3 of 3 declared stages · recorded in the format stage-receipt-chain/0.1 · ran <time> · received by this console <time>', 'Committed by a known time Not anchored', 'Graph Table Inputs & outputs Receipt', 'Ran as approved Yes', 'Records agree Not checked', 'Runs / P1 / dag-r37-r', 'Signed by a known recorder Unsigned', 'dag-r37-r · P1']},
+    'run[forged]/case.html': {'gone': ['Case', 'The run, step by step', 'nb2-cand'], 'new': ['2 of 2 declared stages · recorded in the format stage-receipt-chain/0.2 · ran <time> · received by this console <time>', 'Committed by a known time Not anchored', 'Ran as approved a straight-line run: there is no plan to compare', 'Records agree No', 'Runs / P2 / nb2-cand', 'Signed by a known recorder Unsigned', 'nb2-cand · P2']},
+    'run[held-a]/case.html': {'gone': ['Case', 'The run, step by step', 'nb2-base'], 'new': ['2 of 2 declared stages · recorded in the format stage-receipt-chain/0.2 · ran <time> · received by this console <time>', 'Committed by a known time Not anchored', 'Ran as approved a straight-line run: there is no plan to compare', 'Records agree Yes', 'Runs / P2 / nb2-base', 'Signed by a known recorder Unsigned', 'nb2-base · P2']},
+    'run[held-b]/case.html': {'gone': ['Case', 'The run, step by step', 'nb2-cand'], 'new': ['2 of 2 declared stages · recorded in the format stage-receipt-chain/0.2 · ran <time> · received by this console <time>', 'Committed by a known time Not anchored', 'Ran as approved a straight-line run: there is no plan to compare', 'Records agree No', 'Runs / P2 / nb2-cand', 'Signed by a known recorder Unsigned', 'nb2-cand · P2']},
+    'run[preview]/case.html': {'gone': ['Case', 'The run, step by step', 'ingest-r1-chunker-3.4'], 'new': ['9 of 9 declared stages · recorded in the format stage-receipt-chain/0.0-preview · ran <time> · received by this console <time>', 'Committed by a known time Not anchored', 'Ran as approved a straight-line run: there is no plan to compare', "Records agree Couldn't check", 'Runs / P1 / ingest-r1-chunker-3.4', 'Signed by a known recorder Unsigned', 'ingest-r1-chunker-3.4 · P1']},
+    'run[r11]/case.html': {'gone': ['Case', 'The run, step by step', 'dag-r37-r'], 'new': ['3 of 3 declared stages · recorded in the format stage-receipt-chain/0.1 · ran <time> · received by this console <time>', 'Committed by a known time Not anchored', 'Ran as approved Yes', 'Records agree Not checked', 'Runs / P1 / dag-r37-r', 'Signed by a known recorder Unsigned', 'dag-r37-r · P1']},
 }
 for _page, _kinds in _RUN_HEAD_PAGES.items():
     for _kind, _texts in _kinds.items():
@@ -1063,14 +1066,14 @@ for _page, _kinds in _RUNS_TABLE_PAGES.items():
 #: four answers, as it must never read as a pass). Measured, not typed.
 _PAGE_HEADS = "the run's head on its answer and authorization pages"
 _PAGE_HEADS_PAGES: dict[str, dict[str, list[str]]] = {
-    'run[forged]/answer.html': {'gone': ['Answer', 'Where this answer came from', 'nb2-cand'], 'new': ['2 of 2 declared stages · recorded in the format stage-receipt-chain/0.2 · ran <time> · received by this console <time>', 'Committed by a known time Not anchored', 'Graph Table Inputs & outputs Receipt', 'Ran as approved a straight-line run: there is no plan to compare', 'Records agree No', 'Runs / P2 / nb2-cand', 'Signed by a known recorder Unsigned', 'nb2-cand · P2']},
-    'run[forged]/authorization.html': {'new': ['2 of 2 declared stages · recorded in the format stage-receipt-chain/0.2 · ran <time> · received by this console <time>', 'Graph Table Inputs & outputs Receipt', 'Runs / P2 / nb2-cand', 'nb2-cand · P2']},
-    'run[held-a]/answer.html': {'gone': ['Answer', 'Where this answer came from', 'nb2-base'], 'new': ['2 of 2 declared stages · recorded in the format stage-receipt-chain/0.2 · ran <time> · received by this console <time>', 'Committed by a known time Not anchored', 'Graph Table Inputs & outputs Receipt', 'Ran as approved a straight-line run: there is no plan to compare', 'Records agree Yes', 'Runs / P2 / nb2-base', 'Signed by a known recorder Unsigned', 'nb2-base · P2']},
-    'run[held-a]/authorization.html': {'new': ['2 of 2 declared stages · recorded in the format stage-receipt-chain/0.2 · ran <time> · received by this console <time>', 'Graph Table Inputs & outputs Receipt', 'Runs / P2 / nb2-base', 'nb2-base · P2']},
-    'run[held-b]/answer.html': {'gone': ['Answer', 'Where this answer came from', 'nb2-cand'], 'new': ['2 of 2 declared stages · recorded in the format stage-receipt-chain/0.2 · ran <time> · received by this console <time>', 'Committed by a known time Not anchored', 'Graph Table Inputs & outputs Receipt', 'Ran as approved a straight-line run: there is no plan to compare', 'Records agree No', 'Runs / P2 / nb2-cand', 'Signed by a known recorder Unsigned', 'nb2-cand · P2']},
-    'run[held-b]/authorization.html': {'new': ['2 of 2 declared stages · recorded in the format stage-receipt-chain/0.2 · ran <time> · received by this console <time>', 'Graph Table Inputs & outputs Receipt', 'Runs / P2 / nb2-cand', 'nb2-cand · P2']},
-    'run[r11]/answer.html': {'gone': ['Answer', 'Where this answer came from', 'dag-r37-r'], 'new': ['3 of 3 declared stages · recorded in the format stage-receipt-chain/0.1 · ran <time> · received by this console <time>', 'Committed by a known time Not anchored', 'Graph Table Inputs & outputs Receipt', 'Ran as approved Yes', 'Records agree Not checked', 'Runs / P1 / dag-r37-r', 'Signed by a known recorder Unsigned', 'dag-r37-r · P1']},
-    'run[r11]/authorization.html': {'new': ['3 of 3 declared stages · recorded in the format stage-receipt-chain/0.1 · ran <time> · received by this console <time>', 'Graph Table Inputs & outputs Receipt', 'Runs / P1 / dag-r37-r', 'dag-r37-r · P1']},
+    'run[forged]/answer.html': {'gone': ['Answer', 'Where this answer came from', 'nb2-cand'], 'new': ['2 of 2 declared stages · recorded in the format stage-receipt-chain/0.2 · ran <time> · received by this console <time>', 'Committed by a known time Not anchored', 'Ran as approved a straight-line run: there is no plan to compare', 'Records agree No', 'Runs / P2 / nb2-cand', 'Signed by a known recorder Unsigned', 'nb2-cand · P2']},
+    'run[forged]/authorization.html': {'new': ['2 of 2 declared stages · recorded in the format stage-receipt-chain/0.2 · ran <time> · received by this console <time>', 'Runs / P2 / nb2-cand', 'nb2-cand · P2']},
+    'run[held-a]/answer.html': {'gone': ['Answer', 'Where this answer came from', 'nb2-base'], 'new': ['2 of 2 declared stages · recorded in the format stage-receipt-chain/0.2 · ran <time> · received by this console <time>', 'Committed by a known time Not anchored', 'Ran as approved a straight-line run: there is no plan to compare', 'Records agree Yes', 'Runs / P2 / nb2-base', 'Signed by a known recorder Unsigned', 'nb2-base · P2']},
+    'run[held-a]/authorization.html': {'new': ['2 of 2 declared stages · recorded in the format stage-receipt-chain/0.2 · ran <time> · received by this console <time>', 'Runs / P2 / nb2-base', 'nb2-base · P2']},
+    'run[held-b]/answer.html': {'gone': ['Answer', 'Where this answer came from', 'nb2-cand'], 'new': ['2 of 2 declared stages · recorded in the format stage-receipt-chain/0.2 · ran <time> · received by this console <time>', 'Committed by a known time Not anchored', 'Ran as approved a straight-line run: there is no plan to compare', 'Records agree No', 'Runs / P2 / nb2-cand', 'Signed by a known recorder Unsigned', 'nb2-cand · P2']},
+    'run[held-b]/authorization.html': {'new': ['2 of 2 declared stages · recorded in the format stage-receipt-chain/0.2 · ran <time> · received by this console <time>', 'Runs / P2 / nb2-cand', 'nb2-cand · P2']},
+    'run[r11]/answer.html': {'gone': ['Answer', 'Where this answer came from', 'dag-r37-r'], 'new': ['3 of 3 declared stages · recorded in the format stage-receipt-chain/0.1 · ran <time> · received by this console <time>', 'Committed by a known time Not anchored', 'Ran as approved Yes', 'Records agree Not checked', 'Runs / P1 / dag-r37-r', 'Signed by a known recorder Unsigned', 'dag-r37-r · P1']},
+    'run[r11]/authorization.html': {'new': ['3 of 3 declared stages · recorded in the format stage-receipt-chain/0.1 · ran <time> · received by this console <time>', 'Runs / P1 / dag-r37-r', 'dag-r37-r · P1']},
 }
 for _page, _kinds in _PAGE_HEADS_PAGES.items():
     for _kind, _texts in _kinds.items():
@@ -1091,6 +1094,110 @@ NEW_PAGES.update({
     "incidents/i-contradicts-<key>.html": "one incident's own page, the Check board",
     "incidents/i-runid-reused-<key>.html": "one incident's own page, the Check board",
 })
+
+#: "Ran as approved" in the runs list, as each run's own page reads it: the column's heading and
+#: each run's state word. Generated from the measured difference by tooling, not typed.
+_APPROVED_LISTED = "the runs list shows \"Ran as approved\", as each run's own page reads it"
+_APPROVED_LISTED_PAGES: dict[str, dict[str, list[str]]] = {
+    "executions-all.html": {"new": ["Not a graph run", "Ran as approved"]},
+    "executions-contradicts.html": {"new": ["Not a graph run", "Ran as approved"]},
+    "executions-holds.html": {"new": ["Not a graph run", "Ran as approved"]},
+    "executions-most-recent.html": {"new": ["Not a graph run", "Ran as approved"]},
+    "executions-needs-attention.html": {"new": ["Not a graph run", "Ran as approved"]},
+    "executions-nothing-missing.html": {"new": ["Not a graph run", "Ran as approved"]},
+    "executions-pipeline-p1.html": {"new": ["Ran as approved", "Yes"]},
+    "executions-pipeline-p2.html": {"new": ["Not a graph run", "Ran as approved"]},
+    "executions-records-agree.html": {"new": ["Not a graph run", "Ran as approved"]},
+    "executions-run-id-reused.html": {"new": ["Not a graph run", "Ran as approved"]},
+}
+for _page, _kinds in _APPROVED_LISTED_PAGES.items():
+    for _kind, _blocks in _kinds.items():
+        EXPLAINED.setdefault(_page, {}).setdefault(_kind, {}).update(dict.fromkeys(_blocks, _APPROVED_LISTED))
+
+#: The panel below a pair says what it computes: other runs that recorded the same value, never
+#: "the same change". Its heading, and the sentence it says where it can't read a first difference
+#: (which the B2 block above had listed as new in its earlier words).
+_RECORDED_VALUE = "the same-value panel's words: runs that recorded the same value"
+_RECORDED_VALUE_PAGES: dict[str, dict[str, list[str]]] = {
+    "diff[held-a,held-b]": {"gone": ["Other runs with the same change"],
+                            "new": ["Other runs that recorded the same value",
+                                    "This console can't read a first difference from this comparison's diff "
+                                    "report, so it doesn't look for other runs that recorded the same value."]},
+}
+for _page, _kinds in _RECORDED_VALUE_PAGES.items():
+    for _kind, _blocks in _kinds.items():
+        EXPLAINED.setdefault(_page, {}).setdefault(_kind, {}).update(dict.fromkeys(_blocks, _RECORDED_VALUE))
+
+#: A run stopped by a step's own rule: the r11 run's last step, join, declined ("inputs never
+#: arrived: both roots refused"), so its pages carry the chip and the banner, the runs lists the chip,
+#: and the Overview the count. Measured, not typed.
+_STOPPED = "a run stopped by a step's own rule: its chip, its banner, and the Overview's count"
+_STOPPED_PAGES: dict[str, dict[str, list[str]]] = {
+    'executions-all.html': {'new': ['3 of 3 declared stages Declined at join']},
+    'executions-holds.html': {'new': ['3 of 3 declared stages Declined at join']},
+    'executions-most-recent.html': {'new': ['3 of 3 declared stages Declined at join']},
+    'executions-nothing-missing.html': {'new': ['3 of 3 declared stages Declined at join']},
+    'executions-pipeline-p1.html': {'new': ['3 of 3 declared stages Declined at join']},
+    'home.html + counts.html': {'new': ['1 of 4 stopped by a step', '1 run of 4 — stopped by a step: a step declined by its own rule, and the run ended there']},
+    'run[r11]/answer.html': {'new': ['Declined at join', 'The run stopped at join: the step declined by its own rule, and recorded why: inputs never arrived: both roots refused. No declared step was left without a receipt.']},
+    'run[r11]/authorization.html': {'new': ['Declined at join']},
+    'run[r11]/case.html': {'new': ['Declined at join', 'The run stopped at join: the step declined by its own rule, and recorded why: inputs never arrived: both roots refused. No declared step was left without a receipt.']},
+}
+for _page, _kinds in _STOPPED_PAGES.items():
+    for _kind, _texts in _kinds.items():
+        EXPLAINED.setdefault(_page, {}).setdefault(_kind, {}).update(dict.fromkeys(_texts, _STOPPED))
+NEW_PAGES.update({
+    "executions-stopped-by-a-step.html": "the list the Overview's count of runs stopped by a step opens",
+})
+
+#: A run stopped at a step's own rule: rung 3 reads "Not reached", counted on its own beside "missing
+#: a declared stage", and the Overview's attention order names its group (the "last attempt
+#: failed" block above had listed the order sentence as new in its earlier words). Measured, not typed.
+_STOPPED_AT = "rung 3's \"Not reached\" for a run stopped at a step, its count, and its place in the order"
+_STOPPED_AT_PAGES: dict[str, dict[str, list[str]]] = {
+    "home.html + counts.html": {"new": [
+        "0 runs of 4 \u2014 stopped at a step: the declared steps after it not reached",
+        "Order: contradicts itself, then couldn't check, then not checked, then a declared stage missing, "
+        "then last attempt failed, then stopped at a step, then changed vs baseline; newest first within each."]},
+}
+for _page, _kinds in _STOPPED_AT_PAGES.items():
+    for _kind, _texts in _kinds.items():
+        EXPLAINED.setdefault(_page, {}).setdefault(_kind, {}).update(dict.fromkeys(_texts, _STOPPED_AT))
+NEW_PAGES.update({
+    "executions-stopped-at-a-step.html": "the list rung 3's count of runs stopped at a step opens",
+})
+#: Each run's tabs gain "Choose as run A", its page as run A (the run-head blocks above had listed
+#: the tabs as new in their earlier words). Measured, not typed.
+_CHOOSE_TAB = "a run's tabs: Choose as run A"
+for _page in ('run[forged]/answer.html', 'run[forged]/authorization.html', 'run[forged]/case.html', 'run[held-a]/answer.html', 'run[held-a]/authorization.html', 'run[held-a]/case.html', 'run[held-b]/answer.html', 'run[held-b]/authorization.html', 'run[held-b]/case.html', 'run[preview]/case.html', 'run[r11]/answer.html', 'run[r11]/authorization.html', 'run[r11]/case.html'):
+    EXPLAINED.setdefault(_page, {}).setdefault("new", {})[
+        "Graph Table Inputs & outputs Receipt Choose as run A"] = _CHOOSE_TAB
+#: Choose two runs: a pipeline's runs as run A, and each run's page of the others as run B.
+NEW_PAGES.update({
+    "choose-p1.html": "choose two runs: the pipeline's runs, each choosing itself as run A",
+    "choose-p2.html": "choose two runs: the pipeline's runs, each choosing itself as run A",
+    "choose-p1-<key>.html": "choose two runs: run A's page, the other runs as run B",
+    "choose-p2-<key>.html": "choose two runs: run A's page, the other runs as run B",
+})
+
+#: Fingerprints in text and tables, short: 12 hex characters, the whole value in a fold beside
+#: them, read here as its own block. Measured, not typed.
+_SHORT_FINGERPRINTS = "fingerprints shown by their first 12 hex characters, each whole in its fold"
+_SHORT_FINGERPRINTS_PAGES: dict[str, dict[str, list[str]]] = {
+    'incidents.html': {'gone': ['Rule table digest: <hex>. Rules not built:'], 'new': ['. Rules not built:', '<hex>', '<hex>…', 'Rule table digest:']},
+    'run[forged]/answer.html': {'new': ["Checked — and the record contradicts itself here: output artifact 'a.json' matches — expected sha256:ab\\u000d\\u000aFORGED\\u0009ROW\\u000d\\u000a0000000000000000000000000000000000000000, found sha256:<hex>….", 'sha256:<hex>…']},
+    'run[forged]/case.html': {'new': ["Checked — and the record contradicts itself here: output artifact 'a.json' matches — expected sha256:ab\\u000d\\u000aFORGED\\u0009ROW\\u000d\\u000a0000000000000000000000000000000000000000, found sha256:<hex>….", 'sha256:<hex>…', "step 1 of 2 · alpha — Checked — and the record contradicts itself here: output artifact 'a.json' matches — expected sha256:ab\\u000d\\u000aFORGED\\u0009ROW\\u000d\\u000a0000000000000000000000000000000000000000, found sha256:<hex>…."]},
+    'run[held-a]/answer.html': {'new': ['sha256:<hex>…']},
+    'run[held-a]/case.html': {'new': ['sha256:<hex>…']},
+    'run[held-b]/answer.html': {'new': ['sha256:<hex>…']},
+    'run[held-b]/case.html': {'new': ['sha256:<hex>…']},
+    'run[preview]/case.html': {'new': ['sha256:<hex>…']},
+    'run[r11]/answer.html': {'new': ['sha256:<hex>…']},
+    'run[r11]/case.html': {'new': ['sha256:<hex>…']},
+}
+for _page, _kinds in _SHORT_FINGERPRINTS_PAGES.items():
+    for _kind, _texts in _kinds.items():
+        EXPLAINED.setdefault(_page, {}).setdefault(_kind, {}).update(dict.fromkeys(_texts, _SHORT_FINGERPRINTS))
 
 @pytest.fixture(scope="module")
 def now(tmp_path_factory):
@@ -1128,10 +1235,45 @@ def _grouped(snapshot: dict[str, list[str]]) -> dict[str, Counter]:
     return groups
 
 
+#: The Records agree card's line, in the rung's split: the runs verified (the check held with the
+#: run's output files required), those held without them -- each count opening its own list -- and
+#: the check's other verdicts. It replaces the check's "Verified", which the card's headline also
+#: called verified with another count. Measured, not typed.
+_AGREE_LINE = "the Records agree card's line in the rung's split: verified, and held without its output files"
+EXPLAINED.setdefault("home.html + counts.html", {}).setdefault("new", {}).update(dict.fromkeys(
+    ['1 of 4 verified · 1 of 4 held without its output files required · 2 of 4 Contradicts its record', "1 run of 4 — whose check held without the run's output files required"], _AGREE_LINE))
+NEW_PAGES.update({
+    "executions-held-without-output-files.html":
+        "the list the Records agree card's count of runs held without their output files opens",
+})
+
+
+#: "Records agree", one reading per run: every page and count says each run's rung 1 as its own
+#: page decides it, in rung 1's words, the reason said under not checked; the verifier's "Verified"
+#: is no run-level summary's word; Needs attention lists the runs not checked, and those with no
+#: verdict, in the order its sentence states. The check's verdict tally ("Verified") and its list
+#: go; a list of runs with no verdict recorded is new. Measured by the tool, not typed.
+_ONE_READING = "Records agree, one reading per run: rung 1's states everywhere, never the verifier's Verified"
+EXPLAINED.setdefault('executions-holds.html', {}).setdefault('gone', {}).update(dict.fromkeys(
+    ["Check it yourself", "Computed over this file with the fingerprint's own 64 characters set to zeros. To repeat it without us:", "Run", "Runs", "The runs", "This file's fingerprint: <hex>", "This record shows what was verified and evaluated at the time — not what was ultimately true.", "dag-r37-r", "nb2-base", "python3 -c \"import hashlib,re,sys;b=open(sys.argv[1],'rb').read();m=re.findall(rb'<!--fingerprint-->([0-9a-f]{64})<!--/fingerprint-->',b);assert len(m)==1,'expected exactly one fingerprint';z=b.replace(b'<!--fingerprint-->'+m[0],b'<!--fingerprint-->'+b'0'*64);print('matches' if hashlib.sha256(z).hexdigest()==m[0].decode() else 'DOES NOT MATCH')\" executions-holds.html"], _ONE_READING))
+EXPLAINED.setdefault('executions-needs-attention.html', {}).setdefault('new', {}).update(dict.fromkeys(
+    ["3 of 3 declared stages Declined at join", "Not checked", "P1", "Runs in this list: 3 of 4 stored, and this page lists all 3. Nothing is summarised across runs on this page.", "Yes", "dag-r37-r"], _ONE_READING))
+EXPLAINED.setdefault('executions-not-checked.html', {}).setdefault('new', {}).update(dict.fromkeys(
+    ["3 of 3 declared stages Declined at join", "<time>", "Committed by a known time", "How far it got", "Not anchored", "Not checked", "P1", "Pipeline", "Ran as approved", "Received by this console", "Records agree", "Runs in this list: 1 of 4 stored, and this page lists it. Nothing is summarised across runs on this page.", "Signed by a known recorder", "Unsigned", "Yes", "dag-r37-r"], _ONE_READING))
+EXPLAINED.setdefault('home.html + counts.html', {}).setdefault('gone', {}).update(dict.fromkeys(
+    ["2 runs of 4 — needing attention first, in the order stated on the Overview", "All 2 of them", "Each day's verdicts are counts of the runs received that day. A marker row between two days names a recorded settings or code digest that differs from the day before, in a pipeline with runs on both days.", "Needs attention first · 2 of 4 runs"], _ONE_READING))
+EXPLAINED.setdefault('home.html + counts.html', {}).setdefault('new', {}).update(dict.fromkeys(
+    ["0 of 1", "0 of 3", "0 of 4 in the other states: couldn't check, no verdict recorded", "0 runs of 4 — whose records couldn't be checked", "0 runs of 4 — with no verdict recorded", "1 of 4", "1 of 4 records agree · 2 of 4 contradict their record · 1 of 4 not checked (held without its output files required)", "1 of 4 runs whose records agree", "1 of 4 · 1 not checked (held without its output files required) · 0 couldn't check · 2 contradict their record · 0 no verdict recorded", "1 run of 4 — whose records were not checked", "2 runs of 4 — that contradict their record", "3 runs of 4 — needing attention first, in the order stated on the Overview", "All 3 of them", "Below the count: each run's \"Records agree\" as its own page reads it, as a count of runs; All counts has each in full.", "Each day's counts are counts of the runs received that day, each by its \"Records agree\" as its own page reads it. A marker row between two days names a recorded settings or code digest that differs from the day before, in a pipeline with runs on both days.", "Needs attention first · 3 of 4 runs", "Not checked", "Not checked (held without its output files required)", "Not checked · dag-r37-r · received <time>", "Order: contradicts itself, then couldn't check, then not checked, then no verdict recorded, then a declared stage missing, then last attempt failed, then stopped at a step, then changed vs baseline; newest first within each.", "Records agree", "Records agree: the check held, with the run's output files present.", "held without its output files required"], _ONE_READING))
+NEW_PAGES.update({'executions-no-verdict.html': "the list of runs with no verdict recorded, rung 1's own state"})
+#: Pages gone on purpose, each with why.
+GONE_PAGES: dict[str, str] = {'executions-holds.html': "the check's verdict tally's list, gone with it: Records agree counts rung 1's states"}
+
+
 def test_no_page_is_lost_and_every_new_page_is_declared(now, before, examined):
     examined(len(before), "pages in the baseline")
-    lost = sorted(set(before) - set(now))
+    lost = sorted(set(before) - set(now) - set(GONE_PAGES))
     assert not lost, f"pages that no longer exist: {lost}"
+    assert not set(GONE_PAGES) & set(now), "a page declared gone is still drawn"
     undeclared = sorted(set(now) - set(before) - set(NEW_PAGES))
     assert not undeclared, f"new pages not declared in NEW_PAGES: {undeclared}"
 

@@ -23,6 +23,7 @@ Nothing here decides a verdict: the graph draws what the record holds.
 """
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from fractions import Fraction
 from html import escape
@@ -49,14 +50,23 @@ SWEEPS = 6
 #: Above 60 nodes the page shows a notice and the table instead. Counted as boxes drawn.
 MAX_DRAWN = 60
 
-BOX_W, BOX_H = 168, 40
+BOX_W, BOX_H = 184, 40
+#: A node's name, wrapped whole: each line at most LABEL_MAX characters, LABEL_LINE_H high.
+LABEL_LINE_H = 18
+#: A node's state, drawn as a chip: CHIP_H high, CHIP_CHAR wide per character, CHIP_PAD each side.
+CHIP_H, CHIP_CHAR, CHIP_PAD = 20, 6.6, 9
+#: Characters to a state line (12px sans, about 6.2px a character); a longer one is shortened,
+#: its whole text in its <title> and in the page's own table.
+STATE_MAX = 26
 #: A node's state lines (its verdict in the page's words, then the report's quoted words): at
 #: most TAG_LINES drawn in its box, each TAG_LINE_H high. The page's words are in the box's
 #: <title>, each quoted line in its own; all of them are in the page's own table.
 TAG_LINES, TAG_LINE_H = 2, 16
-GAP_X, GAP_Y = 72, 20
+GAP_X, GAP_Y = 56, 24
 MARGIN = 12
-LABEL_MAX = 22                     # characters shown in a box; the whole name is its <title>
+#: Characters to a line of a box's name, at the name's 14px mono (about 8.4px a character, within
+#: BOX_W less 10px each side); the name is never cut. Four boxes and their gaps fit a 1280 page.
+LABEL_MAX = 19
 
 
 @dataclass(frozen=True, slots=True)
@@ -120,9 +130,10 @@ class Layout:
     outside: tuple[tuple[str, str], ...]
     width: int
     height: int
-    box_h: int = BOX_H             # taller only where a node carries state lines
-    label_lines: int = 1           # 2 where a long name wraps onto a second line
+    box_h: int = BOX_H             # every box in a drawing as tall as its tallest needs
+    label_lines: int = 1           # the most lines any box's name wraps onto
     tag_lines: int = TAG_LINES     # at most this many state lines drawn in a box
+    chip: bool = False             # whether a box's first state is drawn as a chip
 
 
 def _fold_key(node: GraphNode, counts: dict[str, int]) -> str:
@@ -130,13 +141,16 @@ def _fold_key(node: GraphNode, counts: dict[str, int]) -> str:
 
 
 def _label_lines(label: str) -> list[str]:
-    """A name in at most two lines of LABEL_MAX characters, broken at a space where there is one;
-    the second line cut with "…" if the name is longer still. The whole name is the <title>."""
-    if len(label) <= LABEL_MAX:
-        return [label]
-    cut = label.rfind(" ", 1, LABEL_MAX + 1)
-    cut = cut if cut > 0 else LABEL_MAX
-    return [label[:cut], _short(label[cut:].strip())]
+    """A name whole, in lines of at most LABEL_MAX characters, each broken after a space, `_`, `-`,
+    `.` or `/` where the line has one, and otherwise at LABEL_MAX. Never cut: every character is
+    drawn (a record word is already within the page's name cap)."""
+    lines, rest = [], label
+    while len(rest) > LABEL_MAX:
+        cut = max(rest.rfind(c, 1, LABEL_MAX) for c in " _-./")
+        cut = cut + 1 if cut > 0 else LABEL_MAX
+        lines.append(rest[:cut].rstrip(" "))
+        rest = rest[cut:].lstrip(" ")
+    return lines + [rest]
 
 
 def lay_out(nodes, edges, *, wrap: int = 0, wrap_labels: bool = False,
@@ -190,13 +204,15 @@ def lay_out(nodes, edges, *, wrap: int = 0, wrap_labels: bool = False,
         rows = {k: r for col in by_layer for r, k in enumerate(col)}
 
     tallest = max((len(col) for col in by_layer), default=0)
-    lines = min(tag_lines, max((len(n.tags) + len(n.quoted) for n in nodes), default=0))
-    box_h = BOX_H + lines * TAG_LINE_H
-    label_lines = 1
-    if wrap_labels and any(len(n.label or n.node_id) > LABEL_MAX or len(n.shown or n.name) > LABEL_MAX
-                           for n in nodes):
-        label_lines = 2
-        box_h += TAG_LINE_H
+    chip = any(n.tags for n in nodes)
+    #: The state lines after the chip: the rest of the tags, then the report's quoted words.
+    lines = min(tag_lines, max((max(len(n.tags) - 1, 0) + len(n.quoted) for n in nodes), default=0))
+    labels = [(members[k][0].label or members[k][0].node_id) if len(members[k]) == 1 else sentence(
+        "graph.fold", name=members[k][0].shown or members[k][0].name, n=str(len(members[k])))
+        for k in keys]
+    label_lines = max((len(_label_lines(lb)) for lb in labels), default=1)
+    box_h = (14 + label_lines * LABEL_LINE_H + (CHIP_H + 8 if chip else 0)
+             + lines * TAG_LINE_H + 8)
     boxes = []
     for col_no, col in enumerate(by_layer):
         #: A wrapped line's rows start at the top, as text does; a graph's layers are centred.
@@ -217,7 +233,7 @@ def lay_out(nodes, edges, *, wrap: int = 0, wrap_labels: bool = False,
     width = MARGIN * 2 + max(len(by_layer), 1) * BOX_W + max(len(by_layer) - 1, 0) * GAP_X
     height = MARGIN * 2 + max(tallest, 1) * box_h + max(tallest - 1, 0) * GAP_Y
     return Layout(edges is None, tuple(boxes), links, recorded, outside, width, height, box_h,
-                  label_lines, tag_lines)
+                  label_lines, tag_lines, chip)
 
 
 def _layers(keys: list[str], links, order_key) -> dict[str, int]:
@@ -275,8 +291,8 @@ def _rows(keys, links, layer, order_key) -> list[list[str]]:
 
 # ------------------------------------------------------------------------------ drawing
 
-def _short(label: str) -> str:
-    return label if len(label) <= LABEL_MAX else label[:LABEL_MAX - 1] + "…"
+def _short(label: str, most: int = LABEL_MAX) -> str:
+    return label if len(label) <= most else label[:most - 1] + "…"
 
 
 def svg(layout: Layout, esc=escape) -> str:
@@ -315,24 +331,34 @@ def svg(layout: Layout, esc=escape) -> str:
         mark += f' data-tone="{esc(b.tone)}"' if b.tone else ""
         opening, closing = (f'<a href="{esc(b.href)}"{failed}{mark}>', "</a>") if b.href else (
             f"<g{failed}{mark}>", "</g>")
-        #: A box with no state lines is drawn exactly as before they existed.
-        label_y = b.y + BOX_H // 2 + 4 if layout.box_h == BOX_H else b.y + 18
-        names = _label_lines(b.label) if layout.label_lines == 2 else [_short(b.label)]
-        below = label_y + (layout.label_lines - 1) * TAG_LINE_H
-        lines = [(tag, False) for tag in b.tags] + [(q, True) for q in b.quoted]
+        #: The name whole, on as many lines as it takes; under it the state as a chip, then the
+        #: other state lines and the report's quoted words, each shortened with its whole text in
+        #: its <title> and in the page's own table.
+        names = _label_lines(b.label)
+        top = b.y + 14 + LABEL_LINE_H - 4
+        chip = ""
+        below = top + (layout.label_lines - 1) * LABEL_LINE_H + 6
+        if b.tags:
+            words = b.tags[0]
+            w = min(BOX_W - 20, round(CHIP_PAD * 2 + CHIP_CHAR * len(words)))
+            chip = (f'<rect class="chip" x="{b.x + 10}" y="{below}" width="{w}" height="{CHIP_H}" '
+                    f'rx="{CHIP_H // 2}"/><text class="chip" x="{b.x + 10 + CHIP_PAD}" '
+                    f'y="{below + CHIP_H - 6}">{esc(_short(words, STATE_MAX))}</text>')
+        after = below + (CHIP_H + 8 if layout.chip else 0) - 4
+        lines = [(tag, False) for tag in b.tags[1:]] + [(q, True) for q in b.quoted]
         states = "".join(
             f'<text class="state"{' data-words="report"' if quoted else ""} x="{b.x + 10}" '
-            f'y="{below + (i + 1) * TAG_LINE_H}">{esc(_short(text))}'
+            f'y="{after + (i + 1) * TAG_LINE_H}">{esc(_short(text, STATE_MAX))}'
             f'{f"<title>{esc(text)}</title>" if quoted else ""}</text>'
             for i, (text, quoted) in enumerate(lines[:layout.tag_lines]))
         title = b.label + "".join(f" · {tag}" for tag in b.tags)
         parts.append(
             f'{opening}'
             f'<rect class="node" x="{b.x}" y="{b.y}" width="{BOX_W}" height="{layout.box_h}" '
-            f'rx="6"{dash}/><title>{esc(title)}</title>'
-            + "".join(f'<text x="{b.x + 10}" y="{label_y + i * TAG_LINE_H}">{esc(name)}</text>'
+            f'rx="10"{dash}/><title>{esc(title)}</title>'
+            + "".join(f'<text class="name" x="{b.x + 10}" y="{top + i * LABEL_LINE_H}">{esc(name)}</text>'
                       for i, name in enumerate(names))
-            + f'{states}{closing}')
+            + f'{chip}{states}{closing}')
     parts.append("</svg>")
     return "".join(parts)
 
@@ -365,9 +391,19 @@ def _linked(href: str, inner: str, esc=escape) -> str:
     return f'<a href="{esc(href)}">{inner}</a>' if href else inner
 
 
+def _shortened(text: str, esc=escape) -> str:
+    """`text` escaped, each fingerprint in it shown by its first 12 hex characters: the page's own
+    table, or the verifier's output on the same page, holds each whole."""
+    out, at = [], 0
+    for m in re.finditer(r"(sha256:)?([0-9a-f]{64})", text):
+        out.append(esc(text[at:m.start()]) + esc((m.group(1) or "") + m.group(2)[:12] + "…"))
+        at = m.end()
+    return "".join(out) + esc(text[at:])
+
+
 def _quoted(text: str, esc=escape) -> str:
-    """A report's own words, quoted as they are."""
-    return f'<q data-words="report">{esc(text)}</q>'
+    """A report's own words, quoted as they are, each fingerprint in them short."""
+    return f'<q data-words="report">{_shortened(text, esc)}</q>'
 
 
 def as_list(layout: Layout, esc=escape) -> str:
@@ -379,7 +415,7 @@ def as_list(layout: Layout, esc=escape) -> str:
     items = []
     for prev, b in zip([None, *order], order):
         reads = prev is not None and (prev.key, b.key) in drawn
-        lines = "".join(f'<span class="state">{esc(t)}</span>' for t in b.tags) + "".join(
+        lines = "".join(f'<span class="state">{_shortened(t, esc)}</span>' for t in b.tags) + "".join(
             f'<span class="state">{_quoted(q, esc)}</span>' for q in b.quoted)
         items.append(f'<li data-reads-previous="{"yes" if reads else "no"}"'
                      + (f' data-list-mark="{esc(b.mark)}"' if b.mark else "")

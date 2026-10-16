@@ -36,7 +36,8 @@ def _section(page: str, name: str) -> str | None:
 
 
 def _words(html: str) -> str:
-    return _text(html).strip()
+    from tests.conftest import whole_folds
+    return _text(whole_folds(html)).strip()
 
 
 @pytest.fixture

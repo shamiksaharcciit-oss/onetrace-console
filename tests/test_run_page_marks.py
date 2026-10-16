@@ -142,7 +142,33 @@ def _titles(page: str) -> dict[str, str]:
 #: records no reads, so no line is drawn. No word, and no other element or attribute, moves.
 #: Moved by the head on the run's other pages, from cd6522684f466657a748ed3d7614e3b8c9142a858c439fd814e7555a264dfb00.
 #: Measured by diffing the two renderings: one edit, ` class="run-title"` on the head's title.
-UNMARKED_R_CASE_SHA256 = "5a3853b83f21088410c1edc1792ed15c50f6b5f32b249656e3f20db69b46a0c1"
+#: Moved by the version, 0.1.1 to 0.1.2, from 5a3853b83f21088410c1edc1792ed15c50f6b5f32b249656e3f20db69b46a0c1.
+#: Measured by diffing the two renderings: the footer's "onetrace-console 0.1.1." only.
+#: Moved by the run stopped by a step's own rule, from 2bb4307c6b36f955ab5c52d974e8162b834f8b05f5bca785f2c35cc22f2204c4.
+#: Measured by diffing the two renderings, three edits: the stylesheet's `.declined` rule; the
+#: head's chip "Declined at join" (R's last step, join, declined: "inputs never arrived: both
+#: roots refused"); and the banner saying where the run stopped, why, and that no declared step
+#: was left without a receipt.
+#: Moved by the dark theme, from 041514605624f0dec7f740f2e12595600c9b3260f17153fc08b8c7c951ad9067.
+#: Measured by diffing the two renderings: three lines added to the page's stylesheet -- the light
+#: theme's colour scheme, the dark roles for a system set to dark, and the same for a root set to
+#: dark. Nothing outside the stylesheet moves.
+#: Moved by the graph redrawn, from 5b77cad5ec688588676bca3aa54084f116648206b27e3ef0b439d88cae69fb01.
+#: Measured by diffing the two renderings: the stylesheet's graph rules (the box's line, the
+#: link's width, the name, the state lines and the chip), and the graph's own drawing -- the same
+#: three names, in wider boxes, each name whole. Nothing outside the stylesheet and the graph moves.
+#: Moved by the fingerprints shown short, from c8c09fd8b2881b2fccb6dfe4c439667c4b63f5025061ed94505a8457f6663e9f.
+#: Measured by diffing the two renderings: the stylesheet's rules for a fingerprint's fold, and
+#: each fingerprint drawn as its fold -- 12 hex characters, the same whole value beside them. With
+#: each fold read back to its whole value and those rules removed, the two renderings are equal.
+#: Moved by the visual target's type scale and corners, from f0a1932189b77ce226f9e334c7cf5236a22e2ed4880a9cc176a9073630cd7f2b.
+#: Measured by diffing the two renderings: one line added to the stylesheet, the scale's rule.
+#: Moved by "Choose as run A" in the run's tabs, from 6344062af4d45a258c6a89c2366063ff98b21162d236ba322527a8edd1cf80d4.
+#: Measured by diffing the two renderings: one link added to the head's tabs, to the run's
+#: page as run A. Nothing else moves.
+#: Moved by the version, 0.1.2 to 0.2.0, from aa21e3982cf46deeada85767157489ee1e6263d1d96a7b0581a4b2cec07751cc.
+#: Measured by diffing the two renderings: the footer's "onetrace-console 0.1.2." only.
+UNMARKED_R_CASE_SHA256 = "99adf5163b1670ec8e54cfdd1f90195dec01a8adca56067b1e77d808516d238e"
 _VERIFIER_PATH = re.compile(r"\S*onetrace_verify[/\\]verify\.py")
 _FINGERPRINT = re.compile(r"<!--fingerprint-->[0-9a-f]{64}<!--/fingerprint-->")
 _VERIFIER_BLOCK = re.compile(r'(<pre data-layer="3">)(\[[A-Z][A-Z-]* *\] .*?)(</pre>)', re.S)

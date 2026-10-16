@@ -59,7 +59,8 @@ def _ratio(fg: str, bg: str) -> float:
 
 #: (text, background): every pair the look sets -- pills, the banner, cards and panels, the page,
 #: the first difference in the bad ink, the links, and the navigation.
-PAIRS = [("ok-ink", "ok-bg"), ("cc-ink", "cc-bg"), ("bad-ink", "bad-bg"), ("neu-ink", "neu-bg"),
+#: ("page", "cc-ink"): a comparison's first difference, its chip amber filled.
+PAIRS = [("page", "cc-ink"), ("ok-ink", "ok-bg"), ("cc-ink", "cc-bg"), ("bad-ink", "bad-bg"), ("neu-ink", "neu-bg"),
          ("ink", "surface"), ("ink", "page"), ("ink-muted", "surface"), ("ink-muted", "page"),
          ("bad-ink", "surface"), ("accent", "surface"), ("accent", "page"),
          #: Couldn't check, amber ink on the neutral fill with an amber outline.

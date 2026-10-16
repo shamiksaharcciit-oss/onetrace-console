@@ -6,16 +6,16 @@
 # console name the exact SDK build a comparison ran with (`onetrace_console.compare.sdk_build_digest()`).
 # A plain `pip install` works as well: the console then names the build from the installed files.
 #
-# onetrace 0.2.1 and onetrace-verify 0.2.0, as published on PyPI, each pinned by its wheel's sha256:
-# the released files, checked against what PyPI serves before these lines were written (0.2.1's, the
-# build its release cleared). onetrace 0.2.1 asks for onetrace-verify >=0.2.0,<0.3, so 0.2.0 stays.
+# onetrace 0.2.2 and onetrace-verify 0.2.1, as published on PyPI, each pinned by its wheel's sha256:
+# the released files, as PyPI's JSON serves them, read by script before these lines were written.
+# onetrace 0.2.2 asks for onetrace-verify >=0.2.1,<0.3.
 # No credentials are needed to install them. See PINS.md for the history.
-onetrace==0.2.1 \
-    --hash=sha256:f55ca407d9ac1dd0451878c44a3c980e8b977b04ab0818d42e9eac780eaeb608
-onetrace-verify==0.2.0 \
-    --hash=sha256:74b3c862bdf997ec71b20de02c6bbdb445b89ffc0017497b3ed6ce91b2bce89c
+onetrace==0.2.2 \
+    --hash=sha256:5fbefd657d0622d8dad8d9506f118be2b417a9586589d8e50d59fd2a5fa21b1f
+onetrace-verify==0.2.1 \
+    --hash=sha256:c001019740798f907ae8a4adace32c597fb749cf52fca0e668c932723a792119
 
-# onetrace-verify's crypto extra, which checks signatures: exactly the versions 0.2.0 pins in its
+# onetrace-verify's crypto extra, which checks signatures: exactly the versions 0.2.1 pins in its
 # own metadata (Provides-Extra: crypto), each with the hash of every wheel of that version a CPython
 # 3.12 or 3.13 install on Linux x86_64 or Windows x64 can select, from PyPI's JSON. pip installs its
 # platform's file and refuses any other. typing-extensions is needed below Python 3.11 only. See

@@ -37,7 +37,7 @@ from onetrace_console.viewer.model import (NAME_CAP, TEXT_CAP, CheckCount, Detai
 from onetrace_console.viewer.graph import render as graph_render
 from onetrace_console.viewer.sentences import template
 from onetrace_console.viewer.slot import SLOT, STANDALONE_CHECK
-from onetrace_console.viewer.tokens import root_css
+from onetrace_console.viewer.tokens import root_css, scale_css, theme_css
 
 CSS = """
 *{box-sizing:border-box}
@@ -93,6 +93,11 @@ footer{border-top:1px solid var(--line);margin-top:28px;padding-top:12px;color:v
   font-size:13px}
 .graph-box{overflow-x:auto;margin:0 0 8px}
 .graph-list{display:none}
+.declined{border:1px solid var(--accent);color:var(--ink);border-radius:6px;padding:8px 12px;margin:0 0 12px}
+details.fingerprint{display:inline}
+details.fingerprint>summary{display:inline;cursor:pointer;list-style:none}
+details.fingerprint>summary::-webkit-details-marker{display:none}
+details.fingerprint>span{display:block;overflow-wrap:anywhere}
 .last-failed{background:var(--cc-bg);color:var(--cc-ink);border-radius:6px;padding:8px 12px;
   margin:10px 0;font-weight:600}
 .graph-box::-webkit-scrollbar{height:12px}
@@ -128,10 +133,15 @@ footer{border-top:1px solid var(--line);margin-top:28px;padding-top:12px;color:v
   mask-size:100% calc(100% - 12px),100% 12px;-webkit-mask-position:top,bottom;
   mask-position:top,bottom;-webkit-mask-repeat:no-repeat;mask-repeat:no-repeat;
   animation:graph-box-fade linear both;animation-timeline:scroll(self inline)}}
-svg.graph .node{fill:var(--surface);stroke:var(--line);stroke-width:1}
-svg.graph .link{stroke:var(--ink-faint);stroke-width:1.25}
+svg.graph{shape-rendering:geometricPrecision;text-rendering:geometricPrecision}
+svg.graph .node{fill:var(--surface);stroke:var(--line-node);stroke-width:1}
+svg.graph .link{stroke:var(--ink-faint);stroke-width:1.5}
 svg.graph marker path{fill:var(--ink-faint)}
 svg.graph text{fill:var(--ink);font-family:var(--font-mono);font-size:12px}
+svg.graph text.name{font-size:14px;font-weight:500}
+svg.graph text.state{fill:var(--ink-muted)}
+svg.graph rect.chip{fill:var(--neu-bg)}
+svg.graph text.chip{fill:var(--neu-ink);font-family:var(--font-sans);font-weight:600}
 @media print{details>summary{display:none}}
 """
 
@@ -279,6 +289,52 @@ def _escape_lines(text: str) -> str:
             + _t("text.more", n=str(len(text) - TEXT_CAP)))
 
 
+#: A fingerprint as the record writes it: `sha256:` and 64 hex characters, or the 64 alone.
+_FINGERPRINT = re.compile(r"(sha256:)?([0-9a-f]{64})")
+#: How many hex characters of a fingerprint a page's text and tables show.
+FINGERPRINT_SHOWN = 12
+
+
+def fingerprint_html(value, *, words: str = "") -> str:
+    """A fingerprint as a page's text and tables show it: its first FINGERPRINT_SHOWN hex
+    characters, then the whole value as plain, selectable text in a closed Details beside it --
+    nothing to press but the fold, no script. `words` marks whose words it is (`data-words`).
+    A value that is not a fingerprint is quoted as recorded. The record's own words, in the
+    as-written block, are never shortened."""
+    text = str(value)
+    m = _FINGERPRINT.fullmatch(text)
+    marked = f' data-words="{escape(words)}"' if words else ""
+    if not m:
+        return f"{_named(text)}{_rest(text)}"
+    short = (m.group(1) or "") + m.group(2)[:FINGERPRINT_SHOWN] + "…"
+    return (f'<details class="fingerprint"{marked}><summary class="mono">{escape(short)}</summary>'
+            f'<span class="mono" data-fingerprint="whole">{escape(text)}</span></details>')
+
+
+def shortened_in_text(text) -> tuple[str, str]:
+    """Running text -- a report's words, say -- escaped as the page escapes it, each fingerprint in
+    it shown short; and, apart, a closed Details holding each one whole, for the caller to put
+    after the text (a fold cannot sit inside a quotation). ("", "") parts where there is none."""
+    text, out, wholes, at = str(text), [], [], 0
+    for m in _FINGERPRINT.finditer(text):
+        short = (m.group(1) or "") + m.group(2)[:FINGERPRINT_SHOWN] + "…"
+        out.append(escape(text[at:m.start()]) + f'<span class="mono">{escape(short)}</span>')
+        wholes.append(m.group(0))
+        at = m.end()
+    inline = "".join(out) + escape(text[at:])
+    if not wholes:
+        return inline, ""
+    return inline, ('<details class="fingerprint"><summary>' + escape(template("fingerprint.whole"))
+                    + "</summary>" + "".join(f'<span class="mono" data-fingerprint="whole">{escape(w)}</span>'
+                                             for w in dict.fromkeys(wholes)) + "</details>")
+
+
+def fingerprints_in_text(text) -> str:
+    """`shortened_in_text`'s two parts together, for a place a fold may follow the text in."""
+    inline, folded = shortened_in_text(text)
+    return inline + folded
+
+
 def _t(key: str, **values: str) -> str:
     return escape(template(key).format(**values))
 
@@ -387,13 +443,21 @@ def _part(t: Text) -> str:
         return (f'<time class="value" data-words="value" datetime="{escape(t.text)}" '
                 f'title="{escape(t.text)}">{escape(short_time(t.text))}</time>')
     if t.source == "value":
+        if _FINGERPRINT.fullmatch(t.text):
+            return fingerprint_html(t.text, words="value")
         return f'<span class="value" data-words="value">{escape(t.text)}</span>'
     if t.source == "record":
+        if _FINGERPRINT.fullmatch(t.text):
+            return fingerprint_html(t.text, words="record")
         return f'<q data-words="record">{_named(t.text)}</q>{_rest(t.text)}'
     if t.source == "check":
-        #: The verifier's words, which quote the record's: capped the same way (30bi §1).
-        return f'<q data-words="check">{_named(t.text)}</q>{_rest(t.text, whole=False)}'
-    return f'<q data-words="{escape(t.source)}">{escape(t.text)}</q>'
+        #: The verifier's words, which quote the record's: capped the same way, and each
+        #: fingerprint in them short -- the verifier's output, whole, is on the same page as it
+        #: printed it.
+        inline, _folded = shortened_in_text(t.text[:NAME_CAP])
+        return f'<q data-words="check">{inline}</q>{_rest(t.text, whole=False)}'
+    inline, folded = shortened_in_text(t.text)
+    return f'<q data-words="{escape(t.source)}">{inline}</q>{folded}'
 
 
 def _line(parts: Line) -> str:
@@ -402,7 +466,10 @@ def _line(parts: Line) -> str:
 
 def _p(parts: Line, cls: str = "") -> str:
     c = f' class="{cls}"' if cls else ""
-    return f"<p{c}>{_line(parts)}</p>"
+    #: A line holding a fingerprint is a block: its fold cannot sit inside a <p>.
+    folds = any(t.source in ("record", "value") and _FINGERPRINT.fullmatch(t.text) for t in parts)
+    tag = "div" if cls == "fp" or folds else "p"
+    return f"<{tag}{c}>{_line(parts)}</{tag}>"
 
 
 def _detail(d: Detail) -> str:
@@ -446,7 +513,7 @@ def _items(items: tuple[Item, ...], none_key: str, with_fingerprints: bool, more
         text = (f'<q data-words="record">{_named(i.name)}</q>{_rest(i.name)} · '
                 f'<span class="value" data-words="value">{escape(i.size)}</span> {_t("unit.bytes")}')
         if with_fingerprints:
-            text += (f'<div class="fp" data-words="record">{_named(i.fingerprint)}{_rest(i.fingerprint)}</div>')
+            text += f'<div class="fp" data-words="record">{fingerprint_html(i.fingerprint)}</div>'
         rows.append(f"<div>{text}</div>")
     if more:
         rows.append(f"<div>{_t('list.more', n=str(more))}</div>")
@@ -464,10 +531,13 @@ def _head(title: str) -> str:
 def _style() -> str:
     sheet = _FRAME.get()
     if sheet is None:
-        return f"<style>\n{root_css()}\n{CSS}</style>\n"
+        return f"<style>\n{root_css()}\n{scale_css()}\n{theme_css()}\n{CSS}</style>\n"
     #: The console's own icon, beside its stylesheet; the free file, framed by nothing, has none.
     icon = sheet.rsplit("/", 1)[0] + "/favicon.svg"
-    return (f'<link rel="stylesheet" href="{escape(sheet)}">\n'
+    #: The console's theme switch: a stored choice applied before the first paint (`frame.py`).
+    from onetrace_console.frame import THEME_HEAD_SCRIPT
+    return (f"{THEME_HEAD_SCRIPT}\n"
+            f'<link rel="stylesheet" href="{escape(sheet)}">\n'
             f'<link rel="icon" href="{escape(icon)}" type="image/svg+xml">\n')
 
 
@@ -479,6 +549,26 @@ def _top(m: PageModel, kind_key: str, title_key: str) -> str:
             f'<div class="meta"><span data-words="record">{_named(m.run_id)}</span>'
             f"{_rest(m.run_id)}</div>"
             f"</header>{sample}")
+
+
+def _declined(m: PageModel) -> str:
+    """Where the run stopped at a step's own rule: the step, the reason it recorded, and the
+    declared steps left with no receipt. Outlined in the accent, never red: the check ran and a
+    rule refused. Nothing where the run did not stop at one."""
+    if not m.declined:
+        return ""
+    from onetrace_console.viewer.model import LIST_CAP, name_shown
+    stage, reason, left = m.declined
+    #: Each name, and the reason, within the page's caps, as every record word is: a hundred long
+    #: step names never make the page as long as the record.
+    stage = name_shown(stage)
+    said = (_t("declined.banner", stage=stage, reason=name_shown(reason)) if reason.strip()
+            else _t("declined.banner_no_reason", stage=stage))
+    named = ", ".join(name_shown(s) for s in left[:LIST_CAP])
+    if len(left) > LIST_CAP:
+        named += " " + template("list.more").format(n=str(len(left) - LIST_CAP)).rstrip(".")
+    said += " " + (_t("declined.left", steps=named) if left else _t("declined.none_left"))
+    return f'<div data-section="declined"><p class="declined">{said}</p></div>'
 
 
 def _last_failed(m: PageModel) -> str:
@@ -545,8 +635,7 @@ def _receipt(s: StepView) -> str:
         f'<div class="k">{_t("field.in")}</div><div>{_items(s.inputs, "nothing.in", True, s.inputs_more)}</div>'
         f'<div class="k">{_t("field.out")}</div><div>{_items(s.outputs, "nothing.out", True, s.outputs_more)}</div>'
         f'<div class="k">{_t("field.fingerprint")}</div>'
-        f'<div class="fp" data-words="record">{_named(s.manifest_fingerprint)}'
-        f'{_rest(s.manifest_fingerprint)}</div>'
+        f'<div class="fp" data-words="record">{fingerprint_html(s.manifest_fingerprint)}</div>'
         f'<div class="k">{_t("field.constants")}</div>'
         f'<div><pre data-layer="3">{_escape_lines(s.constants)}</pre></div>'
         "</div>")
@@ -671,7 +760,7 @@ def _render_answer(m: PageModel, file_name: str, sibling: str | None) -> str:
                          for x in row) + "</li>"
         for row in m.unchecked)
     body = (
-        f"{_top(m, 'kind.answer', 'title.answer')}{_strip(m)}{_last_failed(m)}"
+        f"{_top(m, 'kind.answer', 'title.answer')}{_strip(m)}{_last_failed(m)}{_declined(m)}"
         f'<section data-section="answer"><h2>{_t("section.answer")}</h2>'
         f'<div class="card">{answer}{receipt}{asked}</div></section>'
         f'<section data-section="trail"><h2>{_t("section.trail")}</h2>'
@@ -819,7 +908,7 @@ def _graph(m: PageModel) -> str:
     if not m.graph_nodes:
         return ""
     first = m.steps[0].index if m.steps else ""
-    #: In-page links are `#step-N` only (core, 2 October): the first step's row is where the
+    #: In-page links are `#step-N` only, as ruled: the first step's row is where the
     #: recorded order starts.
     return graph_render(m.graph_nodes, m.graph_edges,
                         recorded_order_href=f"#step-{first}" if first.isdigit() else "",
@@ -883,7 +972,7 @@ def _render_case(m: PageModel, file_name: str, sibling: str | None) -> str:
         f'{_ran(m.case_ran)}</div>'
         f'<div class="k">{_t("field.for")}</div>{_for_cell(m, "div")}'
         "</div></section>"
-        f"{_strip(m)}{_last_failed(m)}"
+        f"{_strip(m)}{_last_failed(m)}{_declined(m)}"
         f"{_ladder(m)}"
         f"{_graph(m)}"
         f'<section data-section="timeline"><h2>{_t("section.timeline")}</h2>'

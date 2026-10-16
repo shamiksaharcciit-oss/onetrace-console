@@ -27,7 +27,8 @@ def test_a_quoted_line_is_marked_and_titled_whole(examined):
                         drawing)
     assert quoted and quoted[0][1] == QUOTED.replace(">", "&gt;"), drawing
     assert quoted[0][0].endswith("…"), "the box's line is the shortened one"
-    own = re.findall(r'<text class="state" x=[^>]*>([^<]*)</text>', drawing)
+    #: The page's own words: the first state is the box's chip.
+    own = re.findall(r'<text class="chip" x=[^>]*>([^<]*)</text>', drawing)
     assert own == ["Changed"], own
 
 

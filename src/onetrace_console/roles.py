@@ -53,6 +53,9 @@ _VIEWER_GET_PATTERNS = tuple(re.compile(p) for p in (
     r"^runs/[0-9a-f]{64}/record\.tar$",
     r"^diff/[^/]+\.html$",
     r"^comparisons\.html$",
+    #: Choose two runs: a pipeline's runs as run A, and run A's page of the others as run B.
+    r"^choose-p[0-9]+\.html$",
+    r"^choose-p[0-9]+-[0-9a-f]{64}\.html$",
     r"^policy\.html$",
     r"^policy/[^/]+\.html$",
     r"^policy-verdict-[\w-]+\.html$",

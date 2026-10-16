@@ -89,7 +89,7 @@ def item1_problems(page: str, *, graph: bool) -> list[str]:
         if len(closed) != 1 or closed[0][0]:
             out.append(f"not one closed line for what is not shown ({len(closed)})")
         elif closed[0][1] != ("Not shown for graph-shaped runs: where the change started, and "
-                              "other runs with the same change."):
+                              "other runs that recorded the same value."):
             out.append(f"the closed line's words: {closed[0][1]!r}")
         body = page[page.find('data-section="not-shown"'):]
         for section in ("not-shown-localize", "not-shown-same-change"):

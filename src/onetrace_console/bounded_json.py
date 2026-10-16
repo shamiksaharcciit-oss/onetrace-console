@@ -5,7 +5,10 @@ wherever the interpreter ran out: `json.loads` first fails at 2995 levels on Win
 9995 on Linux. A manifest 5000 deep was refused at ingest on Windows and taken on Linux.
 Now the console parses, then applies the vendored viewer's own rule -- `viewer.depth`'s
 `json_depth` against `MAX_JSON_DEPTH`, imported, never copied -- so every reader gives the same
-answer on every platform. The `RecursionError` handlers at the sites stay, as a backstop only.
+answer on every platform. Text nested past what `json.loads` itself parses is past the limit
+too, so the parser's own `RecursionError` is refused here as `TooDeep`, in the same words: left
+to the sites, a receipt that deep was skipped and its run stored, where one nested 257 levels
+was refused. The `RecursionError` handlers at the sites stay, as a backstop only.
 
 `TooDeep` is a `json.JSONDecodeError` (so a `ValueError`): every site that already refuses JSON it
 cannot read refuses JSON nested too deep through the same path. Sites that put the reason into
@@ -51,7 +54,12 @@ def load_json_bounded(text: str | bytes, what: str, role: str = "read"):
     `what` names the value in the refusal; `role` is "read" or "show", as the site's role is."""
     if role not in ROLES:
         raise ValueError(f"role must be one of {ROLES}, not {role!r}")
-    value = json.loads(text)
+    try:
+        value = json.loads(text)
+    except RecursionError:
+        #: Past what the parser reads, so past the limit: json.loads gives out thousands of
+        #: levels after MAX_JSON_DEPTH on every interpreter the console runs on.
+        raise TooDeep(what, role) from None
     if too_deep(value):
         raise TooDeep(what, role)
     return value

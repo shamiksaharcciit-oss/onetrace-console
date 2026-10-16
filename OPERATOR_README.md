@@ -17,7 +17,7 @@ anyone, no data that leaves the machine it runs on.
   - **Never expose it directly to the internet without TLS.** Passwords and session
     cookies must never cross the network in clear text; the console refuses to start
     a non-loopback, plain-HTTP listener with sign-in on.
-- **Signatures and anchors are checked as `onetrace-verify` 0.2.0 checks them.** A valid signature
+- **Signatures and anchors are checked as `onetrace-verify` 0.2.1 checks them.** A valid signature
   reads as trusted only for a key in the trust file you configure (`trust_file`, below); without
   one, it reads "Signed, key not trusted". The console never makes, edits or guesses a trust file.
   An anchor shows that the record existed by the anchored time, not that the run was correct.
@@ -285,8 +285,9 @@ its own CSRF token, for `/compare`) for everything else. See "Signing in."
 curl -H "Authorization: Bearer <token>" --data-binary @run.tar http://127.0.0.1:8080/v1/runs
 
 # Compare two ingested runs, by the run_key each ingest returned -- from a browser,
-# signed in, with its own CSRF token (rendered pages don't yet carry a compare
-# form; this is the route a future UI submits to).
+# signed in, with its own CSRF token. No page carries a compare form: under
+# Comparisons, "Choose two runs" lists each pipeline's runs, and run A's page shows
+# this request, both keys filled in, for each pair not compared yet.
 curl -X POST -b "onetrace_session=<cookie>; onetrace_csrf=<cookie>" \
   -H "X-CSRF-Token: <same value as the onetrace_csrf cookie>" \
   "http://127.0.0.1:8080/compare?a=<run_key>&b=<run_key>"
@@ -301,7 +302,8 @@ credential at all -- the console logs a warning at every
 start-up while this is the case.
 
 The Overview (`home.html`) labels its pipelines P1, P2 … by first arrival. Runs that arrive in
-the same second are ordered by run key.
+the same second are ordered by run name, and two with the same name by run key, so the order is the
+same every time the same runs are loaded.
 
 ### Making a delivery
 

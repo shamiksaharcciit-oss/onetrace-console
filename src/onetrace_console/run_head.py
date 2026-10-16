@@ -23,6 +23,8 @@ HEAD_RUNGS = ("records-agree", "approved", "signed", "anchored")
 #: The tabs: each a page this run already has, or a place on this page.
 TAB_GRAPH, TAB_TABLE, TAB_IO, TAB_RECEIPT, TAB_COMPARE = (
     "Graph", "Table", "Inputs & outputs", "Receipt", "Compare")
+#: The run's page as run A, the baseline: the pipeline's other runs as run B (`choose_pages`).
+TAB_CHOOSE = "Choose as run A"
 
 HEAD_CSS = """
 :is(.shell .page,.cp) [data-section=run-head]{display:flex;flex-direction:column;gap:10px;margin:0 0 6px}
@@ -36,6 +38,11 @@ HEAD_CSS = """
 :is(.shell .page,.cp) [data-section=run-head] .cc{background:var(--cc-bg);color:var(--cc-ink)}
 :is(.shell .page,.cp) [data-section=run-head] .bad{background:var(--bad-bg);color:var(--bad-ink)}
 :is(.shell .page,.cp) [data-section=run-head] .neu{background:var(--neu-bg);color:var(--neu-ink)}
+:is(.shell .page,.cp) [data-section=run-head] .fd{background:var(--cc-ink);color:var(--page)}
+:is(.shell .page,.cp) [data-section=run-head] .ca{background:transparent;color:var(--cc-ink);
+  outline:1px solid var(--cc-ink);outline-offset:-1px}
+:is(.shell .page,.cp) [data-section=run-head] .dec{background:transparent;color:var(--accent);
+  outline:1px solid var(--accent);outline-offset:-1px}
 :is(.shell .page,.cp) [data-section=run-head] .sub{margin:0;color:var(--ink-muted);overflow-wrap:anywhere}
 :is(.shell .page,.cp) :is([data-section=run-head] .seals,.seals[data-section=answers]){display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));
   margin:0;padding:0;list-style:none;border:1px solid var(--line);border-radius:var(--r-card);
@@ -90,6 +97,19 @@ def comparison_chip(model) -> str:
     return _chip(tones.tone(tones.DIFF, "same"), f"No difference found vs {baseline}", href)
 
 
+def declined_chip(run) -> str:
+    """"Declined at <step>" where the run stopped at a step's own rule, in the declined outline;
+    nothing otherwise. From the run's stored reading, as the runs list and the Overview read it."""
+    from onetrace_console.overview import declined
+    from onetrace_console.viewer.model import name_shown
+    from onetrace_console.viewer.sentences import template
+    found = declined(run)
+    if found is None:
+        return ""
+    return (f'<span class="pill {tones.tone(tones.STOPPED, "declined")}" data-declined="true">'
+            f'{escape(template("declined.chip").format(stage=name_shown(found["stage"])))}</span>')
+
+
 def _rungs(model) -> str:
     from onetrace_console.viewer.page import _line
     from onetrace_console.viewer.sentences import template
@@ -117,7 +137,7 @@ def run_head(run: StoredRun, store: Store, model, *, stage_page: str = "", recei
     #: No one-word verdict beside the title: the ladder's questions are separate, and a "Verified"
     #: chip beside "Records agree: Not checked" (a check that held without the output files) would
     #: read as one answer the page does not give. The comparison chip is the only chip.
-    chips = comparison_chip(model)
+    chips = comparison_chip(model) + declined_chip(run)
     ran = ran_at(run)
     sub = [f"{run.delivered_stages} of {run.stage_count} declared stages"
            + (f"; {run.retries} retr{'y' if run.retries == 1 else 'ies'} recorded" if run.retries else ""),
@@ -130,6 +150,9 @@ def run_head(run: StoredRun, store: Store, model, *, stage_page: str = "", recei
     tabs += [(TAB_IO, stage_page)] if stage_page else []
     tabs += [(TAB_RECEIPT, receipt)] if receipt else []
     tabs += [(TAB_COMPARE, source[1])] if source else []
+    if label:
+        from onetrace_console.choose_pages import pair_href
+        tabs += [(TAB_CHOOSE, f"{up}{pair_href(label, run.key)}")]
     #: The run's id as the viewer quotes a record word: capped, with what was left out said and
     #: the whole record offered, as the viewer's own header did.
     from onetrace_console.viewer.page import _RECORD_HREF, _named, _rest

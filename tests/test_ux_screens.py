@@ -15,6 +15,7 @@ runs are compared, and every page it rendered is read as a reader sees it (`tool
 """
 from __future__ import annotations
 
+import calendar
 import hashlib
 import json
 import re
@@ -27,8 +28,9 @@ from tests.conftest import make_tar
 
 RUNS = Path(__file__).resolve().parent / "fixtures" / "demo-runs-rc2"
 NAMES = ("ingest-day1", "ingest-day2", "query-day1", "query-day2")
-MONTHS = re.compile(r"\b(January|February|March|April|May|June|July|August|September|October|"
-                    r"November|December)\b")
+#: Every month by name, from the calendar module: Python reads it in the C locale unless a program
+#: sets another, so these are the English names on every host. No month is written out here.
+MONTHS = re.compile(r"\b(" + "|".join(calendar.month_name[1:]) + r")\b")
 #: Words no page may show: internal vocabulary, process ids and places, and personal names.
 NOT_ON_A_PAGE = {
     "AADP": re.compile(r"\bAADP\b"),
@@ -196,11 +198,27 @@ def test_no_page_shows_it(demo, examined, what):
     assert not {n: h for n, h in hits.items() if h}, f"{what} on a page"
 
 
+def month_problems(pages: dict[str, str]) -> dict[str, list[str]]:
+    """{page: the month names it shows}, for each page that shows one."""
+    return {n: MONTHS.findall(t) for n, t in pages.items() if MONTHS.search(t)}
+
+
 def test_no_page_renders_a_month_by_name(demo, examined):
     _base, root, _keys, _cmp = demo
     pages = _pages(root)
     examined(len(pages), "pages read as a reader sees them")
-    assert not {n: MONTHS.findall(t) for n, t in pages.items() if MONTHS.search(t)}
+    assert not month_problems(pages)
+
+
+def test_sabotage_a_month_planted_in_a_rendered_page_is_named(demo, examined):
+    """One month name, taken from the calendar module, planted in one real rendered page."""
+    _base, root, _keys, _cmp = demo
+    pages = _pages(root)
+    name = sorted(pages)[0]
+    month = calendar.month_name[10]
+    planted = {**pages, name: pages[name] + " Generated on 3 " + month + "."}
+    examined(1, "planted month")
+    assert month_problems(planted) == {name: [month]}
 
 
 def test_the_authorization_row_says_this_console_does_not_record_authorization(demo, examined):

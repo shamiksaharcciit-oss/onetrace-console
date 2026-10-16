@@ -19,8 +19,9 @@ The pipelines:
   `examples/reference-demo/demo.py` it ships beside, run with the real clock;
 - P3, `ticket_triage.py`: a support-ticket triage shaped as a graph;
 - P4, `support_reply.py`: a reply drafted by a stub that varies per run (marked not re-runnable),
-  then a policy stage whose recorded refund window changes between the demo's two runs of it. The
-  draft leaves the window as `{days}` by design, and the policy stage fills in the number.
+  then a policy stage whose recorded refund window changes between the demo's first two runs of it.
+  The draft names the window in words, and the policy stage puts in the number of days. Its third
+  run asks for a window longer than the policy allows, and the policy stage declines it.
 
 A run folder or trust file whose bytes the build record doesn't hold -- edited, added or removed
 after the build -- is refused wherever the built folder is used again (`check_build_record`).
@@ -92,6 +93,8 @@ def runs() -> list[RunSpec]:
         _p3(28, "T-3", "1", tail="-lookup-retried", fault="lookup-once"),
         RunSpec("p4-29-reply-30-days", "p4", {"refund_days": "30"}),
         RunSpec("p4-30-reply-14-days", "p4", {"refund_days": "14"}),
+        #: Declined at policy_check by its own rule: the run stops there.
+        RunSpec("p4-31-reply-60-days-declined", "p4", {"refund_days": "60"}),
     ]
     return out
 

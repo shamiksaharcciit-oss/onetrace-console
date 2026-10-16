@@ -26,6 +26,7 @@ from onetrace_console.store import Store
 from tests.test_checks import FIXED_RAN_AT, _require_installed
 from tests.test_reference_demo import DEMO, _delivery
 from tests.test_stage_pages import GENERATED_AT
+from tests.conftest import whole_folds
 
 INSTALL_LINE = "install onetrace-verify[crypto] to check signatures"
 
@@ -66,7 +67,7 @@ def _signed_rung(run, store) -> tuple[str, str]:
     found = re.search(r'<tr data-rung="signed" data-state="([^"]+)"><td>.*?</td><td>(.*?)</td></tr>',
                       case, re.S)
     assert found, "no signing rung"
-    return found.group(1), re.sub(r"\s+", " ", unescape(re.sub(r"<[^>]+>", " ", found.group(2)))).strip()
+    return found.group(1), re.sub(r"\s+", " ", unescape(re.sub(r"<[^>]+>", " ", whole_folds(found.group(2))))).strip()
 
 
 def _trust(tmp_path, key_id: str, label: str, name: str = "trust.json"):

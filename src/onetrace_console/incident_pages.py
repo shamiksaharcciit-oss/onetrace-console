@@ -23,6 +23,7 @@ nothing here knows.
 """
 from __future__ import annotations
 
+from onetrace_console.viewer.page import fingerprint_html, fingerprints_in_text
 from onetrace_console.words import escape, verbatim, verbatim_rows, generated_footer
 
 from onetrace_console.incidents import (NOT_BUILT, RULE_TABLE_DIGEST, RULES, Incident,
@@ -162,6 +163,7 @@ def _which(envelope: dict) -> str:
     rows carry a record's words unescaped, so each is drawn as a record word: its control characters
     shown, cut past NAME_CAP with what was left out said."""
     from onetrace_console.bounded_json import load_json_bounded
+    from onetrace_console.viewer.model import NAME_CAP
     from onetrace_console.viewer.page import _named, _rest
 
     def word(text: str) -> str:
@@ -178,7 +180,9 @@ def _which(envelope: dict) -> str:
         path, _, check = name.partition(": ")
         items.append(f'<li data-fail-row><code>{word(path)}</code>'
                      + (f" — {word(check)}" if check else "")
-                     + (f": {word(detail)}" if detail else "") + "</li>")
+                     #: Capped as every record word is, then each fingerprint in it short.
+                     + (f": {fingerprints_in_text(detail[:NAME_CAP])}{_rest(detail, whole=False)}"
+                        if detail else "") + "</li>")
     body = f'<ul class="plain">{"".join(items)}</ul>' if items else f"<p>{escape(WHICH_NONE)}</p>"
     return f'<section data-section="which"><h2>Which file, and how</h2>{body}</section>'
 
@@ -244,9 +248,10 @@ def render_incident_page(incident: Incident, store: Store, *, generated_at: str)
     envelope = None
     if run is not None:
         strip, answers = _four_answers(run, store, generated_at)
-        if not strip:   # the run page's own answers could not be drawn: the store's three, as the lists read them
+        if not strip:   # the run page's own answers could not be drawn: the store's, as the lists read them
             answers = run_answers(run, store)
-            names = {"records-agree": "rung.records-agree", "signed": "rung.signed", "anchored": "rung.anchored"}
+            names = {"records-agree": "rung.records-agree", "signed": "rung.signed", "anchored": "rung.anchored",
+                     "approved": "rung.approved"}
             strip = ('<ul class="seals">' + "".join(
                 f'<li data-head-rung="{k}" data-state="{v}"><span class="q">{escape(template(names[k]))}</span> '
                 f'<span class="pill {tones.tone(tones.RUNG, v)}">'
@@ -380,9 +385,9 @@ def render_incidents(store: Store, *, generated_at: str,
         "it. There is no severity, no score and nothing to acknowledge.</p>",
         underived_note(store),
         "".join(groups),
-        f'<p data-section="rule-table">Rule table digest: '
-        f'<span class="mono">{escape(digest_text)}</span>. Rules not built: '
-        f'</p><ul class="plain" data-section="not-built">{not_built}</ul>',
+        f'<div data-section="rule-table">Rule table digest: '
+        f'{fingerprint_html(digest_text)}. Rules not built: '
+        f'</div><ul class="plain" data-section="not-built">{not_built}</ul>',
         f'<p class="limit" data-section="limit">{escape(_limit_sentence())}</p>',
         generated_footer(generated_at),
     ]

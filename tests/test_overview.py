@@ -87,9 +87,10 @@ def test_a_comparison_that_found_no_difference_reads_same(compared):
 
 
 def test_needs_attention_follows_its_stated_rule(ten_runs, examined):
-    """Contradicts itself, then couldn't check, then not checked, then a declared stage
-    missing, then changed vs baseline; newest first within each. Runs that hold, complete and
-    unchanged are not on it."""
+    """Contradicts itself, then couldn't check, then not checked, then no verdict recorded, then a
+    declared stage missing, then changed vs baseline; newest first within each. The first three
+    are each run's "Records agree" as its own page reads it. Runs whose records agree, complete
+    and unchanged are not on it."""
     from onetrace_console.overview import ATTENTION_RULE, needs_attention
     store, made = ten_runs
     #: Arrival order made explicit, so "newest first" is tested and not left to a tie.
@@ -102,13 +103,18 @@ def test_needs_attention_follows_its_stated_rule(ten_runs, examined):
     listed = needs_attention(store)
     examined(len(listed), "runs needing attention")
     kinds = [kind for kind, _ in listed]
-    order = ["contradicts", "couldnt-check", "not-checked", "missing-stage", "changed"]
+    order = ["contradicts", "couldnt-check", "not-checked", "no-verdict", "missing-stage",
+             "last-attempt-failed", "stopped-at-a-step", "changed"]
     assert kinds == sorted(kinds, key=order.index), kinds
-    assert set(kinds) == {"contradicts", "couldnt-check", "not-checked", "missing-stage"}
+    #: The fixture's run whose rung 3 reads "Not reached" is listed as stopped at a step.
+    assert set(kinds) == {"contradicts", "couldnt-check", "not-checked", "no-verdict", "missing-stage",
+                          "stopped-at-a-step"}
     for kind in set(kinds):
         times = [r.received_at for k, r in listed if k == kind]
         assert times == sorted(times, reverse=True), (kind, times)
-    assert all(r.check_verdict != HOLDS or k == "missing-stage" for k, r in listed)
+    from onetrace_console import records
+    assert all(records.state(r, store) != "yes" or k in ("missing-stage", "stopped-at-a-step")
+               for k, r in listed)
     assert "then" in ATTENTION_RULE and "newest first" in ATTENTION_RULE
 
 
@@ -217,14 +223,17 @@ def test_a_store_where_nothing_needs_attention_says_so(store):
     """Never blank: an empty panel says the rule found nothing."""
     from onetrace_console.checks import run_and_record
     from tests.test_checks import FIXED_RAN_AT, _require_installed
-    from tests.test_compare import EXAM, _deliver, _require_exam
+    from tests.test_compare import REPO, _deliver, _require_exam
     _require_installed()
     _require_exam()
-    #: A 0.1-format run that holds. Until 0.2.0 this was `ingest-r1/run_C`; that is a preview-format
-    #: run, which the 0.2.0 verifier reads as NOT VERIFIED, so it now rightly
-    #: needs attention ("Couldn't check") and can't be the store where nothing does.
-    run = run_and_record(_deliver(EXAM / "dag-r37" / "run_R", store), store, ran_at=FIXED_RAN_AT)
-    assert run.check_verdict == HOLDS
+    #: A run whose records agree: its check held with its output files required. Until 0.2.0 this
+    #: was `ingest-r1/run_C`; that is a preview-format run, which the 0.2.0 verifier reads as NOT
+    #: VERIFIED, so it rightly needs attention ("Couldn't check"). Then `dag-r37/run_R`, which
+    #: keeps no output files: its records are not checked, which needs attention too.
+    from onetrace_console import records
+    run = run_and_record(_deliver(REPO / "examples" / "reference-demo" / "runs" / "day-1", store,
+                                  outputs=True), store, ran_at=FIXED_RAN_AT)
+    assert run.check_verdict == HOLDS and records.state(run, store) == "yes"
     panel = _text(_section(render_all(store, generated_at=GENERATED_AT)[HOME], "needs-attention"))
     assert "Needs attention first · 0 of 1 run" in panel
     assert "No run needs attention by this rule." in panel
@@ -233,7 +242,8 @@ def test_a_store_where_nothing_needs_attention_says_so(store):
 # ------------------------------------------------------------------- recent runs
 
 def test_recent_runs_show_what_each_run_records_and_how_it_compares(ten_runs):
-    from onetrace_console.home import MOST_RECENT, VERDICT_LABELS, verdict_of
+    from onetrace_console import records
+    from onetrace_console.home import MOST_RECENT
     from onetrace_console.overview import pipelines, ran_at, vs_baseline
     store, _ = ten_runs
     home = render_all(store, generated_at=GENERATED_AT)[HOME]
@@ -249,7 +259,7 @@ def test_recent_runs_show_what_each_run_records_and_how_it_compares(ten_runs):
                        f"{run.delivered_stages} of {run.stage_count} declared stages"
                        + (f"; {run.retries} retr{'y' if run.retries == 1 else 'ies'} recorded"
                           if run.retries else ""),
-                       vs_baseline(run, store)[1], VERDICT_LABELS[verdict_of(run)],
+                       vs_baseline(run, store)[1], records.said(run, store),
                        short_time(ran_at(run)) if ran_at(run) else "not recorded",
                        short_time(run.received_at)], tds
         assert f'datetime="{run.received_at}"' in cells, "the time's whole value is in its <time>"
@@ -283,11 +293,15 @@ def test_the_pipelines_table_states_what_a_pipeline_is_and_counts_each_one(ten_r
         assert tds[2] == f"{n} of {total}"
         href = re.search(r'<a href="([^"]+)"', cells).group(1)
         assert _rows(pages[href]) == n, "the count opens exactly its runs"
-        counts = [re.fullmatch(r"(\d+) of (\d+)", td) for td in tds[3:7]]
+        #: One column per "Records agree" state, as each run's own page reads it.
+        from onetrace_console import records
+        counts = [re.fullmatch(r"(\d+) of (\d+)", td) for td in tds[3:3 + len(records.STATES)]]
         assert all(c and int(c.group(2)) == n for c in counts), tds
-        assert sum(int(c.group(1)) for c in counts) == n, "every run is in one verdict column"
+        assert sum(int(c.group(1)) for c in counts) == n, "every run is in one state's column"
+        assert [int(c.group(1)) for c in counts] == [len(records.runs_in(p.runs, store, s))
+                                                     for s in records.STATES], tds
         latest = max(r.received_at for r in p.runs)
-        assert tds[7] == short_time(latest) and f'datetime="{latest}"' in cells
+        assert tds[3 + len(records.STATES)] == short_time(latest) and f'datetime="{latest}"' in cells
 
 
 # ------------------------------------------------------ verdicts by day, and the marker
@@ -327,7 +341,8 @@ def test_each_day_shows_its_verdicts_as_counts_of_that_days_runs(three_days, exa
     for _, cells in days:
         tds = [_text(td) for td in re.findall(r"<td[^>]*>(.*?)</td>", cells, re.S)]
         n = int(tds[1])
-        counts = [re.fullmatch(r"(\d+) of (\d+)", td) for td in tds[2:6]]
+        #: One column per "Records agree" state, as each run's own page reads it.
+        counts = [re.fullmatch(r"(\d+) of (\d+)", td) for td in tds[2:7]]
         assert all(c and int(c.group(2)) == n for c in counts), tds
         assert sum(int(c.group(1)) for c in counts) == n
     assert not re.search(r"\d+(?:\.\d+)?\s*%", _text(section)), "counts, never percentages"
@@ -369,11 +384,16 @@ def test_other_runs_with_the_same_change_are_counted_by_a_stated_rule(diverging,
     page = render_diff(comparison, store, generated_at=GENERATED_AT)
     section = _section(page, "same-change")
     text = _text(section)
-    examined(len(store.runs()), "stored runs searched for the same change")
-    assert text.startswith("Other runs with the same change")
-    assert "same settings digest at stage 4 · split, by exact equality" in text
-    assert re.search(r"sha256:[0-9a-f]{64}", text), "the digest matched, whole"
-    assert "2 other runs in P1 carry it, of 5 runs in P1" in text
+    examined(len(store.runs()), "stored runs searched for the same recorded value")
+    assert text.startswith("Other runs that recorded the same value")
+    assert ("the same recorded settings at stage 4 · split as the candidate, by exact equality: "
+            "divide_paragraphs False ; max_chars 900 ; strategy paragraph-packing") in text
+    #: The ruled words: runs "recorded" the value, counted against the pipeline's stored runs,
+    #: the candidate among them; never "the same change".
+    #: (`_text` turns each tag into a space: hence "False ," as "False ;" above.)
+    assert ("3 of 5 stored runs in P1 recorded divide_paragraphs False , max_chars 900 and strategy "
+            "paragraph-packing at stage 4 · split, the candidate among them.") in text
+    assert "same change" not in text and "carry it" not in text
     listed = re.findall(r'<li data-run="([^"]+)">', section)
     assert sorted(listed) == sorted(r.key for r in same)
     assert 'href="#same-change-list"' in section
@@ -386,7 +406,7 @@ def test_a_pair_with_no_difference_has_no_change_to_look_for(compared):
     comparison, store = compared
     text = _text(_section(render_diff(comparison, store, generated_at=GENERATED_AT),
                           "same-change"))
-    assert "The two runs do not differ, so there is no change to look for." in text
+    assert "The two runs do not differ, so there is no changed value to look for." in text
 
 
 def test_a_pair_whose_receipts_cannot_be_read_matches_nothing(diverging, monkeypatch):
@@ -394,10 +414,47 @@ def test_a_pair_whose_receipts_cannot_be_read_matches_nothing(diverging, monkeyp
     import onetrace_console.overview as overview
     from onetrace_console.render import render_diff
     comparison, store = diverging
+    #: The match on a recorded digest: the one taken where no recorded setting changed.
+    monkeypatch.setattr(overview, "changed_settings", lambda diff, index: {})
     monkeypatch.setattr(overview, "recorded_digests", lambda run, store: None)
     text = _text(_section(render_diff(comparison, store, generated_at=GENERATED_AT),
                           "same-change"))
     assert "could not be read at stage 4 · split, so no other run is matched" in text
+
+
+def test_with_no_recorded_setting_changed_the_match_is_on_the_settings_digest(diverging, monkeypatch):
+    import onetrace_console.overview as overview
+    from onetrace_console.render import render_diff
+    comparison, store = diverging
+    monkeypatch.setattr(overview, "changed_settings", lambda diff, index: {})
+    text = _text(_section(render_diff(comparison, store, generated_at=GENERATED_AT), "same-change"))
+    assert "same settings digest at stage 4 · split, by exact equality" in text
+    assert re.search(r"sha256:[0-9a-f]{64}", text), "the digest matched, whole"
+    assert re.search(r"\b\d+ of \d+ stored runs? in P1 recorded the same settings digest at stage 4 · split, "
+                     r"the candidate among them\.", text), text
+
+
+def test_a_run_recording_another_value_is_not_matched_and_an_unread_one_is_said(diverging, monkeypatch,
+                                                                                 examined):
+    """Matched on each changed setting's value, never on the stage alone; a run whose receipts the
+    store cannot read is neither matched nor left out silently."""
+    import onetrace_console.overview as overview
+    from onetrace_console.render import render_diff
+    comparison, store = diverging
+    b = store.get_run(comparison.run_b)
+    same, other, unread = (_fake_run(store, b, run_id=n, verdict=HOLDS) for n in ("same", "other", "unread"))
+    real = overview.settings_at
+
+    def held(run, store, stage):
+        if run.key == other.key:
+            return {**real(run, store, stage), "max_chars": "901"}
+        return None if run.key == unread.key else real(run, store, stage)
+    monkeypatch.setattr(overview, "settings_at", held)
+    section = _section(render_diff(comparison, store, generated_at=GENERATED_AT), "same-change")
+    examined(3, "runs with the same, another and no readable value")
+    assert re.findall(r'<li data-run="([^"]+)">', section) == [same.key]
+    assert ("The store is missing part of 1 other run in P1, so it is not counted among the runs "
+            "that recorded it.") in _text(section)
 
 
 # ------------------------------------------- what the evidence establishes, across runs
@@ -417,13 +474,15 @@ def test_the_overview_carries_the_evidence_ladder_across_runs(ten_runs, examined
                                     "authorized", "anchored"]
     by = {k: _text(v) for k, v in rows}
     t = {x.slug: x for x in tallies(store)}
-    #: As the confirmation review held it: only a check with the output files
-    #: required counts as agreeing; one that held without them is said beside the count.
-    without = t["holds"].count - t["records-agree"].count
+    #: As the confirmation review held it: only a check with the output files required counts as
+    #: agreeing. Each other state of rung 1 beside the count, in its own words, as each run's page
+    #: reads it; held without the output files required is the reason under not checked.
+    from onetrace_console import records
     assert f"{t['records-agree'].count} of {total}" in by["records-agree"]
-    assert f"{without} held without their output files required" in by["records-agree"]
-    assert f"{t['could-not-check'].count} couldn't check" in by["records-agree"]
-    assert f"{t['contradicts'].count} contradict" in by["records-agree"]
+    for slug, s in (("not-checked", "not-checked"), ("could-not-check", "couldnt-check"),
+                    ("contradicts", "no"), ("no-verdict", "no-verdict")):
+        assert f"{t[slug].count} {records.counted(s, t[slug].runs, store)}" in by["records-agree"], (slug, by)
+    assert "held without" not in by["records-agree"].replace("not checked (", "") or t["not-checked"].count
     #: Each signing form as each run's own page reads it, over all runs stored,
     #: zeros left out (tests/test_signed_surfaces.py holds each rule).
     from onetrace_console.home import SIGNATURE_FORMS
@@ -436,7 +495,10 @@ def test_the_overview_carries_the_evidence_ladder_across_runs(ten_runs, examined
     assert f"{t['nothing-missing'].count} of {total}" in by["nothing-missing"]
     assert f"{missing} missing a declared stage" in by["nothing-missing"]
     assert f"{t['missing-not-established'].count} not established" in by["nothing-missing"]
-    assert (t["nothing-missing"].count + missing + t["missing-not-established"].count == total)
+    stopped = t["stopped-at-a-step"].count
+    if stopped:
+        assert f"{stopped} stopped at a step" in by["nothing-missing"]
+    assert (t["nothing-missing"].count + missing + stopped + t["missing-not-established"].count == total)
     assert "not checked" in by["reproduced"]
     assert "No records · This console does not record authorization." in by["authorized"]
     assert not re.search(r"\d+ of \d+", by["authorized"]), "authorization is never counted"

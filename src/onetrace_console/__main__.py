@@ -229,7 +229,7 @@ def _export_static(argv: list[str]) -> int:
         return 1
     for rel, digest in files.items():
         print(f"{digest}  {rel}")
-    print("internal ids: 0")
+    print("project ids: 0")
     print("external requests: 0")
     if fence is None:
         print("fence scan: not run here -- its terms never come to this machine; it runs over "

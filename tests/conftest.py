@@ -308,3 +308,11 @@ def pytest_testnodedown(node, error):
     from tests.examined import RECORDS, Report
     RECORDS.extend(Report(nodeid, what, count)
                    for nodeid, what, count in node.workeroutput.get("examined", ()))
+
+
+def whole_folds(html: str) -> str:
+    """`html` with each fingerprint's fold read whole: its short summary dropped, the whole value
+    it holds kept -- so a check that a page carries a fingerprint reads the whole one, which is
+    on the page, one fold away."""
+    import re
+    return re.sub(r'(<details class="fingerprint"[^>]*>)<summary class="mono">[^<]*</summary>', r"\1", html)

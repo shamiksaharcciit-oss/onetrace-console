@@ -37,6 +37,7 @@ import re
 from onetrace_console.bounded_json import load_json_bounded
 
 from onetrace_console.viewer.graph import instance_label
+from onetrace_console.viewer.page import fingerprint_html
 from onetrace_console.words import (NO_AUTHORIZATION, RELATIVE_TIME_SCRIPT, generated_footer,
                                      scroll_region, short_time, time_html)
 from onetrace_console.words import (escape, named, record_href, rest, run_named, shown_name,
@@ -206,10 +207,16 @@ def typed_command(comparison, store: Store, verb: str, *, text: bool = False) ->
             + (" --text" if text else ""))
 
 
+#: Settings named by the SDK's words for them, not their path's last part: the corpus link is a
+#: field of the receipt, not a name the record chose.
+SETTING_WORDS = {"assertions.corpus_manifest": "corpus link"}
+
+
 def short_setting(field: str) -> str:
     """A recorded setting by its short name: the last part of its path
-    (`assertions.constants.chunk_size` -> `chunk_size`). The whole path is said where it's shown."""
-    return field.rsplit(".", 1)[-1]
+    (`assertions.constants.chunk_size` -> `chunk_size`), or the SDK's words for a receipt field
+    (`SETTING_WORDS`). The whole path is said where it's shown."""
+    return SETTING_WORDS.get(field, field.rsplit(".", 1)[-1])
 
 
 def _is_digest(value) -> bool:
@@ -218,33 +225,30 @@ def _is_digest(value) -> bool:
 
 
 def records_words(comparison, store: Store) -> str:
-    """Whether both runs' records agree, each by the Overview's rule: the check held with the run's
-    output files required. Said for both together where they read alike."""
-    from onetrace_console.checks import CONTRADICTS, HOLDS
-    from onetrace_console.home import artifacts_required, verdict_of
+    """Each run's "Records agree", as its own page reads it (`records.state`), in rung 1's words.
+    Said for both together where they read alike."""
+    from onetrace_console import records
 
-    #: (both runs, one run): each reading in the Overview's words.
+    #: (both runs, one run): each state in rung 1's words.
     words = {
-        "agree": ("Both runs' records agree", "{who}'s records agree"),
-        "held": ("Both runs' checks held, without their output files required",
-                 "{who}'s check held, without its output files required"),
-        "contradicts": ("Both runs' records contradict themselves",
-                        "{who}'s records contradict themselves"),
-        "unchecked": ("Neither run's records were checked", "{who}'s records were not checked"),
+        records.YES: ("Both runs' records agree", "{who}'s records agree"),
+        records.NO: ("Both runs contradict their record", "{who} contradicts its record"),
+        records.COULDNT: ("Both runs' records couldn't be checked", "{who}'s records couldn't be checked"),
+        records.NOT_CHECKED: ("Both runs' records were not checked", "{who}'s records were not checked"),
+        records.NO_VERDICT: ("Neither run has a verdict recorded", "{who} has no verdict recorded"),
     }
 
-    def reads(key: str) -> str:
+    def reads(key: str) -> tuple[str, str]:
         run = _held(store, key)
-        if run is None:
-            return "unchecked"
-        if verdict_of(run) == HOLDS:
-            return "agree" if artifacts_required(run, store) else "held"
-        return "contradicts" if verdict_of(run) == CONTRADICTS else "unchecked"
-    a, b = reads(comparison.run_a), reads(comparison.run_b)
-    if a == b:
-        return words[a][0] + "."
-    return (words[a][1].format(who="The baseline") + "; "
-            + words[b][1].format(who="the candidate") + ".")
+        if run is None:      # its record can't be read, so nothing of its check is read
+            return records.NOT_CHECKED, ""
+        return records.state(run, store), records.why(run, store)
+
+    (a, why_a), (b, why_b) = reads(comparison.run_a), reads(comparison.run_b)
+    if a == b and why_a == why_b:
+        return words[a][0] + (f" ({why_a})" if why_a else "") + "."
+    return (words[a][1].format(who="The baseline") + (f" ({why_a})" if why_a else "") + "; "
+            + words[b][1].format(who="the candidate") + (f" ({why_b})" if why_b else "") + ".")
 
 
 def _first_difference_summary(report, annotations: list[dict], identical: int,
@@ -374,6 +378,70 @@ def _settings_changed(annotations: list[dict], first: str = "") -> str:
                      + "</details>")
     return ('<section data-section="settings-changed"><h2>Settings that changed</h2>'
             f"{body}</section>")
+
+
+#: A graph-shaped pair's node note, as the SDK words a setting that differs
+#: (`topology.annotate`): the field it names, by the path the straight-line report uses.
+_DAG_SETTING_NOTES = ((re.compile(r"instrument (\S+) differs: .*"), "instrument."),
+                      (re.compile(r"constant (.+) differs"), "assertions.constants."),
+                      (re.compile(r"corpus link differs: .*"), "assertions.corpus_manifest"))
+#: A value a graph-shaped pair's table can't give: the receipt isn't one the store can read, or
+#: it records nothing under that name.
+DAG_VALUE_UNREADABLE = "not readable in the store"
+DAG_VALUE_NONE = "not recorded"
+
+
+def _receipt_value(receipt: dict | None, field: str) -> str:
+    """`field` (`instrument.<k>`, `assertions.constants.<k>`, `assertions.corpus_manifest`) as
+    `receipt` records it: a string as written, anything else as JSON. The corpus link by its
+    digest, as the SDK compares it."""
+    import json
+    if receipt is None:
+        return DAG_VALUE_UNREADABLE
+    assertions = receipt.get("assertions") if isinstance(receipt.get("assertions"), dict) else {}
+    if field == "assertions.corpus_manifest":
+        ref = assertions.get("corpus_manifest")
+        value = ref.get("digest") if isinstance(ref, dict) else ref
+    elif field.startswith("instrument."):
+        block = receipt.get("instrument")
+        value = block.get(field[len("instrument."):]) if isinstance(block, dict) else None
+    else:
+        block = assertions.get("constants")
+        value = block.get(field[len("assertions.constants."):]) if isinstance(block, dict) else None
+    if value is None:
+        return DAG_VALUE_NONE
+    return value if isinstance(value, str) else json.dumps(value, sort_keys=True, ensure_ascii=False)
+
+
+def dag_annotations(report, comparison, store: Store) -> list[dict]:
+    """A graph-shaped pair's settings that differ, as the straight-line report's `annotations`
+    are shaped (`{index, stage, differs: {field: [old, new]}}`): for each node whose note says an
+    instrument field, a constant or the corpus link differs, exactly those fields, each with the
+    value each run's receipt for that node records. The SDK's graph report names them without
+    their values; the values are read from the stored receipts, never guessed."""
+    from onetrace_console.stage_pages import _steps
+
+    def receipts(run_key: str) -> dict[str, dict]:
+        run = _held(store, run_key)
+        try:
+            return {s["index"]: s["receipt"] for s in _steps(run, store)} if run is not None else {}
+        except Exception:  # noqa: BLE001 - each value then says it can't be read
+            return {}
+    a, b = receipts(comparison.run_a), receipts(comparison.run_b)
+    out = []
+    for n, row in enumerate(report.ladder, start=1):
+        fields = []
+        for note in row.annotations:
+            for rx, path in _DAG_SETTING_NOTES:
+                m = rx.fullmatch(note)
+                if m:
+                    fields.append(path + m.group(1) if path.endswith(".") else path)
+        if not fields or row.index_baseline is None or row.index_candidate is None:
+            continue
+        ra, rb = a.get(row.index_baseline), b.get(row.index_candidate)
+        out.append({"index": str(n), "stage": instance_label(row.node),
+                    "differs": {f: [_receipt_value(ra, f), _receipt_value(rb, f)] for f in fields}})
+    return out
 
 
 def recorded_reads(run_key: str, store: Store) -> dict[str, tuple[str, ...]]:
@@ -728,6 +796,7 @@ def _text_diff_section(comparison, store) -> str:
     how to ask for the larger one. Never the console's own diff."""
     from onetrace_console.compare import (TEXT_DIFF, TEXT_DIFF_DEFAULT_LINES, TEXT_DIFF_MORE_LINES,
                                           text_diff_raw)
+    from onetrace_console.kept_inputs import for_this_console
     from onetrace_console.textdiff_view import TextDiffUnreadable, read_textdiff, render_textdiff
     head = f'<section data-section="text-diff"><h2>{escape(TEXT_DIFF_HEADING)}</h2>'
     found = text_diff_raw(comparison, store)
@@ -743,7 +812,7 @@ def _text_diff_section(comparison, store) -> str:
                f"<code>{escape(typed_command(comparison, store, 'diff', text=True))}"
                f"{escape(' ' + more.group(0)) if more else ''}</code></p>")
     try:
-        doc = read_textdiff(raw)
+        doc = for_this_console(read_textdiff(raw), comparison, store)
     except TextDiffUnreadable as e:
         return (f"{head}<p>{escape(TEXT_DIFF_UNREADABLE.format(why=e))}</p>{command}</section>")
     more = verb != TEXT_DIFF
@@ -771,7 +840,9 @@ def _text_diff_section(comparison, store) -> str:
 def _dag_table(report, verb: str) -> str:
     """The changes table for two graph-shaped runs: one row per node, in the SDK's order,
     each node's position in either run as the report gives it (empty where it is not in that
-    run), the SDK's annotations verbatim, and the verdict in this page's words."""
+    run), the SDK's annotations verbatim -- each fingerprint in them short, its whole value one
+    fold away -- and the verdict in this page's words."""
+    from onetrace_console.viewer.page import fingerprints_in_text
     rows = []
     for n, row in enumerate(report.ladder, start=1):
         first = row.verdict == "FIRST DIFFERENCE"
@@ -782,7 +853,7 @@ def _dag_table(report, verb: str) -> str:
             f'<td class="mono">{named(instance_label(row.node))}</td>'
             f'<td class="mono">{escape(row.index_baseline or "")}</td>'
             f'<td class="mono">{escape(row.index_candidate or "")}</td>'
-            f'<td data-section="annotations">{escape("; ".join(row.annotations))}</td>'
+            f'<td data-section="annotations">{fingerprints_in_text("; ".join(row.annotations))}</td>'
             f'<td data-result="{_tag(row.verdict)}">'
             f'{escape(_RESULT_WORDS.get(row.verdict, row.verdict))}</td></tr>')
     return _scrolls(
@@ -804,9 +875,13 @@ def _scrolls(table: str) -> str:
 
 
 def _side(side) -> str:
-    """One side of a ladder row, as the report gives it. Digests shown, never shortened.
+    """One side of a ladder row, as the report gives it, each digest whole.
 
-    Truncating a digest on a page is how two different records come to look like one.
+    The rule for a digest on a page: it may be shown short in running text and annotation cells;
+    every short form has its whole value on the same page -- in a Details, the "as the SDK wrote
+    it" block, or the footer. A short form with no whole value beside it is how two different
+    records come to look like one. This table sits folded under a Details, so it is one of the
+    places a digest is whole.
     """
     if not isinstance(side, dict):
         return ""
@@ -845,26 +920,35 @@ def _localized(report) -> str:
 #: `undecided` are canary's proposed words, after a form fixed for a cause that turned out
 #: not to be this one; they are not yet fixed.
 SAME_CHANGE_WORDS = {
-    "none": "The two runs do not differ, so there is no change to look for.",
+    "none": "The two runs do not differ, so there is no changed value to look for.",
     "graph": ("This console doesn't match a graph comparison's first differences against other "
-              "runs, so it doesn't look for other runs with the same change."),
+              "runs, so it doesn't look for other runs that recorded the same value."),
     "undecided": ("This console can't read a first difference from this comparison's diff "
-                  "report, so it doesn't look for other runs with the same change."),
+                  "report, so it doesn't look for other runs that recorded the same value."),
 }
 
 
-def _same_change(comparison, store: Store) -> str:
-    """The "Other runs with the same change" panel, below the pair.
+#: Runs the settings match could not read, said rather than counted either way.
+UNREAD_RUNS = ("The store is missing part of {n} other {runs} in {pipeline}, so {they} not "
+               "counted among the runs that recorded it.")
+#: How the SDK's report names a recorded setting: a setting's whole path, as its tooltip gives it.
+_SETTING_PATH = "assertions.constants."
 
-    Its matching rule is on the page, by exact equality; it shows counts with their
-    denominators and a plain list of run ids; it never says what the change did in them.
+
+def _same_change(comparison, store: Store) -> str:
+    """The "Other runs that recorded the same value" panel, below the pair.
+
+    Its matching rule is on the page, by exact equality; it says how many of the pipeline's
+    stored runs recorded the candidate's value, the candidate among them, and lists the others by
+    run id. Its words say what is computed -- runs that recorded a value -- never that they
+    have the same change, and never what the change did in them.
     Nothing is compared automatically: the pair is the one somebody asked for, and this only
     counts which other stored runs carry the same recorded digest.
     """
     from onetrace_console.overview import same_change
 
     found = same_change(comparison, store)
-    head = "<h2>Other runs with the same change</h2>"
+    head = "<h2>Other runs that recorded the same value</h2>"
     if found.state in SAME_CHANGE_WORDS:
         said = SAME_CHANGE_WORDS[found.state]
         return (f'<section data-section="same-change" data-state="{found.state}">{head}'
@@ -876,19 +960,31 @@ def _same_change(comparison, store: Store) -> str:
     if found.state == "unchanged":
         return (f'<section data-section="same-change">{head}<p>'
                 + escape(f"No recorded settings or code digest at {at} differs between the two "
-                         "runs, so there is no recorded change to look for elsewhere.")
+                         "runs, so there is no changed value to look for in other runs.")
                 + "</p></section>")
-    n = len(found.matches)
-    runs = "run" if n == 1 else "runs"
+    #: The candidate recorded the value too, so it is counted with the others it is matched against.
+    n = len(found.matches) + 1
     total = "run" if found.in_pipeline == 1 else "runs"
     items = "".join(f'<li data-run="{_tag(r.key)}"><span class="mono" data-words="record">'
                     f"{named(r.run_id, record_href(r))}</span></li>" for r in found.matches)
-    return (f'<section data-section="same-change">{head}'
-            f"<p>Matching rule: the same {escape(found.what)} digest at {escape(at)}, by exact "
-            f'equality: <span class="mono">{escape(found.digest)}</span>.</p>'
-            f'<p><a href="#same-change-list">{n} other {runs} in {escape(found.pipeline)} carry '
-            f"it, of {found.in_pipeline} {total} in {escape(found.pipeline)}</a>.</p>"
-            "<p>Nothing here says what the change did in those runs.</p>"
+    if found.settings:
+        values = [f'{setting_name(_SETTING_PATH + k)} <span class="mono" data-words="record">{named(v)}</span>'
+                  for k, v in found.settings]
+        value = values[0] if len(values) == 1 else ", ".join(values[:-1]) + " and " + values[-1]
+        recorded = "; ".join(f'{setting_name(_SETTING_PATH + k)} <span class="mono" data-words="record">{named(v)}</span>'
+                             for k, v in found.settings)
+        rule = (f"<div>Matching rule: the same recorded {'setting' if len(found.settings) == 1 else 'settings'}"
+                f" at {escape(at)} as the candidate, by exact equality: {recorded}.</div>")
+    else:
+        value = f"the same {escape(found.what)} digest"
+        rule = (f"<div>Matching rule: the same {escape(found.what)} digest at {escape(at)}, by exact "
+                f'equality: {fingerprint_html(found.digest)}.</div>')
+    return (f'<section data-section="same-change">{head}' + rule +
+            f'<p><a href="#same-change-list">{n} of {found.in_pipeline} stored {total} in '
+            f"{escape(found.pipeline)}</a> recorded {value} at {escape(at)}, the candidate among them.</p>"
+            + (f"<p>{escape(UNREAD_RUNS.format(n=found.unread, runs='run' if found.unread == 1 else 'runs', they='it is' if found.unread == 1 else 'they are', pipeline=found.pipeline))}</p>"
+               if found.unread else "")
+            + "<p>Nothing here says what the change did in those runs.</p>"
             f'<ul class="plain" id="same-change-list">{items or "<li>none</li>"}</ul></section>')
 
 
@@ -1060,11 +1156,11 @@ DIFF_ENVELOPES = {
 }
 
 #: What a graph-shaped pair's pages do not draw, said once at the end of the page.
-NOT_SHOWN = "Not shown for graph-shaped runs: where the change started, and other runs with the same change."
+NOT_SHOWN = "Not shown for graph-shaped runs: where the change started, and other runs that recorded the same value."
 NOT_SHOWN_WHY = {
     "localize": ("This console draws where the change started only for two linear runs; the SDK's "
                  "localize report for this pair is below, as it wrote it."),
-    "same-change": ("Other runs with the same change are not looked for: this console doesn't match a "
+    "same-change": ("Other runs that recorded the same value are not looked for: this console doesn't match a "
                     "graph comparison's first differences against other runs."),
 }
 
@@ -1140,6 +1236,10 @@ def render_diff(comparison: StoredComparison, store: Store, *, generated_at: str
                             f"{verb}.json holds a {report.verb} report of another kind, not "
                             f"a comparison of two runs")
                     annotations = _annotations(folder, verb)
+                    #: A graph-shaped pair's report names the settings that differ on each node
+                    #: without their values: "Settings that changed" reads them from the receipts.
+                    if isinstance(report, TwoRunDag) and not annotations:
+                        annotations = dag_annotations(report, comparison, store)
                     if verb == DIFF and getattr(report, "ladder", None):
                         identical = _identical_before(folder, verb, report)
                 except Exception as e:  # noqa: BLE001 - stated on the page, and logged
@@ -1282,17 +1382,19 @@ def _card(name: str, title: str, lead: str, href: str, line: str, definition: li
             f'aria-label="{DEFINITION_SUMMARY}">?</summary>{told}</details></div>')
 
 
-def _states_line(tallies) -> str:
+def _states_line(states) -> str:
     """A card's breakdown in one short line: each state with runs, as a count opening exactly
-    those runs; the states at 0 folded into one grey line that still names and links each."""
-    said = [t for t in tallies if t.count]
-    zero = [t for t in tallies if not t.count]
+    those runs; the states at 0 folded into one grey line that still names and links each.
+    `states` is (tally, the words the line gives it) pairs."""
+    said = [(t, w) for t, w in states if t.count]
+    zero = [(t, w) for t, w in states if not t.count]
     #: Each count with its denominator, as every count on the page is.
-    line = " · ".join(f'<a href="{_tag(t.href)}">{t.count} of {t.denominator} {escape(t.label)}</a>'
-                      for t in said)
+    line = " · ".join(f'<a href="{_tag(t.href)}">{t.count} of {t.denominator} {escape(w)}</a>'
+                      for t, w in said)
     out = f'<p data-line="states">{line}</p>' if said else ""
     if zero:
-        named = ", ".join(f'<a href="{_tag(t.href)}">{escape(t.label)}</a>' for t in zero)
+        named = ", ".join(f'<a href="{_tag(t.href)}">{escape(w)}</a>' for t, w in zero)
+        zero = [t for t, _ in zero]
         out += (f'<p class="zero" data-line="zero">0 of {zero[0].denominator} in the other '
                 f'states: {named}</p>')
     return out
@@ -1306,6 +1408,16 @@ def _kpi(lead: str) -> str:
     if not m:
         return escape(lead)
     return f'<span class="kpi">{escape(m.group(1))}</span><span class="of">{escape(m.group(2))}</span>'
+
+
+def _stopped_line(by_slug: dict) -> str:
+    """The Runs card's count of runs stopped by a step, linking to exactly those runs; grey at 0,
+    as the Overview's zeros are."""
+    t = by_slug["stopped-by-a-step"]
+    from onetrace_console.viewer.sentences import template
+    said = f"{t.count} of {t.denominator} {template('declined.overview')}"
+    return (f'<p data-line="stopped"{"" if t.count else " class=\"zero\""}>'
+            f'<a href="{_tag(t.href)}">{escape(said)}</a></p>')
 
 
 def _cards(store: Store, by_slug: dict) -> str:
@@ -1323,7 +1435,12 @@ def _cards(store: Store, by_slug: dict) -> str:
     word = "pipeline" if len(found) == 1 else "pipelines"
     unit = "run" if total == 1 else "runs"
     agree, changed = by_slug["records-agree"], by_slug["changed-vs-baseline"]
-    others = [by_slug[s] for s in ("holds", "could-not-check", "contradicts", "not-checked")]
+    #: Rung 1's states, each in its own words (`records.counted`) and each opening exactly its
+    #: runs: no two counts under one label, and the same counts as the rung row below.
+    from onetrace_console import records
+    from onetrace_console.home import RECORDS_TALLY
+    states = [(t, records.counted(s, t.runs, store))
+              for s in records.STATES for t in (by_slug[RECORDS_TALLY[s][0]],)]
     compared = sum(1 for r in runs if any(c.run_b == r.key for c in store.comparisons()))
     every = derive(store)
     raised_from = len({i.subject for i in every if i.subject_kind == "run"})
@@ -1332,12 +1449,13 @@ def _cards(store: Store, by_slug: dict) -> str:
     #: card's muted lines, in the words the longer lead used to carry.
     cards = [
         _card("runs", "Runs", f"{total} {unit} stored", by_slug["all"].href,
-              f"<p>{escape(f'Stored in {len(found)} {word}.')}</p>", [escape(PIPELINE_RULE)]),
-        _card("records-agree", "Records agree", f"{len(agree.runs)} of {total} {unit} verified",
-              agree.href, _states_line(others),
-              [escape("Verified: " + agree.label.split(": ", 1)[1] + "."),
-               escape("Below the count: each verdict the check recorded, as a count of runs; "
-                      "All counts has each in full.")]),
+              f"<p>{escape(f'Stored in {len(found)} {word}.')}</p>" + _stopped_line(by_slug),
+              [escape(PIPELINE_RULE)]),
+        _card("records-agree", "Records agree", f"{len(agree.runs)} of {total} {unit} whose records agree",
+              agree.href, _states_line(states),
+              [escape("Records agree: " + agree.label.split(": ", 1)[1] + "."),
+               escape("Below the count: each run's \"Records agree\" as its own page reads it, as a "
+                      "count of runs; All counts has each in full.")]),
         _card("changed-vs-baseline", "Changed vs baseline",
               f"{len(changed.runs)} of {total} {unit} changed vs baseline", changed.href,
               f"<p>{escape(f'{total - compared} of {total} {unit} are no comparison' + chr(39) + 's candidate.')}</p>",
@@ -1425,8 +1543,10 @@ def _recorded_of_declared(run) -> str:
 def _recent_runs(store: Store) -> str:
     """v6 board 1's "Recent runs": newest arrival first, each with what its record says --
     its pipeline (declared stage list), its receipts against its declared stages, how it
-    compares with the baseline it was compared against, and its recorded verdict."""
-    from onetrace_console.home import MOST_RECENT, VERDICT_LABELS, verdict_of
+    compares with the baseline it was compared against, and its "Records agree" as its own page
+    reads it (`records.said`)."""
+    from onetrace_console import records
+    from onetrace_console.home import MOST_RECENT
     from onetrace_console.overview import pipelines, ran_at, vs_baseline
 
     runs = store.runs()
@@ -1439,13 +1559,12 @@ def _recent_runs(store: Store) -> str:
     rows = []
     for r in recent:
         state, words = vs_baseline(r, store)
-        verdict = verdict_of(r)
         rows.append(
             f'<tr data-recent="{_tag(r.key)}"><td>{_run_link(r)}</td>'
             f"<td>{escape(label[r.key])}</td>"
             f'<td class="value">{_recorded_of_declared(r)}</td>'
             f"<td>{pill(words, BASELINE_TONE.get(state, 'neu'))}</td>"
-            f"<td>{pill(VERDICT_LABELS[verdict], tones.tone(tones.VERDICT, verdict))}</td>"
+            f"<td>{pill(records.said(r, store), tones.tone(tones.RUNG, records.state(r, store)))}</td>"
             f'<td class="value">{time_html(ran) if (ran := ran_at(r)) else "not recorded"}</td>'
             f'<td class="value">{time_html(r.received_at)}</td></tr>')
     rows = "".join(rows)
@@ -1460,20 +1579,25 @@ def _recent_runs(store: Store) -> str:
             + "</section>")
 
 
+def _state_heads() -> str:
+    """A table's columns for rung 1's states, each under its own label (`records.LABEL`)."""
+    from onetrace_console import records
+    return "".join(f"<th>{escape(records.LABEL[s])}</th>" for s in records.STATES)
+
+
 def _pipelines(store: Store) -> str:
     """The pipelines table, from the data already stored: one row per declared
     stage list, its runs as a count of every run stored (opening exactly those runs), each
-    recorded verdict as a count of the pipeline's own runs, and its latest arrival."""
-    from onetrace_console.checks import CONTRADICTS, COULD_NOT_CHECK, HOLDS
-    from onetrace_console.home import NOT_CHECKED, verdict_of
+    "Records agree" state (rung 1, `records.state`) as a count of the pipeline's own runs, and its
+    latest arrival."""
+    from onetrace_console import records
     from onetrace_console.overview import PIPELINE_RULE, pipelines
 
     found, total = pipelines(store), len(store.runs())
     rows = []
     for p in found:
         n = len(p.runs)
-        verdicts = [sum(1 for r in p.runs if verdict_of(r) == v)
-                    for v in (HOLDS, CONTRADICTS, COULD_NOT_CHECK, NOT_CHECKED)]
+        verdicts = [len(records.runs_in(p.runs, store, s)) for s in records.STATES]
         stages = " → ".join(shown_name(s) for s in p.stages) if p.stages else "(no stages declared)"
         if p.more:
             #: The first LIST_CAP, then how many more, in the viewer's words.
@@ -1490,9 +1614,8 @@ def _pipelines(store: Store) -> str:
             f'<div class="head"><h2>Pipelines · {len(found)}</h2></div>'
             f"<p>{escape(PIPELINE_RULE)}</p>"
             + scroll_region('<table class="board"><thead><tr><th>Pipeline</th><th>Declared stages</th>'
-                            "<th>Runs</th><th>Verified</th><th>Contradicts its record</th>"
-                            "<th>Couldn't check</th><th>No verdict recorded</th>"
-                            "<th>Latest received by this console</th></tr></thead>"
+                            "<th>Runs</th>" + _state_heads()
+                            + "<th>Latest received by this console</th></tr></thead>"
                             f"<tbody>{''.join(rows)}</tbody></table>",
                             "Pipelines, scrolls sideways", "pipelines")
             + "</section>")
@@ -1507,8 +1630,7 @@ def _by_day(store: Store) -> str:
     arrow, and no word for a direction: it says what the records say changed, nothing about
     whether anything got better or worse.
     """
-    from onetrace_console.checks import CONTRADICTS, COULD_NOT_CHECK, HOLDS
-    from onetrace_console.home import NOT_CHECKED, verdict_of
+    from onetrace_console import records
     from onetrace_console.overview import days, markers
 
     found = days(store)
@@ -1516,8 +1638,7 @@ def _by_day(store: Store) -> str:
     rows = []
     for i, day in enumerate(found):
         n = len(day.runs)
-        counts = [sum(1 for r in day.runs if verdict_of(r) == v)
-                  for v in (HOLDS, CONTRADICTS, COULD_NOT_CHECK, NOT_CHECKED)]
+        counts = [len(records.runs_in(day.runs, store, s)) for s in records.STATES]
         rows.append(f'<tr data-day="{_tag(day.date)}"><td class="value">{escape(day.date)}</td>'
                     f'<td class="value">{n}</td>'
                     + "".join(f'<td class="value">{c} of {n}</td>' for c in counts) + "</tr>")
@@ -1527,21 +1648,21 @@ def _by_day(store: Store) -> str:
                 f"{', '.join(m.before)} to {', '.join(m.after)}" for m in changes[i])
             names = ",".join(sorted({f"{m.pipeline}/{shown_name(m.stage)}/{m.what}"
                                      for m in changes[i]}))
-            rows.append(f'<tr data-change-marker="{_tag(names)}"><td colspan="6">'
+            rows.append(f'<tr data-change-marker="{_tag(names)}"><td colspan="{2 + len(records.STATES)}">'
                         f'<span class="mono">{escape(said)}</span></td></tr>')
     note = (f"<p>The receipts of {unreadable} of {len(store.runs())} runs could not be read, so "
             "no change is marked on their account.</p>" if unreadable else "")
     #: The days are the days the runs arrived, and the heading says so.
     return ('<section data-section="by-day">'
             '<div class="head"><h2>Verdicts by day received</h2></div>'
-            "<p>Each day's verdicts are counts of the runs received that day. A marker row "
+            "<p>Each day's counts are counts of the runs received that day, each by its \"Records "
+            "agree\" as its own page reads it. A marker row "
             "between two "
             "days names a recorded settings or code digest that differs from the day before, "
             "in a pipeline with runs on both days.</p>"
             f"{note}"
             + scroll_region('<table class="board"><thead><tr><th>Day received</th><th>Runs</th>'
-                            "<th>Verified</th><th>Contradicts its record</th>"
-                            "<th>Couldn't check</th><th>No verdict recorded</th></tr></thead>"
+                            + _state_heads() + "</tr></thead>"
                             f"<tbody>{''.join(rows)}</tbody></table>",
                             "Runs by day, scrolls sideways", "by-day")
             + "</section>")
@@ -1589,15 +1710,17 @@ def _evidence(store: Store, by_slug: dict) -> str:
     signing and anchoring rungs count each run's own page's reading of this console's check."""
     total = len(store.runs())
     unit = "run" if total == 1 else "runs"
-    agree, holds = by_slug["records-agree"], by_slug["holds"]
-    nothing, missing, unknown = (by_slug[s] for s in ("nothing-missing",
-                                                       "missing-a-declared-stage",
-                                                       "missing-not-established"))
-    cnc, contra, unchecked = (by_slug[s] for s in ("could-not-check", "contradicts",
-                                                   "not-checked"))
-    #: The evidence, as on each run's page: only a check run with the run's output files
-    #: required counts as agreeing. A check that held without them is said, not counted.
-    without = holds.count - agree.count
+    from onetrace_console import records
+    from onetrace_console.home import RECORDS_TALLY
+    agree = by_slug["records-agree"]
+    nothing, missing, stopped, unknown = (by_slug[s] for s in ("nothing-missing",
+                                                                "missing-a-declared-stage",
+                                                                "stopped-at-a-step",
+                                                                "missing-not-established"))
+    #: Rung 1 as each run's page decides it (`records.state`): the runs whose records agree, then
+    #: each other state in its own words, the reason said under not checked.
+    rest = [(by_slug[RECORDS_TALLY[s][0]], s) for s in (records.NOT_CHECKED, records.COULDNT,
+                                                       records.NO, records.NO_VERDICT)]
     def part(n: int, words: str) -> str:
         """One count in a row of counts; at 0, grey, still said (the zeros are folded, not
         left out)."""
@@ -1607,10 +1730,7 @@ def _evidence(store: Store, by_slug: dict) -> str:
     rows = [
         ("records-agree", "Records agree",
          f'<a href="{_tag(agree.href)}">{agree.count} of {total}</a> · '
-         + " · ".join((part(without, f"held without {'its' if without == 1 else 'their'} output "
-                                     "files required"),
-                       part(cnc.count, "couldn\'t check"), part(contra.count, "contradict"),
-                       part(unchecked.count, "not checked")))),
+         + " · ".join(part(t.count, escape(records.counted(s, t.runs, store))) for t, s in rest)),
         #: In the fixed words: each form over all runs stored, zeros left out, each count
         #: linking to its runs.
         ("signed", "Signed by a known recorder?", _signing(by_slug)),
@@ -1619,7 +1739,9 @@ def _evidence(store: Store, by_slug: dict) -> str:
         ("nothing-missing", "No declared stage missing",
          f'<a href="{_tag(nothing.href)}">{nothing.count} of {total}</a> · '
          f'<a href="{_tag(missing.href)}">{missing.count} missing a declared stage</a> · '
-         f'<a href="{_tag(unknown.href)}">{unknown.count} not established</a>'),
+         + (f'<a href="{_tag(stopped.href)}">{stopped.count} stopped at a step</a> · '
+            if stopped.count else "")
+         + f'<a href="{_tag(unknown.href)}">{unknown.count} not established</a>'),
         ("reproduced", "Re-runnable stages re-run and matched",
          "not checked · this console runs no re-check"),
         ("authorized", "Action authorized, effect confirmed",
@@ -1679,7 +1801,7 @@ def watched_section() -> str:
     one colour rule). A notice line, empty until the page's script fills it, says when new runs
     have arrived since the page was drawn. Nothing when no folder is watched."""
     from onetrace_console import watch
-    from onetrace_console.words import WATCH_SCRIPT
+    from onetrace_console.words import WATCH_SCRIPT, path_text
     watcher = watch.CURRENT
     if watcher is None:
         return ""
@@ -1689,7 +1811,7 @@ def watched_section() -> str:
                     for name, (tone, words) in sorted(state.changed.items()))
     return (f'<section data-section="watched" data-version="{state.version}" '
             f'data-taken="{len(state.taken)}" data-interval="{state.interval:g}">'
-            f"<p>Watching <code>{escape(state.folder)}</code> for new runs, every "
+            f"<p>Watching <code>{path_text(state.folder)}</code> for new runs, every "
             f"{state.interval:g} s; a run is taken in once it has finished writing. Last read: "
             f'<time data-part="last-read" datetime="{escape(state.last_read)}">'
             f"{escape(short_time(state.last_read)) if state.last_read else 'not yet'}</time>.</p>"
@@ -1798,6 +1920,7 @@ def _newest_first(c: StoredComparison) -> tuple:
 def render_comparisons(store: Store, *, generated_at: str) -> str:
     """Every stored comparison, newest first, each linking to its compare page (approved by
     the maintainer). Unsealed, so its frame is filled as it is served."""
+    from onetrace_console.choose_pages import choose_links
     every = sorted(store.comparisons(), key=_newest_first)
     gone = store.unreadable_comparisons
     #: Never dropped without a word, as the Overview names it.
@@ -1826,6 +1949,7 @@ def render_comparisons(store: Store, *, generated_at: str) -> str:
         ", newest first by the time each was run; comparisons run at the same moment are "
         "ordered by their key. Each opens its compare page.</p>",
         listing,
+        choose_links(store),
         generated_footer(generated_at),
     ]
     body = ['<div class="cp">', *body, "</div>"]
@@ -1873,6 +1997,19 @@ def render_all(store: Store, *, generated_at: str) -> dict[str, str]:
             file_name=t.href, rows=rows, every_stored=t.slug == "all",
             filtered=t.slug != "all"))
     pages[COMPARISONS] = drawn(lambda: render_comparisons(store, generated_at=generated_at))
+    #: Choose two runs: a page per pipeline, and one per run as run A.
+    from onetrace_console.choose_pages import (choose_href, held_comparisons, pair_href,
+                                               render_choose, render_pair)
+    from onetrace_console.overview import pipelines
+    try:
+        groups, held = pipelines(store), held_comparisons(store)
+    except Exception:  # noqa: BLE001 - Home above already says what failed
+        groups, held = (), {}
+    for p in groups:
+        pages[choose_href(p.label)] = drawn(lambda p=p: render_choose(p, store, generated_at=generated_at))
+        for r in p.runs:
+            pages[pair_href(p.label, r.key)] = drawn(lambda p=p, r=r: render_pair(
+                p, r, store, generated_at=generated_at, held=held))
     #: The Incidents page and one list per rule, so every count on Home opens.
     pages[INCIDENTS] = drawn(lambda: render_incidents(store, generated_at=generated_at))
     for rule in RULES:

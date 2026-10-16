@@ -82,6 +82,17 @@ def digest(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
 
 
+def arrival_order(runs, *, newest_first: bool) -> list:
+    """Runs by when they arrived, newest first or oldest first. Arrival is recorded to the second,
+    so runs that share one are ordered by run name (run_id, A to Z), and only two runs sharing a
+    name by their key. Never by the key first: a key is a digest of the record, which holds its
+    recorded times, so the same runs built again get other keys, and a key-first order would
+    differ from build to build (tests/test_arrival_ties.py)."""
+    out = sorted(runs, key=lambda r: (r.run_id, r.key))
+    out.sort(key=lambda r: r.received_at, reverse=newest_first)
+    return out
+
+
 def run_key(run_id: str, chain_head: str) -> str:
     return digest(run_id.encode("utf-8") + _KEY_SEPARATOR + chain_head.encode("utf-8"))
 
@@ -126,6 +137,9 @@ class StoredRun:
     #: The declared stages whose last recorded attempt failed with an error, as
     #: JSON [[stage, error type], ...] in the declared order. Derived with the fields above.
     last_failed: str = ""
+    #: The step the run stopped at by its own rule (`ingest.declined_at`), as JSON {"stage",
+    #: "reason", "left": [...]}, or "null" where it did not stop at one. Derived with the fields above.
+    declined: str = ""
     declared_digest: str = ""
     #: Rung 3, "nothing missing", as the run's own page decides it (`viewer.model.
     #: nothing_missing`), recorded when the run is checked: yes, no, couldnt-check or
@@ -142,6 +156,18 @@ class StoredRun:
     #: not-installed, couldnt-check or unreadable -- or empty where the page has no own check whose
     #: rows it reads. The Overview counts this.
     signed: str = ""
+    #: "Ran as approved" as the run's own page reads it from its own check (`viewer.model.
+    #: ran_as_approved`), recorded when the run is checked: approved, departed, edges-mismatch,
+    #: no-plan, not-a-graph-run, cant-check, does-not-verify or couldnt-check -- or empty where
+    #: the page has no own check whose rows it reads. The runs list shows this.
+    approved: str = ""
+    #: "Records agree" as the run's own page decides rung 1 from its own check (`viewer.model.
+    #: records_agree_reading`), recorded when the run is checked: yes, no, couldnt-check or
+    #: not-checked -- or empty where the page has no own check it reads. `agree_why` is
+    #: `no-outputs` where the check held without the run's output files required. Every page and
+    #: count reads these through `records.state` alone.
+    agree: str = ""
+    agree_why: str = ""
     #: What a list shows of the run (the viewer's `list_row`, or why it refused), and the recorded
     #: digests Home's change markers read, as JSON: kept when the run is checked, so no later
     #: render reads its receipts again (otherwise one upload of three 14 MB receipts made
@@ -193,7 +219,7 @@ class StoredRun:
 #: states `viewer.model`'s own, each with the empty string for "none recorded"; spelled here
 #: because `checks` imports this module (tests/test_round4_fixes.py holds them in step).
 _VERDICTS = ("", "holds", "contradicts", "could_not_check")
-_RUNG_STATES = ("", "yes", "no", "couldnt-check", "not-checked")
+_RUNG_STATES = ("", "yes", "no", "couldnt-check", "not-checked", "not-reached")
 _ANCHOR_READINGS = ("", "yes", "couldnt-check", "failed", "not-anchored")
 _SIGNATURE_READINGS = ("", "yes", "untrusted", "failed", "unsigned", "not-installed",
                        "couldnt-check", "unreadable")
@@ -367,8 +393,10 @@ class Store:
         gone = self.missing(run)
         if not gone:
             return run
+        #: Its stored rung 1 reading goes too: it was read from objects no longer all here.
         return replace(run, check_verdict="could_not_check",
-                       check_note=MISSING_OBJECT.format(objects=", ".join(gone)))
+                       check_note=MISSING_OBJECT.format(objects=", ".join(gone)),
+                       agree="", agree_why="")
 
     def get_run(self, key: str) -> StoredRun | None:
         path = self._run_path(key)
@@ -381,9 +409,9 @@ class Store:
                              f"{_why(e)}") from None
 
     def runs(self) -> tuple[StoredRun, ...]:
-        """Every stored run, newest delivery first, then by run_id, then by key: records are named
-        by their key and read in sorted order, so two runs sharing an arrival second and a run_id
-        still come in one order on every host (tests/test_arrival_ties.py).
+        """Every stored run, newest delivery first; runs sharing an arrival second by run name, A
+        to Z, and two sharing a name by key (`arrival_order`), so the order is the same on every
+        host and every build (tests/test_arrival_ties.py).
 
         A run record this version cannot read -- damaged, wrong-typed, nested past what JSON
         reads, or written by a later version with a field this one does not know -- is left
@@ -398,7 +426,7 @@ class Store:
                 unreadable.append(f"{path.name}: {_why(e)}")
                 keys.append(path.stem)
         self.unreadable_runs, self.unreadable_run_keys = tuple(unreadable), tuple(keys)
-        return tuple(sorted(out, key=lambda r: (r.received_at, r.run_id), reverse=True))
+        return tuple(arrival_order(out, newest_first=True))
 
     def runs_with_id(self, run_id: str) -> tuple[StoredRun, ...]:
         return tuple(r for r in self.runs() if r.run_id == run_id)
@@ -428,7 +456,12 @@ class Store:
         path = self._comparison_path(key)
         if not path.exists():
             return None
-        return StoredComparison.from_json(path.read_bytes().decode("utf-8"))
+        try:
+            return StoredComparison.from_json(path.read_bytes().decode("utf-8"))
+        except _UNREADABLE + (AttributeError,) as e:
+            #: As `get_run`: a record it holds and cannot read is said as that, never raised bare.
+            raise StoreError(f"the stored comparison record {path.name} cannot be read: "
+                             f"{_why(e)}") from None
 
     def comparisons(self) -> tuple:
         from onetrace_console.compare import StoredComparison
@@ -508,8 +541,11 @@ _UNREADABLE = (OSError, ValueError, UnicodeDecodeError, KeyError, TypeError, Rec
 
 
 def _why(e: BaseException) -> str:
-    """What is wrong with a record, in a line: the type, and the words where there are any."""
-    said = str(e).splitlines()[0][:200] if str(e) else ""
+    """What is wrong with a record, in a line: the type, and the words where there are any. For an
+    OSError, its reason alone: the record is named by its file name beside this, and a page
+    never shows the server's own path to it (nor, so, repr's doubled backslashes)."""
+    text = (e.strerror or "") if isinstance(e, OSError) else str(e)
+    said = text.splitlines()[0][:200] if text else ""
     return f"{type(e).__name__}: {said}" if said else type(e).__name__
 
 

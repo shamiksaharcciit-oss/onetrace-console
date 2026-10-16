@@ -256,3 +256,131 @@ def test_a_stored_diff_report_is_judged_by_the_limit_on_the_overview(store, tota
     comparison = SimpleNamespace(verb=lambda verb: verb_run if verb == DIFF else None)
     got = _diff_of(comparison, store)
     assert (got is not None) is read, got
+
+
+# --------------------------------------------------------------------- past what json.loads parses
+#: Deeper than json.loads itself parses on any interpreter the console runs on (it fails at 2995
+#: levels on Windows 3.12 and 9995 on Linux): the parser's own RecursionError, not the walk, is
+#: what meets these. Each test first shows json.loads fails on its input, so a host where it
+#: did not would fail here, not pass without testing anything.
+DEEPER = 200_000
+
+
+def _too_deep_for_json_loads(text: str) -> str:
+    with pytest.raises(RecursionError):
+        json.loads(text)
+    return text
+
+
+def _planted_past_json(raw: bytes, where: str, levels: int) -> bytes:
+    data = json.loads(raw.decode("utf-8"))
+    if where == "assertions":
+        data.setdefault("assertions", {})["constants"] = "__PLANTED__"
+    else:
+        data[where] = "__PLANTED__"
+    text = json.dumps(data, ensure_ascii=False).replace('"__PLANTED__"', _nested(levels))
+    return _too_deep_for_json_loads(text).encode("utf-8")
+
+
+def test_the_helper_refuses_text_deeper_than_json_loads_parses_in_its_words():
+    """Before: the parser's RecursionError left the helper, and each site caught it, or not, in
+    its own way."""
+    text = _too_deep_for_json_loads(_nested(DEEPER))
+    with pytest.raises(TooDeep) as e:
+        load_json_bounded(text, "x.json")
+    assert str(e.value) == "x.json is nested too deeply to read"
+    with pytest.raises(TooDeep):
+        load_json_bounded(text.encode("utf-8"), "x.json", "show")
+
+
+def test_ingest_refuses_a_manifest_deeper_than_json_loads_parses_in_the_ruled_words(files, store):
+    """Before: refused, but as "the manifest is readable JSON -- RecursionError: maximum
+    recursion depth exceeded ...", the interpreter's words."""
+    from onetrace_console.ingest import accept
+    out = _renamed(files)
+    out["MANIFEST.json"] = _planted_past_json(out["MANIFEST.json"], "note", DEEPER)
+    got = accept(make_tar(_resummed(out)), store)
+    assert getattr(got, "run", None) is None
+    assert _refusal_row("MANIFEST.json") in got.rows, got.rows
+    assert not [r for r in got.rows if "RecursionError" in r], got.rows
+
+
+def test_ingest_refuses_a_receipt_deeper_than_json_loads_parses_in_the_ruled_words(files, store):
+    """Before: the receipt was skipped as unreadable and the run STORED (201), where one nested
+    257 levels is refused: the deeper file got the weaker answer."""
+    from onetrace_console.ingest import accept
+    out = _renamed(files)
+    rel = json.loads(out["MANIFEST.json"].decode("utf-8"))["chain"][1]["file"]
+    out[rel] = _planted_past_json(out[rel], "assertions", DEEPER)
+    got = accept(make_tar(_resummed(out)), store)
+    assert getattr(got, "run", None) is None, "stored"
+    assert _refusal_row(rel) in got.rows, got.rows
+
+
+# --------------------------------------------------------------------- the console's own comparison records
+
+def _plant_comparison(store, key: str, levels: int) -> None:
+    d = store.root / "comparisons"
+    d.mkdir(parents=True, exist_ok=True)
+    (d / f"{key}.json").write_text('{"x":' + _nested(levels) + "}", encoding="utf-8")
+
+
+@pytest.mark.parametrize("levels", [PAST, DEEPER], ids=["past-the-rule", "past-json-loads"])
+def test_a_stored_comparison_record_too_deep_is_said_as_cannot_be_read(store, levels):
+    """As `get_run` says a run record it cannot read. Before: TooDeep or the parser's
+    RecursionError left `get_comparison` bare."""
+    from onetrace_console.store import StoreError
+    key = "ab" * 32
+    _plant_comparison(store, key, levels)
+    with pytest.raises(StoreError) as e:
+        store.get_comparison(key)
+    assert f"the stored comparison record {key}.json cannot be read: " in str(e.value)
+    assert "RecursionError" not in str(e.value)
+
+
+def test_more_lines_of_a_comparison_whose_record_is_too_deep_answers_400_not_500(server, capfd):
+    """Before: 500, the body "RecursionError: maximum recursion depth exceeded ...", and a
+    traceback in the log."""
+    from onetrace_console.store import Store
+    from tests.test_serve import _get, _post
+    base, root = server
+    key = "cd" * 32
+    _plant_comparison(Store(root / "store"), key, DEEPER)
+    status, body = _post(base, f"/text-diff/more?c={key}")
+    assert status == 400, (status, body[:300])
+    assert b"RecursionError" not in body
+    assert _get(base, "/health")[0] == 200
+    assert "Traceback" not in capfd.readouterr().err
+
+
+def test_comparing_a_pair_whose_stored_comparison_is_too_deep_answers_400_not_500(
+        server, capfd, preview_stored_directly):
+    """The pair's own key, held and unreadable: said, never 500, and the record is not
+    rewritten (a record is never repaired). Before: 500 and a traceback in the log. The pair is
+    the exam's preview-format fixtures, stored directly as `test_compare`'s are."""
+    from onetrace_console.store import Store
+    from tests.test_checks import _require_installed
+    from tests.test_compare import RUN_C, RUN_C_POPPLER24, _require_exam
+    from tests.test_serve import _get, _post, _real_delivery
+    _require_installed()
+    _require_exam()
+    base, root = server
+    keys = []
+    for folder in (RUN_C, RUN_C_POPPLER24):
+        status, body = _post(base, "/v1/runs", _real_delivery(folder))
+        assert status == 200, body[:300]
+        keys.append(json.loads(body)["run_key"])
+    status, body = _post(base, f"/compare?a={keys[0]}&b={keys[1]}")
+    assert status == 200, body[:300]
+    held = json.loads(body)["comparison_key"]
+    store = Store(root / "store")
+    _plant_comparison(store, held, DEEPER)
+    planted = (store.root / "comparisons" / f"{held}.json").read_bytes()
+    capfd.readouterr()
+    status, body = _post(base, f"/compare?a={keys[0]}&b={keys[1]}")
+    assert status == 400, (status, body[:300])
+    assert f"{held}.json cannot be read" in json.loads(body)["error"]
+    assert b"RecursionError" not in body
+    assert (store.root / "comparisons" / f"{held}.json").read_bytes() == planted, "not rewritten"
+    assert _get(base, "/health")[0] == 200
+    assert "Traceback" not in capfd.readouterr().err

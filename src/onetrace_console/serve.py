@@ -904,7 +904,7 @@ class Handler(BaseHTTPRequestHandler):
                 self._respond(409, (MISSING_OBJECT.format(objects=", ".join(gone)) + "\n")
                               .encode("utf-8"), "text/plain; charset=utf-8")
                 return
-            body = bundle(run, self.store) if run is not None else None
+            body = bundle(run, self.store, public=self.config.public) if run is not None else None
         except StoreError as e:
             self._respond(409, f"{e}\n".encode("utf-8"), "text/plain; charset=utf-8")
             return
@@ -981,7 +981,7 @@ class Handler(BaseHTTPRequestHandler):
         })
 
     def _handle_compare(self, query: dict[str, list[str]]) -> None:
-        from onetrace_console.compare import compare
+        from onetrace_console.compare import ComparisonError, compare
         from onetrace_console.store import StoreError
 
         unreadable: list[str] = []
@@ -1024,6 +1024,10 @@ class Handler(BaseHTTPRequestHandler):
             return
         try:
             comparison = compare(a_run, b_run, self.store)
+        except ComparisonError as e:
+            #: Said, never 500: nothing compared and nothing stored.
+            self._respond_json(400, {"error": str(e)})
+            return
         except SameFileError as e:
             #: A run the store holds that cannot be laid out here as stored: said, nothing
             #: compared and nothing stored.
@@ -1088,7 +1092,8 @@ class Handler(BaseHTTPRequestHandler):
                                    path=urlsplit(self.path).path, status=status)
         except AccessLogExhausted as e:
             status = 500
-            body = f"the access log could not be written: {e}\n".encode("utf-8")
+            from onetrace_console.oserror import shown
+            body = (shown(f"the access log could not be written: {e}") + "\n").encode("utf-8")
             content_type = "text/plain"
             extra_headers = None
         self.send_response(status)
@@ -1115,6 +1120,11 @@ class Handler(BaseHTTPRequestHandler):
             from onetrace_console.public import security_headers
             for name, value in security_headers():
                 self.send_header(name, value)
+        else:
+            #: A console on this machine sends the same content policy, its fonts and scripts
+            #: its own, plus the watched folder's notice reading the console itself.
+            from onetrace_console.public import content_security_policy
+            self.send_header("Content-Security-Policy", content_security_policy(local=True))
         super().end_headers()
 
     def _respond_json(self, status: int, obj: dict,
@@ -1285,11 +1295,12 @@ def main(argv: list[str] | None = None, *, overrides: dict | None = None, prepar
         #: Found by the two confirmation reviews: a store_root that is
         #: a file, under one, on no such drive or not writable, or whose store, pages or
         #: access_log is a file, ended in a traceback.
-        print(f"refusing to start: cannot use store_root {store_root}: "
-              f"{getattr(e, 'strerror', None) or f'{type(e).__name__}: {e}'}"
-              f"{f' ({e.filename})' if getattr(e, 'filename', None) else ''}"
-              f"\nfix: point store_root at a folder this console can create and write, "
-              f"holding nothing but what this console put there.", file=sys.stderr)
+        from onetrace_console.oserror import shown
+        print(shown(f"refusing to start: cannot use store_root {store_root}: "
+                    f"{getattr(e, 'strerror', None) or f'{type(e).__name__}: {e}'}"
+                    f"{f' ({e.filename})' if getattr(e, 'filename', None) else ''}")
+              + "\nfix: point store_root at a folder this console can create and write, "
+                "holding nothing but what this console put there.", file=sys.stderr)
         return 1
 
     Handler.store_root = store_root
@@ -1363,10 +1374,11 @@ def main(argv: list[str] | None = None, *, overrides: dict | None = None, prepar
     try:
         ssl_context = build_ssl_context(config)
     except (OSError, ssl.SSLError) as e:
-        print(f"refusing to start: cannot load the TLS certificate and key named in "
-              f"sign_in.tls_cert_path and sign_in.tls_key_path: {e}\nfix: point both at a "
-              f"PEM certificate and its PEM private key this console can read.",
-              file=sys.stderr)
+        from onetrace_console.oserror import shown
+        print(shown(f"refusing to start: cannot load the TLS certificate and key named in "
+                    f"sign_in.tls_cert_path and sign_in.tls_key_path: {e}")
+              + "\nfix: point both at a PEM certificate and its PEM private key this console "
+                "can read.", file=sys.stderr)
         return 1
     try:
         server_class = ConsoleServer6 if ":" in config.host else ConsoleServer

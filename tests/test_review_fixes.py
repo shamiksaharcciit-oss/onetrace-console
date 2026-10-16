@@ -142,7 +142,8 @@ def _with_flag(run, store):
     it. The pinned verifier (0.1.0) has no such flag (B4): a test double, and said so."""
     envelope = json.loads(store.get(run.check_report).decode("utf-8"))
     envelope["command"] = list(envelope["command"]) + ["--require-artifacts"]
-    flagged = replace(run, check_report=store.put(json.dumps(envelope).encode("utf-8")))
+    from tests.test_one_reading import reread
+    flagged = reread(replace(run, check_report=store.put(json.dumps(envelope).encode("utf-8"))), store)
     store.put_run(flagged)
     return flagged
 
@@ -154,9 +155,9 @@ def test_a_check_that_held_without_the_flag_is_not_counted_as_agreeing(checked, 
         == "not-checked"
     home = render_all(store, generated_at=GENERATED_AT)[HOME]
     card = re.search(r'<div data-card="records-agree">(.*?)</div>', home, re.S).group(1)
-    assert re.search(r"\b0 of 1 run verified\b", _text(card)), _text(card)
+    assert re.search(r"\b0 of 1 run whose records agree\b", _text(card)), _text(card)
     evidence = re.search(r'<tr data-rung="records-agree">(.*?)</tr>', home, re.S).group(1)
-    assert "0 of 1" in _text(evidence) and "1 held without its output files required" in \
+    assert "0 of 1" in _text(evidence) and "1 not checked (held without its output files required)" in \
         _text(evidence), _text(evidence)
 
 
@@ -167,7 +168,7 @@ def test_a_check_that_held_with_the_flag_is_counted(checked, store):  # noqa: F8
         == "yes"
     home = render_all(store, generated_at=GENERATED_AT)[HOME]
     card = re.search(r'<div data-card="records-agree">(.*?)</div>', home, re.S).group(1)
-    assert re.search(r"\b1 of 1 run verified\b", _text(card)), _text(card)
+    assert re.search(r"\b1 of 1 run whose records agree\b", _text(card)), _text(card)
 
 
 # ------------------------------------------------------------------------ 3. the Diff page

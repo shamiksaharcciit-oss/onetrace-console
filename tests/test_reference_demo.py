@@ -24,6 +24,7 @@ from html import unescape
 from pathlib import Path
 
 import pytest
+from tests.conftest import whole_folds
 
 REPO = Path(__file__).resolve().parent.parent
 DEMO = REPO / "examples" / "reference-demo"
@@ -226,7 +227,7 @@ def test_each_run_page_renders_with_its_ladder_and_no_records(loaded):
     store, runs, _ = loaded
     for run in runs:
         pages = render_execution(run, store, generated_at="2026-09-29T12:00:00+00:00").pages
-        case = unescape(re.sub(r"<[^>]+>", " ", pages[CASE]))
+        case = unescape(re.sub(r"<[^>]+>", " ", whole_folds(pages[CASE])))
         assert "No records · This console does not record authorization." in re.sub(r"\s+", " ", case)
         #: The check holds, and was run without `--require-artifacts` (the pinned verifier
         #: has no such flag), so rung 1 is "not checked", never yes, as the confirmation review
@@ -239,11 +240,11 @@ def test_each_run_page_renders_with_its_ladder_and_no_records(loaded):
 def test_the_overview_and_the_diff_page_show_it(loaded):
     from onetrace_console.render import HOME, render_all, render_diff
     store, _, comparison = loaded
-    home = re.sub(r"\s+", " ", unescape(re.sub(r"<[^>]+>", " ", render_all(store, generated_at="x")[HOME])))
+    home = re.sub(r"\s+", " ", unescape(re.sub(r"<[^>]+>", " ", whole_folds(render_all(store, generated_at="x")[HOME]))))
     assert "1 of 2 runs changed vs baseline" in home
     assert "P1 · stage model · settings changed" in home
     assert "First difference · model" in home, "the recent runs name the frontier"
-    diff = re.sub(r"\s+", " ", unescape(re.sub(r"<[^>]+>", " ", render_diff(comparison, store, generated_at="x"))))
+    diff = re.sub(r"\s+", " ", unescape(re.sub(r"<[^>]+>", " ", whole_folds(render_diff(comparison, store, generated_at="x")))))
     assert "Why model's output differs is not established by this evidence." in diff
 
 

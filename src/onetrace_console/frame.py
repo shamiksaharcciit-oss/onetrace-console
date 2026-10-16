@@ -29,13 +29,31 @@ from onetrace_console.words import escape
 STYLESHEET = "/static/console.css"
 
 _FONTS = Path(__file__).parent / "static" / "fonts"
-#: Each bundled face: (family, weight, style) -- read from the files shipped, never a download.
+#: Each bundled face: (family, weight, the characters it holds) -- read from the files shipped, never
+#: a download. Each weight is two files, IBM Plex's own split: Latin1, and Pi (arrows and other
+#: symbols); `unicode-range` names each file's characters, so a page loads Pi only where it draws
+#: one. The ranges were read from the files' own character maps (static/fonts/FONTS.md).
 _FACES = {
-    "IBMPlexSans-Regular.woff2": ("IBM Plex Sans", 400),
-    "IBMPlexSans-Medium.woff2": ("IBM Plex Sans", 500),
-    "IBMPlexSans-SemiBold.woff2": ("IBM Plex Sans", 600),
-    "IBMPlexMono-Regular.woff2": ("IBM Plex Mono", 400),
-    "IBMPlexMono-Medium.woff2": ("IBM Plex Mono", 500),
+    "IBMPlexSans-Regular-Latin1.woff2": ("IBM Plex Sans", 400,
+             "U+0000,U+000D,U+0020-007E,U+00A0-00FF,U+0131,U+0152-0153,U+02C6,U+02DA,U+02DC,U+2013-2014,U+2018-201A,U+201C-201E,U+2020-2022,U+2026,U+2030,U+2039-203A,U+2044,U+20AC,U+2122,U+2212,U+FB01-FB02"),
+    "IBMPlexSans-Regular-Pi.woff2": ("IBM Plex Sans", 400,
+             "U+0E3F,U+2000-200D,U+2015,U+2028-2029,U+202F,U+2032-2033,U+2070,U+2074-2079,U+2080-2089,U+2113,U+2116,U+2126,U+212E,U+2150-2151,U+2153-215E,U+2190-2199,U+21A9-21AA,U+21B0-21B3,U+21B6-21B7,U+21BA-21BB,U+21C4,U+21C6,U+2202,U+2206,U+220F,U+2211,U+2215,U+221A,U+221E,U+222B,U+2248,U+2260,U+2264-2265,U+25CA,U+2713,U+274C,U+2B0E-2B11,U+ECE0,U+EFCC,U+FEFF,U+FFFD"),
+    "IBMPlexSans-Medium-Latin1.woff2": ("IBM Plex Sans", 500,
+             "U+0000,U+000D,U+0020-007E,U+00A0-00FF,U+0131,U+0152-0153,U+02C6,U+02DA,U+02DC,U+2013-2014,U+2018-201A,U+201C-201E,U+2020-2022,U+2026,U+2030,U+2039-203A,U+2044,U+20AC,U+2122,U+2212,U+FB01-FB02"),
+    "IBMPlexSans-Medium-Pi.woff2": ("IBM Plex Sans", 500,
+             "U+0E3F,U+2000-200D,U+2015,U+2028-2029,U+202F,U+2032-2033,U+2070,U+2074-2079,U+2080-2089,U+2113,U+2116,U+2126,U+212E,U+2150-2151,U+2153-215E,U+2190-2199,U+21A9-21AA,U+21B0-21B3,U+21B6-21B7,U+21BA-21BB,U+21C4,U+21C6,U+2202,U+2206,U+220F,U+2211,U+2215,U+221A,U+221E,U+222B,U+2248,U+2260,U+2264-2265,U+25CA,U+2713,U+274C,U+2B0E-2B11,U+ECE0,U+EFCC,U+FEFF,U+FFFD"),
+    "IBMPlexSans-SemiBold-Latin1.woff2": ("IBM Plex Sans", 600,
+             "U+0000,U+000D,U+0020-007E,U+00A0-00FF,U+0131,U+0152-0153,U+02C6,U+02DA,U+02DC,U+2013-2014,U+2018-201A,U+201C-201E,U+2020-2022,U+2026,U+2030,U+2039-203A,U+2044,U+20AC,U+2122,U+2212,U+FB01-FB02"),
+    "IBMPlexSans-SemiBold-Pi.woff2": ("IBM Plex Sans", 600,
+             "U+0E3F,U+2000-200D,U+2015,U+2028-2029,U+202F,U+2032-2033,U+2070,U+2074-2079,U+2080-2089,U+2113,U+2116,U+2126,U+212E,U+2150-2151,U+2153-215E,U+2190-2199,U+21A9-21AA,U+21B0-21B3,U+21B6-21B7,U+21BA-21BB,U+21C4,U+21C6,U+2202,U+2206,U+220F,U+2211,U+2215,U+221A,U+221E,U+222B,U+2248,U+2260,U+2264-2265,U+25CA,U+2713,U+274C,U+2B0E-2B11,U+ECE0,U+EFCC,U+FEFF,U+FFFD"),
+    "IBMPlexMono-Regular-Latin1.woff2": ("IBM Plex Mono", 400,
+             "U+0020-007E,U+00A0-00FF,U+0131,U+0152-0153,U+02C6,U+02DA,U+02DC,U+2013-2014,U+2018-201A,U+201C-201E,U+2020-2022,U+2026,U+2030,U+2039-203A,U+2044,U+20AC,U+2122,U+2212,U+FB01-FB02"),
+    "IBMPlexMono-Regular-Pi.woff2": ("IBM Plex Mono", 400,
+             "U+03C0,U+0E3F,U+2000-200D,U+2010-2012,U+2015,U+2028-2029,U+202F,U+2032-2033,U+203E,U+205F,U+2070,U+2074-2079,U+2080-2089,U+2113,U+2116,U+2126,U+212E,U+2150-2151,U+2153-215E,U+2190-2199,U+21A9-21AA,U+21B0-21B3,U+21B6-21B7,U+21BA-21BB,U+21C4,U+21C6,U+2202,U+2206,U+220F,U+2211,U+2215,U+2219-221A,U+221E,U+222B,U+2236,U+2248,U+2260,U+2264-2265,U+2400-2421,U+2500-259F,U+25CA,U+2713,U+274C,U+2B0E-2B11,U+3000,U+FEFF,U+FFFD"),
+    "IBMPlexMono-Medium-Latin1.woff2": ("IBM Plex Mono", 500,
+             "U+0020-007E,U+00A0-00FF,U+0131,U+0152-0153,U+02C6,U+02DA,U+02DC,U+2013-2014,U+2018-201A,U+201C-201E,U+2020-2022,U+2026,U+2030,U+2039-203A,U+2044,U+20AC,U+2122,U+2212,U+FB01-FB02"),
+    "IBMPlexMono-Medium-Pi.woff2": ("IBM Plex Mono", 500,
+             "U+03C0,U+0E3F,U+2000-200D,U+2010-2012,U+2015,U+2028-2029,U+202F,U+2032-2033,U+203E,U+205F,U+2070,U+2074-2079,U+2080-2089,U+2113,U+2116,U+2126,U+212E,U+2150-2151,U+2153-215E,U+2190-2199,U+21A9-21AA,U+21B0-21B3,U+21B6-21B7,U+21BA-21BB,U+21C4,U+21C6,U+2202,U+2206,U+220F,U+2211,U+2215,U+2219-221A,U+221E,U+222B,U+2236,U+2248,U+2260,U+2264-2265,U+2400-2421,U+2500-259F,U+25CA,U+2713,U+274C,U+2B0E-2B11,U+3000,U+FEFF,U+FFFD"),
 }
 
 #: The navigation, in order: (label, href, the page it opens under `pages/`).
@@ -189,7 +207,7 @@ PAGE_CSS = """
 .cp [data-section=first-difference]:has(>[data-part]){display:grid;
   grid-template-columns:minmax(0,1fr) minmax(0,2fr);gap:6px 24px}
 .cp [data-section=first-difference] [data-part=where] p:first-child{font-size:15px;
-  font-weight:600;color:var(--bad-ink)}
+  font-weight:600;color:var(--cc-ink)}
 .cp [data-section=first-difference] [data-part=where] p+p{font-weight:600}
 .cp [data-section=first-difference][data-shape=dag] p{font-weight:600}
 .cp [data-section=first-difference] [data-part=what] p:last-of-type{font-weight:600}
@@ -198,6 +216,7 @@ PAGE_CSS = """
   border-radius:var(--r-card);padding:10px 14px;font-size:var(--fs-body)}
 .cp [data-section=settings-changed] details>summary{font-size:var(--fs-body)}
 .cp svg.graph text{font-family:var(--font-sans)}
+.cp svg.graph text.name{font-family:var(--font-mono)}
 .cp [data-textdiff] [data-counts]{margin:2px 0 6px;font-size:var(--fs-small);color:var(--ink-muted)}
 .cp pre[data-hunk]{white-space:normal;padding:6px 0}
 .cp pre[data-hunk]>span[data-op]{display:block;white-space:pre-wrap;padding:0 12px 0 0}
@@ -207,10 +226,23 @@ PAGE_CSS = """
   color:var(--ink-muted);user-select:none}
 .cp mark.del{background:transparent;color:var(--bad-ink);font-weight:600;text-decoration:line-through}
 .cp mark.ins{background:transparent;color:var(--ok-ink);font-weight:600}
-.cp svg.graph [data-tone=ok] .node{fill:var(--ok-bg);stroke:var(--ok-ink)}
-.cp svg.graph [data-tone=bad] .node{fill:var(--bad-bg);stroke:var(--bad-ink)}
-.cp svg.graph [data-tone=cc] .node{fill:var(--cc-bg);stroke:var(--cc-ink)}
-.cp svg.graph [data-tone=neu] .node{fill:var(--neu-bg);stroke:var(--line-node)}
+.cp svg.graph [data-tone=ok] .node{stroke:var(--ok-ink)}
+.cp svg.graph [data-tone=ok] rect.chip{fill:var(--ok-bg)}
+.cp svg.graph [data-tone=ok] text.chip{fill:var(--ok-ink)}
+.cp svg.graph [data-tone=bad] .node{stroke:var(--bad-ink)}
+.cp svg.graph [data-tone=bad] rect.chip{fill:var(--bad-bg)}
+.cp svg.graph [data-tone=bad] text.chip{fill:var(--bad-ink)}
+.cp svg.graph [data-tone=cc] .node{stroke:var(--cc-ink)}
+.cp svg.graph [data-tone=cc] rect.chip{fill:var(--cc-bg)}
+.cp svg.graph [data-tone=cc] text.chip{fill:var(--cc-ink)}
+.cp svg.graph [data-tone=neu] .node{stroke:var(--line-node)}
+.cp svg.graph [data-tone=fd] .node{fill:var(--hl);stroke:var(--cc-ink);stroke-width:2.5;
+  filter:drop-shadow(0 0 10px var(--cc-ink))}
+.cp svg.graph [data-tone=fd] rect.chip{fill:var(--cc-ink)}
+.cp svg.graph [data-tone=fd] text.chip{fill:var(--page)}
+.cp svg.graph [data-tone=ca] .node{stroke:var(--cc-ink)}
+.cp svg.graph [data-tone=ca] rect.chip{fill:none;stroke:var(--cc-ink)}
+.cp svg.graph [data-tone=ca] text.chip{fill:var(--cc-ink)}
 .cp table[data-section=changes]{background:var(--surface);border:1px solid var(--line);
   border-radius:var(--r-card);border-collapse:separate;border-spacing:0;width:100%}
 .cp table[data-section=changes] th{font-size:var(--fs-small);color:var(--ink-muted);
@@ -221,7 +253,7 @@ PAGE_CSS = """
 .cp table[data-section=changes] :is(td[data-cell=digest],td[data-section=settings],
   td[data-section=annotations]){overflow-wrap:anywhere}
 .cp table[data-section=changes] tr:last-child td{border-bottom:none}
-.cp table[data-section=changes] td[data-result="FIRST DIFFERENCE"]{color:var(--bad-ink);font-weight:600}
+.cp table[data-section=changes] td[data-result="FIRST DIFFERENCE"]{color:var(--cc-ink);font-weight:600}
 .cp pre{background:var(--surface);border:1px solid var(--line);border-radius:var(--r-ctl);
   padding:10px 12px;overflow-x:auto;max-width:100%;font-size:var(--fs-small)}
 .cp>p[data-state=no-records]{align-self:flex-start;margin-top:-8px}
@@ -239,7 +271,8 @@ PAGE_CSS = """
 @media (max-width:760px){.cp [data-section=first-difference]:has(>[data-part]){
   grid-template-columns:minmax(0,1fr)}
   .cp [data-attention]{flex-direction:column;gap:2px}
-  .cp [data-attention]>.value,.cp [data-attention]>.value .rel{text-align:left}}
+  .cp [data-attention]>.value,.cp [data-attention]>.value .rel{text-align:left}
+  .cp [data-attention]>.value{white-space:normal}}
 .cp details>summary{font-size:var(--fs-body);color:var(--ink-muted);cursor:pointer}
 .cp [data-section$=-envelope],.cp [data-section=pair],.cp [data-section=sdk]{font-size:var(--fs-body);
   color:var(--ink-muted)}
@@ -285,12 +318,24 @@ CHIP_CSS = (
     f".cp .bad,{_ANSWER} .bad,{_states('bad')}{{background:var(--bad-bg);color:var(--bad-ink)}}\n"
     f".cp .neu,{_ANSWER} .neu,.cp>p[data-state=no-records],{_states('neu')}"
     f"{{background:var(--neu-bg);color:var(--neu-ink)}}\n"
+    #: Declined by a step's own rule: outlined in the accent on the page's own ground, never red.
+    #: An outline, not a border, so the chip keeps the one shape.
+    f":is(.cp,.shell .page) .dec{{background:transparent;color:var(--accent);outline:1px solid var(--accent);"
+    f"outline-offset:-1px}}\n"
+    #: A rung whose state is the declined kind ("Not reached"), drawn the same way.
+    f"{_states('dec')}{{background:transparent;color:var(--accent);outline:1px solid var(--accent);"
+    f"outline-offset:-1px}}\n"
+    #: A comparison's first difference, amber filled, and a step changed after it, amber outlined.
+    f":is(.cp,.shell .page) .fd{{background:var(--cc-ink);color:var(--page)}}\n"
+    f":is(.cp,.shell .page) .ca{{background:transparent;color:var(--cc-ink);outline:1px solid var(--cc-ink);"
+    f"outline-offset:-1px}}\n"
     f".cp :is(p,section,td)[data-state=couldnt-check]{{background:var(--cc-bg);color:var(--cc-ink);"
     f"border-radius:var(--r-ctl);padding:8px 12px}}\n"
     #: A graph's marks, in the console's stylesheet only (the free file never marks a graph):
     #: the first difference outlined in the bad ink, a failed attempt's box in the amber. The
     #: words stay with them: the node's state line, and the fold's "failed attempt".
-    f"svg.graph [data-mark=first] .node{{stroke:var(--bad-ink);stroke-width:2}}\n"
+    f"svg.graph [data-mark=first] .node{{stroke:var(--cc-ink);stroke-width:2.5;"
+    f"filter:drop-shadow(0 0 10px var(--cc-ink))}}\n"
     #: Part V's "First recorded change": the same outline, amber -- a comparison's marker, not a
     #: check's result, so never red.
     #: Specific enough to win over the box's tone (`.cp svg.graph [data-tone=neu] .node`).
@@ -301,6 +346,13 @@ CHIP_CSS = (
     #: run's id, and a long command, breaking where they must (copied, the same characters).
     f".cp [data-attention]>.value .rel{{display:block;text-align:right}}\n"
     f".shell .page table.timeline .mono{{overflow-wrap:anywhere}}\n"
+    #: The runs list's run names: at desktop width a name broke every four characters,
+    #: because `anywhere` let the table shrink the column to almost nothing. `break-word` still
+    #: breaks a name that must, but leaves the column its longest piece between hyphens as its
+    #: least width, and the column has a floor of its own: a name breaks at its hyphens.
+    f".shell .page table.timeline[data-section=runs-table] td:first-child .mono{{overflow-wrap:break-word}}\n"
+    f"@media (min-width:761px){{.shell .page table.timeline[data-section=runs-table] td:first-child"
+    f"{{min-width:12ch}}}}\n"
     f".cp code{{overflow-wrap:anywhere}}\n"
     #: A runs list with no run in it: its one line, grey as the Overview's zeros are.
     f".shell .page p.zero[data-section=no-runs]{{color:var(--ink-faint)}}\n"
@@ -323,7 +375,7 @@ NARROW_CSS = """
 .shell .graph-list>li[data-reads-previous=yes]::before{content:"";position:absolute;left:20px;
   top:-15px;height:14px;border-left:2px solid var(--line-strong)}
 .shell .graph-list>li[data-list-mark=recorded-change]{border-color:var(--cc-ink);border-width:2px}
-.shell .graph-list>li[data-list-mark=first]{border-color:var(--bad-ink);border-width:2px}
+.shell .graph-list>li[data-list-mark=first]{border-color:var(--cc-ink);border-width:2px}
 .shell .graph-list .state{font-size:var(--fs-small);color:var(--ink-muted)}
 .shell .scroll-x{overflow:visible;mask-image:none;-webkit-mask-image:none}
 .shell .scroll-x :is(table,thead,tbody,tr,th,td){display:block;width:auto;min-width:0}
@@ -339,6 +391,16 @@ NARROW_CSS = """
 }
 """
 
+#: The theme switch in the footer: the navigation's own ink and lines, in both themes.
+THEME_CSS = """
+nav.frame footer .theme{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
+nav.frame footer .theme button{font:inherit;color:var(--nav-ink);background:var(--nav-bg);
+  border:1px solid var(--nav-ink-faint);border-radius:var(--r-ctl);padding:4px 10px;cursor:pointer}
+nav.frame footer .theme button:hover{color:var(--nav-on-ink);background:var(--nav-on-bg)}
+nav.frame footer .theme button:focus-visible{outline:2px solid var(--nav-on-ink);outline-offset:2px}
+nav.frame footer .theme button[hidden]{display:none}
+"""
+
 #: The public mode's banner, in the navigation (`banner()`): only a public console's pages carry it.
 PUBLIC_CSS = """
 nav.frame [data-frame=banner]{margin:0 0 14px;padding:10px 14px;border-radius:var(--r-ctl);
@@ -352,17 +414,17 @@ def stylesheet() -> bytes:
     """The fonts' faces, the skin's tokens, the viewer's stylesheet, the frame's rules, the console
     pages' rules and the one chip family."""
     from onetrace_console.viewer.page import CSS, FRAME_CSS
-    from onetrace_console.viewer.tokens import root_css
+    from onetrace_console.viewer.tokens import root_css, scale_css, theme_css
     shipped = sorted(p.name for p in _FONTS.glob("*.woff2"))
     if shipped != sorted(_FACES):
         raise RuntimeError(f"the bundled fonts are not the faces this stylesheet names: {shipped}")
     faces = "".join(
         f"@font-face{{font-family:'{family}';font-weight:{weight};font-style:normal;"
-        f"font-display:swap;src:url(/static/fonts/{name}) format('woff2')}}\n"
-        for name, (family, weight) in _FACES.items())
+        f"font-display:swap;src:url(/static/fonts/{name}) format('woff2');unicode-range:{chars}}}\n"
+        for name, (family, weight, chars) in _FACES.items())
     from onetrace_console.run_head import HEAD_CSS
-    return (faces + root_css() + "\n" + CSS + FRAME_CSS + PAGE_CSS + CHIP_CSS
-            + PUBLIC_CSS + HEAD_CSS + NARROW_CSS).encode("utf-8")
+    return (faces + root_css() + "\n" + scale_css() + "\n" + theme_css() + "\n" + CSS + FRAME_CSS + PAGE_CSS + CHIP_CSS
+            + THEME_CSS + PUBLIC_CSS + HEAD_CSS + NARROW_CSS).encode("utf-8")
 
 
 def items(onedoor: bool) -> tuple[tuple[str, str, str], ...]:
@@ -384,8 +446,42 @@ def _current(rel: str) -> str | None:
     return None
 
 
+#: The theme switch, in the footer beside the version: a choice of light or dark for this
+#: browser, kept in its own storage under THEME_KEY and nowhere else -- nothing is sent, and the
+#: console stores nothing. With no choice made, the page follows the system, as it does with no
+#: script at all. Two buttons, because one that cycled through three states would not say what a
+#: press does: the first names the theme it switches to; the second, shown only once a choice is
+#: made, returns to the system's. Both are `hidden` until the script shows them, so a page read
+#: without scripts is the page it was. Not a form: it posts nothing, and goes nowhere.
+THEME_KEY = "onetrace-console-theme"
+THEME_SWITCH = ('<div class="theme" data-theme-controls>'
+                '<button type="button" data-theme-switch hidden>Switch to dark theme</button>'
+                '<button type="button" data-theme-system hidden>Follow the system setting</button>'
+                "</div>")
+#: In `<head>`, before the stylesheet: the stored choice set before the page is first drawn, so a
+#: page set to dark never shows light first. Storage that is blocked leaves the system's theme.
+THEME_HEAD_SCRIPT = ("<script>try{var t=localStorage.getItem('" + THEME_KEY + "');"
+                     "if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t)"
+                     "}catch(e){}</script>")
+#: After the buttons: shows them, and keeps their words true to what a press does. A choice is
+#: kept where the browser allows; where it doesn't, it holds for the page in view.
+THEME_SCRIPT = (
+    "<script>(function(){var d=document.documentElement,k='" + THEME_KEY + "',"
+    "a=document.querySelector('[data-theme-switch]'),b=document.querySelector('[data-theme-system]'),"
+    "m=matchMedia('(prefers-color-scheme: dark)');if(!a||!b)return;"
+    "function now(){return d.getAttribute('data-theme')||(m.matches?'dark':'light')}"
+    "function keep(v){try{v?localStorage.setItem(k,v):localStorage.removeItem(k)}catch(e){}}"
+    "function draw(){a.textContent='Switch to '+(now()==='dark'?'light':'dark')+' theme';"
+    "a.hidden=false;b.hidden=!d.hasAttribute('data-theme')}"
+    "a.addEventListener('click',function(){var v=now()==='dark'?'light':'dark';"
+    "d.setAttribute('data-theme',v);keep(v);draw()});"
+    "b.addEventListener('click',function(){d.removeAttribute('data-theme');keep(null);draw();a.focus()});"
+    "m.addEventListener('change',draw);draw()})()</script>")
+
+
 def _footer(mode: str) -> str:
-    return f"<footer><div>{mode}</div><div>onetrace-console {escape(__version__)}</div></footer>"
+    return (f"<footer><div>{mode}</div><div>onetrace-console {escape(__version__)}</div>"
+            f"{THEME_SWITCH}{THEME_SCRIPT}</footer>")
 
 
 def footer(user: str | None, *, public: bool = False) -> str:
@@ -455,6 +551,12 @@ def rendering(*, onedoor: bool, sign_in: bool, public: bool = False):
         yield
     finally:
         _RENDERING.reset(token)
+
+
+def rendering_public() -> bool:
+    """Whether the render now is a public console's: such a page offers nothing that computes."""
+    r = _RENDERING.get()
+    return bool(r is not None and r.public)
 
 
 def sealed_framing():

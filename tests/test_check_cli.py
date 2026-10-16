@@ -52,7 +52,7 @@ def test_a_run_without_artifacts_holds_and_its_rung_says_so_as_ruled(store, exam
     assert env["command"] == ["onetrace-verify", "MANIFEST.json"]
     assert env["rows_json"]["command"] == ["onetrace-verify", "--json", "MANIFEST.json"]
     assert "outputs_required" not in env, "the flag is never run on a run without artifacts/"
-    assert _agree(run, store) == "Records agree: held without its output files required"
+    assert _agree(run, store) == "Records agree: not checked (held without its output files required)"
 
 
 def test_the_graph_edge_rows_are_in_the_stored_words(store, examined):
@@ -76,7 +76,7 @@ def test_a_run_with_artifacts_gets_the_third_check_and_the_rung_reads_from_it(st
     assert env["outputs_required"]["command"] == [
         "onetrace-verify", "--json", "--require-artifacts", "MANIFEST.json"]
     assert env["outputs_required"]["exit_status"] == "0"
-    assert _agree(run, store) == "Records agree"
+    assert _agree(run, store) == "Records agree: yes"
 
 
 def test_an_output_that_no_longer_matches_is_a_no(store, tmp_path, examined):

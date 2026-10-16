@@ -97,7 +97,8 @@ def _stored(tmp_path, store, run_id, plan):
     from onetrace_console.checks import run_and_record
     from tests.test_home_and_diff import _deliver
     _emit(tmp_path / run_id, run_id, plan)
-    return run_and_record(_deliver(tmp_path / run_id, store), store, ran_at=FIXED_RAN_AT)
+    #: With its output files, so its records agree and its other answers are what is listed.
+    return run_and_record(_deliver(tmp_path / run_id, store, outputs=True), store, ran_at=FIXED_RAN_AT)
 
 
 def _case(run, store) -> str:
@@ -215,7 +216,7 @@ def test_a_run_derived_before_this_is_re_derived_with_the_line(tmp_path, store):
     old = replace(run, last_failed="", derived="derivation-2")
     store.put_run(old)
     again = rederive(old, store)
-    assert again.derived == DERIVED == "derivation-6"
+    assert again.derived == DERIVED == "derivation-10"
     assert again.last_failed == '[["b", "TimeoutError"]]'
 
 
@@ -234,7 +235,7 @@ def test_a_store_from_before_the_rename_is_re_derived_at_start_up(tmp_path, stor
     from onetrace_console.serve import _render_startup_pages
     from onetrace_console.store import Store
     run = _stored(tmp_path, store, "before-rename", [("a", None, "ok"), ("b", None, "error")])
-    assert DERIVED == "derivation-6"
+    assert DERIVED == "derivation-10"
     store.put_run(replace(run, last_failed="", derived=PREVIOUS_RELEASE_DERIVED))
     reopened = Store(store.root)
     _render_startup_pages(reopened, tmp_path / "site")

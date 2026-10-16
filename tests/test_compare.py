@@ -61,12 +61,17 @@ def _require_exam():
             f"This refuses rather than skips: these checks exist to compare real records.")
 
 
-def _deliver(folder: Path, store):
-    """Ingest a run folder from disk, building the SHA256SUMS a sidecar would."""
+def _deliver(folder: Path, store, *, outputs: bool = False):
+    """Ingest a run folder from disk, building the SHA256SUMS a sidecar would. `outputs`: its
+    `artifacts/` too, so its check runs with the output files required."""
     manifest = json.loads((folder / "MANIFEST.json").read_bytes().decode("utf-8"))
     files = {"MANIFEST.json": (folder / "MANIFEST.json").read_bytes()}
     for entry in manifest["chain"]:
         files[entry["file"]] = (folder / entry["file"]).read_bytes()
+    if outputs:
+        for p in sorted((folder / "artifacts").rglob("*")):
+            if p.is_file():
+                files[p.relative_to(folder).as_posix()] = p.read_bytes()
     files[SUMS_NAME] = ("\n".join(
         f"{hashlib.sha256(b).hexdigest()}  {p}"
         for p, b in files.items()) + "\n").encode("utf-8")

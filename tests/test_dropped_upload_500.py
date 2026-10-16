@@ -177,7 +177,7 @@ def test_a_run_missing_an_object_reads_couldnt_check_on_its_pages_and_in_the_cou
     t = {x.slug: x for x in tallies(store)}
     assert [r.key for r in t["could-not-check"].runs] == [run.key]
     assert words in t["could-not-check"].reasons
-    assert not t["holds"].runs and not t["contradicts"].runs
+    assert not t["records-agree"].runs and not t["contradicts"].runs and not t["not-checked"].runs
 
 
 def test_a_raw_run_missing_an_object_renders_could_not_check_not_its_stored_verdict(tmp_path):

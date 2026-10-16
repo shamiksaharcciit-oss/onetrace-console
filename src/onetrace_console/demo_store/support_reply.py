@@ -5,16 +5,20 @@ stage whose recorded setting changes. Recorded with onetrace.
 
 A customer's question comes in; `draft` writes a reply; `policy_check` sets the refund window in
 the reply from its recorded setting `refund_days`; `send` records the reply that would go out.
-`draft`'s reply leaves the window as the placeholder `{days}` by design, so a page showing its
-output shows `{days}`; `policy_check`'s output has the number in its place.
+`draft`'s reply names the window in words, "the refund window"; `policy_check`'s output has the
+number of days in its place. No stage leaves a `{name}` placeholder for a page to show.
 
 `draft` is a STUB, not a hosted model: it picks one of a few fixed phrasings by a seed taken from
 the run's id, as a sampled model call varies from call to call. Its receipt says so: it is marked
 not re-runnable (`rederivable="false"`), with a note. Nothing here contacts a network or a model.
 
-The demo's two runs of it differ in two ways: `draft`'s wording (its seed), and `policy_check`'s
-`refund_days`, 30 in the first and 14 in the second -- the change a comparison should find, past a
-first difference that is only the stub's variance.
+The demo's first two runs of it differ in two ways: `draft`'s wording (its seed), and
+`policy_check`'s `refund_days`, 30 in the first and 14 in the second -- the change a comparison
+should find, past a first difference that is only the stub's variance.
+
+`policy_check` has a rule of its own: a refund window longer than the policy allows
+(MAX_REFUND_DAYS) is declined -- the SDK's `Refusal`, recorded with its reason -- and the run stops
+there, `send` left with no receipt. The demo's third run asks for 60 days, and is declined.
 """
 from __future__ import annotations
 
@@ -22,7 +26,7 @@ import hashlib
 import json
 from pathlib import Path
 
-from onetrace.emit import Instrument, Recorder
+from onetrace.emit import Instrument, Recorder, Refusal
 
 from onetrace_console.bounded_json import load_json_bounded
 
@@ -32,14 +36,22 @@ STAGES = ["question", "draft", "policy_check", "send"]
 QUESTION = "I bought a kettle last week and it leaks. Can I return it for a refund?"
 
 #: The stub's phrasings: one is picked by the run's seed, as a sampled model call varies.
+#: Each names the window as WINDOW, which the policy stage replaces with the number of days.
+WINDOW = "the refund window"
 PHRASINGS = [
-    "Sorry to hear about the kettle. You can return it for a full refund within {days} days of "
-    "delivery.",
-    "Thanks for letting us know. A leaking kettle can be returned within {days} days of delivery, "
-    "and we'll refund you in full.",
-    "We're sorry the kettle leaks. Please send it back within {days} days of delivery for a full "
-    "refund.",
+    f"Sorry to hear about the kettle. You can return it for a full refund within {WINDOW}.",
+    f"Thanks for letting us know. A leaking kettle can be returned within {WINDOW}, and we'll "
+    "refund you in full.",
+    f"We're sorry the kettle leaks. Please send it back within {WINDOW} for a full refund.",
 ]
+
+
+def filled(reply: str, refund_days: str) -> str:
+    """The reply with its window set: WINDOW replaced by the number of days from delivery."""
+    return reply.replace(WINDOW, f"{refund_days} days of delivery")
+
+#: The longest refund window the policy allows, in days: a longer one is declined.
+MAX_REFUND_DAYS = 30
 
 STUB_NOTE = ("a stub standing in for a sampled model call: its wording is picked by a seed that "
              "changes per run, so its output is recorded, not replayed")
@@ -69,7 +81,7 @@ def main(out_dir, run_id: str, refund_days: str, *, sign_with=None) -> None:
     def draft(ctx, asked):
         ctx.read_receipt("question")
         q = ctx.read_json(asked)
-        #: The stub's pick; the window is left as a placeholder for the policy stage to set.
+        #: The stub's pick; the window is named in words, for the policy stage to set.
         return ctx.write_json("draft.json", {"question": q["question"],
                                              "reply": PHRASINGS[seed % len(PHRASINGS)]})
 
@@ -77,8 +89,11 @@ def main(out_dir, run_id: str, refund_days: str, *, sign_with=None) -> None:
         ctx.read_receipt("draft")
         d = ctx.read_json(drafted)
         ctx.constant("refund_days", refund_days)
+        if int(refund_days) > MAX_REFUND_DAYS:
+            raise Refusal(f"a refund window of {refund_days} days is longer than the policy allows "
+                          f"({MAX_REFUND_DAYS} days)")
         return ctx.write_json("checked.json", {"question": d["question"],
-                                               "reply": d["reply"].format(days=refund_days)})
+                                               "reply": filled(d["reply"], refund_days)})
 
     def send(ctx, checked):
         ctx.read_receipt("policy_check")
@@ -93,6 +108,9 @@ def main(out_dir, run_id: str, refund_days: str, *, sign_with=None) -> None:
     checked = rec.run_node("policy_check", None, Instrument("refund-policy", "checker", "1.0.0",
                                                             {"policy": "refund window"}),
                            policy_check, drafted)
-    rec.run_node("send", None, Instrument("reply-outbox", "writer", "1.0.0", {"channel": "email"}),
-                 send, checked)
+    #: A declined policy check returns no result (the SDK records the refusal and its reason):
+    #: the run stops there, and nothing is sent.
+    if checked is not None:
+        rec.run_node("send", None, Instrument("reply-outbox", "writer", "1.0.0", {"channel": "email"}),
+                     send, checked)
     rec.close()

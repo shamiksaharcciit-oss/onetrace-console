@@ -196,7 +196,9 @@ EXPECTED = {
     "p1-13-baseline-set1-again": ("holds", "yes", TRUSTED, None, "same"),
     "p1-14-candidate-set3-byte-changed": ("contradicts", "no", TRUSTED, "contradicts", "not-compared"),
     "p1-15-candidate-set4-file-deleted": ("contradicts", "no", TRUSTED, "contradicts", "not-compared"),
-    "p1-16-candidate-set5-no-artifacts": ("holds", "not-checked", TRUSTED, None, "not-compared"),
+    #: Its check held without its output files required: rung 1 Not checked, and listed under
+    #: not checked in Needs attention first, as the order sentence says.
+    "p1-16-candidate-set5-no-artifacts": ("holds", "not-checked", TRUSTED, "not-checked", "not-compared"),
     "p1-17-baseline-set2-unsigned": ("holds", "yes", UNSIGNED, None, "not-compared"),
     "p1-18-baseline-set3-unsigned": ("holds", "yes", UNSIGNED, None, "not-compared"),
     "p1-19-baseline-set4-untrusted-key": ("holds", "yes", UNTRUSTED, None, "not-compared"),
@@ -211,6 +213,9 @@ EXPECTED = {
     #: P4: the stub that varies per run, and the refund window changed two stages later.
     "p4-29-reply-30-days": ("holds", "yes", TRUSTED, None, "not-compared"),
     "p4-30-reply-14-days": ("holds", "yes", TRUSTED, "changed", "changed"),
+    #: Declined at policy_check by its own rule, `send` not reached: the check holds, and the
+    #: Overview lists it as stopped at a step -- as the run's own page reads rung 3, "Not reached".
+    "p4-31-reply-60-days-declined": ("holds", "yes", TRUSTED, "stopped-at-a-step", "not-compared"),
 }
 
 
@@ -241,7 +246,7 @@ def test_every_run_reads_as_the_stores_table_says(built, examined):
     #: pipelines are held by their stages and runs here, not by the label each one gets.
     found = {(p.stages[0], len(p.runs)) for p in pipelines(store)}
     assert sorted(p.label for p in pipelines(store)) == ["P1", "P2", "P3", "P4"]
-    assert found == {("load_docs", 20), ("request", 2), ("intake", 6), ("question", 2)}
+    assert found == {("load_docs", 20), ("request", 2), ("intake", 6), ("question", 3)}
     assert len(store.comparisons()) == 5
 
 

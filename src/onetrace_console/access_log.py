@@ -53,6 +53,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
+from onetrace_console.oserror import said
 from onetrace_console.store import _atomic_write
 
 SEGMENT_DIGITS = 6
@@ -163,14 +164,14 @@ class AccessLog:
             with open(segment_path, "ab") as fh:
                 fh.write(line)
         except OSError as e:
-            raise AccessLogExhausted(f"cannot append to the access log: {e}") from e
+            raise AccessLogExhausted(f"cannot append to the access log: {said(e)}") from e
 
         self._segment_size += len(line)
         self._chain_head = entry_digest(entry)
         try:
             self._write_head()
         except OSError as e:
-            raise AccessLogExhausted(f"cannot record the access log's own head: {e}") from e
+            raise AccessLogExhausted(f"cannot record the access log's own head: {said(e)}") from e
         return entry
 
     def _rotate(self) -> None:

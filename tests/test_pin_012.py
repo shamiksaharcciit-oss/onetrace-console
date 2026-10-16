@@ -33,6 +33,13 @@ REPO = Path(__file__).resolve().parent.parent
 #: builds before it were committed in a wheelhouse folder on the 0.2.0 branch only; that folder is gone.
 #: 0.1.2 (kept below as history) is no longer pinned. Since console 0.1.1, onetrace is 0.2.1
 #: from PyPI (its two files, as PyPI serves them, written here by script); onetrace-verify stays 0.2.0.
+#: Since console 0.2.0, onetrace 0.2.2 and onetrace-verify 0.2.1, from PyPI, the same way.
+RELEASE_0_2_2 = {
+    "onetrace-0.2.2-py3-none-any.whl": "5fbefd657d0622d8dad8d9506f118be2b417a9586589d8e50d59fd2a5fa21b1f",
+    "onetrace-0.2.2.tar.gz": "b4ffd90b41ea9c2a794c973c35a5468f5f88b7b22922e4f356074c0dd683c26b",
+    "onetrace_verify-0.2.1-py3-none-any.whl": "c001019740798f907ae8a4adace32c597fb749cf52fca0e668c932723a792119",
+    "onetrace_verify-0.2.1.tar.gz": "6db523beef437a6dc8cf2a22fe54821f90d0b8f2f82f50a7e5f86d9d8f611f10",
+}
 RELEASE_0_2_1 = {
     "onetrace-0.2.1-py3-none-any.whl": "f55ca407d9ac1dd0451878c44a3c980e8b977b04ab0818d42e9eac780eaeb608",
     "onetrace-0.2.1.tar.gz": "b8d464936d907ac311bbb2969fbb20801cabff46682ba361429603ef7b2a4ff3",
@@ -55,19 +62,19 @@ ACCEPTED_29AG = {
 }
 
 
-def test_the_lock_pins_exactly_the_0_2_1_and_0_2_0_wheels(examined):
+def test_the_lock_pins_exactly_the_0_2_2_and_0_2_1_wheels(examined):
     entries = lock_entries()
-    examined(3, "pins checked against RC2's SHA256SUMS")
+    examined(2, "pins checked against PyPI's sha256")
     from tests.test_pins import CRYPTO_PINS
     #: The crypto extra's five, from PyPI, are held by tests/test_signed_run.py.
     assert set(entries) - CRYPTO_PINS == {
-        "onetrace==0.2.1", "onetrace-verify==0.2.0"} and CRYPTO_PINS <= set(entries), entries
+        "onetrace==0.2.2", "onetrace-verify==0.2.1"} and CRYPTO_PINS <= set(entries), entries
     assert {k: v for k, v in entries.items() if k not in CRYPTO_PINS} == {
-        "onetrace==0.2.1": RELEASE_0_2_1["onetrace-0.2.1-py3-none-any.whl"],
-        "onetrace-verify==0.2.0": RELEASE_0_2_0["onetrace_verify-0.2.0-py3-none-any.whl"],
+        "onetrace==0.2.2": RELEASE_0_2_2["onetrace-0.2.2-py3-none-any.whl"],
+        "onetrace-verify==0.2.1": RELEASE_0_2_2["onetrace_verify-0.2.1-py3-none-any.whl"],
     }, entries
-    assert ONETRACE_WHL_SHA256 == RELEASE_0_2_1["onetrace-0.2.1-py3-none-any.whl"]
-    assert ONETRACE_VERIFY_WHL_SHA256 == RELEASE_0_2_0["onetrace_verify-0.2.0-py3-none-any.whl"]
+    assert ONETRACE_WHL_SHA256 == RELEASE_0_2_2["onetrace-0.2.2-py3-none-any.whl"]
+    assert ONETRACE_VERIFY_WHL_SHA256 == RELEASE_0_2_2["onetrace_verify-0.2.1-py3-none-any.whl"]
 
 
 def test_no_development_build_is_left_in_the_tree(examined):
@@ -111,10 +118,10 @@ def test_the_wheel_cache_names_what_the_lock_pins(examined):
     entries = lock_entries()
     examined(len(w.WHEELS), "cached wheels checked against the lock")
     assert w.SOURCE == "pypi"
-    assert set(w.WHEELS) == {"onetrace==0.2.1", "onetrace-verify==0.2.0"}
+    assert set(w.WHEELS) == {"onetrace==0.2.2", "onetrace-verify==0.2.1"}
     for req, (name, sha) in w.WHEELS.items():
         assert entries[req] == sha, (req, sha)
-        assert {**RELEASE_0_2_0, **RELEASE_0_2_1}[name] == sha, (name, sha)
+        assert RELEASE_0_2_2[name] == sha, (name, sha)
 
 
 def _fake_exam(root: Path) -> None:
@@ -147,7 +154,7 @@ def test_a_fixture_cache_from_another_sdist_is_not_ready(tmp_path, monkeypatch, 
 
 
 def test_both_installed_distributions_are_the_pinned_ones(examined):
-    """onetrace 0.2.1 and onetrace-verify 0.2.0, since console 0.1.1."""
+    """onetrace 0.2.2 and onetrace-verify 0.2.1, since console 0.2.0."""
     from tests.test_pins import PINNED_SDK_VERSION, PINNED_VERIFY_VERSION
     examined(2, "installed distributions read")
     for dist, want in (("onetrace", PINNED_SDK_VERSION), ("onetrace-verify", PINNED_VERIFY_VERSION)):
@@ -227,7 +234,8 @@ def test_the_pinned_verifier_is_one_that_checks_stage_order(examined):
     """The premise of the test above, read from the installed verifier rather than assumed."""
     examined(1, "installed verifier read")
     import importlib.util
-    assert importlib.metadata.version("onetrace-verify") == "0.2.0"
+    from tests.test_pins import PINNED_VERIFY_VERSION
+    assert importlib.metadata.version("onetrace-verify") == PINNED_VERIFY_VERSION
     package = Path(importlib.util.find_spec("onetrace_verify").submodule_search_locations[0])
     source = (package / "verify.py").read_text(encoding="utf-8")
     assert "\ndef check_stage_order(" in source and "check_stage_order(obj," in source

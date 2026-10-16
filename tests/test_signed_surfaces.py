@@ -17,12 +17,13 @@ from onetrace_console.home import SIGNATURE_FORMS, tallies
 from tests.test_signed_run import _checked, _signed_rung, _trust, signed  # noqa: F401
 from tests.test_receipt_page import _pills, _receipt, _row
 from tests.test_stage_pages import _pages
+from tests.conftest import whole_folds
 
 UNTRUSTED = "Signed, key not trusted"
 
 
 def _cells(row: str) -> list[str]:
-    return [re.sub(r"\s+", " ", unescape(re.sub(r"<[^>]+>", " ", c))).strip()
+    return [re.sub(r"\s+", " ", unescape(re.sub(r"<[^>]+>", " ", whole_folds(c)))).strip()
             for c in re.findall(r"<td>(.*?)</td>", row, re.S)]
 
 

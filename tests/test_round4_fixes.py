@@ -456,9 +456,9 @@ def test_the_store_knows_the_verdicts_and_rung_states_the_console_writes():
     `checks` imports the store; held in step with their sources here."""
     from onetrace_console.checks import VERDICTS
     from onetrace_console.store import _RUNG_STATES, _VERDICTS
-    from onetrace_console.viewer.model import _COULDNT, _NO, _NOT_CHECKED, _YES
+    from onetrace_console.viewer.model import _COULDNT, _NO, _NOT_CHECKED, _NOT_REACHED, _YES
     assert set(_VERDICTS) == {""} | set(VERDICTS)
-    assert set(_RUNG_STATES) == {""} | {s[0] for s in (_YES, _NO, _COULDNT, _NOT_CHECKED)}
+    assert set(_RUNG_STATES) == {""} | {s[0] for s in (_YES, _NO, _COULDNT, _NOT_CHECKED, _NOT_REACHED)}
 
 
 # ---------------------------------------------------------------------------------- S4

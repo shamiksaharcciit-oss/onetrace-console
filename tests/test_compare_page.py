@@ -198,7 +198,8 @@ def test_sabotage_a_card_with_another_command_is_named(demo, examined):
 
 def test_sabotage_a_box_toned_off_the_rule_is_named(demo, examined):
     examined(1, "planted page")
-    page = _page(demo, *HEADLINE).replace('data-mark="first" data-tone="bad"', 'data-mark="first" data-tone="ok"', 1)
+    assert 'data-mark="first" data-tone="fd"' in _page(demo, *HEADLINE)
+    page = _page(demo, *HEADLINE).replace('data-mark="first" data-tone="fd"', 'data-mark="first" data-tone="ok"', 1)
     assert any(p.startswith("stage 2 is toned 'ok'") for p in graph_problems(
         page, [("2", "FIRST DIFFERENCE")]))
 
@@ -207,3 +208,112 @@ def test_sabotage_an_invented_setting_row_is_named(demo, examined):
     examined(1, "planted page")
     page = _page(demo, *HEADLINE).replace('<tr data-setting="', '<tr data-setting="9:invented"></tr><tr data-setting="', 1)
     assert any("the table's rows are" in p for p in settings_problems(page, _annotations(demo, *HEADLINE)))
+
+
+#: The demo's graph-shaped pair whose classify step's recorded constant `rules` changes, 1 to 2.
+GRAPH_PAIR = ("p3-23-t-1-rules1", "p3-27-t-1-rules2")
+
+
+def _ladder(demo, base: str, cand: str) -> list[dict]:
+    folder, store = demo
+    ids = {r.run_id: r.key for r in store.runs()}
+    comparison = next(c for c in store.comparisons() if (c.run_a, c.run_b) == (ids[base], ids[cand]))
+    return json.loads(store.get(dict(comparison.verb("diff").reports)["diff.json"]))["ladder"]
+
+
+def _receipt(demo, run_id: str, index: str) -> dict:
+    """A run's receipt at a chain index, read from the run's own folder, not the store."""
+    folder, _ = demo
+    run = folder / "runs" / run_id
+    chain = json.loads((run / "MANIFEST.json").read_text(encoding="utf-8"))["chain"]
+    entry = next(e for e in chain if str(e["index"]) == index)
+    return json.loads((run / entry["file"]).read_text(encoding="utf-8"))
+
+
+def graph_settings_problems(page: str, ladder: list[dict], receipt_a, receipt_b) -> list[str]:
+    """Each setting a node's note says differs is a row of "Settings that changed", with the value
+    each run's receipt records; and the table lists nothing the notes don't name."""
+    section = re.search(r'<section data-section="settings-changed">(.*?)</section>', page, re.S)
+    if not section:
+        return ["no settings table"]
+    rows = dict(re.findall(r'<tr data-setting="([^"]+)">(.*?)</tr>', section.group(1), re.S))
+    want, out = {}, []
+    for n, row in enumerate(ladder, start=1):
+        for note in row["annotations"]:
+            m = re.fullmatch(r"instrument (\S+) differs: .*", note)
+            if m:
+                field, key = f"instrument.{m[1]}", ("instrument", m[1])
+            elif (m := re.fullmatch(r"constant (.+) differs", note)):
+                field, key = f"assertions.constants.{m[1]}", ("constants", m[1])
+            else:
+                continue
+            ra, rb = receipt_a(row["index_baseline"]), receipt_b(row["index_candidate"])
+            value = (lambda r: r["instrument"][key[1]]) if key[0] == "instrument" else \
+                    (lambda r: r["assertions"]["constants"][key[1]])
+            want[f"{n}:{field}"] = (str(value(ra)), str(value(rb)))
+    if set(rows) != set(want):
+        out.append(f"the table's rows are {sorted(rows)}, the notes name {sorted(want)}")
+    for name, values in want.items():
+        cells = html.unescape(re.sub(r"<[^>]+>", " ", rows.get(name, "")))
+        out += [f"{name}: {v} is not in its row" for v in values if v not in cells]
+    return out
+
+
+def test_settings_that_changed_on_a_graph_pair_are_the_notes_settings_with_both_values(demo, examined):
+    ladder = _ladder(demo, *GRAPH_PAIR)
+    page = _page(demo, *GRAPH_PAIR)
+    problems = graph_settings_problems(page, ladder, lambda i: _receipt(demo, GRAPH_PAIR[0], i),
+                                       lambda i: _receipt(demo, GRAPH_PAIR[1], i))
+    rows = re.findall(r'<tr data-setting="([^"]+)">', page)
+    examined(len(rows), "settings rows on the graph pair")
+    assert problems == []
+    assert "2:assertions.constants.rules" in rows, rows
+    assert "No recorded setting differs" not in page
+
+
+def test_sabotage_a_graph_pair_s_missing_setting_row_is_named(demo, examined):
+    examined(1, "planted page")
+    page = re.sub(r'<tr data-setting="2:assertions\.constants\.rules">.*?</tr>', "", _page(demo, *GRAPH_PAIR),
+                  flags=re.S)
+    problems = graph_settings_problems(page, _ladder(demo, *GRAPH_PAIR),
+                                       lambda i: _receipt(demo, GRAPH_PAIR[0], i),
+                                       lambda i: _receipt(demo, GRAPH_PAIR[1], i))
+    assert any("the notes name" in p for p in problems), problems
+
+
+def text_count_problems(page: str) -> list[str]:
+    """Each step's "settings: N changed" in the text diff against the rows "Settings that changed"
+    lists for that step, its fingerprints under Details included: N must be that count."""
+    def words(s: str) -> str:
+        return re.sub(r"\s+", " ", html.unescape(re.sub(r"<[^>]+>", " ", s))).strip()
+    section = re.search(r'<section data-section="settings-changed">(.*?)</section>', page, re.S)
+    listed: dict[str, int] = {}
+    for row in re.findall(r'<tr data-setting="[^"]+">(.*?)</tr>', section.group(1) if section else "", re.S):
+        stage = words(re.search(r"<td[^>]*>(.*?)</td>", row, re.S).group(1))
+        listed[stage] = listed.get(stage, 0) + 1
+    out = []
+    for node, body in re.findall(r'<article data-node="([^"]*)">(.*?)</article>', page, re.S):
+        m = re.search(r"settings: (\d+) changed", body)
+        if m and int(m[1]) != listed.get(html.unescape(node), 0):
+            out.append(f"{html.unescape(node)}: the text diff says {m[1]} changed, the table lists "
+                       f"{listed.get(html.unescape(node), 0)}")
+    return out
+
+
+def _every_diff_page(demo) -> dict[str, str]:
+    folder, _ = demo
+    return {p.name: p.read_text(encoding="utf-8") for p in (folder / "store" / "pages" / "diff").glob("*.html")
+            if not p.name.endswith("-text.html")}
+
+
+def test_the_text_diff_s_settings_count_is_what_the_settings_table_lists(demo, examined):
+    pages = _every_diff_page(demo)
+    counted = sum(len(re.findall(r"settings: \d+ changed", p)) for p in pages.values())
+    examined(counted, "settings counts in the demo's text diffs")
+    assert {name: text_count_problems(p) for name, p in pages.items() if text_count_problems(p)} == {}
+
+
+def test_sabotage_a_settings_count_the_table_does_not_list_is_named(demo, examined):
+    examined(1, "planted page")
+    page = _page(demo, *GRAPH_PAIR).replace("settings: 2 changed", "settings: 3 changed", 1)
+    assert text_count_problems(page) == ["classify: the text diff says 3 changed, the table lists 2"]

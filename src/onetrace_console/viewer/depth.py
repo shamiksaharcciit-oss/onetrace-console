@@ -10,7 +10,7 @@ deep, the first n that raises:
     Windows, Python 3.12.10   json.loads fails at n = 2995   indented json.dumps fails at n = 991
 
 (as `python -m onetrace_console.viewer.depth` measures them: the Linux gates at one commit, and a
-Windows machine's run of the same commit with its junit file, 6 October 2026). Windows'
+Windows machine's run of the same commit with its junit file). Windows'
 `json.loads` stops sooner, on a smaller C stack; that is what failed at 8b384b5.
 
 **The binding figure is the indented dump at 991, on 3.12 on both OSes:** 256 + 700 = 956 fits below

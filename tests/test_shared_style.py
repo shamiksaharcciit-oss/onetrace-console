@@ -64,8 +64,11 @@ def _declared(body: str, prop: str) -> str | None:
     return m.group(1).strip() if m else None
 
 
-def _tokens() -> dict[str, str]:
-    from onetrace_console.viewer.tokens import root_css
+def _tokens(theme: str = "light") -> dict[str, str]:
+    """{role: #rrggbb} in a theme: the skin's own block for light, the dark theme's mix for dark."""
+    from onetrace_console.viewer.tokens import dark_palette, root_css
+    if theme == "dark":
+        return dict(dark_palette())
     return dict(re.findall(r"--([\w-]+):\s*(#[0-9a-fA-F]{6})", root_css()))
 
 
@@ -108,8 +111,8 @@ def text_pairs(css: str) -> tuple[list[tuple[str, str, str]], list[str]]:
     return pairs, unplaced
 
 
-def contrast_problems(css: str) -> list[str]:
-    tokens = _tokens()
+def contrast_problems(css: str, theme: str = "light") -> list[str]:
+    tokens = _tokens(theme)
     pairs, unplaced = text_pairs(css)
     return unplaced + [f"{s}: --{fg} on --{bg} reads {ratio(fg, bg, tokens):.2f}:1"
                        for s, fg, bg in pairs if ratio(fg, bg, tokens) < 4.5]
@@ -120,11 +123,12 @@ def _sheet() -> str:
     return stylesheet().decode("utf-8")
 
 
-def test_every_text_colour_in_the_whole_stylesheet_reads_on_its_background(examined):
+@pytest.mark.parametrize("theme", ["light", "dark"])
+def test_every_text_colour_in_the_whole_stylesheet_reads_on_its_background(theme, examined):
     pairs, _ = text_pairs(_sheet())
-    examined(len(pairs), "text-on-background pairs in the served stylesheet")
+    examined(len(pairs), f"text-on-background pairs in the served stylesheet, {theme}")
     assert len(pairs) >= 100, len(pairs)
-    assert contrast_problems(_sheet()) == []
+    assert contrast_problems(_sheet(), theme) == []
 
 
 @pytest.mark.parametrize("planted, said", [
@@ -167,6 +171,12 @@ def chip_problems(css: str) -> list[str]:
         fg, bg = _var(_declared(body, "color") or ""), _var(_declared(body, "background") or "")
         if fg and bg and (fg, bg) not in TONES:
             problems.append(f"{selector}: --{fg} on --{bg} is not one of the four tones")
+    #: The fifth kind, a run stopped by a step's own rule: the accent's outline on the page's own
+    #: ground, and only that, as the declined-runs work order asks.
+    dec = [body for s, body in rules if re.search(r"\.cp,\.shell \.page\) \.dec\b", s)]
+    want = {"background": "transparent", "color": "var(--accent)", "outline": "1px solid var(--accent)"}
+    if len(dec) != 1 or any((_declared(dec[0], k) or "").strip() != v for k, v in want.items()):
+        problems.append(f".cp .dec: not the declined outline ({dec})")
     return problems
 
 
@@ -177,6 +187,8 @@ def test_every_state_chip_has_the_one_shape_and_one_of_four_tones(examined):
 
 @pytest.mark.parametrize("planted, said", [
     (".cp .bad{background:var(--accent);color:var(--accent-ink)}", "is not one of the four tones"),
+    #: The declined chip filled red, as a failure would be.
+    (":is(.cp,.shell .page) .dec{background:var(--bad-bg);color:var(--bad-ink)}", "not the declined outline"),
 ])
 def test_the_chip_check_names_a_fifth_tone(planted, said, examined):
     examined(1, "planted chip tone")
@@ -242,3 +254,26 @@ def test_every_chip_on_every_demo_page_carries_its_words(demo_pages, examined):
     assert len(kinds) == len(_CHIP_MARKUP), "each kind of chip is drawn somewhere in the demo"
     empty = [(rel, m) for rel, m in chips if not re.sub(r"<[^>]+>", "", m).strip()]
     assert not empty, empty[:5]
+
+
+def placement_problems(css: str) -> list[str]:
+    """Each chip tone added since the four: styled wherever a chip can sit -- the console's own pages
+    (.cp), the viewer-framed pages (.shell .page: the runs lists, a run's pages), and a run's head."""
+    out = []
+    for tone in ("dec", "fd", "ca"):
+        if not re.search(rf":is\(\.cp,\.shell \.page\) \.{tone}\{{", css):
+            out.append(f".{tone}: not styled on the console's and the viewer-framed pages")
+        if not re.search(rf"\[data-section=run-head\] \.{tone}\{{", css):
+            out.append(f".{tone}: not styled in a run's head")
+    return out
+
+
+def test_each_new_chip_tone_is_styled_wherever_a_chip_sits(examined):
+    examined(3, "chip tones")
+    assert placement_problems(_sheet()) == []
+
+
+def test_sabotage_a_tone_missing_from_the_run_head_is_named(examined):
+    examined(1, "planted sheet")
+    sheet = re.sub(r"\[data-section=run-head\] \.fd\{", "[data-section=run-head] .x-fd{", _sheet())
+    assert ".fd: not styled in a run's head" in placement_problems(sheet)

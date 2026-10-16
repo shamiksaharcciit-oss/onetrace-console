@@ -16,6 +16,7 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
+from onetrace_console.oserror import said, shown
 from onetrace_console.viewer import fingerprint
 from onetrace_console.viewer.model import GENERATOR, build_model, list_row
 from onetrace_console.viewer.page import render_answer, render_case, render_executions
@@ -96,8 +97,8 @@ def main(argv: list[str] | None = None) -> int:
                 ok, why = fingerprint.check(page.read_bytes())
             except (OSError, UnicodeDecodeError, ValueError) as e:
                 # A page that cannot be read is said, not raised (the third review, NEW-14).
-                ok, why = False, f"cannot be read: {e}"
-            print(f"{'matches' if ok else 'DOES NOT MATCH':15} {page}: {why}")
+                ok, why = False, f"cannot be read: {said(e) if isinstance(e, OSError) else e}"
+            print(shown(f"{'matches' if ok else 'DOES NOT MATCH':15} {page}: {why}"))
             worst = worst if ok else 1
         return worst
 
@@ -150,7 +151,7 @@ def main(argv: list[str] | None = None) -> int:
     except OSError as e:
         # A folder or file the pages cannot be read from or written to (the third review,
         # NEW-14: `--out` naming a file printed a traceback).
-        print(f"cannot read or write a file: {e}", file=sys.stderr)
+        print(shown(f"cannot read or write a file: {said(e)}"), file=sys.stderr)
         return 2
     for path in written:
         ok, why = fingerprint.check(path.read_bytes())

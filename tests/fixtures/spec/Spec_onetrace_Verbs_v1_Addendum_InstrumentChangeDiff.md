@@ -1,7 +1,7 @@
 # onetrace — instrument-change diff. Addendum to Spec_onetrace_Verbs_v1 (no code)
 
-**INTERNAL · shelf · addendum only — not scheduled, same status as the parent
-spec (code is October, gated on the battery)** ·
+**An addendum only, with no release planned for it, as for the parent
+spec, whose code waits on the test battery** ·
 Extends `Spec_onetrace_Verbs_v1_2026-09-13.md`
 (sealed e3ec7077c8092a990767f7d394a6cdb3651e9ba3a7e57e72fed3a9e9e3c76a92) ·
 Triggered by a scenario, 13 Sept: a new chunker version is introduced;
@@ -76,7 +76,7 @@ separately.
 
 ## 7. Status
 
-Not scheduled. Ships, if it ships, as part of the `diff` verb's ~23 Oct line,
+No release is planned for it. Ships, if it ships, as part of the `diff` verb's next line,
 with the chunker 3.4→3.4.1 corpus added to the dogfood ring (§5 of the parent
 spec) as a named acceptance case: instrument-change diff must reproduce this
 week's result before it ships.

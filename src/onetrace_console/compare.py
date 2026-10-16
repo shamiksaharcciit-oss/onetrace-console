@@ -71,7 +71,7 @@ from pathlib import Path
 from onetrace_console.checks import materialise
 from onetrace_console.child import utf8_env
 from onetrace_console.ingest import bundle
-from onetrace_console.store import StoredRun, Store, digest
+from onetrace_console.store import StoredRun, Store, StoreError, digest
 
 COMPARISON_FORMAT = "onetrace-console/comparison/0.1"
 
@@ -472,7 +472,12 @@ def compare(run_a: StoredRun, run_b: StoredRun, store: Store, *,
     build = sdk_build_digest()
     key = comparison_key(sha_a, sha_b, distribution, build)
 
-    held = store.get_comparison(key)
+    try:
+        held = store.get_comparison(key)
+    except StoreError as e:
+        #: Held under this pair's key and unreadable: said, and not recomputed over it, since a
+        #: record is never repaired.
+        raise ComparisonError(str(e)) from None
     if held is not None and not force:
         #: Two ways a hit is not a hit, both "recompute rather than reuse":
         #:   * the record carries no build digest -> it predates the key change and is

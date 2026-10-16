@@ -66,7 +66,7 @@ row 4 (the propose) carries `approval_id=1`; rows 5 and 6 (its resumption) carry
 to row 5 (the resumption's own `exec_result` to its own `exec_intent`), the same
 bookkeeping row 2 has to row 1 — it says nothing about the propose. onedoor's own
 `docs/decision-ref.md` says the two "are linked in onedoor's audit log the same way any
-propose-then-resume pair already is" — true only of the internal `approvals` table
+propose-then-resume pair already is" — true only of onedoor's own `approvals` table
 (`approvals.audit_id` points at the resumption's row, checked in `onedoor/guardrail/
 approvals.py`'s `mark_executed`), which is **not part of any export** the console can see.
 **Recorded as a gap owned by onedoor, not built here.**

@@ -356,8 +356,12 @@ def nothing_missing_state(folder: Path) -> str:
 #:   3. adds the declared stages whose last recorded attempt failed;
 #:   4. adds what the run's own check says of its anchors;
 #:   5. adds what it says of the run's signatures;
-#:   6. the same derivation as 5, under a neutral name.
-DERIVED = "derivation-6"
+#:   6. the same derivation as 5, under a neutral name;
+#:   7. adds the step a run stopped at by its own rule (`ingest.declined_at`);
+#:   8. adds what the run's own check says of its approved plan ("Ran as approved");
+#:   9. rung 3 reads "Not reached" where the run stopped at a step's own rule;
+#:  10. adds rung 1, "Records agree", as the run's own page decides it, and why.
+DERIVED = "derivation-10"
 
 
 def _reading(folder: Path, envelope: dict | None, read) -> str:
@@ -389,6 +393,19 @@ def signed_state(folder: Path, envelope: dict | None) -> str:
     return _reading(folder, envelope, signature_reading)
 
 
+def approved_state(folder: Path, envelope: dict | None) -> str:
+    """"Ran as approved", as the run's own page reads it from this console's own check
+    (`viewer.model.ran_as_approved`, the verifier's own rows and exit only), for the runs list."""
+    from types import SimpleNamespace
+
+    from onetrace_console.viewer.model import ran_as_approved, rows_from_report
+
+    def read(record, report, own_check):
+        return SimpleNamespace(kind=ran_as_approved(record.manifest, rows_from_report(report),
+                                                    own_check=own_check, verifier=None).state)
+    return _reading(folder, envelope, read)
+
+
 def anchored_state(folder: Path, envelope: dict | None) -> str:
     """"Committed by a known time", as the run's own page reads it from this console's own check:
     `viewer.model.anchor_reading` over the record read as the page reads it and the stored report,
@@ -410,6 +427,33 @@ def anchored_state(folder: Path, envelope: dict | None) -> str:
         traceback.print_exc(file=sys.stderr)
         return ""
     return read.kind if read is not None else ""
+
+
+def agree_state(folder: Path, envelope: dict | None) -> dict:
+    """"Records agree", rung 1, as the run's own page decides it from this console's own check
+    (`viewer.model.records_agree_reading`), for every list and count (`records.state`): its state
+    and why. Empty -- no own check read -- where there is no report or the viewer refuses the
+    record, as the page then says."""
+    if envelope is None:
+        return {"agree": "", "agree_why": ""}
+    from onetrace_console.viewer.model import records_agree_reading, refuse_unreadable_parts
+    from onetrace_console.viewer.record import RecordError, read_record
+    from onetrace_console.viewer.report import ReportUnreadable, parse
+    try:
+        record = read_record(folder)
+        refuse_unreadable_parts(record)
+        try:
+            report, problem = parse(envelope), None
+        except ReportUnreadable as e:
+            report, problem = None, str(e)
+        read = records_agree_reading(record, report, problem)
+    except RecordError:
+        return {"agree": "", "agree_why": ""}
+    except Exception:  # noqa: BLE001 - no own check read, and logged; the check still stands
+        import traceback
+        traceback.print_exc(file=sys.stderr)
+        return {"agree": "", "agree_why": ""}
+    return {"agree": read.kind, "agree_why": read.why}
 
 
 def derived_from(folder: Path, envelope: dict | None = None) -> dict:
@@ -441,7 +485,8 @@ def derived_from(folder: Path, envelope: dict | None = None) -> dict:
         kept_row = {"refused": f"{type(e).__name__}: {e}", "from_viewer": False}
     digests = digests_in(read)
     receipts = set()
-    from onetrace_console.ingest import _declared_by, delivered_and_retries, last_attempt_failed
+    from onetrace_console.ingest import (_declared_by, declined_at, delivered_and_retries,
+                                         last_attempt_failed)
     declared: list[str] = []
     seen: set[str] = set()
     attempts: list[tuple] = []  # (stage name, outcome class, outcome status), in the chain's order
@@ -463,13 +508,18 @@ def derived_from(folder: Path, envelope: dict | None = None) -> dict:
             attempts.append((stage.get("name") if isinstance(stage, dict) else None,
                              outcome.get("class") if isinstance(outcome, dict) else None,
                              outcome.get("status") if isinstance(outcome, dict)
-                             and isinstance(outcome.get("status"), str) else ""))
+                             and isinstance(outcome.get("status"), str) else "",
+                             outcome.get("reason") if isinstance(outcome, dict)
+                             and isinstance(outcome.get("reason"), str) else ""))
     return {"nothing_missing": nothing_missing_state(folder),
             "anchored": anchored_state(folder, envelope),
             "signed": signed_state(folder, envelope),
+            "approved": approved_state(folder, envelope),
+            **agree_state(folder, envelope),
             "list_row": json.dumps(kept_row), "recorded_count": len(receipts),
             **delivered_and_retries(attempts, seen),
             "last_failed": json.dumps(last_attempt_failed(attempts, declared)),
+            "declined": json.dumps(declined_at(attempts, declared)),
             "digests": json.dumps(digests), "derived": DERIVED}
 
 
@@ -489,7 +539,7 @@ def rederive(run: StoredRun, store: Store) -> StoredRun:
             fields = derived_from(materialise(run, store, Path(tmp) / "run"),
                                   envelope if isinstance(envelope, dict) else None)
         except (SameFileError, StoreError) as e:
-            fields = {"nothing_missing": "", "anchored": "", "signed": "", "digests": "null", "derived": DERIVED,
+            fields = {"nothing_missing": "", "anchored": "", "signed": "", "approved": "", "agree": "", "agree_why": "", "digests": "null", "derived": DERIVED,
                       "list_row": json.dumps({"refused": f"{type(e).__name__}: {e}",
                                               "from_viewer": False})}
     updated = replace(run, **fields)
@@ -505,7 +555,7 @@ def run_and_record(run: StoredRun, store: Store, *, ran_at: str | None = None,
     #: is never asked about a folder that is not the run -- and is recorded as could not check,
     #: with why, and with no report. Otherwise, the check's own outcome.
     report_key, exit_status, verdict, note, topology = "", "", COULD_NOT_CHECK, "", ""
-    derived = {"nothing_missing": "", "anchored": "", "signed": "", "digests": "null",
+    derived = {"nothing_missing": "", "anchored": "", "signed": "", "approved": "", "agree": "", "agree_why": "", "digests": "null",
                "derived": DERIVED}
     with tempfile.TemporaryDirectory(prefix="onetrace-check-") as tmp:
         try:
