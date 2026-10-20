@@ -44,6 +44,8 @@ _VIEWER_GET_PATTERNS = tuple(re.compile(p) for p in (
     r"^runs/[^/]+/case\.html$",
     #: A run key is sha256 hex (`store.run_key`), so exactly that: `[^/]+` admitted `..`.
     r"^runs/[0-9a-f]{64}/authorization\.html$",
+    #: A run page's "Proof" view (`views`), beside its "What changed" at case.html.
+    r"^runs/[0-9a-f]{64}/proof\.html$",
     #: A stage's inputs and outputs, one page per manifest index.
     r"^runs/[0-9a-f]{64}/stage-[0-9]+\.html$",
     #: The run receipt.
@@ -53,6 +55,8 @@ _VIEWER_GET_PATTERNS = tuple(re.compile(p) for p in (
     r"^runs/[0-9a-f]{64}/record\.tar$",
     r"^diff/[^/]+\.html$",
     r"^comparisons\.html$",
+    #: A pipeline's page, and its two filters.
+    r"^pipeline-p[0-9]+(-agree|-attention)?\.html$",
     #: Choose two runs: a pipeline's runs as run A, and run A's page of the others as run B.
     r"^choose-p[0-9]+\.html$",
     r"^choose-p[0-9]+-[0-9a-f]{64}\.html$",

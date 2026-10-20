@@ -5,7 +5,8 @@ count is read from the builder's own run list (`demo_store.pipeline_names`), nev
 held here, on every page a public console serves of the demo built as the image builds it, to the
 pipelines the console finds in that store. The README, the PyPI description
 and the changelog say the same counts in prose; each is held to the builder: its pipelines, its
-runs and its comparisons. Each check has its sabotage.
+runs and its comparisons, and the README and the PyPI description the runs it breaks on purpose
+(`demo_store.PLANTED`). Each check has its sabotage.
 """
 from __future__ import annotations
 
@@ -33,7 +34,7 @@ def banner_problems(page: str, pipelines: int) -> list[str]:
 
 
 def doc_problems(name: str, text: str) -> list[str]:
-    from onetrace_console.demo_store import COMPARISONS, pipeline_names, runs
+    from onetrace_console.demo_store import COMPARISONS, PLANTED, pipeline_names, runs
     from onetrace_console.public import count_word
     out = []
     wanted = [(r"(\w+) small example pipelines", count_word(len(pipeline_names())), "pipelines")]
@@ -41,6 +42,9 @@ def doc_problems(name: str, text: str) -> list[str]:
         wanted.append((r"stores (\w+) comparisons", count_word(len(COMPARISONS)), "comparisons"))
         #: The Overview image's description: the runs the image shows are the demo's.
         wanted.append((r"the demo's (\w+) runs", str(len(runs())), "runs"))
+        #: The runs the builder breaks on purpose, one line each in its own list.
+        wanted.append((r"(\w+) of its runs are broken on purpose when the demo is built",
+                       count_word(len(PLANTED)).capitalize(), "runs broken on purpose"))
     else:
         #: The changelog's newest entry that says what the demo records: a release that leaves the
         #: demo's counts as they were (0.1.2's fixes) doesn't say them again.
@@ -81,8 +85,8 @@ def test_sabotage_each_check_catches_its_fault(served, monkeypatch, examined):  
     page = container_check.fetch(served[0], "/home.html")[2].decode("utf-8")
     caught = 0
     #: The count typed into the banner's words, as it was: three.
-    typed = page.replace("from four small", "from three small")
-    assert typed != page and "the banner says three" in banner_problems(typed, 4)[0]
+    typed = page.replace("from seven small", "from three small")
+    assert typed != page and "the banner says three" in banner_problems(typed, 7)[0]
     caught += 1
     #: The builder's list read wrong: one pipeline left out of it.
     names = demo_store.pipeline_names()
@@ -90,12 +94,21 @@ def test_sabotage_each_check_catches_its_fault(served, monkeypatch, examined):  
     assert banner_problems(banner(), len(names)) != []
     monkeypatch.undo()
     caught += 1
-    for name, old, new in [("README.md", "from four small", "from three small"),
-                           ("PYPI_DESCRIPTION.md", "stores five comparisons", "stores four comparisons"),
-                           ("README.md", "the demo's 31 runs", "the demo's 30 runs"),
-                           ("CHANGELOG.md", "records 31 runs", "records 30 runs")]:
+    for name, old, new in [("README.md", "from seven small", "from six small"),
+                           ("PYPI_DESCRIPTION.md", "stores ten comparisons", "stores nine comparisons"),
+                           ("README.md", "the demo's 41 runs", "the demo's 40 runs"),
+                           ("CHANGELOG.md", "records 41 runs", "records 40 runs")]:
         text = (REPO / name).read_text(encoding="utf-8")
         assert old in text, name
         assert doc_problems(name, text.replace(old, new)) != [], name
         caught += 1
     examined(caught, "faults caught")
+
+
+def test_sabotage_a_run_planted_and_not_counted_in_the_documents_is_named(monkeypatch):
+    from onetrace_console import demo_store
+    planted = dict(demo_store.PLANTED, **{"p6-36-fill-baseline": "One more run broken on purpose."})
+    monkeypatch.setattr(demo_store, "PLANTED", planted)
+    for name in DOCS:
+        found = doc_problems(name, (REPO / name).read_text(encoding="utf-8"))
+        assert any("runs broken on purpose" in p for p in found), (name, found)

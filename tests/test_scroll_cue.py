@@ -108,13 +108,16 @@ def pages(tmp_path_factory) -> dict[str, str]:
             for p in root.rglob("*.html")}
 
 
+#: A comparison page's "Proof" view, beside it.
+PROOF_PAGE = "-proof.html"
 _REGION = re.compile(r'<div class="graph-box" tabindex="0" role="region" aria-label="([^"]+)">')
 
 
 def test_each_graph_panel_is_a_named_region_a_keyboard_reaches(pages, examined):
     from onetrace_console.viewer.sentences import template
-    compare = [h for rel, h in pages.items() if rel.startswith("diff/") and not rel.endswith(TEXT_PAGE)]  # a Diff page, not its text diff's own
-    runs = [h for rel, h in pages.items() if rel.endswith("/case.html")]
+    compare = [h for rel, h in pages.items() if rel.startswith("diff/") and not rel.endswith(TEXT_PAGE)  # a Diff page, not its text diff's own
+               and not rel.endswith(PROOF_PAGE)]  # its "What changed" view, which holds the graph
+    runs = [h for rel, h in pages.items() if rel.endswith(("/case.html", "/proof.html"))]
     examined(len(compare) + len(runs), "pages with a graph")
     assert compare and runs
     #: 0.1.1's demo store compares graph-shaped pairs (P2, P3) and straight-line ones (P1); each
@@ -133,7 +136,9 @@ def test_the_changes_table_scrolls_in_its_own_named_region(pages, examined):
     """In the scroll region every wide table has (`words.scroll_region`): its scrollbar drawn, its
     ring drawn by the frame around it, which the fade's mask cannot clip."""
     from onetrace_console.render import CHANGES_REGION
-    compare = [h for rel, h in pages.items() if rel.startswith("diff/") and not rel.endswith(TEXT_PAGE)]  # a Diff page, not its text diff's own
+    #: Each comparison as its two views together: a straight-line pair's tables are on "Proof".
+    compare = [h + pages.get(rel[:-len(".html")] + PROOF_PAGE, "") for rel, h in pages.items()
+               if rel.startswith("diff/") and not rel.endswith((TEXT_PAGE, PROOF_PAGE))]
     examined(len(compare), "comparison pages")
     for html in compare:
         wrapped = re.findall(r'<div class="scroll-frame"><div class="scroll-x" data-scroll="changes" '

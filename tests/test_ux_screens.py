@@ -107,8 +107,32 @@ def test_the_four_demo_runs_raise_no_incidents(demo, examined):
     incidents = derive(store)
     examined(len(keys), "demo runs whose incidents were raised")
     assert len(incidents) == 0, [(i.rule, i.quoted) for i in incidents]
-    home = _text((root / "pages" / "home.html").read_text(encoding="utf-8"))
-    assert re.search(r"\b0 incidents raised\b", home), home[:2000]
+    incidents_page = _text((root / "pages" / "incidents.html").read_text(encoding="utf-8"))
+    assert incident_page_problems(incidents_page, len(keys)) == []
+    assert "0 incidents raised from 0 of 4 runs." in incidents_page.splitlines()
+
+
+def incident_page_problems(page: str, runs: int) -> list[str]:
+    """The Incidents page, where the Overview's incident count is kept: every rule it builds
+    reads 0 runs of the runs stored, and says it raised nothing."""
+    from onetrace_console.incidents import RULES
+    out = []
+    for rule in RULES:
+        if f"{rule.id} — 0 runs of {runs}" not in page:
+            out.append(f"{rule.id}: not 0 runs of {runs}")
+    if page.count(f"This rule raised nothing from the {runs} runs stored.") != len(RULES):
+        out.append("a rule that raised something")
+    return out
+
+
+def test_sabotage_an_incident_on_the_incidents_page_is_named(demo):
+    _base, root, keys, _cmp = demo
+    page = _text((root / "pages" / "incidents.html").read_text(encoding="utf-8"))
+    raised = page.replace(f"I-CONTRADICTS — 0 runs of {len(keys)}", f"I-CONTRADICTS — 1 runs of {len(keys)}", 1)
+    raised = raised.replace(f"This rule raised nothing from the {len(keys)} runs stored.", "", 1)
+    assert raised != page
+    assert incident_page_problems(raised, len(keys)) == ["I-CONTRADICTS: not 0 runs of 4",
+                                                          "a rule that raised something"]
 
 
 def test_a_run_declaring_links_with_no_edge_row_carries_a_note_not_an_incident(store, examined):
@@ -297,7 +321,8 @@ def test_each_not_checked_reason_is_said_once(demo, examined):
     """In "What was checked and what was not", a reason every step shares is said once for the run,
     and only reasons that differ are listed per step."""
     _base, root, keys, _cmp = demo
-    html = (root / "pages" / "runs" / keys["query-day2"] / "case.html").read_text(encoding="utf-8")
+    #: "What was checked and what was not" is on the run page's "Proof" view.
+    html = (root / "pages" / "runs" / keys["query-day2"] / "proof.html").read_text(encoding="utf-8")
     found = re.search(r"<h3>Not checked</h3><ul class=\"plain\">(.*?)</ul>", html, re.S)
     assert found, "no Not checked list"
     items = re.findall(r"<li[^>]*>(.*?)</li>", found.group(1), re.S)
@@ -313,7 +338,7 @@ def test_every_step_is_named_by_its_recorded_name_first(demo, examined):
     words, they follow the name, never stand in its place, so every step's line reads alike."""
     from onetrace_console.viewer.sentences import STEP_WORDS
     _base, root, keys, _cmp = demo
-    html = (root / "pages" / "runs" / keys["query-day2"] / "case.html").read_text(encoding="utf-8")
+    html = (root / "pages" / "runs" / keys["query-day2"] / "proof.html").read_text(encoding="utf-8")
     section = _section(html, "checked")
     labels = re.findall(r"step \d+ of \d+ · ([^—\n]+?) —", section)
     recorded = [json.loads((RUNS / "query-day2" / e["file"]).read_text(encoding="utf-8"))["stage"]["name"]

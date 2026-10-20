@@ -139,10 +139,36 @@ def _matches(data: bytes, digest: str) -> bool:
     return "sha256:" + hashlib.sha256(data).hexdigest() == digest
 
 
+#: The demo's one exception: the digests of the example inputs the demo builder invents itself, set
+#: only by `demo_store.allowing_examples` -- for a folder whose build record vouches for every byte
+#: -- and empty otherwise. An input outside the pipeline is shown on a public console only where its
+#: digest is one of these, so only the builder's own invented bytes can ever be shown; no setting or
+#: store can add to them (the digests are the builder's code's, not a file's).
+_EXAMPLES: frozenset = frozenset()
+#: What a public console's run receipt says where the run's download includes its kept inputs.
+EXAMPLE_RECORD = ("This run's kept inputs are the demo's invented example data, so this public "
+                  "console shows them and its download includes them.")
+
+
+def set_examples(digests) -> frozenset:
+    """Set the example digests; returns the ones set before, to put back."""
+    global _EXAMPLES
+    before, _EXAMPLES = _EXAMPLES, frozenset(digests)
+    return before
+
+
+def example_allowed(digest: str) -> bool:
+    """`digest` ("sha256:<hex>") is one of the demo builder's own example inputs, in a demo whose
+    build record vouches for it."""
+    return digest in _EXAMPLES
+
+
 def hidden_here(item: dict) -> bool:
-    """On a public console, an externally sourced input's kept text is never shown."""
+    """On a public console, an externally sourced input's kept text is never shown -- except the
+    demo builder's own invented example data (`example_allowed`)."""
     from onetrace_console.frame import rendering_public
-    return rendering_public() and item.get("trust_class") == EXTERNALLY_SOURCED
+    return (rendering_public() and item.get("trust_class") == EXTERNALLY_SOURCED
+            and not example_allowed(str(item.get("digest", ""))))
 
 
 def _fp(digest: str) -> str:
@@ -307,6 +333,12 @@ def _input_named(line: str, names: set[str]) -> str | None:
 def _sides_read(line: str, node: str, sides) -> list[tuple[str, Kept]] | None:
     """[("baseline", reading), ("candidate", reading)] for the input `line` names, or None where
     the console can't tie the line to both runs' records."""
+    found = _named_sides(line, node, sides)
+    return found[1] if found else None
+
+
+def _named_sides(line: str, node: str, sides) -> tuple[str, list[tuple[str, Kept]]] | None:
+    """(the input's recorded name, `_sides_read`'s readings), or None."""
     if sides is None or None in sides:
         return None
     steps = [_receipt_for(s[0], node) for s in sides]
@@ -321,29 +353,39 @@ def _sides_read(line: str, node: str, sides) -> list[tuple[str, Kept]] | None:
     for label, step, side, its in zip(("baseline", "candidate"), steps, sides, items):
         kept = read_kept(its[name], step["receipt"], step["file"], side[1], side[2])
         out.append((label, kept if kept is not None else Kept("not-kept")))
-    return out
+    return name, out
 
 
-def diff_lines(lines: list[str], node: str, sides) -> list[str]:
+def diff_lines(lines: list[str], node: str, sides, kept: list | None = None) -> list[str]:
     """A node's input lines as this console may show them. Each changed input's kept texts (the
-    SDK's `  - "..."` and `  + "..."`) stay only where the console reads both sides as shown:
-    listed, matching their digests, recorded by an SDK that keeps inputs, and not an externally
-    sourced input on a public console. Otherwise each side not shown says its reading, and a line
-    the console can't tie to the records says that, never the text."""
+    SDK's `  - "..."` and `  + "..."`, one escaped line each) are shown only where the console reads
+    both sides as shown: listed, matching their digests, recorded by an SDK that keeps inputs, and
+    not an externally sourced input on a public console. There they are taken out of the lines and
+    appended to `kept` as (the input's line, its name, the baseline's text, the candidate's text),
+    for a line diff of the texts as kept. Otherwise each side not shown says its reading, and a
+    line the console can't tie to the records says that, never the text."""
     out: list[str] = []
     replaced: list[str] | None = None
     for line in lines:
         if not line.startswith("  "):
             replaced = None
             out.append(line)
-            hidden = _external_line(line) and _public()
-            read = _sides_read(line, node, sides) if line.startswith("input ") else None
+            named = _named_sides(line, node, sides) if line.startswith("input ") else None
+            read = named[1] if named else None
+            #: Shown only where both sides read as shown: on a public console, the demo's own
+            #: example data (`hidden_here`), and nothing else.
+            hidden = (_external_line(line) and _public()
+                      and not (read is not None and all(k.state == "shown" for _, k in read)))
             if hidden:
                 replaced = ["  " + EXTERNAL]
             elif line.startswith("input ") and read is None:
                 replaced = ["  " + UNTIED]
             elif read is not None and not all(k.state == "shown" for _, k in read):
                 replaced = [f"  {label}: {k.words()}" for label, k in read if k.state != "shown"]
+            elif read is not None and kept is not None:
+                #: Both texts shown: drawn as a line diff below the line, not as the escaped lines.
+                kept.append((line, named[0], read[0][1].text, read[1][1].text))
+                replaced = []
             continue
         if replaced is not None and _kept_line(line):
             if replaced:
@@ -366,5 +408,13 @@ def for_this_console(doc: dict, comparison=None, store=None) -> dict:
     if comparison is not None:
         sides = (_side(store, getattr(comparison, "run_a", None)),
                  _side(store, getattr(comparison, "run_b", None)))
-    return {**doc, "nodes": [{**n, "inputs": diff_lines(list(n.get("inputs") or []), str(n.get("node", "")), sides)}
-                             for n in doc.get("nodes", [])]}
+    nodes = []
+    for n in doc.get("nodes", []):
+        kept: list = []
+        nodes.append({**n, "inputs": diff_lines(list(n.get("inputs") or []), str(n.get("node", "")), sides, kept),
+                      KEPT_DIFFS: kept})
+    return {**doc, "nodes": nodes}
+
+
+#: The key `for_this_console` gives each node for its kept texts, drawn as line diffs.
+KEPT_DIFFS = "_kept_diffs"

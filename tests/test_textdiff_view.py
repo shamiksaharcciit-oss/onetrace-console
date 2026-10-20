@@ -213,7 +213,9 @@ def test_settings_lines_by_short_name_fingerprints_under_details(examined):
     examined(len(lines), "settings lines")
     assert settings_problems(html) == []
     assert 'title="constants.chunk_size">chunk_size</span>: 1024 → 512' in html
-    assert html.index("<details data-settings-details>") < html.index("config_digest")
+    #: The fingerprint's values only under Details; above it, a row naming what it fingerprints
+    #: (its path in the tooltip), so the count sits over as many rows.
+    assert html.index("<details data-settings-details>") < html.index("aaa2d6fad586")
 
 
 def test_sabotage_long_names_ascii_arrows_or_a_loose_fingerprint_are_named(examined):

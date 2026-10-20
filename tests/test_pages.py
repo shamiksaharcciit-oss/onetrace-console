@@ -25,7 +25,7 @@ import pytest
 
 from onetrace_console.checks import REPEAT_COMMAND, run_and_record
 from onetrace_console.ingest import accept
-from onetrace_console.pages import (ANSWER, AUTHORIZATION, CASE, EXECUTIONS, PageError,
+from onetrace_console.pages import (ANSWER, AUTHORIZATION, CASE, EXECUTIONS, RUN_PROOF, PageError,
                                     render_execution, render_executions)
 from tests.test_checks import FIXED_RAN_AT, _require_installed
 
@@ -60,7 +60,7 @@ def test_both_pages_render(execution):
     stages = {n for n in execution.pages if re.fullmatch(r"stage-\d+\.html", n)}
     #: And the run receipt (board 5).
     from onetrace_console.receipt_page import RECEIPT
-    assert stages and set(execution.pages) == {ANSWER, CASE, AUTHORIZATION, RECEIPT} | stages
+    assert stages and set(execution.pages) == {ANSWER, CASE, RUN_PROOF, AUTHORIZATION, RECEIPT} | stages
     for name, html in execution.pages.items():
         assert html.startswith("<!doctype html>") or html.lstrip().startswith("<!"), name
         #: The authorization page links the console's stylesheet, and
@@ -116,7 +116,8 @@ def test_the_pages_verdicts_equal_the_stored_reports(execution, checked, store):
     assert checked.check_verdict == ("holds" if overall == "PASS" else "contradicts")
     assert checked.check_exit == ("0" if overall == "PASS" else checked.check_exit)
 
-    case = execution.pages[CASE]
+    #: The check's rows are on the run page's "Proof" view.
+    case = execution.pages[RUN_PROOF]
     #: The report's own words are disclosed on the page, so the summary line itself is the
     #: strongest available comparison: if the page carried different numbers, it would be
     #: carrying a different report. Compared in its ESCAPED form -- the page escapes `>`,

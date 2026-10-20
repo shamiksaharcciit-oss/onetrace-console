@@ -33,6 +33,14 @@ REPO = Path(__file__).resolve().parent.parent
 #: builds before it were committed in a wheelhouse folder on the 0.2.0 branch only; that folder is gone.
 #: 0.1.2 (kept below as history) is no longer pinned. Since console 0.1.1, onetrace is 0.2.1
 #: from PyPI (its two files, as PyPI serves them, written here by script); onetrace-verify stays 0.2.0.
+#: Now onetrace 0.3.0 and onetrace-verify 0.3.0, from PyPI: its four files, as PyPI serves them,
+#: written here by script from its JSON. The two wheels are the release candidate's, pinned before.
+RELEASE_0_3_0 = {
+    "onetrace-0.3.0-py3-none-any.whl": "c20cc67cedd92a66b232af1cd970166df3c108cd86b31415ec299490f004a5bf",
+    "onetrace-0.3.0.tar.gz": "7fa599d344d53873f077c26207d9df0add2e5d6e710b8cfe21cb90a0690857df",
+    "onetrace_verify-0.3.0-py3-none-any.whl": "9b8f4db4ba75b4b7ae6871125246128de620cb25e7966bc1c140c3ad069483d2",
+    "onetrace_verify-0.3.0.tar.gz": "44721f8291e64ae1b199d4f03b771eaefed643ef4aa99d658ab559d3badd7771",
+}
 #: Since console 0.2.0, onetrace 0.2.2 and onetrace-verify 0.2.1, from PyPI, the same way.
 RELEASE_0_2_2 = {
     "onetrace-0.2.2-py3-none-any.whl": "5fbefd657d0622d8dad8d9506f118be2b417a9586589d8e50d59fd2a5fa21b1f",
@@ -62,19 +70,37 @@ ACCEPTED_29AG = {
 }
 
 
-def test_the_lock_pins_exactly_the_0_2_2_and_0_2_1_wheels(examined):
+def test_the_lock_pins_exactly_the_0_3_0_wheels(examined):
     entries = lock_entries()
     examined(2, "pins checked against PyPI's sha256")
     from tests.test_pins import CRYPTO_PINS
     #: The crypto extra's five, from PyPI, are held by tests/test_signed_run.py.
     assert set(entries) - CRYPTO_PINS == {
-        "onetrace==0.2.2", "onetrace-verify==0.2.1"} and CRYPTO_PINS <= set(entries), entries
+        "onetrace==0.3.0", "onetrace-verify==0.3.0"} and CRYPTO_PINS <= set(entries), entries
     assert {k: v for k, v in entries.items() if k not in CRYPTO_PINS} == {
-        "onetrace==0.2.2": RELEASE_0_2_2["onetrace-0.2.2-py3-none-any.whl"],
-        "onetrace-verify==0.2.1": RELEASE_0_2_2["onetrace_verify-0.2.1-py3-none-any.whl"],
+        "onetrace==0.3.0": RELEASE_0_3_0["onetrace-0.3.0-py3-none-any.whl"],
+        "onetrace-verify==0.3.0": RELEASE_0_3_0["onetrace_verify-0.3.0-py3-none-any.whl"],
     }, entries
-    assert ONETRACE_WHL_SHA256 == RELEASE_0_2_2["onetrace-0.2.2-py3-none-any.whl"]
-    assert ONETRACE_VERIFY_WHL_SHA256 == RELEASE_0_2_2["onetrace_verify-0.2.1-py3-none-any.whl"]
+    assert ONETRACE_WHL_SHA256 == RELEASE_0_3_0["onetrace-0.3.0-py3-none-any.whl"]
+    assert ONETRACE_VERIFY_WHL_SHA256 == RELEASE_0_3_0["onetrace_verify-0.3.0-py3-none-any.whl"]
+
+
+def test_the_0_3_0_pins_read_from_the_package_index(examined):
+    """The release's four files are held, and neither lock nor the wheel cache still says the pins
+    are the release candidate's wheels rather than the release on the package index. (The wheel
+    cache's own install from its verified folder is its design, and not looked at here.)"""
+    from tools import fetch_wheel_cache as w
+    locks = [REPO / "requirements.lock", REPO / "src" / "onetrace_console" / "requirements.lock"]
+    files = [*locks, REPO / "tools" / "fetch_wheel_cache.py"]
+    examined(len(RELEASE_0_3_0) + len(files), "release files and pin sources checked")
+    assert sorted(RELEASE_0_3_0) == ["onetrace-0.3.0-py3-none-any.whl", "onetrace-0.3.0.tar.gz",
+                                     "onetrace_verify-0.3.0-py3-none-any.whl", "onetrace_verify-0.3.0.tar.gz"]
+    assert w.SOURCE == "pypi"
+    for f in files:
+        assert "release candidate" not in f.read_text(encoding="utf-8"), f"{f.name} still names the release candidate"
+    for f in locks:
+        text = f.read_text(encoding="utf-8")
+        assert "--no-index" not in text and "--find-links" not in text, f"{f.name} names a local source"
 
 
 def test_no_development_build_is_left_in_the_tree(examined):
@@ -118,10 +144,10 @@ def test_the_wheel_cache_names_what_the_lock_pins(examined):
     entries = lock_entries()
     examined(len(w.WHEELS), "cached wheels checked against the lock")
     assert w.SOURCE == "pypi"
-    assert set(w.WHEELS) == {"onetrace==0.2.2", "onetrace-verify==0.2.1"}
+    assert set(w.WHEELS) == {"onetrace==0.3.0", "onetrace-verify==0.3.0"}
     for req, (name, sha) in w.WHEELS.items():
         assert entries[req] == sha, (req, sha)
-        assert RELEASE_0_2_2[name] == sha, (name, sha)
+        assert RELEASE_0_3_0[name] == sha, (name, sha)
 
 
 def _fake_exam(root: Path) -> None:

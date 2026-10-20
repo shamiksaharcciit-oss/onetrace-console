@@ -114,6 +114,11 @@ def _forged_pair(tmp_path: Path, *, artifacts: bool = False) -> tuple[dict, dict
     return _files(tmp_path / "a"), b
 
 
+def _both_views(path) -> str:
+    """A comparison page's two views together: the SDK's reports as it wrote them are on "Proof"."""
+    return path.read_bytes().decode() + path.with_name(path.stem + "-proof.html").read_bytes().decode()
+
+
 def _layer(page: str, verb: str = DIFF) -> tuple[str, str]:
     """(the note, if the page gives one, and the layer's text)."""
     found = re.search(rf"<summary>The {verb} report as the SDK wrote it[^<]*</summary>"
@@ -144,7 +149,7 @@ def test_the_forged_output_digest_is_refused_by_the_check_and_the_comparison_ove
     assert verdicts == {"a": "holds", "b": "contradicts"}, verdicts
     status, body = _post(base, f"/compare?a={keys['a']}&b={keys['b']}")
     assert status == 200, body[:300]
-    page = (root / "pages" / json.loads(body)["pages"]["diff"].lstrip("/")).read_bytes().decode()
+    page = _both_views(root / "pages" / json.loads(body)["pages"]["diff"].lstrip("/"))
     for c in RAW:
         assert c not in page, repr(c)
     assert not re.search(r"^FORGED", page, re.M), "a record drew a line of the page"
@@ -169,15 +174,16 @@ def forged(tmp_path, store):
 @pytest.mark.parametrize("verb", [DIFF, LOCALIZE])
 def test_the_stored_text_is_the_sdks_text_of_its_stored_report(forged, store, verb):
     """The layer can be rebuilt from the report only because the SDK's text IS its
-    report's text: `text()` over the stored JSON gives the stored `.txt`, byte for byte."""
+    report's text: `text()` over the stored JSON, drawn as the verb draws it (its repeated carried
+    lines once, `verbose=False`), gives the stored `.txt`, byte for byte."""
     from onetrace.report import text
 
     from onetrace_console.render import _ordered_as
     rep = report_json(forged, verb, store)
     assert rep is not None, f"the SDK wrote no {verb}.json"
     stored = report_text(forged, verb, store)
-    assert text(rep) == stored
-    assert text(_ordered_as(rep, stored)) == stored
+    assert text(rep, verbose=False) == stored
+    assert text(_ordered_as(rep, stored), verbose=False) == stored
 
 
 def test_a_report_the_sdk_wrote_in_its_own_order_agrees_once_its_keys_are_in_that_order(
@@ -198,8 +204,8 @@ def test_a_report_the_sdk_wrote_in_its_own_order_agrees_once_its_keys_are_in_tha
                          ran_at=FIXED_RAN_AT)
     rep, stored = report_json(comparison, DIFF, store), report_text(comparison, DIFF, store)
     assert any(len(a["differs"]) > 1 for a in rep["annotations"]), "no two settings differ"
-    assert text(rep) != stored
-    assert text(_ordered_as(rep, stored)) == stored
+    assert text(rep, verbose=False) != stored
+    assert text(_ordered_as(rep, stored), verbose=False) == stored
     note, layer = _layer(render_diff(comparison, store, generated_at=GENERATED_AT))
     assert note == "", "a real report's layer is rebuilt, its layout kept"
     from html import escape
@@ -303,6 +309,40 @@ def test_a_text_that_is_not_its_reports_is_escaped_whole_and_said(forged, store)
     assert "added\\u000d\\u000aFORGED\\u000a" in layer
 
 
+#: A carried verifier line the verbs print once for several receipts of one side, with the count.
+COLLAPSED = re.compile(r"\] \S[^\n]* on \d+ receipts")
+
+
+@pytest.mark.parametrize("verb", [DIFF, LOCALIZE])
+def test_a_text_whose_repeated_carried_lines_the_sdk_collapsed_is_shown_as_it_wrote_it(forged, store, verb):
+    """The verbs print and write the same carried verifier line on several receipts of one side once,
+    with a count ("originality on 2 receipts"); `--verbose` and the JSON keep each line. The stored
+    text is the collapsed form, it is its report's text drawn that way, and the layer shows it as
+    it is."""
+    stored = report_text(forged, verb, store)
+    assert COLLAPSED.search(stored), f"the SDK collapsed no carried line in {verb}.txt:\n{stored}"
+    note, layer = _layer(render_diff(forged, store, generated_at=GENERATED_AT), verb)
+    assert note == "", note
+    assert COLLAPSED.search(layer), "the collapsed line, as the SDK wrote it"
+
+
+def test_a_text_with_every_carried_line_is_its_reports_and_shown_as_written(forged, store):
+    """The same report's text with every carried line -- as `--verbose` writes it, and as the SDK
+    wrote it before it collapsed them -- is its report's text too, and is shown as it is."""
+    from onetrace.report import text
+
+    from onetrace_console.render import _ordered_as
+    run, stored = forged.verb(DIFF), report_text(forged, DIFF, store)
+    full = text(_ordered_as(report_json(forged, DIFF, store), stored), verbose=True)
+    assert full != stored and not COLLAPSED.search(full), "the verbose text keeps each line"
+    key = store.put(full.encode("utf-8"))
+    swapped = swap(run, reports=tuple((n, key if n == f"{DIFF}.txt" else k) for n, k in run.reports))
+    page = render_diff(swap(forged, verbs=tuple(swapped if v is run else v for v in forged.verbs)),
+                       store, generated_at=GENERATED_AT)
+    note, _layer_text = _layer(page)
+    assert note == "", note
+
+
 # ------------------------------------------------------------------ NB2-a
 
 #: A raw CR, and the six characters `\\u000d` written out: two names that display alike.
@@ -368,8 +408,8 @@ def test_two_names_that_escape_alike_drop_no_line_end_to_end(server, tmp_path):
         keys[side] = answer["run_key"]
     status, body = _post(base, f"/compare?a={keys['a']}&b={keys['b']}")
     assert status == 200, body[:300]
-    page = (root / "pages" / json.loads(body)["pages"]["diff"].lstrip("/")).read_bytes()
-    note, layer = _layer(page.decode("utf-8"))
+    page = _both_views(root / "pages" / json.loads(body)["pages"]["diff"].lstrip("/"))
+    note, layer = _layer(page)
     #: One-to-one escaping (30bj §4): the two names stay apart, and the layer is rebuilt.
     assert note == "", note
     assert f"{TWIN_SHOWN[0]}   1  -&gt;  2" in layer and f"{TWIN_SHOWN[1]}   3  -&gt;  4" in layer

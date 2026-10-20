@@ -124,7 +124,7 @@ def test_the_overview_has_four_cards_in_the_rulings_order(ten_runs):
     store, _ = ten_runs
     home = render_all(store, generated_at=GENERATED_AT)[HOME]
     cards = re.findall(r'<div data-card="([^"]+)">', _section(home, "cards"))
-    assert cards == ["runs", "records-agree", "changed-vs-baseline", "incidents"]
+    assert cards == ["pipelines", "runs", "records-agree", "need-attention"]
 
 
 def test_every_run_card_opens_exactly_the_runs_it_counts(diverging, examined):
@@ -133,15 +133,16 @@ def test_every_run_card_opens_exactly_the_runs_it_counts(diverging, examined):
     pages = render_all(store, generated_at=GENERATED_AT)
     home = pages[HOME]
     total = len(store.runs())
-    for name in ("records-agree", "changed-vs-baseline"):
+    for name in ("records-agree", "need-attention"):
         card = _card(home, name)
         href = re.search(r'<a href="([^"]+)"', card).group(1)
         lead = re.search(r'<p class="lead">(.*?)</p>', card, re.S).group(1)
         shown = re.search(r"(\d+) of (\d+) runs?", _text(lead))
         examined(1, f"the {name} card")
         assert (int(shown.group(1)), int(shown.group(2))) == (_rows(pages[href]), total), name
-    changed = _card(home, "changed-vs-baseline")
-    assert re.search(r"1 of 2 runs changed vs baseline", _text(changed)), _text(changed)
+    #: Changed vs baseline, a card before the Overview led with its pipelines, is on All counts.
+    from onetrace_console.render import COUNTS
+    assert "1 run of 2 — changed vs baseline" in _text(pages[COUNTS]), "All counts"
 
 
 def test_the_runs_card_names_its_pipelines_and_what_a_pipeline_is_here(ten_runs):
@@ -155,11 +156,15 @@ def test_no_incident_is_called_open(ten_runs):
     """The console keeps no open or closed state for an incident."""
     from onetrace_console.incidents import derive
     store, _ = ten_runs
-    home = render_all(store, generated_at=GENERATED_AT)[HOME]
-    card = _text(_card(home, "incidents"))
-    assert f"{len(derive(store))} incident" in card
-    assert not re.search(r"\bopen incidents?\b|\d+\s+open\b", card.lower()), card
-    assert "none is called open" in card, "and the card says why"
+    from onetrace_console.incident_pages import INCIDENTS
+    pages = render_all(store, generated_at=GENERATED_AT)
+    #: The Overview's Incidents card is gone; its count is on All counts and the Incidents page,
+    #: and the Incidents page says why none is called open.
+    for name in (HOME, INCIDENTS):
+        text = _text(pages[name])
+        assert not re.search(r"\bopen incidents?\b|\d+\s+open\b", text.lower()), name
+    assert "none is called open" in _text(pages[INCIDENTS]), "and the Incidents page says why"
+    assert derive(store) is not None
 
 
 def test_the_full_list_of_counts_is_kept_and_says_why(ten_runs):

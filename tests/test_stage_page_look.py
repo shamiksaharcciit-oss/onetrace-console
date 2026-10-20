@@ -102,17 +102,28 @@ def test_every_stage_page_is_held_to_its_receipt(demo, examined):
     assert n > 100
 
 
-def test_the_demo_keeps_no_externally_sourced_input(demo, examined):
-    """The demo's own data decides what a public console could show as kept text: no step of any
-    demo run lists an externally sourced input as kept. (The rule that a public console never
-    shows such text is held in tests/test_kept_inputs.py; this holds the data beside it.)"""
-    from onetrace_console.kept_inputs import external_kept
+def test_the_demo_keeps_externally_sourced_inputs_only_as_its_builder_s_example_data(demo, examined):
+    """The demo's own data decides what a public console could show as kept text: a step lists an
+    externally sourced input as kept only in a pipeline the builder marks as example data, and
+    each such input's digest is one of the builder's own invented inputs. (The rule that a public
+    console never shows such text otherwise is held in tests/test_kept_inputs.py and
+    tests/test_demo_example_inputs.py; this holds the data beside it.)"""
+    from onetrace_console.demo_store import EXAMPLE_DATA, example_input_digests, runs as specs
+    from onetrace_console.kept_inputs import EXTERNALLY_SOURCED, external_kept, listed
     from onetrace_console.stage_pages import _steps
     store, _, _ = demo
     runs = store.runs()
+    marked = {s.run_id or s.folder for s in specs() if s.pipeline in EXAMPLE_DATA}
+    allowed = example_input_digests()
     examined(len(runs), "demo runs")
-    assert {run.run_id: external_kept(_steps(run, store)) for run in runs
-            if external_kept(_steps(run, store))} == {}
+    assert {run.run_id for run in runs if external_kept(_steps(run, store))} <= marked
+    for run in runs:
+        for step in _steps(run, store):
+            names = set(listed(step["receipt"]))
+            for i in step["receipt"].get("inputs") or []:
+                if i.get("name") in names and i.get("trust_class") == EXTERNALLY_SOURCED:
+                    assert i.get("digest") in allowed, (run.run_id, i.get("name"))
+    assert any(external_kept(_steps(run, store)) for run in runs), "the demo keeps no example input"
 
 
 def test_sabotage_a_stage_page_that_strays_from_its_receipt_is_named(demo, examined):

@@ -45,7 +45,8 @@ from pathlib import PurePosixPath
 from onetrace_console.preview import PREVIEW_NOT_INGESTED, is_format_refusal, preview_not_run_row
 from onetrace_console.staging import (StagingError, ask_the_verifier, staging,
                                       write_delivery)
-from onetrace_console.store import SameFileError, StoredRun, Store, StoreError, digest, run_key
+from onetrace_console.store import (SameFileError, StoredRun, Store, StoreError, digest,
+                                    folder_key, run_key)
 
 #: R16: a format the store implements. Not a guess -- these are the two strings the
 #: emitter writes, measured from a run the SDK produced, and anything else is refused
@@ -539,7 +540,8 @@ def _member_named(e: OSError, run_folder) -> str:
 
 
 def accept(data: bytes, store: Store, *, headers: dict[str, str] | None = None,
-           received_at: str | None = None, limits=None) -> Accepted | Rejection:
+           received_at: str | None = None, limits=None, run_folder: str = "",
+           shared_head: bool = False) -> Accepted | Rejection:
     """Validate a delivery completely, then store it completely, or store nothing.
 
     `headers` may carry `run_id`, `chain_head` and `format`. The design note has the
@@ -551,6 +553,10 @@ def accept(data: bytes, store: Store, *, headers: dict[str, str] | None = None,
 
     `limits` is an `onetrace_console.config.Config` (or `None` for its defaults) --
     `read_tar`'s own upload-hardening limits.
+
+    `run_folder`: the run folder a folder load read the delivery from, kept on the run. With
+    `shared_head` -- another folder carries the same run and chain head -- the run is stored under
+    its folder's own key (`store.folder_key`), so neither folder's run stands in for the other's.
     """
     headers = {k.lower(): v for k, v in (headers or {}).items()}
     try:
@@ -742,7 +748,8 @@ def accept(data: bytes, store: Store, *, headers: dict[str, str] | None = None,
                              body=said.text, from_verifier=True)
         return Rejection(tuple(rows), body="\n".join(rows) + "\n", from_verifier=False)
 
-    key = run_key(run_id, chain_head)
+    key = (folder_key(run_id, chain_head, run_folder) if run_folder and shared_head
+           else run_key(run_id, chain_head))
     try:
         held = store.get_run(key)
     except StoreError as e:
@@ -764,8 +771,9 @@ def accept(data: bytes, store: Store, *, headers: dict[str, str] | None = None,
         return Accepted(run=held, created=False, status=200)
 
     flags: list[str] = []
-    if store.runs_with_id(run_id):
-        # "two chains under one name is itself a finding"
+    if any(r.chain_head != chain_head for r in store.runs_with_id(run_id)):
+        # "two chains under one name is itself a finding" -- two chains: a run folder copied
+        # under another name carries the same chain, which `twins` reads instead.
         flags.append(RUN_ID_REUSED)
     flags.extend(header_disagreements)
 
@@ -795,6 +803,7 @@ def accept(data: bytes, store: Store, *, headers: dict[str, str] | None = None,
         #: "3 of 3" on Home -- nor any file it names.
         recorded_count=len(receipts),
         **delivered_and_retries(attempts, seen_declared),
+        folder=run_folder,
     )
     store.put_run(run)
     return Accepted(run=run, created=True)
@@ -805,23 +814,28 @@ def bundle(run: StoredRun, store: Store, *, public: bool = False) -> bytes:
 
     `public`: a public console's download leaves out `inputs/`, the kept input text, and the
     lines of `SHA256SUMS` that name its files, so the record holds exactly the files its sums name.
-    Kept text is removable by design: the run verifies without it.
+    Kept text is removable by design: the run verifies without it. The one exception is a file
+    whose bytes are the demo builder's own example data (`kept_inputs.example_allowed`).
 
     Deterministic on purpose -- fixed mtime, uid, gid and names -- so that the same run
     exports to the same bytes. `GET /v1/runs/{id}/bundle` is the "Export evidence" button
     and the "repeat the check without us" answer, and an export that differed run to run
     would make a reader wonder which copy was the evidence.
     """
-    from onetrace_console.kept_inputs import FOLDER
+    from onetrace_console.kept_inputs import FOLDER, example_allowed
+    left_out = ({path for path, key in run.listing if _under(path, FOLDER)
+                 and not example_allowed("sha256:" + key)} if public else set())
     buf = io.BytesIO()
     with tarfile.open(fileobj=buf, mode="w") as tar:
         for path, key in run.listing:
-            if public and _under(path, FOLDER):
+            if path in left_out:
                 continue
             blob = store.get(key)
             if public and same_file(path) == same_file(SUMS_NAME):
+                gone = {same_file(p) for p in left_out}
                 blob = b"".join(line for line in blob.splitlines(keepends=True)
-                                if not _under(_summed_name(line), FOLDER))
+                                if not (_under(_summed_name(line), FOLDER)
+                                        and same_file(_summed_name(line)) in gone))
             info = tarfile.TarInfo(name=path)
             info.size = len(blob)
             info.mtime = 0

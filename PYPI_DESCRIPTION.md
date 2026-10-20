@@ -10,7 +10,7 @@ The console never computes a verdict of its own. It keeps each run's files exact
 pip install onetrace-console
 ```
 
-It needs Python 3.12 or later. It installs from PyPI alone: `onetrace` 0.2.2 and `onetrace-verify` 0.2.1, with the `[crypto]` extra so signatures and anchors are checked. The pages' viewer ships inside the package.
+It needs Python 3.12 or later. It installs from PyPI alone: `onetrace` 0.3.0 and `onetrace-verify` 0.3.0, with the `[crypto]` extra so signatures and anchors are checked. The pages' viewer ships inside the package.
 
 ## See it with the demo's runs
 
@@ -18,9 +18,9 @@ It needs Python 3.12 or later. It installs from PyPI alone: `onetrace` 0.2.2 and
 onetrace-console demo
 ```
 
-This records the demo's runs into `onetrace-console-demo/` under the folder you start it from, starts the console, loads them, stores five comparisons, and prints the pages' addresses. The runs come from four small example pipelines that ship with the console: a question-and-answer pipeline over an example shop's refund policy, the reference demo's coding agent, a support-ticket triage, and a support reply drafted by a stub whose wording varies from run to run. The draft names the refund window in words; a later policy stage puts in the number of days. They make no network calls and use no hosted model: the embedder is a hashed bag of words, the answerer quotes the text it retrieved, and the times in the records are the times you ran it. Some runs are altered after they were recorded, on purpose, so the console has something to find: one has an output byte changed, one an output file deleted, one is unsigned, and one is signed with a key the demo's trust file doesn't name. The demo keeps its store and its trust file in that folder too. It runs in local mode, so it refuses to start while `ONETRACE_CONSOLE_CONFIG` is set.
+This records the demo's runs into `onetrace-console-demo/` under the folder you start it from, starts the console, loads them, stores ten comparisons, and prints the pages' addresses. The runs come from seven small example pipelines that ship with the console: a question-and-answer pipeline over an example shop's refund policy, the reference demo's coding agent, a support-ticket triage, a support reply drafted by a stub whose wording varies from run to run, and three over physical readings: a pump's vibration to a maintenance work order, a camera frame of a bottle to a fill-level reject, and a temperature logger to releasing or quarantining a shipment. The draft names the refund window in words; a later policy stage puts in the number of days. Every reading, ticket and name in them is invented example data, and the demo records and compares; it controls no equipment. They make no network calls and use no hosted model: the embedder is a hashed bag of words, the answerer quotes the text it retrieved, and the times in the records are the times you ran it. Nine of its runs are broken on purpose when the demo is built; the read-only demo's Overview lists each one, with what was done to it and what its own page reads. The demo keeps its store and its trust file in that folder too. It runs in local mode, so it refuses to start while `ONETRACE_CONSOLE_CONFIG` is set.
 
-![The Overview, with the demo's 31 runs from four pipelines](https://raw.githubusercontent.com/shamiksaharcciit-oss/onetrace-console/v0.2.0/docs/screenshots/overview.png)
+![The Overview, with the demo's 41 runs from seven pipelines](https://raw.githubusercontent.com/shamiksaharcciit-oss/onetrace-console/v0.2.1/docs/screenshots/overview.png)
 
 A read-only copy of the demo is hosted at https://demo.oneproof.dev. To try the read-only mode yourself, run `onetrace-console demo --public`.
 
@@ -56,9 +56,9 @@ While the console runs, it reads the runs folder again every 2 seconds and takes
 - Every check runs with these files, and a stored check records which ones it ran with. Started again with the same files, nothing is checked again; with different ones, every run is.
 - A file that can't be read is refused at start, with how to fix it.
 
-![One run's page: what was checked, and the verifier's result](https://raw.githubusercontent.com/shamiksaharcciit-oss/onetrace-console/v0.2.0/docs/screenshots/run.png)
+![One run's page: what was checked, and the verifier's result](https://raw.githubusercontent.com/shamiksaharcciit-oss/onetrace-console/v0.2.1/docs/screenshots/run.png)
 
-![A comparison of two runs, with the first stage that changed](https://raw.githubusercontent.com/shamiksaharcciit-oss/onetrace-console/v0.2.0/docs/screenshots/comparison.png)
+![A comparison of two runs, with the first stage that changed](https://raw.githubusercontent.com/shamiksaharcciit-oss/onetrace-console/v0.2.1/docs/screenshots/comparison.png)
 
 ## What it shows
 
@@ -81,7 +81,7 @@ A run's record does not show:
 
 Started as above, it listens on 127.0.0.1 only, and makes no network calls; `--open` asks your browser to open the local page. A folder load keeps what it stores in a `store` folder under the folder you start it from, and `demo` keeps it in `onetrace-console-demo/`.
 
-To run it for a team, as a container with sign-in, see [OPERATOR_README.md](https://github.com/shamiksaharcciit-oss/onetrace-console/blob/v0.2.0/OPERATOR_README.md).
+To run it for a team, as a container with sign-in, see [OPERATOR_README.md](https://github.com/shamiksaharcciit-oss/onetrace-console/blob/v0.2.1/OPERATOR_README.md).
 
 ## For contributors
 

@@ -555,6 +555,10 @@ RULED: dict[str, tuple[str, str]] = {
 #: ladder; the canvas is not a sealed text, so the words are provisional here until they are
 #: fixed, and each entry names the board it is taken from.
 PROVISIONAL: dict[str, tuple[str, str]] = {
+    "rung.approved.no_paths": (
+        "no paths were observed: the record declares an approved plan but lists no path the run "
+        "took, so whether it followed the plan can't be said",
+        RULED_29GS + ", the case a plan is declared and no path observed; no words ruled yet"),
     "fingerprint.whole": (
         "Each fingerprint in full",
         "fingerprints short in text and tables (the visual-quality work order): the fold holding "

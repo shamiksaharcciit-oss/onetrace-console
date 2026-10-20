@@ -970,6 +970,16 @@ EXPLAINED.setdefault("diff[held-a,held-b]", {}).setdefault("new", {}).update(dic
 _SDK_022 = "the comparison names the installed SDK, 0.2.2"
 EXPLAINED.setdefault("diff[held-a,held-b]", {}).setdefault("new", {}).update(dict.fromkeys(
     ["Compared with onetrace 0.2.2, build wheel:<hex>, at <time>."], _SDK_022))
+#: 0.3.0 since the pins moved to its release candidate's wheels. Measured, not typed.
+_SDK_030 = "the comparison names the installed SDK, 0.3.0"
+EXPLAINED.setdefault("diff[held-a,held-b]", {}).setdefault("new", {}).update(dict.fromkeys(
+    ["Compared with onetrace 0.3.0, build wheel:<hex>, at <time>."], _SDK_030))
+#: Since 0.3.0 the SDK's text says a carried verifier line repeated on several receipts of one side
+#: once, with the count; its JSON keeps each. The refused layers on the forged pair, as written.
+#: Measured, not typed.
+_CARRIED_030 = "the SDK's text says a carried line on several receipts of a side once, with the count"
+EXPLAINED.setdefault("diff[held-a,held-b]", {}).setdefault("new", {}).update(dict.fromkeys(
+    ["baseline (the baseline run's folder) nb2-base (run) candidate (the candidate run's folder) (no run id) (run) diff: refused — does not verify: (the candidate run's folder) REFUSED — candidate does not verify: [FAIL] receipts/01-alpha.json: digest is sha256: and 64 lower-case hex -- outputs[0].digest: 'sha256:ab\\\\r\\\\nFORGED\\\\tROW\\\\r\\\\n0000000000000000000000000000000000000000' carried: [baseline] [NOT-RUN] originality on 2 receipts -- record is declared unanchored; this verifier can establish consistency, not originality [candidate] [NOT-RUN] originality on 2 receipts -- record is declared unanchored; this verifier can establish consistency, not originality [candidate] [NOT-RUN] run: artifacts -- artifacts not present; output files not checked", "baseline (the baseline run's folder) nb2-base (run) candidate (the candidate run's folder) (no run id) (run) localize: refused — does not verify: (the candidate run's folder) REFUSED — candidate does not verify: [FAIL] receipts/01-alpha.json: digest is sha256: and 64 lower-case hex -- outputs[0].digest: 'sha256:ab\\\\r\\\\nFORGED\\\\tROW\\\\r\\\\n0000000000000000000000000000000000000000' carried: [baseline] [NOT-RUN] originality on 2 receipts -- record is declared unanchored; this verifier can establish consistency, not originality [candidate] [NOT-RUN] originality on 2 receipts -- record is declared unanchored; this verifier can establish consistency, not originality [candidate] [NOT-RUN] run: artifacts -- artifacts not present; output files not checked"], _CARRIED_030))
 
 #: Two times, each named: "Received" is when this console took a run in, and the run's own start
 #: time, from its record, stands beside it under "Ran". Measured, not typed.
@@ -1265,8 +1275,134 @@ EXPLAINED.setdefault('home.html + counts.html', {}).setdefault('gone', {}).updat
 EXPLAINED.setdefault('home.html + counts.html', {}).setdefault('new', {}).update(dict.fromkeys(
     ["0 of 1", "0 of 3", "0 of 4 in the other states: couldn't check, no verdict recorded", "0 runs of 4 — whose records couldn't be checked", "0 runs of 4 — with no verdict recorded", "1 of 4", "1 of 4 records agree · 2 of 4 contradict their record · 1 of 4 not checked (held without its output files required)", "1 of 4 runs whose records agree", "1 of 4 · 1 not checked (held without its output files required) · 0 couldn't check · 2 contradict their record · 0 no verdict recorded", "1 run of 4 — whose records were not checked", "2 runs of 4 — that contradict their record", "3 runs of 4 — needing attention first, in the order stated on the Overview", "All 3 of them", "Below the count: each run's \"Records agree\" as its own page reads it, as a count of runs; All counts has each in full.", "Each day's counts are counts of the runs received that day, each by its \"Records agree\" as its own page reads it. A marker row between two days names a recorded settings or code digest that differs from the day before, in a pipeline with runs on both days.", "Needs attention first · 3 of 4 runs", "Not checked", "Not checked (held without its output files required)", "Not checked · dag-r37-r · received <time>", "Order: contradicts itself, then couldn't check, then not checked, then no verdict recorded, then a declared stage missing, then last attempt failed, then stopped at a step, then changed vs baseline; newest first within each.", "Records agree", "Records agree: the check held, with the run's output files present.", "held without its output files required"], _ONE_READING))
 NEW_PAGES.update({'executions-no-verdict.html': "the list of runs with no verdict recorded, rung 1's own state"})
+
+
+#: Runs are folders, not chain heads: the incident rule for two run folders carrying the same run
+#: and chain head whose files differ. It raises nothing here (no two fixture folders share a head),
+#: so the Overview counts it at 0, the Incidents page lists it at 0 with its words, and its own
+#: list page is new. Measured, not typed.
+_HEAD_SHARED = "the incident rule for two run folders sharing a chain head whose files differ, at 0"
+EXPLAINED.setdefault("home.html + counts.html", {}).setdefault("new", {}).update(dict.fromkeys(
+    ["0 runs of 4 — runs raising I-HEAD-SHARED"], _HEAD_SHARED))
+EXPLAINED.setdefault("incidents.html", {}).setdefault("new", {}).update(dict.fromkeys(
+    ["I-HEAD-SHARED — 0 runs of 4",
+     "Two folders share a chain head but their contents differ. Raised when two run folders carry "
+     "the same run and chain head, and their files differ. this rule's list"], _HEAD_SHARED))
+NEW_PAGES.update({"incidents-i-head-shared.html": "the list of runs the new incident rule raised, "
+                  "two run folders sharing a chain head whose files differ"})
+#: Each run page in two linked views, "What changed" (the page's own address) and "Proof" (a page
+#: beside it): the checks behind it -- what was checked and what was not, the check's own words,
+#: and the authorization policy -- move whole to "Proof", so the two views are compared as one, and
+#: each run's "Proof" is a new page.
+_VIEWS = "each run page in two linked views, What changed and Proof"
+for _run in ("r11", "held-a", "held-b", "forged", "preview"):
+    MOVED.append((f"run[{_run}]/case.html", f"run[{_run}]/proof.html"))
+    NEW_PAGES[f"run[{_run}]/proof.html"] = _VIEWS + ": the run page's Proof view"
+    #: What was declared of the run page holds for its two views, compared as one.
+    for _kind, _blocks in EXPLAINED.get(f"run[{_run}]/case.html", {}).items():
+        EXPLAINED.setdefault(f"run[{_run}]/case.html + run[{_run}]/proof.html", {}).setdefault(
+            _kind, {}).update(_blocks)
+#: Each run page's two views, measured by the tool, not typed: the two tabs; the line of what
+#: the records establish (red, and the verdicts on Proof, for a run that contradicts its record or
+#: could not be checked); and the page's own foot (and the preview label), on both views.
+_VIEWS_TABS = _VIEWS + ": the two tabs, What changed and Proof"
+_VIEWS_LINE = _VIEWS + ": the line of what the records establish, from rung 1"
+_VIEWS_BOTH = _VIEWS + ": the page's own foot and its preview label, on both views"
+#: A red run's "What changed": the head without what it reads from the record, and one line
+#: in its place; the head's count of declared stages is a block of its own (on "Proof" whole).
+_VIEWS_WITHHELD = _VIEWS + ": a red run's head on What changed, without what it reads from the record"
+EXPLAINED.setdefault('run[forged]/case.html + run[forged]/proof.html', {}).setdefault('new', {}).update(dict.fromkeys(
+    ['Not shown: this record does not hold up. Proof says why', 'recorded in the format stage-receipt-chain/0.2 · ran <time> · received by this console <time>'], _VIEWS_WITHHELD))
+EXPLAINED.setdefault('run[held-b]/case.html + run[held-b]/proof.html', {}).setdefault('new', {}).update(dict.fromkeys(
+    ['Not shown: this record does not hold up. Proof says why', 'recorded in the format stage-receipt-chain/0.2 · ran <time> · received by this console <time>'], _VIEWS_WITHHELD))
+EXPLAINED.setdefault('run[preview]/case.html + run[preview]/proof.html', {}).setdefault('new', {}).update(dict.fromkeys(
+    ['Not shown: this record could not be checked. Proof says why', 'recorded in the format stage-receipt-chain/0.0-preview · ran <time> · received by this console <time>'], _VIEWS_WITHHELD))
+EXPLAINED.setdefault('run[forged]/case.html + run[forged]/proof.html', {}).setdefault('new', {}).update(dict.fromkeys(
+    ["Check it yourself", "Computed over this file with the fingerprint's own 64 characters set to zeros. To repeat it without us:", "Regenerate this page", "Repeat the check — Run it from the run's folder:", "This file's fingerprint: <hex>", "This record shows what was verified and evaluated at the time — not what was ultimately true.", "Where this answer came from", "python3 -c \"import hashlib,re,sys;b=open(sys.argv[1],'rb').read();m=re.findall(rb'<!--fingerprint-->([0-9a-f]{64})<!--/fingerprint-->',b);assert len(m)==1,'expected exactly one fingerprint';z=b.replace(b'<!--fingerprint-->'+m[0],b'<!--fingerprint-->'+b'0'*64);print('matches' if hashlib.sha256(z).hexdigest()==m[0].decode() else 'DOES NOT MATCH')\" proof.html"], _VIEWS_BOTH))
+EXPLAINED.setdefault('run[forged]/case.html + run[forged]/proof.html', {}).setdefault('new', {}).update(dict.fromkeys(
+    ["Contradicts its record: this console's check, with the run's output files required, failed. The step-by-step comparison is not shown on this view: the record does not hold up. Proof says why", "These rows come from a record that does not hold up.", "The step-by-step verdicts are here, not on What changed: Contradicts its record: this console's check, with the run's output files required, failed."], _VIEWS_LINE))
+EXPLAINED.setdefault('run[forged]/case.html + run[forged]/proof.html', {}).setdefault('new', {}).update(dict.fromkeys(
+    ["What changedProof"], _VIEWS_TABS))
+EXPLAINED.setdefault('run[held-a]/case.html + run[held-a]/proof.html', {}).setdefault('new', {}).update(dict.fromkeys(
+    ["Check it yourself", "Computed over this file with the fingerprint's own 64 characters set to zeros. To repeat it without us:", "Regenerate this page", "Repeat the check — Run it from the run's folder:", "This file's fingerprint: <hex>", "This record shows what was verified and evaluated at the time — not what was ultimately true.", "Where this answer came from", "python3 -c \"import hashlib,re,sys;b=open(sys.argv[1],'rb').read();m=re.findall(rb'<!--fingerprint-->([0-9a-f]{64})<!--/fingerprint-->',b);assert len(m)==1,'expected exactly one fingerprint';z=b.replace(b'<!--fingerprint-->'+m[0],b'<!--fingerprint-->'+b'0'*64);print('matches' if hashlib.sha256(z).hexdigest()==m[0].decode() else 'DOES NOT MATCH')\" proof.html"], _VIEWS_BOTH))
+EXPLAINED.setdefault('run[held-a]/case.html + run[held-a]/proof.html', {}).setdefault('new', {}).update(dict.fromkeys(
+    ["Records agree: this console's check held, with the run's output files required. Every check behind this is on Proof"], _VIEWS_LINE))
+EXPLAINED.setdefault('run[held-a]/case.html + run[held-a]/proof.html', {}).setdefault('new', {}).update(dict.fromkeys(
+    ["What changedProof"], _VIEWS_TABS))
+EXPLAINED.setdefault('run[held-b]/case.html + run[held-b]/proof.html', {}).setdefault('new', {}).update(dict.fromkeys(
+    ["Check it yourself", "Computed over this file with the fingerprint's own 64 characters set to zeros. To repeat it without us:", "Regenerate this page", "Repeat the check — Run it from the run's folder:", "This file's fingerprint: <hex>", "This record shows what was verified and evaluated at the time — not what was ultimately true.", "Where this answer came from", "python3 -c \"import hashlib,re,sys;b=open(sys.argv[1],'rb').read();m=re.findall(rb'<!--fingerprint-->([0-9a-f]{64})<!--/fingerprint-->',b);assert len(m)==1,'expected exactly one fingerprint';z=b.replace(b'<!--fingerprint-->'+m[0],b'<!--fingerprint-->'+b'0'*64);print('matches' if hashlib.sha256(z).hexdigest()==m[0].decode() else 'DOES NOT MATCH')\" proof.html"], _VIEWS_BOTH))
+EXPLAINED.setdefault('run[held-b]/case.html + run[held-b]/proof.html', {}).setdefault('new', {}).update(dict.fromkeys(
+    ["Contradicts its record: this console's check, with the run's output files required, failed. The step-by-step comparison is not shown on this view: the record does not hold up. Proof says why", "These rows come from a record that does not hold up.", "The step-by-step verdicts are here, not on What changed: Contradicts its record: this console's check, with the run's output files required, failed."], _VIEWS_LINE))
+EXPLAINED.setdefault('run[held-b]/case.html + run[held-b]/proof.html', {}).setdefault('new', {}).update(dict.fromkeys(
+    ["What changedProof"], _VIEWS_TABS))
+EXPLAINED.setdefault('run[preview]/case.html + run[preview]/proof.html', {}).setdefault('new', {}).update(dict.fromkeys(
+    ["Check it yourself", "Computed over this file with the fingerprint's own 64 characters set to zeros. To repeat it without us:", "Regenerate this page", "Repeat the check — Run it from the run's folder:", "This file's fingerprint: <hex>", "This record shows what was verified and evaluated at the time — not what was ultimately true.", "Where this answer came from", "preview format: 1 run shown here declare stage-receipt-chain/0.0-preview. The pinned verifier reads that format but does not perform the draft-00 checks on it, and says so in its own report.", "python3 -c \"import hashlib,re,sys;b=open(sys.argv[1],'rb').read();m=re.findall(rb'<!--fingerprint-->([0-9a-f]{64})<!--/fingerprint-->',b);assert len(m)==1,'expected exactly one fingerprint';z=b.replace(b'<!--fingerprint-->'+m[0],b'<!--fingerprint-->'+b'0'*64);print('matches' if hashlib.sha256(z).hexdigest()==m[0].decode() else 'DOES NOT MATCH')\" proof.html"], _VIEWS_BOTH))
+EXPLAINED.setdefault('run[preview]/case.html + run[preview]/proof.html', {}).setdefault('new', {}).update(dict.fromkeys(
+    ["Couldn't check: this console's check could not settle whether the records agree. The step-by-step comparison is not shown on this view: the record could not be checked. Proof says why", "These rows come from a record that could not be checked.", "The step-by-step verdicts are here, not on What changed: Couldn't check: this console's check could not settle whether the records agree."], _VIEWS_LINE))
+EXPLAINED.setdefault('run[preview]/case.html + run[preview]/proof.html', {}).setdefault('new', {}).update(dict.fromkeys(
+    ["What changedProof"], _VIEWS_TABS))
+EXPLAINED.setdefault('run[r11]/case.html + run[r11]/proof.html', {}).setdefault('new', {}).update(dict.fromkeys(
+    ["Check it yourself", "Computed over this file with the fingerprint's own 64 characters set to zeros. To repeat it without us:", "Regenerate this page", "Repeat the check — Run it from the run's folder:", "This file's fingerprint: <hex>", "This record shows what was verified and evaluated at the time — not what was ultimately true.", "Where this answer came from", "python3 -c \"import hashlib,re,sys;b=open(sys.argv[1],'rb').read();m=re.findall(rb'<!--fingerprint-->([0-9a-f]{64})<!--/fingerprint-->',b);assert len(m)==1,'expected exactly one fingerprint';z=b.replace(b'<!--fingerprint-->'+m[0],b'<!--fingerprint-->'+b'0'*64);print('matches' if hashlib.sha256(z).hexdigest()==m[0].decode() else 'DOES NOT MATCH')\" proof.html"], _VIEWS_BOTH))
+EXPLAINED.setdefault('run[r11]/case.html + run[r11]/proof.html', {}).setdefault('new', {}).update(dict.fromkeys(
+    ["Not checked: this console's check did not look at what this needs (held without its output files required). Every check behind this is on Proof"], _VIEWS_LINE))
+EXPLAINED.setdefault('run[r11]/case.html + run[r11]/proof.html', {}).setdefault('new', {}).update(dict.fromkeys(
+    ["What changedProof"], _VIEWS_TABS))
 #: Pages gone on purpose, each with why.
 GONE_PAGES: dict[str, str] = {'executions-holds.html': "the check's verdict tally's list, gone with it: Records agree counts rung 1's states"}
+
+
+#: A red run's "What changed" keeps the answer trail's command to repeat the check, with "What could
+#: be re-checked": it says nothing read from the record's contents. The trail stays whole on "Proof",
+#: so the two views together carry its words once more. Measured, not typed.
+_VIEWS_REPEAT = _VIEWS + ": a red run's What changed keeps the trail's command, with What could be re-checked"
+EXPLAINED.setdefault('run[forged]/case.html + run[forged]/proof.html', {}).setdefault('new', {}).update(dict.fromkeys(
+    ['Repeat the check', "Run it from the run's folder:"], _VIEWS_REPEAT))
+EXPLAINED.setdefault('run[held-b]/case.html + run[held-b]/proof.html', {}).setdefault('new', {}).update(dict.fromkeys(
+    ['Repeat the check', "Run it from the run's folder:"], _VIEWS_REPEAT))
+EXPLAINED.setdefault('run[preview]/case.html + run[preview]/proof.html', {}).setdefault('new', {}).update(dict.fromkeys(
+    ['Repeat the check', "Run it from the run's folder:"], _VIEWS_REPEAT))
+
+#: A pipeline's page: its stage chain with where its stored comparisons first differ, its runs as
+#: tiles, and two filters, each its own page.
+_PIPELINE_PAGE = "a pipeline's page, its runs as tiles, and its two filters"
+for _p in ("p1", "p2"):
+    NEW_PAGES.update({f"pipeline-{_p}.html": _PIPELINE_PAGE,
+                      f"pipeline-{_p}-agree.html": _PIPELINE_PAGE + ": the runs whose records agree",
+                      f"pipeline-{_p}-attention.html": _PIPELINE_PAGE + ": the runs that need attention"})
+
+#: The Overview, pipelines first: four tiles (pipelines, runs, records agree with its bar, need
+#: attention with its parts named) in the four cards' place, then one card per pipeline with one
+#: mark per run and a legend. Changed vs baseline and Incidents leave the Overview's top; their
+#: counts stay on All counts, and the Incidents page now says why no incident is called open.
+_PIPELINES_FIRST = "the Overview leads with its pipelines: four tiles, then a card per pipeline"
+EXPLAINED.setdefault("home.html + counts.html", {}).setdefault("gone", {}).update(dict.fromkeys(
+    ["Changed vs baseline", "Incidents"], _PIPELINES_FIRST))
+EXPLAINED.setdefault("home.html + counts.html", {}).setdefault("new", {}).update(dict.fromkeys(
+    ["1 of 1 not checked (held without its output files required)",
+     "1 of 3 records agree · 2 of 3 contradict their record", "1 run", "2 pipelines",
+     "3 of 4 runs need attention", "3 runs",
+     "A pipeline here is a declared stage list: runs that declare the same stages, in the same "
+     "order. No record names its pipeline.",
+     "Contradicts itself: 2 · Not checked: 1",
+     "Each a stage list its runs declare; one card each below.",
+     'Each mark is one run\'s "Records agree", as its own page reads it:',
+     "Each pipeline's runs", "Need attention", "P1", "P2", "Pipelines", "alpha", "beta", "join",
+     "zeta"], _PIPELINES_FIRST))
+EXPLAINED.setdefault("incidents.html", {}).setdefault("new", {}).update(dict.fromkeys(
+    ["This console keeps no open or closed state for an incident, so none is called open."],
+    _PIPELINES_FIRST + ": the Incidents card's reason, now on the Incidents page"))
+#: The Incidents card's total, back as the Incidents page's first sentence: the number 0.2.0 showed,
+#: drawn by the lines that drew it on the card (`incident_pages.incident_total`).
+EXPLAINED.setdefault("incidents.html", {}).setdefault("new", {}).update(dict.fromkeys(
+    ["3 incidents raised from 2 of 4 runs."],
+    "the Incidents card's total, now the Incidents page's first sentence"))
+#: The Incidents page's last lines, each on one line: the digest's line ending at the shortened
+#: digest, and the rules not built as a sentence of their own, not a list after ". Rules not built:".
+EXPLAINED.setdefault("incidents.html", {}).setdefault("gone", {}).update(dict.fromkeys(
+    ["I-DIFF-REGRESSION"], "the rules not built, now one sentence on a line of its own"))
+EXPLAINED.setdefault("incidents.html", {}).setdefault("new", {}).update(dict.fromkeys(
+    ["Rules not built: I-DIFF-REGRESSION."],
+    "the rules not built, one sentence on a line of its own"))
 
 
 def test_no_page_is_lost_and_every_new_page_is_declared(now, before, examined):

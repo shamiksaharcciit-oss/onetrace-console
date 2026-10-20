@@ -50,7 +50,8 @@ def row_problems(list_page: str, store, pages) -> list[str]:
         if f'href="runs/{key}/case.html"' not in row or not case_path.exists():
             out.append(f"{run.run_id}: no link to its page")
             continue
-        case = case_path.read_text(encoding="utf-8")
+        #: The ladder is on "What changed", or on "Proof" for a run whose records don't hold up.
+        case = case_path.read_text(encoding="utf-8") + (case_path.parent / "proof.html").read_text(encoding="utf-8")
         rungs = dict(re.findall(r'<tr data-rung="([^"]+)" data-state="([^"]+)">', case))
         for k in ANSWERS:
             got = re.search(rf'<td[^>]*data-answer="{k}"[^>]*><span class="pill \w+" data-state="([^"]+)">', row)
@@ -122,7 +123,7 @@ def test_a_list_with_no_run_says_so_in_one_grey_line(demo, examined):
 
 #: Every state the run page's plan rung can decide (`viewer.model.Approval`), and the list's.
 APPROVAL_STATES = {"approved": "yes", "departed": "no", "edges-mismatch": "no", "no-plan": "not-declared",
-                   "not-a-graph-run": "not-a-graph-run", "cant-check": "couldnt-check",
+                   "not-a-graph-run": "not-a-graph-run", "cant-check": "couldnt-check", "no-paths": "couldnt-check",
                    "does-not-verify": "couldnt-check", "couldnt-check": "couldnt-check",
                    "not-checked": "not-checked"}
 

@@ -29,7 +29,7 @@ def test_the_overview_is_board_1_s_layout(ten_runs, examined):
     main = home[home.index("<main>"):home.index("</main>")]
     assert '<div class="cp">' in main and main.count('class="cp"') == 1
     cards = re.findall(r'<div data-card="([^"]+)">', _section(home, "cards"))
-    assert cards == ["runs", "records-agree", "changed-vs-baseline", "incidents"]
+    assert cards == ["pipelines", "runs", "records-agree", "need-attention"]
     panels = re.search(r'<div class="panels">(.*?)</div>\s*<section data-section="recent-runs"',
                        home, re.S)
     assert panels, "no panels row before the recent runs"
@@ -47,29 +47,27 @@ def test_each_card_leads_with_one_short_line_and_keeps_its_denominator(ten_runs,
     on is said in the card's muted lines below it, word for word as it was, so nothing is lost.
     Every count still says what it is out of."""
     from onetrace_console.home import tallies
-    from onetrace_console.incidents import derive
-    from onetrace_console.overview import pipelines
+    from onetrace_console.overview import ATTENTION_RULE, needs_attention, pipelines
     store, pages = _pages(ten_runs)
     home = pages[HOME]
     leads = dict(re.findall(r'<div data-card="([^"]+)"><h3>[^<]*</h3><p class="lead"><a [^>]*>'
                             r'(.*?)</a>', home, re.S))
     examined(len(leads), "cards")
     by = {t.slug: t for t in tallies(store)}
-    total, found, every = len(store.runs()), len(pipelines(store)), derive(store)
-    raised_from = len({i.subject for i in every if i.subject_kind == "run"})
+    total, found = len(store.runs()), len(pipelines(store))
     unit = "run" if total == 1 else "runs"
     expected = {
+        "pipelines": f"{found} pipeline{'' if found == 1 else 's'}",
         "runs": f"{total} {unit} stored",
         "records-agree": f"{len(by['records-agree'].runs)} of {total} {unit} whose records agree",
-        "changed-vs-baseline": f"{len(by['changed-vs-baseline'].runs)} of {total} {unit} changed vs baseline",
-        "incidents": f"{len(every)} incident{'' if len(every) == 1 else 's'}",
+        "need-attention": f"{len(needs_attention(store))} of {total} {unit} need attention",
     }
     #: What each lead used to say beyond its count: now in the card's muted lines, as it was.
     kept = {
         "runs": f"in {found} pipeline{'' if found == 1 else 's'}",
         "records-agree": "the check held, with the run's output files present",
-        "changed-vs-baseline": "Changed: the run was the candidate in a stored comparison that found a first difference.",
-        "incidents": f"raised from {raised_from} of {total} {unit}",
+        "pipelines": "one card each below",
+        "need-attention": ATTENTION_RULE,
     }
     assert set(leads) == set(expected)
     for name, lead in leads.items():

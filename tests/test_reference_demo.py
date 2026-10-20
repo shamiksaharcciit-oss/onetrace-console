@@ -238,14 +238,20 @@ def test_each_run_page_renders_with_its_ladder_and_no_records(loaded):
 
 
 def test_the_overview_and_the_diff_page_show_it(loaded):
-    from onetrace_console.render import HOME, render_all, render_diff
+    from onetrace_console.render import COUNTS, HOME, render_all, render_diff
     store, _, comparison = loaded
-    home = re.sub(r"\s+", " ", unescape(re.sub(r"<[^>]+>", " ", whole_folds(render_all(store, generated_at="x")[HOME]))))
-    assert "1 of 2 runs changed vs baseline" in home
+    pages = render_all(store, generated_at="x")
+    home = re.sub(r"\s+", " ", unescape(re.sub(r"<[^>]+>", " ", whole_folds(pages[HOME]))))
+    counts = re.sub(r"\s+", " ", unescape(re.sub(r"<[^>]+>", " ", pages[COUNTS])))
+    #: Changed vs baseline, a card before the Overview led with its pipelines, is on All counts.
+    assert "1 run of 2 — changed vs baseline" in counts
     assert "P1 · stage model · settings changed" in home
     assert "First difference · model" in home, "the recent runs name the frontier"
     diff = re.sub(r"\s+", " ", unescape(re.sub(r"<[^>]+>", " ", whole_folds(render_diff(comparison, store, generated_at="x")))))
-    assert "Why model's output differs is not established by this evidence." in diff
+    #: A graph pair: model's own setting is recorded as differing, so the page names it, by its
+    #: node, and says nothing of it being not established.
+    assert "model: seed differs." in diff
+    assert "Why model's output differs is not established by this evidence." not in diff
 
 
 def test_files_beside_the_chain_are_accepted_kept_and_not_the_chain(tmp_path):
@@ -291,8 +297,10 @@ def test_files_beside_the_chain_are_accepted_kept_and_not_the_chain(tmp_path):
     tail = stored.rstrip("\n").split("\n")[-2:]
     assert tail[0].startswith("anchors show this record existed"), tail
     assert tail[1].startswith("a signature does not show: "), tail
-    from onetrace_console.pages import CASE, render_execution
-    case = render_execution(checked, store, generated_at="2026-10-06T12:00:00+00:00").pages[CASE]
+    from onetrace_console.pages import CASE, RUN_PROOF, render_execution
+    drawn = render_execution(checked, store, generated_at="2026-10-06T12:00:00+00:00").pages
+    #: The answer trail is on "Proof" for a run whose records don't hold up.
+    case = drawn[CASE] + drawn[RUN_PROOF]
     assert 'data-state="contradicts"' in case, "the page reads the anchor row and contradicts"
 
 

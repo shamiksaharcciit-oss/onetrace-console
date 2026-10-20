@@ -68,8 +68,15 @@ def headline_problems(page: str, command: str) -> list[str]:
             and where[1].startswith("Stages identical before it: ")):
         out.append(f"the card's where is {where}")
     what = card.group(2)
-    if "is not established by this evidence." not in html.unescape(what):
-        out.append("the card no longer says what is not established")
+    said = html.unescape(re.sub(r"<[^>]+>", " ", what))
+    #: What the card says of the stage: what is recorded as differing there (a setting, the code,
+    #: an input), or, with nothing recorded, the SDK's sentence that there is no recorded cause; and
+    #: with a recorded change, never that why the output differs is not established.
+    recorded = any(w in said for w in ("settings differ in", "recorded configuration differs", "input "))
+    if not recorded and "no recorded cause:" not in said:
+        out.append("the card says neither what is recorded as differing nor that nothing is")
+    if recorded and "is not established by this evidence." in said:
+        out.append("the card says not established beside a recorded change")
     shown = re.search(r'<pre data-section="headline-command"><code>(.*?)</code></pre>', what, re.S)
     if not shown or html.unescape(shown.group(1)) != command:
         out.append("the card's command is not the comparison's own")
@@ -87,8 +94,9 @@ def graph_problems(page: str, ladder: list[tuple[str, str]], reads: int = 0) -> 
         out.append(f"the graph is {svg.group(1)} wide, more than {WIDTH_AT_1280}")
     if svg.group(0).count('class="link"') != reads:
         out.append(f"{svg.group(0).count('class=\"link\"')} links drawn for {reads} recorded reads")
-    boxes = re.findall(r'<a href="#step-(\d+)"[^>]*?data-tone="(\w+)"><rect[^>]*/><title>([^<]*)</title>',
-                       svg.group(0))
+    #: Each box opens its stage's row, on this page or on its "Proof" view, which holds the table.
+    boxes = re.findall(r'<a href="(?:[0-9a-f]{64}-proof\.html)?#step-(\d+)"[^>]*?data-tone="(\w+)"><rect[^>]*/>'
+                       r'<title>([^<]*)</title>', svg.group(0))
     drawn = {i: (tone, html.unescape(title)) for i, tone, title in boxes}
     from onetrace_console.render import _RESULT_WORDS
     for index, verdict in ladder:
@@ -140,7 +148,13 @@ def test_a_straight_line_pair_is_drawn_toned_and_fits_1280(demo, examined):
     assert reads, "the demo's candidate records its reads"
     assert graph_problems(page, ladder, reads) == []
     assert graph_problems(page, ladder, reads - 1), "a line the records don't hold is named"
-    assert all(f'id="step-{i}"' in page for i, _ in ladder), "each box links to its row"
+    #: Each box links to its stage's row, on the comparison's "Proof" view, which holds the table.
+    folder, store = demo
+    ids = {r.run_id: r.key for r in store.runs()}
+    c = next(c for c in store.comparisons() if (c.run_a, c.run_b) == tuple(ids[r] for r in HEADLINE))
+    proof = (folder / "store" / "pages" / "diff" / f"{c.key}-proof.html").read_text(encoding="utf-8")
+    assert all(f'id="step-{i}"' in proof for i, _ in ladder), "each box links to its row"
+    assert all(f'href="{c.key}-proof.html#step-{i}"' in page for i, _ in ladder), "each box links to its row"
 
 
 def test_settings_that_changed_are_the_reports_annotations(demo, examined):

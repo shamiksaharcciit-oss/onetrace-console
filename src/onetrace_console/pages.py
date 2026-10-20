@@ -41,6 +41,8 @@ GENERATOR = f"onetrace-console {__version__}"
 
 ANSWER = "answer.html"
 CASE = "case.html"
+#: The run page's "Proof" view (`views`).
+RUN_PROOF = "proof.html"
 EXECUTIONS = "executions.html"
 #: A run's authorization page, rendered by this console beside the two
 #: viewer pages. See `onetrace_console.authorization`.
@@ -158,8 +160,12 @@ def _strict_diff_report(comparison, store: Store):
 
     from onetrace_console.compare import DIFF
     from onetrace_console.store import create_exclusively
+    from onetrace_console.records import unchecked_sides
     run = comparison.verb(DIFF)
     if run is None or run.note or not any(n == "diff.json" for n, _ in run.reports):
+        return None
+    #: A side that couldn't be checked: nothing the SDK's diff says of the pair is read.
+    if unchecked_sides(comparison, store):
         return None
     with tempfile.TemporaryDirectory(prefix="onetrace-marks-") as tmp:
         folder = Path(tmp)
@@ -238,9 +244,16 @@ def _with_marks(model, run: StoredRun, store: Store):
     report = _strict_diff_report(comparison, store)
     from onetrace_console.viewer.model import _framed
     if report is None:
+        from onetrace_console.records import UNCHECKED_MARKS, unchecked_sides
+        from onetrace_console.viewer.model import VerbSaid, line
+        unchecked = unchecked_sides(comparison, store)
+        #: The console's own words where a side couldn't be checked, never set as the verb's.
+        changed = (_framed("comparison.could_not_check", "reason",
+                           "the comparison's report could not be read") if not unchecked else
+                   VerbSaid(line("comparison.could_not_check", reason=(UNCHECKED_MARKS.format(
+                       name=unchecked[0][1].run_id, role=unchecked[0][0]), "page"))))
         return replace(model, graph_source=(name, comparison.ran_at, href, False),
-                       changed=(_framed("comparison.could_not_check", "reason",
-                                        "the comparison's report could not be read"),))
+                       changed=(changed,))
     #: A graph-shaped report names each node by its id; a linear one by its position, which is
     #: the step's emission index in the candidate.
     by = ({r.node: r for r in report.ladder} if isinstance(report, TwoRunDag)
@@ -357,14 +370,23 @@ def render_execution(run: StoredRun, store: Store, *, generated_at: str) -> Rend
         authorization_head = run_head(run, store, model, receipt=RECEIPT, page=CASE,
                                       stage_page=stage_page(first) if first else "", title_tag="p",
                                       rungs=False)
+        #: The run page as its two views, split before the seal so each view's fingerprint covers
+        #: that view: "What changed" at the page's address, "Proof" its sibling.
+        from onetrace_console import views
+        whole = receipt_link(authorization_link(incidents_block(
+            topology_note_block(label(case, [run]), run), raised, len(every), store, up="../../")))
+        said, state = views.run_said(run, store)
+        what, proof = views.split(whole, "run", CASE, views.RUN_PROOF, said, state)
+        #: The answer and authorization pages' tabs into the run page, at the view that holds them.
+        answer = views.retarget(answer, what, proof, CASE, views.RUN_PROOF)
+        authorization_head = views.retarget(authorization_head, what, proof, CASE, views.RUN_PROOF)
         return {
             ANSWER: fingerprint.seal(fill_sealed(incidents_block(
                 label(answer, [run]), raised, len(every), store, up="../../"),
                 f"runs/{run.key}/{ANSWER}")),
-            CASE: fingerprint.seal(fill_sealed(receipt_link(authorization_link(incidents_block(
-                topology_note_block(label(case, [run]), run), raised, len(every), store,
-                up="../../"))),
-                f"runs/{run.key}/{CASE}")),
+            CASE: fingerprint.seal(fill_sealed(what, f"runs/{run.key}/{CASE}")),
+            views.RUN_PROOF: fingerprint.seal(fill_sealed(_check_names(proof, views.RUN_PROOF),
+                                                          f"runs/{run.key}/{views.RUN_PROOF}")),
             AUTHORIZATION: render_authorization(run, generated_at=generated_at, case=CASE,
                                                 head=authorization_head),
             #: The run receipt, labelled like the run's other pages.
@@ -388,7 +410,7 @@ def render_execution(run: StoredRun, store: Store, *, generated_at: str) -> Rend
         page = render_incomplete_run(run, MISSING_OBJECT.format(objects=", ".join(gone)),
                                      generated_at=generated_at)
         return RenderedExecution(run=run, pages={
-            ANSWER: page, CASE: page,
+            ANSWER: page, CASE: page, RUN_PROOF: page,
             AUTHORIZATION: render_authorization(run, generated_at=generated_at, case=CASE)},
             #: Could not check, whatever verdict the passed run carries -- a
             #: caller holding a raw StoredRun, not the store's reading, gets the same.
@@ -408,11 +430,18 @@ def render_execution(run: StoredRun, store: Store, *, generated_at: str) -> Rend
             reason, from_viewer = refusal(e)
             page = render_unreadable_run(run, reason, generated_at=generated_at,
                                          from_viewer=from_viewer)
-            pages = {ANSWER: page, CASE: page,
+            pages = {ANSWER: page, CASE: page, RUN_PROOF: page,
                      AUTHORIZATION: render_authorization(run, generated_at=generated_at,
                                                          case=CASE)}
     return RenderedExecution(run=run, pages=pages, verdict=run.check_verdict,
                              repeat_command=REPEAT_COMMAND)
+
+
+def _check_names(page: str, name: str) -> str:
+    """A view's "Check it yourself" command, naming that view's own file."""
+    from onetrace_console.viewer.page import _code
+    from onetrace_console.viewer.slot import STANDALONE_CHECK
+    return page.replace(_code(STANDALONE_CHECK.format(file=CASE)), _code(STANDALONE_CHECK.format(file=name)))
 
 
 def _list_row(run: StoredRun, store: Store, folder: Path):
@@ -508,7 +537,7 @@ _ANCHORED_STATE = {"yes": "yes", "couldnt-check": "couldnt-check", "failed": "no
 #: "Ran as approved": the run page's states, and "Couldn't check" wherever the plan can't be
 #: decided -- the verifier has no plan row, or the run doesn't verify, so its rows aren't read.
 _APPROVED_STATE = {"approved": "yes", "departed": "no", "edges-mismatch": "no", "no-plan": "not-declared",
-                   "not-a-graph-run": "not-a-graph-run", "cant-check": "couldnt-check",
+                   "not-a-graph-run": "not-a-graph-run", "cant-check": "couldnt-check", "no-paths": "couldnt-check",
                    "does-not-verify": "couldnt-check", "couldnt-check": "couldnt-check",
                    "not-checked": "not-checked", "": "not-checked"}
 

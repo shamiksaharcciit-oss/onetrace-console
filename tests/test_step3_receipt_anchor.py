@@ -108,9 +108,11 @@ def _read_by_the_viewer(envelope: dict) -> None:
 
 
 def _case_rung(run, store) -> str:
-    from onetrace_console.pages import CASE, render_execution
+    from onetrace_console.pages import CASE, RUN_PROOF, render_execution
     from tests.test_stage_pages import GENERATED_AT
-    case = render_execution(run, store, generated_at=GENERATED_AT).pages[CASE]
+    #: The ladder is on "What changed", or on "Proof" for a run whose records don't hold up.
+    drawn = render_execution(run, store, generated_at=GENERATED_AT).pages
+    case = drawn[CASE] + drawn[RUN_PROOF]
     found = re.search(r'<tr data-rung="anchored"[^>]*><td>.*?</td><td>(.*?)</td></tr>', case, re.S)
     assert found, "no anchored rung on the case page"
     return re.sub(r"\s+", " ", unescape(re.sub(r"<[^>]+>", " ", found.group(1)))).strip()

@@ -90,9 +90,41 @@ def _relative(target: str, holder: str) -> str:
     return posixpath.relpath(path, posixpath.dirname(holder) or ".")
 
 
+#: The export's own copy of the verifier's errors page, which an incident page's fix lines link to:
+#: the published page is on another host, so the export carries the page the pinned SDK generates.
+ERRORS_FILE = "errors.html"
+
+
+def errors_page() -> bytes:
+    """The errors page as the installed onetrace generates it (`onetrace.errors.render_page`, the
+    page `python -m onetrace._errors_page` prints), each section under its code's id, its words
+    escaped and kept as written."""
+    from html import escape
+
+    import onetrace
+    from onetrace.errors import render_page
+    from onetrace_console.frame import STYLESHEET
+    head, *sections = re.split(r"(?m)^## ", render_page())
+    parts = [f"<pre>{escape(head.strip())}</pre>"]
+    for section in sections:
+        code, _, body = section.partition("\n")
+        parts.append(f'<section id="{escape(code.strip(), quote=True)}"><h2>{escape(code.strip())}</h2>'
+                     f"<pre>{escape(body.strip())}</pre></section>")
+    version = escape(getattr(onetrace, "__version__", ""))
+    return ('<!doctype html>\n<html lang="en">\n<head>\n<meta charset="utf-8">\n'
+            '<meta name="viewport" content="width=device-width,initial-scale=1">\n'
+            f'<title>onetrace errors</title>\n<link rel="stylesheet" href="{STYLESHEET}">\n</head>\n'
+            f'<body><main><p class="note">The errors page as onetrace {version} generates it, kept with '
+            "this export so its links stay in it.</p>" + "".join(parts) + "</main></body>\n</html>\n"
+            ).encode("utf-8")
+
+
 def _page(served: bytes, rel: str) -> bytes:
-    """A served page as exported: links relative, the banner, and sealed again if it was sealed."""
+    """A served page as exported: links relative, the banner, and sealed again if it was sealed.
+    A link to the published errors page goes to the export's own copy of it, at the same section."""
+    from onetrace_console.incident_pages import ERRORS_PAGE
     page = served.decode("utf-8")
+    page = page.replace(f'href="{ERRORS_PAGE}#', f'href="/{ERRORS_FILE}#')
     page = _ROOTED.sub(lambda m: f'{m.group(1)}="{_relative(m.group(2), rel)}"', page)
     opened = _MAIN.findall(page)
     if len(opened) != 1:
@@ -170,6 +202,8 @@ def export(source: Path, keys: list[str], out: Path) -> dict[str, str]:
             if was:
                 now = _FINGERPRINT.search(files[rel].decode("utf-8")).group(1)
                 seals.append(f"{rel}  {was.group(1)}  {now}\n")
+        if any(f'{ERRORS_FILE}#'.encode() in data for data in files.values()):
+            files[ERRORS_FILE] = _page(errors_page(), ERRORS_FILE)
         css = STYLESHEET.lstrip("/")
         files[css] = _CSS_ROOTED.sub(lambda m: f"url({_relative(m.group(1), css)})",
                                      stylesheet().decode("utf-8")).encode("utf-8")

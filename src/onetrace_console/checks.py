@@ -163,26 +163,40 @@ CHECK_TIMEOUT_SECONDS = 360
 _VERDICTS = {("0", "pass"): HOLDS, ("1", "fail"): CONTRADICTS}
 NOT_VERIFIED_EXITS = ("2", "4")
 
-#: A preview-format run, checked with 0.2.0, is "Couldn't check", never "doesn't
-#: hold", and says why in these words. The run stays stored and viewable.
+#: A preview-format run, checked with the pinned verifier, is "Couldn't check", never "doesn't
+#: hold", and says why in these words: the format, not a verifier version, so they stay true for
+#: any version. The run stays stored and viewable.
 PREVIEW_CHAIN_FORMAT = "stage-receipt-chain/0.0-preview"
-PREVIEW_REASON = ("This run uses the preview record format, which the 0.2.0 verifier doesn't "
-                  "check. It was recorded before onetrace 0.1.")
+PREVIEW_REASON = ("This run is in the preview record format (stage-receipt/0.0-preview), and "
+                  "onetrace-verify does not check that format, so its receipts couldn't be checked.")
+#: The reason runs checked before were stored with, which named a verifier version. Still
+#: recognised on a stored run; never stored again, and never shown: a page shows PREVIEW_REASON.
+PREVIEW_REASON_STORED_BEFORE = ("This run uses the preview record format, which the 0.2.0 verifier "
+                                "doesn't check. It was recorded before onetrace 0.1.")
+PREVIEW_REASONS = (PREVIEW_REASON, PREVIEW_REASON_STORED_BEFORE)
 
 
 def is_preview_not_verified(run) -> bool:
     """A stored preview-format run whose check said NOT VERIFIED for that
     format -- a known, permanent state, not an event. Exactly this, and nothing wider: the format,
-    the verdict, a NOT VERIFIED exit and the fixed reason, all four."""
+    the verdict, a NOT VERIFIED exit and the fixed reason (either one), all four."""
     return (run.format == PREVIEW_CHAIN_FORMAT and run.check_verdict == COULD_NOT_CHECK
-            and run.check_exit in NOT_VERIFIED_EXITS and run.check_note == PREVIEW_REASON)
+            and run.check_exit in NOT_VERIFIED_EXITS and run.check_note in PREVIEW_REASONS)
+
+
+def shown_note(run) -> str:
+    """A stored run's check note as a page shows it: the current reason for a preview run, whichever
+    of the two fixed reasons it was stored with; any other note as stored."""
+    return PREVIEW_REASON if is_preview_not_verified(run) else run.check_note
 
 
 #: The Overview's one line, shown only where such runs exist; and its singular.
-PREVIEW_OVERVIEW_LINE = ("{n} runs use the preview record format and can't be checked by 0.2.0; "
-                         "they were recorded before onetrace 0.1.")
-PREVIEW_OVERVIEW_LINE_ONE = ("1 run uses the preview record format and can't be checked by 0.2.0; "
-                             "it was recorded before onetrace 0.1.")
+PREVIEW_OVERVIEW_LINE = ("{n} runs are in the preview record format (stage-receipt/0.0-preview), and "
+                         "onetrace-verify does not check that format, so their receipts couldn't be "
+                         "checked.")
+PREVIEW_OVERVIEW_LINE_ONE = ("1 run is in the preview record format (stage-receipt/0.0-preview), and "
+                             "onetrace-verify does not check that format, so its receipts couldn't be "
+                             "checked.")
 
 
 def preview_overview_line(n: int) -> str:

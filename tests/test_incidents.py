@@ -1,4 +1,4 @@
-"""The four rules, their near misses, determinism, and the pages.
+"""The five rules, their near misses, determinism, and the pages.
 
 Step 1's check: *"for each rule, one fixture that raises it and one near miss that doesn't,
 and a test for each."* Each rule below has both, side by side, so the pair can be read
@@ -46,10 +46,10 @@ RULE_IDS = tuple(r.id for r in RULES)
 
 # ------------------------------------------------------------------ the rule table
 
-def test_the_rule_table_has_exactly_the_four_rules_that_could_be_built(examined):
+def test_the_rule_table_has_exactly_the_five_rules_that_could_be_built(examined):
     examined(len(RULES), "rules in the table")
     assert RULE_IDS == ("I-CONTRADICTS", "I-RUNID-REUSED", "I-HEADER-DISAGREES",
-                        "I-COULD-NOT-CHECK")
+                        "I-COULD-NOT-CHECK", "I-HEAD-SHARED")
     assert NOT_BUILT == ("I-DIFF-REGRESSION",)
 
 

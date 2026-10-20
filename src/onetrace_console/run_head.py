@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import re
 
-from onetrace_console import tones
+from onetrace_console import tones, twins
 #: The viewer's one escape: HTML, and a record's words shown by its display rule (control and
 #: direction characters drawn visibly), as every run page draws them.
 from onetrace_console.viewer.page import escape
@@ -19,6 +19,14 @@ from onetrace_console.store import Store, StoredRun
 
 #: The four rungs the head shows first, in the ladder's own words, each as the ladder states it.
 HEAD_RUNGS = ("records-agree", "approved", "signed", "anchored")
+#: What the head reads from the record's contents, rather than says about the record, carries
+#: `data-from="contents"`: a run's "What changed" view withholds it where the record does not
+#: hold up (`views.split`). Of the four rungs, "Ran as approved" compares the paths the record
+#: holds with its plan; whether the records agree, are signed and are anchored is said of the
+#: record itself. The comparison and declined chips, and the count of declared stages, are read
+#: from its contents too.
+HEAD_FROM_CONTENTS = {"approved"}
+FROM_CONTENTS = ' data-from="contents"'
 
 #: The tabs: each a page this run already has, or a place on this page.
 TAB_GRAPH, TAB_TABLE, TAB_IO, TAB_RECEIPT, TAB_COMPARE = (
@@ -30,6 +38,7 @@ HEAD_CSS = """
 :is(.shell .page,.cp) [data-section=run-head]{display:flex;flex-direction:column;gap:10px;margin:0 0 6px}
 :is(.shell .page,.cp) [data-section=run-head] .crumbs{margin:0;font-size:var(--fs-small);color:var(--ink-muted)}
 :is(.shell .page,.cp) [data-section=run-head] .title{display:flex;flex-wrap:wrap;align-items:center;gap:10px}
+:is(.shell .page,.cp) [data-section=run-head] .chips{display:contents}
 :is(.shell .page,.cp) [data-section=run-head] .run-title{margin:0;overflow-wrap:anywhere;
   font-size:var(--fs-h1);font-weight:600}
 :is(.shell .page,.cp) [data-section=run-head] .pill{display:inline-block;font-size:var(--fs-small);
@@ -123,7 +132,8 @@ def _rungs(model) -> str:
             said = _chip(tones.tone(tones.RUNG, r.state), template(r.state_key))
         else:
             said = " ".join(_line(e) for e in r.evidence)
-        items.append(f'<li data-head-rung="{escape(key)}" data-state="{escape(r.state)}">'
+        mark = FROM_CONTENTS if key in HEAD_FROM_CONTENTS else ""
+        items.append(f'<li data-head-rung="{escape(key)}" data-state="{escape(r.state)}"{mark}>'
                      f'<span class="q">{escape(template("rung." + key))}</span> <span>{said}</span></li>')
     return f'<ul class="seals">{"".join(items)}</ul>'
 
@@ -138,10 +148,11 @@ def run_head(run: StoredRun, store: Store, model, *, stage_page: str = "", recei
     #: chip beside "Records agree: Not checked" (a check that held without the output files) would
     #: read as one answer the page does not give. The comparison chip is the only chip.
     chips = comparison_chip(model) + declined_chip(run)
+    chips = f'<span class="chips"{FROM_CONTENTS}>{chips}</span>' if chips else ""
     ran = ran_at(run)
-    sub = [f"{run.delivered_stages} of {run.stage_count} declared stages"
-           + (f"; {run.retries} retr{'y' if run.retries == 1 else 'ies'} recorded" if run.retries else ""),
-           f'recorded in the format <span class="mono">{escape(run.format)}</span>' if run.format else "",
+    count = (f"{run.delivered_stages} of {run.stage_count} declared stages"
+             + (f"; {run.retries} retr{'y' if run.retries == 1 else 'ies'} recorded" if run.retries else ""))
+    sub = [f'recorded in the format <span class="mono">{escape(run.format)}</span>' if run.format else "",
            f"ran {_time(ran)}" if ran else "the record gives no time it ran",
            f"received by this console {_time(run.received_at)}"]
     source = compared_with(model)
@@ -168,7 +179,10 @@ def run_head(run: StoredRun, store: Store, model, *, stage_page: str = "", recei
             f'<div class="title"><{title_tag} class="run-title"><span class="mono" data-words="record">'
             f"{_named(run.run_id)}</span>"
             + (f" · {escape(label)}" if label else "") + f"</{title_tag}>{rest}{chips}</div>"
-            f'<p class="sub">{" · ".join(s for s in sub if s)}</p>'
+            f'<p class="sub"><span{FROM_CONTENTS}>{count} · </span>{" · ".join(s for s in sub if s)}</p>'
+            #: Another folder carrying the same run and chain head: each is read on its own, and
+            #: the page says which folder this is and how the other's files compare.
+            + "".join(f'<p class="sub" data-twin="true">{escape(t)}</p>' for t in twins.sentences(run, store))
             #: Without its four answers on the authorization page, which must never read as a
             #: pass: "Ran as approved: Yes" there would read as the action approved.
             + (_rungs(model) if rungs else "") +

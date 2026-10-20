@@ -44,7 +44,10 @@ def test_a_run_without_artifacts_reads_as_the_verifier_says_on_every_surface(ser
     status, case = _get(base, f"/runs/{key}/case.html")
     assert status == 200
     case = case.decode("utf-8")
-    assert RUN_ROW in case, "the pinned verifier did not print the run-level row this is about"
+    #: The check's rows are on the run page's "Proof" view, served beside it.
+    status, proof = _get(base, f"/runs/{key}/proof.html")
+    assert status == 200
+    assert RUN_ROW in proof.decode("utf-8"), "the pinned verifier did not print the run-level row this is about"
 
     surfaces = {}
     # 1. the ingest answer

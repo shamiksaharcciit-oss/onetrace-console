@@ -168,7 +168,15 @@ def _titles(page: str) -> dict[str, str]:
 #: page as run A. Nothing else moves.
 #: Moved by the version, 0.1.2 to 0.2.0, from aa21e3982cf46deeada85767157489ee1e6263d1d96a7b0581a4b2cec07751cc.
 #: Measured by diffing the two renderings: the footer's "onetrace-console 0.1.2." only.
-UNMARKED_R_CASE_SHA256 = "99adf5163b1670ec8e54cfdd1f90195dec01a8adca56067b1e77d808516d238e"
+#: Moved by the dark theme as the default and the version, 0.2.0 to 0.2.1, from 99adf5163b1670ec8e54cfdd1f90195dec01a8adca56067b1e77d808516d238e.
+#: Measured by diffing the two renderings: the stylesheet's theme rules (dark the default, light by
+#: choice or a light system followed by choice, light in print) and the footer's
+#: "onetrace-console 0.2.0." only.
+#: Moved by marking what the head reads from the record's contents, from 58aca7003ffa82a53b7d76457f62b81c7ddecdfc860164d3a06e15643f0c5ab8.
+#: Measured by diffing the two renderings: `data-from="contents"` on the "Ran as approved" rung,
+#: the chips in a span that carries it, and the count of declared stages in one. The words are
+#: the same.
+UNMARKED_R_CASE_SHA256 = "d4bb6b42f8ffa52c21f055ee42c469476114e081a911581516229ca2d90f6bfc"
 _VERIFIER_PATH = re.compile(r"\S*onetrace_verify[/\\]verify\.py")
 _FINGERPRINT = re.compile(r"<!--fingerprint-->[0-9a-f]{64}<!--/fingerprint-->")
 _VERIFIER_BLOCK = re.compile(r'(<pre data-layer="3">)(\[[A-Z][A-Z-]* *\] .*?)(</pre>)', re.S)

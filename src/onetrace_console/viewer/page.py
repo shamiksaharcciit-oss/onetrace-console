@@ -295,19 +295,20 @@ _FINGERPRINT = re.compile(r"(sha256:)?([0-9a-f]{64})")
 FINGERPRINT_SHOWN = 12
 
 
-def fingerprint_html(value, *, words: str = "") -> str:
+def fingerprint_html(value, *, words: str = "", close: str = "") -> str:
     """A fingerprint as a page's text and tables show it: its first FINGERPRINT_SHOWN hex
     characters, then the whole value as plain, selectable text in a closed Details beside it --
     nothing to press but the fold, no script. `words` marks whose words it is (`data-words`).
     A value that is not a fingerprint is quoted as recorded. The record's own words, in the
-    as-written block, are never shortened."""
+    as-written block, are never shortened. `close` is the sentence's closing mark, drawn with
+    the value shown: a closed Details is a box of its own, so a mark after it starts a line."""
     text = str(value)
     m = _FINGERPRINT.fullmatch(text)
     marked = f' data-words="{escape(words)}"' if words else ""
     if not m:
-        return f"{_named(text)}{_rest(text)}"
+        return f"{_named(text)}{_rest(text)}{escape(close)}"
     short = (m.group(1) or "") + m.group(2)[:FINGERPRINT_SHOWN] + "…"
-    return (f'<details class="fingerprint"{marked}><summary class="mono">{escape(short)}</summary>'
+    return (f'<details class="fingerprint"{marked}><summary class="mono">{escape(short + close)}</summary>'
             f'<span class="mono" data-fingerprint="whole">{escape(text)}</span></details>')
 
 

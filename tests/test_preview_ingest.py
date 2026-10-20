@@ -1,5 +1,5 @@
-"""The preview-format limits against the 0.2.0 verifier. The store accepts a format only while
-the pinned verifier checks it; 0.2.0 no longer checks preview receipts (NOT-RUN, NOT VERIFIED), so a
+"""The preview-format limits against the pinned verifier. The store accepts a format only while
+the pinned verifier checks it; it no longer checks preview receipts (NOT-RUN, NOT VERIFIED), so a
 NEW preview delivery gets a 422: one console sentence, then the verifier's own row, verbatim, and
 nothing is stored. Runs already stored stay. A 0.1 or 0.2 delivery is taken.
 """
@@ -16,8 +16,8 @@ from onetrace_console.preview import PREVIEW_NOT_INGESTED, PREVIEW_NOT_RUN_ROW
 from tests.test_checks import _require_installed
 from tests.test_compare import EXAM, RUN_C, _deliver, _require_exam
 
-RULED = ("Not ingested: this run uses the preview record format, which the 0.2.0 verifier "
-         "doesn't check.")
+RULED = ("Not ingested: this run is in the preview record format (stage-receipt/0.0-preview), and "
+         "onetrace-verify does not check that format, so its receipts couldn't be checked.")
 
 
 def _delivery(folder: Path) -> bytes:

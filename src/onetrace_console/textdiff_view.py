@@ -276,10 +276,26 @@ def _settings_line(text: str) -> str:
             f'{_html(short)}</span>: {_html(m["old"])} → {_html(m["new"])}')
 
 
+#: A recorded fingerprint's row, shown where its count is: what it fingerprints, by the field's
+#: name, and that it differs; its two values stay under Details.
+FINGERPRINT_WORDS = {"config_digest": "configuration fingerprint", "manifest_digest": "code fingerprint"}
+FINGERPRINT_DIFFERS = "differs, both values under Details"
+
+
+def _fingerprint_row(text: str) -> str:
+    m = _SETTING.fullmatch(text)
+    path = m["name"] if m else text
+    words = FINGERPRINT_WORDS.get(path.rsplit(".", 1)[-1], "recorded fingerprint")
+    return (f'<p data-settings data-fingerprint><span class="mono" data-setting-path="{_html(path)}" '
+            f'title="{_html(path)}">{_html(words)}</span>: {_html(FINGERPRINT_DIFFERS)}</p>')
+
+
 def _settings(lines: list[str]) -> str:
-    """A stage's settings lines: the readable ones, then its recorded fingerprints under a small
-    Details of their own."""
-    plain = "".join(f"<p data-settings>{_settings_line(s)}</p>" for s in lines if not _is_fingerprint(s))
+    """A stage's settings lines: one row for each setting its "settings: N changed" counts -- each
+    readable one with its values, each recorded fingerprint by what it fingerprints -- then the
+    fingerprints' values under a small Details of their own."""
+    plain = "".join(f"<p data-settings>{_settings_line(s)}</p>" if not _is_fingerprint(s)
+                    else _fingerprint_row(s) for s in lines)
     prints = [s for s in lines if _is_fingerprint(s)]
     if prints:
         plain += ('<details data-settings-details><summary>Details</summary>'
@@ -320,6 +336,55 @@ def _render_output(out: dict) -> str:
     return "".join(parts)
 
 
+#: A kept input's line diff: the lines of context around each change, as the SDK's unified
+#: diff keeps for outputs, and the most lines drawn, as its default for an output.
+KEPT_CONTEXT = 3
+KEPT_MAX_LINES = 200
+#: What a kept input's line diff says it is, where an output says its media type.
+KEPT_KIND = "kept input text"
+
+
+def kept_anchor(node: str, name: str) -> str:
+    """The id of a node's kept input's line diff, which the comparison's summary links to."""
+    return "input-" + re.sub(r"[^A-Za-z0-9_.-]+", "-", f"{node}-{name}")
+
+
+def _kept_hunks(a: str, b: str) -> tuple[list[dict], int]:
+    """The two kept texts' line diff, in the shape of the SDK's output hunks (`op`, each side's
+    line number, the text), and how many lines past the cap were left out. Each text is split on
+    its own line breaks; nothing in a line is changed."""
+    import difflib
+    x, y = a.splitlines(), b.splitlines()
+    hunks, drawn, more = [], 0, 0
+    for group in difflib.SequenceMatcher(None, x, y, autojunk=False).get_grouped_opcodes(KEPT_CONTEXT):
+        lines = []
+        for tag, i1, i2, j1, j2 in group:
+            if tag == "equal":
+                rows = [(" ", str(i1 + k + 1), str(j1 + k + 1), x[i1 + k]) for k in range(i2 - i1)]
+            else:
+                rows = ([("-", str(k + 1), None, x[k]) for k in range(i1, i2)]
+                        + [("+", None, str(k + 1), y[k]) for k in range(j1, j2)])
+            for op, base, cand, text in rows:
+                if drawn >= KEPT_MAX_LINES:
+                    more += 1
+                    continue
+                drawn += 1
+                lines.append({"op": op, "baseline": base, "candidate": cand, "text": text, "spans": []})
+        if lines:
+            hunks.append({"lines": lines})
+    return hunks, more
+
+
+def _render_kept(node: str, name: str, a: str, b: str) -> str:
+    """A kept input's two texts as a line diff, drawn as an output's lines are: each side's text
+    read only where it matches its recorded digest, so each side is said verified."""
+    hunks, more = _kept_hunks(a, b)
+    out = {"name": name, "media_type": KEPT_KIND, "verified": True, "notes": [], "hunks": hunks}
+    if more:
+        out["truncated"] = {"more_lines": str(more)}
+    return f'<div data-kept-diff id="{_html(kept_anchor(node, name))}">{_render_output(out)}</div>'
+
+
 def render_textdiff(doc: dict) -> str:
     """The text diff as the SDK wrote it: a strict reading's result, escaped once, verified only."""
     if not doc["shown"]:
@@ -339,7 +404,12 @@ def render_textdiff(doc: dict) -> str:
         if node.get("presence"):
             parts.append(f'<p>{_html(node["presence"])}</p>')
         parts.append(_settings(node["settings"]))
-        parts.extend(f'<p data-input>{_html(s)}</p>' for s in node["inputs"])
+        from onetrace_console.kept_inputs import KEPT_DIFFS
+        kept = {k[0]: k for k in node.get(KEPT_DIFFS) or ()}
+        for s in node["inputs"]:
+            parts.append(f'<p data-input>{_html(s)}</p>')
+            if s in kept:
+                parts.append(_render_kept(node["node"], *kept[s][1:]))
         parts.extend(_render_output(out) for out in node["outputs"])
         parts.append("</article></details>")
     parts.append("</div>")

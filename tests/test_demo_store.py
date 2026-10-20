@@ -216,6 +216,24 @@ EXPECTED = {
     #: Declined at policy_check by its own rule, `send` not reached: the check holds, and the
     #: Overview lists it as stopped at a step -- as the run's own page reads rung 3, "Not reached".
     "p4-31-reply-60-days-declined": ("holds", "yes", TRUSTED, "stopped-at-a-step", "not-compared"),
+    #: P5, pump maintenance: the calibration offset changed (its first difference calibrate); the
+    #: sensor firmware changed and the readings did not (same, the version a changed setting);
+    #: declined at work_order, the last declared step, so no declared step is left unreached and
+    #: Needs attention first doesn't list it (its page carries the declined chip).
+    "p5-32-pump-baseline": ("holds", "yes", TRUSTED, None, "not-compared"),
+    "p5-33-pump-offset-changed": ("holds", "yes", TRUSTED, "changed", "changed"),
+    "p5-34-pump-firmware-changed": ("holds", "yes", TRUSTED, None, "same"),
+    "p5-35-pump-outside-window-declined": ("holds", "yes", TRUSTED, "stopped-at-a-step", "not-compared"),
+    #: P6, fill-level inspection: the exposure changed (measure differs, classify comes back the
+    #: same); a bottle below the reject line (classify changes after measure).
+    "p6-36-fill-baseline": ("holds", "yes", TRUSTED, None, "not-compared"),
+    "p6-37-fill-exposure-changed": ("holds", "yes", TRUSTED, "changed", "changed"),
+    "p6-38-fill-below-reject-line": ("holds", "yes", TRUSTED, "changed", "changed"),
+    #: P7, cold-chain release: one logger reading changed; one byte of a decision changed after
+    #: the run closed.
+    "p7-39-cold-chain-baseline": ("holds", "yes", TRUSTED, None, "not-compared"),
+    "p7-40-cold-chain-one-reading-changed": ("holds", "yes", TRUSTED, "changed", "changed"),
+    "p7-41-cold-chain-decision-tampered": ("contradicts", "no", TRUSTED, "contradicts", "not-compared"),
 }
 
 
@@ -234,20 +252,23 @@ def test_every_run_reads_as_the_stores_table_says(built, examined):
     assert sorted(r.run_id for r in runs) == sorted(EXPECTED)
     got = {}
     for run in runs:
-        rungs = _rungs((pages / "runs" / run.key / "case.html").read_text(encoding="utf-8"))
+        #: The ladder is on "What changed", or on "Proof" for a run whose records don't hold up.
+        rungs = _rungs("".join((pages / "runs" / run.key / n).read_text(encoding="utf-8")
+                               for n in ("case.html", "proof.html")))
         got[run.run_id] = (run.check_verdict, rungs["Records agree"],
                            rungs["Signed by a known recorder"], attention_kind(run, store),
                            vs_baseline(run, store)[0])
         assert rungs["Committed by a known time"] == "not-anchored", (run.run_id, "every run")
     assert got == EXPECTED
-    #: Four pipelines, labelled P1-P4 in order of first arrival. That order is read from
+    #: Seven pipelines, labelled P1-P7 in order of first arrival. That order is read from
     #: `received_at`, kept to the second, so two pipelines whose first runs arrive in the same
     #: second take their labels in key order -- which varies from build to build. The demo's
     #: pipelines are held by their stages and runs here, not by the label each one gets.
     found = {(p.stages[0], len(p.runs)) for p in pipelines(store)}
-    assert sorted(p.label for p in pipelines(store)) == ["P1", "P2", "P3", "P4"]
-    assert found == {("load_docs", 20), ("request", 2), ("intake", 6), ("question", 3)}
-    assert len(store.comparisons()) == 5
+    assert sorted(p.label for p in pipelines(store)) == [f"P{n}" for n in range(1, 8)]
+    assert found == {("load_docs", 20), ("request", 2), ("intake", 6), ("question", 3),
+                     ("readings", 4), ("measure", 3), ("fill_gaps", 3)}
+    assert len(store.comparisons()) == 10
 
 
 def test_the_headline_comparison_moves_an_answer_at_split(built, examined):

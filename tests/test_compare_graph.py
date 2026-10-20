@@ -12,6 +12,7 @@ drawn as it always was.
 """
 from __future__ import annotations
 
+import html
 import re
 from pathlib import Path
 
@@ -145,17 +146,20 @@ def test_a_linear_comparison_needs_no_a_and_b(compared):  # noqa: F811
 
 
 def test_what_the_marks_leave_open_is_said_for_every_first_difference(dag_pages):
-    """The linear page says why the first differing stage's output differs is not established;
-    the graph page marked first differences and said nothing of it (found with item 5's demo).
-    Now each frontier node has the sentence, and no other node does."""
+    """The graph page marked first differences and said nothing of them (found with item 5's
+    demo). Each frontier node with nothing recorded about it that differs now has the
+    no-recorded-cause sentence, the SDK's own as its localize report wrote it, and no other node
+    does; and none says its output's difference is "not established", which the sentence says in
+    its own terms."""
     page = dag_pages["PR"]
     section = re.search(r'<section data-section="first-difference"[^>]*>(.*?)</section>', page,
                         re.S)
     assert section, "no caveat on the graph page"
-    said = re.findall(r"<p>Why ([^<]*)&#x27;s output differs is not established by this "
-                      r"evidence\.</p>", section.group(1))
+    said = re.findall(r"<p>no recorded cause: nothing recorded differs at '([^']*)' \(",
+                      html.unescape(section.group(1)))
     marked = [t.split(" · ")[0] for _, t in _boxes(_graph(page)) if "First difference" in t]
     assert said and sorted(said) == sorted(marked), (said, marked)
+    assert "not established" not in section.group(1)
 
 
 def test_the_compare_page_s_incidents_are_inside_its_skin_and_first(runs):  # noqa: F811

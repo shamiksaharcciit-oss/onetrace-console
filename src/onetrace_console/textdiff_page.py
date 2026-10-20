@@ -46,6 +46,9 @@ def shown_document(comparison, store: Store) -> dict | None:
     from onetrace_console.compare import text_diff_raw
     from onetrace_console.kept_inputs import for_this_console
     from onetrace_console.textdiff_view import TextDiffUnreadable, read_textdiff
+    from onetrace_console.records import unchecked_sides
+    if unchecked_sides(comparison, store):
+        return None
     found = text_diff_raw(comparison, store)
     if found is None:
         return None
@@ -101,7 +104,12 @@ def render_text_diff_page(comparison, store: Store, *, generated_at: str) -> str
             + (f'<h3>{escape(INPUTS)}</h3>' + "".join(f"<p data-input>{escape(s)}</p>" for s in inputs)
                if inputs else "")
             + "</section>")
-    right = ('<section data-section="outputs" data-textdiff="shown">'
+    #: Each kept text input's line diff, as the comparison page draws it, beside the outputs.
+    from onetrace_console.kept_inputs import KEPT_DIFFS
+    from onetrace_console.textdiff_view import _render_kept
+    kept = "".join(f'<div data-pane-output><h3>{escape(n["node"])}</h3>{_render_kept(n["node"], *k[1:])}</div>'
+                   for n in doc.get("nodes", []) if n["verdict"] in LISTED for k in n.get(KEPT_DIFFS) or ())
+    right = ('<section data-section="outputs" data-textdiff="shown">' + kept
              + "".join(f'<div id="{a}" data-pane-output><h3>{escape(stage)}</h3>{_render_output(o)}</div>'
                        for a, stage, o in listed)
              + f'<p class="note">{escape(FROM_SDK)}</p><p class="note">{escape(NOT_WHICH)}</p></section>')

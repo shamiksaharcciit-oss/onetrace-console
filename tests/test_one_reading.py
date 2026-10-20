@@ -9,8 +9,8 @@ console serves it, for every run and every state:
 1. the one function is the run page's own rung, run by run;
 2. each page and table that says or counts it agrees with that function: the Runs list, the
    receipt page, the Overview's Records agree card and its rung row, the Pipelines table, Verdicts
-   by day, All counts, Recent runs, Needs attention first, the comparison pages, and the start-up
-   list the console prints;
+   by day, All counts, Recent runs, Needs attention first, the comparison pages, the public
+   Overview's table of planted runs, and the start-up list the console prints;
 3. "Verified", the verifier's own word, is no run-level summary's label;
 4. a run whose check held but whose run with the output files required failed contradicts its
    record everywhere (a fixture run, not in the demo).
@@ -99,7 +99,8 @@ def run_page_problems(d: Demo) -> list[str]:
             if (d.pages / "runs" / r.key / "case.html").exists():
                 out.append(f"{r.run_id}: no verdict recorded, yet it has a run page")
             continue
-        page = d.page(f"runs/{r.key}/case.html")
+        #: The ladder is on "What changed", or on "Proof" for a run whose records don't hold up.
+        page = d.page(f"runs/{r.key}/case.html") + d.page(f"runs/{r.key}/proof.html")
         rung = re.search(r'data-rung="records-agree"[^>]*data-state="([^"]+)"', page)
         got = rung.group(1) if rung else None
         if got != d.state[r.key]:
@@ -301,10 +302,32 @@ def verified_problems(d: Demo) -> list[str]:
     return out
 
 
+def planted_table_problems(d: Demo) -> list[str]:
+    """The public Overview's table of planted runs: each row's badge is the one function's state,
+    in its words, and every run the builder planted has its row."""
+    from onetrace_console import demo_store, records
+    home = d.page("home.html")
+    rows = re.findall(r'<tr data-planted="([0-9a-f]{64})">(.*?)</tr>', home, re.S)
+    by_key = {r.key: r for r in d.runs}
+    planted = {s.run_id or s.folder for s in demo_store.runs() if demo_store.planted(s)}
+    out = []
+    if sorted(by_key[k].run_id for k, _ in rows if k in by_key) != sorted(planted):
+        out.append(f"{len(rows)} rows in the planted table, the builder planted {len(planted)}")
+    for key, row in rows:
+        badge = re.search(r'<span data-reading="([^"]+)">(.*?)</span>', row, re.S)
+        got = badge.group(1) if badge else None
+        if got != d.state.get(key):
+            out.append(f"{by_key[key].run_id if key in by_key else key[:12]}: the planted table says {got!r}, "
+                       f"its page {d.state.get(key)!r}")
+        elif _text(badge.group(2)) != records.said(by_key[key], d.store):
+            out.append(f"{by_key[key].run_id}: the planted table's words {_text(badge.group(2))!r}")
+    return out
+
+
 CHECKS = (run_page_problems, runs_list_problems, receipt_problems, card_problems, rung_row_problems,
           lambda d: table_problems(d, "pipelines"), lambda d: table_problems(d, "by-day"),
           counts_problems, recent_problems, attention_problems, comparison_problems,
-          startup_problems, verified_problems)
+          startup_problems, verified_problems, planted_table_problems)
 
 
 # ------------------------------------------------------------- on the demo
@@ -315,7 +338,7 @@ def test_the_demo_reads_as_its_table_says(demo, examined):
     by_id = {r.run_id: r.key for r in demo.runs}
     counts = {s: _count(demo, s) for s in COUNTED}
     examined(len(demo.runs), "runs read")
-    assert counts == {"yes": 28, "no": 2, "couldnt-check": 0, "not-checked": 1, "no-verdict": 0}
+    assert counts == {"yes": 37, "no": 3, "couldnt-check": 0, "not-checked": 1, "no-verdict": 0}
     key = by_id["p1-16-candidate-set5-no-artifacts"]
     assert (demo.state[key], demo.why[key]) == ("not-checked", "held without its output files required")
 
@@ -377,9 +400,24 @@ def test_sabotage_verified_back_in_a_summary_is_named(demo, tmp_path, examined):
 def test_sabotage_the_card_off_the_one_function_is_named(demo, tmp_path, examined):
     home = demo.page("home.html")
     card = re.search(r'<div data-card="records-agree">.*?</div>', home, re.S).group(0)
-    bad = _planted(demo, tmp_path, "home.html", card, card.replace(">1 of 31 not checked", ">0 of 31 not checked", 1))
+    n = len(demo.runs)
+    new = card.replace(f">1 of {n} not checked", f">0 of {n} not checked", 1)
+    assert new != card, "nothing to plant over"
+    bad = _planted(demo, tmp_path, "home.html", card, new)
     examined(1, "planted card")
     assert any("not checked" in p for p in card_problems(bad))
+
+
+def test_sabotage_a_plant_s_state_changed_in_the_planted_table_is_named(demo, tmp_path, examined):
+    """One plant's badge changed in the Overview's table: its page reads Contradicts its record."""
+    home = demo.page("home.html")
+    row = re.search(r'<tr data-planted="[0-9a-f]{64}">.*?</tr>', home, re.S)
+    assert row, "no planted table to plant over"
+    new = row.group(0).replace('data-reading="no"', 'data-reading="yes"', 1)
+    assert new != row.group(0), "the first planted row does not read no"
+    bad = _planted(demo, tmp_path, "home.html", row.group(0), new)
+    examined(1, "planted row")
+    assert any("the planted table says 'yes'" in p for p in planted_table_problems(bad))
 
 
 def test_sabotage_the_start_up_list_s_own_word_is_named(demo, examined):

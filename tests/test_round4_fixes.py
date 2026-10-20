@@ -38,7 +38,7 @@ import pytest
 
 from onetrace_console.checks import run_and_record
 from onetrace_console.ingest import Accepted, Rejection, accept
-from onetrace_console.pages import (ANSWER, AUTHORIZATION, CASE, render_execution,
+from onetrace_console.pages import (ANSWER, AUTHORIZATION, CASE, RUN_PROOF, render_execution,
                                     render_executions)
 from onetrace_console.render import COUNTS, HOME, render_all
 from tests.conftest import make_tar
@@ -157,7 +157,9 @@ def _early_stopped(tmp_path: Path) -> dict[str, bytes]:
 def test_a_run_that_stopped_early_is_missing_a_stage_on_home_as_on_its_own_page(tmp_path,
                                                                                store):
     run = _stored(_early_stopped(tmp_path), store)
-    case = render_execution(run, store, generated_at=GENERATED_AT).pages[CASE]
+    #: The ladder is on "What changed", or on "Proof" for a run whose records don't hold up.
+    drawn = render_execution(run, store, generated_at=GENERATED_AT).pages
+    case = drawn[CASE] + drawn[RUN_PROOF]
     assert _rung(case, "nothing-missing") == "no"
     pages = render_all(store, generated_at=GENERATED_AT)
     home = pages[HOME]
@@ -187,7 +189,9 @@ def test_a_run_with_gaps_is_counted_on_home_as_its_own_page_says(files, store):
     run = _stored(_with_receipt(files, lambda d: d["emission"].update(gaps=[0, 0, 0]), "gaps"),
                   store)
     assert (run.recorded_count, run.stage_count) == (3, 3)
-    case = render_execution(run, store, generated_at=GENERATED_AT).pages[CASE]
+    #: The ladder is on "What changed", or on "Proof" for a run whose records don't hold up.
+    drawn = render_execution(run, store, generated_at=GENERATED_AT).pages
+    case = drawn[CASE] + drawn[RUN_PROOF]
     assert _rung(case, "nothing-missing") == "no"
     home = render_all(store, generated_at=GENERATED_AT)[HOME]
     rung = _text(re.search(r'<tr data-rung="nothing-missing">(.*?)</tr>', home, re.S).group(1))

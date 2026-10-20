@@ -67,7 +67,7 @@ def subtitle_problems(page: str) -> list[str]:
 def card_problems(page: str) -> list[str]:
     out = []
     cards = re.findall(r'<div data-card="([^"]+)">(.*?)</div>(?=<div data-card|</section>)', page, re.S)
-    if [c for c, _ in cards] != ["runs", "records-agree", "changed-vs-baseline", "incidents"]:
+    if [c for c, _ in cards] != ["pipelines", "runs", "records-agree", "need-attention"]:
         out.append(f"the cards are {[c for c, _ in cards]}")
     for name, body in cards:
         if not re.search(r'<p class="lead"><a href="[^"]+"><span class="kpi">\d+</span>', body):
@@ -206,9 +206,9 @@ def test_sabotage_the_subtitle_paragraph_unfolded_is_named(home, examined):
 
 def test_sabotage_a_definition_left_out_is_named(home, examined):
     examined(1, "planted page")
-    planted = re.sub(r'(<div data-card="incidents">.*?<summary[^>]*>\?</summary>).*?(</details>)',
+    planted = re.sub(r'(<div data-card="need-attention">.*?<summary[^>]*>\?</summary>).*?(</details>)',
                      r"\1\2", home, count=1, flags=re.S)
-    assert "incidents: no definition behind its '?'" in card_problems(planted)
+    assert "need-attention: no definition behind its '?'" in card_problems(planted)
 
 
 def test_sabotage_a_state_at_zero_hidden_outright_is_named(home, examined):
@@ -225,9 +225,8 @@ def test_sabotage_two_counts_under_one_label_are_named_in_each_card(home, examin
                            '<p data-line="states"><a href="x">29 of 31 records agree</a> · ', 1)
     assert any(p.startswith("records-agree:") for p in label_problems(planted))
     caught += 1
-    for name, plant in (("runs", "<p>30 runs stored</p>"),
-                        ("changed-vs-baseline", "<p>5 of 31 runs changed vs baseline</p>"),
-                        ("incidents", "<p>3 incidents</p>")):
+    for name, plant in (("pipelines", "<p>8 pipelines</p>"), ("runs", "<p>30 runs stored</p>"),
+                        ("need-attention", "<p>5 of 31 runs need attention</p>")):
         planted = re.sub(rf'(<div data-card="{name}">.*?)(<details)', rf"\1{plant}\2", home,
                          count=1, flags=re.S)
         assert any(p.startswith(f"{name}:") for p in label_problems(planted)), name

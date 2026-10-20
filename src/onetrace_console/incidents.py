@@ -144,10 +144,10 @@ WHOLE_OUTPUT = "stdout[whole]"
 
 
 def _evidence_for_run(run: StoredRun) -> str:
-    """The run's case page, which shows the check's report: a path from the site's root, linked
-    relative to the page that shows the incident (`incident_pages`). It was the free viewer file's
-    `execution-<id>.html`, a page the console has never served."""
-    return f"runs/{run.key}/case.html"
+    """The run page's "Proof" view, which shows the check's report: a path from the site's root,
+    linked relative to the page that shows the incident (`incident_pages`). It was the free viewer
+    file's `execution-<id>.html`, a page the console has never served."""
+    return f"runs/{run.key}/proof.html"
 
 
 # ----------------------------------------------------------------------- the five rules
@@ -243,6 +243,25 @@ def _could_not_check(run: StoredRun, store: Store) -> list[Incident]:
     return out
 
 
+def _head_shared(run: StoredRun, store: Store) -> list[Incident]:
+    """One incident per other folder carrying the same run and chain head as this run's folder
+    whose files differ from this one's (`twins`). Its source is the store's own records of the two
+    deliveries, so it quotes the rule's sentence naming both folders, and the field path names this
+    run's folder so the two folders' incidents never share an id."""
+    from onetrace_console.twins import differ_said, folder_named, twins
+    out = []
+    for other, same in twins(run, store):
+        if same:
+            continue
+        path = f"folder[{folder_named(run)}|{folder_named(other)}]"
+        out.append(Incident(
+            id=incident_id("I-HEAD-SHARED", _manifest_sha(run), path),
+            rule="I-HEAD-SHARED", subject=run.key, subject_kind="run",
+            source_sha=_manifest_sha(run), field_path=path,
+            quoted=differ_said(run, other), evidence=_evidence_for_run(run)))
+    return out
+
+
 #: The table. **This tuple is the rule table**: `RULES.md` documents it and
 #: `RULE_TABLE_DIGEST` is taken over it, so a rule cannot change without the digest moving.
 RULES: tuple[Rule, ...] = (
@@ -273,6 +292,12 @@ RULES: tuple[Rule, ...] = (
          condition="the runner recorded a check it did not run, with a stated reason",
          words="a check was not run, and the record says why",
          raise_for=_could_not_check),
+    Rule(id="I-HEAD-SHARED",
+         source="the store's records of two run folders",
+         field="each folder's listing of its files and their object keys",
+         condition="two run folders carry the same run and chain head, and their files differ",
+         words="Two folders share a chain head but their contents differ",
+         raise_for=_head_shared),
 )
 
 #: Left out deliberately; see this module's docstring and DESIGN_GAPS.md.

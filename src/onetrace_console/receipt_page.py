@@ -40,11 +40,17 @@ DOES_NOT_SAY = (
 )
 
 
-def _public_record_note() -> str:
-    """On a public console: its downloads leave out kept inputs (`ingest.bundle`)."""
+def _public_record_note(run: StoredRun) -> str:
+    """On a public console: its downloads leave out kept inputs (`ingest.bundle`), except where
+    every kept file of the run is the demo builder's own example data."""
     from onetrace_console.frame import rendering_public
-    from onetrace_console.kept_inputs import PUBLIC_RECORD
-    return f'<p class="note" data-section="public-record">{escape(PUBLIC_RECORD)}</p>' if rendering_public() else ""
+    from onetrace_console.ingest import _under
+    from onetrace_console.kept_inputs import EXAMPLE_RECORD, FOLDER, PUBLIC_RECORD, example_allowed
+    if not rendering_public():
+        return ""
+    kept = [key for path, key in run.listing if _under(path, FOLDER)]
+    said = EXAMPLE_RECORD if kept and all(example_allowed("sha256:" + k) for k in kept) else PUBLIC_RECORD
+    return f'<p class="note" data-section="public-record">{escape(said)}</p>'
 
 
 def _edge_rows(run: StoredRun, store: Store) -> list[str]:
@@ -80,14 +86,14 @@ def _counts(run: StoredRun, store: Store) -> tuple[int, int] | None:
 def _agree(run: StoredRun, store: Store) -> str:
     """Rung 1, as the run page states it (`records.state`), with the reason where there is one."""
     from onetrace_console import records
-    from onetrace_console.checks import PREVIEW_REASON
+    from onetrace_console.checks import PREVIEW_REASON, PREVIEW_REASONS
     state, why = records.state(run, store), records.why(run, store)
     words = {records.YES: "yes", records.NO: "no", records.COULDNT: "couldn't check",
              records.NOT_CHECKED: "not checked", records.NO_VERDICT: "no verdict recorded"}[state]
     if why:
         return f"Records agree: {words} ({why})"
-    #: A preview-format run says why, in the fixed words.
-    if state == records.COULDNT and run.check_note == PREVIEW_REASON:
+    #: A preview-format run says why, in the fixed words, whichever of the two it was stored with.
+    if state == records.COULDNT and run.check_note in PREVIEW_REASONS:
         return f"Records agree: {words}. {PREVIEW_REASON}"
     return f"Records agree: {words}"
 
@@ -291,7 +297,7 @@ def render_receipt(run: StoredRun, store: Store, *, generated_at: str, anchored,
         #: character, and the command is two lines to type.
         + "<pre><code>" + "\n".join(escape(line) for line in command.split("\n")) + "</code></pre>"
         + "".join(f'<p class="note">{n}</p>' for n in notes)
-        + _public_record_note()
+        + _public_record_note(run)
         + f"<p>{escape(NO_NETWORK)}</p>"
         + _printed(run, store)
         + "</section>"

@@ -3,10 +3,11 @@
 1. Every role the light skin has gets a dark value: a token of the target's file, or a translucent
    one mixed over the opaque one it is drawn on. The three roles the target's file has no token
    for are named, with why.
-2. Both stylesheets -- the console's and the viewer's own -- carry it, switched by the reader's
-   system setting (`prefers-color-scheme`). An explicit `data-theme` on the root wins: the theme
-   switch in the sidebar's footer sets it (tests/test_theme_switch.py), and so may a
-   screenshot or a test. The navigation carries no other control.
+2. Both stylesheets -- the console's and the viewer's own -- carry it, as the default: a page with
+   no theme set is dark. An explicit `data-theme` on the root wins: the theme switch in the
+   sidebar's footer sets light, dark or the system's setting (tests/test_theme_switch.py,
+   tests/test_dark_default.py), and so may a screenshot or a test. The navigation carries no other
+   control.
 3. The vendored target file is pinned: changed bytes raise.
 
 The contrast of every text colour on its ground, in both themes, is held in
@@ -31,22 +32,20 @@ def test_every_light_role_has_a_dark_value_and_the_derived_ones_say_why(examined
 
 
 @pytest.mark.parametrize("where", ["console", "viewer"])
-def test_each_stylesheet_switches_by_the_system_setting_only(where, examined):
+def test_each_stylesheet_is_dark_unless_light_is_chosen(where, examined):
     from onetrace_console import frame
     from onetrace_console.viewer import page
     from onetrace_console.viewer.tokens import dark_palette
     css = frame.stylesheet().decode("utf-8") if where == "console" else page._style()
     examined(1, f"the {where} stylesheet")
-    media = re.search(r"@media \(prefers-color-scheme:dark\)\{:root:not\(\[data-theme=light\]\)\{([^}]*)\}\}", css)
-    assert media, "no dark theme for the system's dark setting"
-    forced = re.search(r":root\[data-theme=dark\]\{([^}]*)\}", css)
-    assert forced and forced.group(1) == media.group(1)
+    default = re.search(r"(?:^|\n):root:not\(\[data-theme=light\]\)\{([^}]*)\}", css)
+    assert default, "no dark theme by default"
     for role, value in dark_palette().items():
-        assert f"--{role}:{value};" in media.group(1), role
+        assert f"--{role}:{value};" in default.group(1), role
 
 
 def test_the_navigation_s_only_control_is_the_theme_switch_in_its_footer(examined):
-    """The theme follows the system until a reader picks one with the footer's switch; the
+    """The theme is dark until a reader picks one with the footer's switch; the
     navigation itself carries nothing to press and nothing to run (the console's no-form rule)."""
     from onetrace_console import frame
     examined(2, "the navigation, without and with its footer")

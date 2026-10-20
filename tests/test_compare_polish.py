@@ -17,13 +17,23 @@ from __future__ import annotations
 import re
 from html import unescape
 
-from tests.test_compare_page import HEADLINE, _annotations, _page, demo  # noqa: F401
+from tests.test_compare_page import HEADLINE, _annotations, demo  # noqa: F401
 
 DIGEST = re.compile(r"sha256:[0-9a-f]{64}")
 
 
 def _text(html: str) -> str:
     return " ".join(unescape(re.sub(r"<[^>]+>", " ", html)).split())
+
+
+def _both_views(demo, base: str, cand: str) -> str:  # noqa: F811
+    """The comparison page's two views together: its stage table is on "Proof"."""
+    folder, store = demo
+    ids = {r.run_id: r.key for r in store.runs()}
+    c = next(c for c in store.comparisons() if (c.run_a, c.run_b) == (ids[base], ids[cand]))
+    diff = folder / "store" / "pages" / "diff"
+    return ((diff / f"{c.key}.html").read_text(encoding="utf-8")
+            + (diff / f"{c.key}-proof.html").read_text(encoding="utf-8"))
 
 
 def polish_problems(page: str, annotations: list[dict]) -> list[str]:
@@ -66,7 +76,7 @@ def polish_problems(page: str, annotations: list[dict]) -> list[str]:
 
 
 def test_the_compare_page_is_polished(demo, examined):  # noqa: F811
-    page = _page(demo, *HEADLINE)
+    page = _both_views(demo, *HEADLINE)
     annotations = _annotations(demo, *HEADLINE)
     examined(1, "comparison page")
     assert polish_problems(page, annotations) == []
@@ -75,7 +85,7 @@ def test_the_compare_page_is_polished(demo, examined):  # noqa: F811
 
 
 def test_sabotage_each_unpolished_form_is_named(demo, examined):  # noqa: F811
-    page = _page(demo, *HEADLINE)
+    page = _both_views(demo, *HEADLINE)
     annotations = _annotations(demo, *HEADLINE)
     first = next(n for n in annotations if n["differs"])
     field = next(f for f, (o, n) in first["differs"].items() if not DIGEST.fullmatch(str(o)))
@@ -108,7 +118,7 @@ def test_a_folds_heading_stays_on_its_markers_line(examined):
 def test_every_setting_arrow_is_one_arrow(demo, examined):  # noqa: F811
     """`→` wherever the console says a setting changed: the graph's boxes, the changes table, the
     sentence, the text diff's settings lines. (The SDK's own quoted words stay as it wrote them.)"""
-    page = _page(demo, *HEADLINE)
+    page = _both_views(demo, *HEADLINE)
     graph = re.search(r'<svg class="graph".*?</svg>', page, re.S).group(0)
     cells = re.findall(r'<td[^>]*data-section="settings"[^>]*>(.*?)</td>', page, re.S)
     lines = re.findall(r"<p data-settings>(.*?)</p>", page, re.S)

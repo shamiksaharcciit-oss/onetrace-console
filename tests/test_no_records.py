@@ -15,7 +15,7 @@ from html import unescape
 
 import pytest
 
-from onetrace_console.pages import CASE, render_execution
+from onetrace_console.pages import CASE, RUN_PROOF, render_execution
 from tests.test_pages import GENERATED_AT, checked  # noqa: F401  (fixture)
 
 
@@ -53,7 +53,13 @@ def test_no_records_is_never_counted_as_a_pass(case_page):
     assert "authorized" not in [r for r, s in states.items() if s == "yes"]
 
 
-def test_the_run_detail_says_no_authorization_records_and_is_never_blank(case_page):
-    policy = _text(_section(case_page, "policy"))
+@pytest.fixture
+def proof_page(checked, store) -> str:  # noqa: F811
+    """The run page's "Proof" view, which holds its policy section."""
+    return render_execution(checked, store, generated_at=GENERATED_AT).pages[RUN_PROOF]
+
+
+def test_the_run_detail_says_no_authorization_records_and_is_never_blank(proof_page):
+    policy = _text(_section(proof_page, "policy"))
     assert "No authorization records for this run." in policy
     assert "The record stops here" not in policy

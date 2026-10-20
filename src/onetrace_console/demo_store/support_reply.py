@@ -3,7 +3,8 @@ stage whose recorded setting changes. Recorded with onetrace.
 
     question --> draft --> policy_check --> send
 
-A customer's question comes in; `draft` writes a reply; `policy_check` sets the refund window in
+A customer's question comes in, with the ticket it came on, which `question` keeps (invented
+example data); `draft` writes a reply; `policy_check` sets the refund window in
 the reply from its recorded setting `refund_days`; `send` records the reply that would go out.
 `draft`'s reply names the window in words, "the refund window"; `policy_check`'s output has the
 number of days in its place. No stage leaves a `{name}` placeholder for a page to show.
@@ -34,6 +35,21 @@ STAGES = ["question", "draft", "policy_check", "send"]
 
 #: The question, made up for this demo.
 QUESTION = "I bought a kettle last week and it leaks. Can I return it for a refund?"
+#: The customer's ticket, made up for this demo: invented example data, read from outside the
+#: pipeline and kept with its digest (the demo builder marks this pipeline as example data).
+TICKET = ("Ticket from an example customer of an example shop. Subject: leaking kettle. "
+          "Message: " + QUESTION)
+
+
+def ticket_bytes() -> bytes:
+    """The ticket as `question` reads it, and keeps it: a JSON string, the bytes its digest is
+    computed over."""
+    return json.dumps(TICKET).encode("utf-8")
+
+
+def kept_inputs(args: dict) -> list[bytes]:
+    """The bytes of every input a run with `args` keeps: the ticket, the same in every run."""
+    return [ticket_bytes()]
 
 #: The stub's phrasings: one is picked by the run's seed, as a sampled model call varies.
 #: Each names the window as WINDOW, which the policy stage replaces with the number of days.
@@ -76,6 +92,11 @@ def main(out_dir, run_id: str, refund_days: str, *, sign_with=None) -> None:
     def question(ctx):
         q = load_json_bounded(ctx.read_external(question_path, "application/json", name="question",
                                                 trust_class="operator-authored"), "question")
+        #: The ticket, from outside the pipeline, kept beside its digest.
+        ctx.read_memory(ticket_bytes(), "application/json", name="ticket",
+                        trust_class="externally-sourced")
+        ctx.keep_declared = True
+        ctx.keep_input("ticket", ticket_bytes())
         return ctx.write_json("question.json", q)
 
     def draft(ctx, asked):

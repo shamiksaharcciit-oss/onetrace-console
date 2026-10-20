@@ -190,11 +190,11 @@ def rendered(tmp: Path) -> dict[str, str]:
 
 
 def _preview_case(tmp: Path) -> dict[str, str]:
-    """One preview run's case page, so the check sees the preview banner.
+    """One preview run's case page, as its two views, so the check sees the preview banner.
 
     The SDK exam's ingest-r1 run B, which declares stage-receipt-chain/0.0-preview, in a store of
     its own: in the shared store it would change every count, list and Overview page."""
-    from onetrace_console.pages import CASE, render_execution
+    from onetrace_console.pages import CASE, RUN_PROOF, render_execution
     from onetrace_console.store import Store
     from tests.conftest import _delivery_paths
     from tests.test_unreadable import _resummed
@@ -203,8 +203,9 @@ def _preview_case(tmp: Path) -> dict[str, str]:
                        for p in _delivery_paths(folder)})
     store = Store(tmp / "preview-store")
     run = _stored_at(files, store, RECEIVED_AT[0])
-    return {"run[preview]/case.html":
-            render_execution(run, store, generated_at=GENERATED_AT).pages[CASE]}
+    drawn = render_execution(run, store, generated_at=GENERATED_AT).pages
+    #: The run page's two views ("What changed" and "Proof").
+    return {"run[preview]/case.html": drawn[CASE], "run[preview]/proof.html": drawn[RUN_PROOF]}
 
 
 def _policy_pages(store, tmp: Path) -> dict[str, str]:

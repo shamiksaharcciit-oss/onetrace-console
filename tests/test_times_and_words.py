@@ -130,7 +130,9 @@ def _intake_cell(diff: str) -> str:
 def test_a_same_stage_whose_inputs_differ_says_so(tmp_path, examined):
     runs = _intake_pair(tmp_path, ("What is the refund window?", "How long does shipping take?"))
     store, pages, loaded = _console(tmp_path, runs, compare=("a", "b"))
-    diff = (pages / "diff" / f"{loaded.comparison.key}.html").read_text(encoding="utf-8")
+    #: The comparison's two views: the stage table is on "Proof", the graph on "What changed".
+    diff = ((pages / "diff" / f"{loaded.comparison.key}-proof.html").read_text(encoding="utf-8")
+            + (pages / "diff" / f"{loaded.comparison.key}.html").read_text(encoding="utf-8"))
     cell = _text(_intake_cell(diff))
     examined(1, "comparison page")
     assert cell.startswith("Same · its inputs differ (question); the verdict compares outputs, "
@@ -141,7 +143,8 @@ def test_a_same_stage_whose_inputs_differ_says_so(tmp_path, examined):
 def test_sabotage_the_same_inputs_say_nothing(tmp_path, examined):
     runs = _intake_pair(tmp_path, ("What is the refund window?", "What is the refund window?"))
     store, pages, loaded = _console(tmp_path, runs, compare=("a", "b"))
-    diff = (pages / "diff" / f"{loaded.comparison.key}.html").read_text(encoding="utf-8")
+    #: The stage table is on the comparison's "Proof" view.
+    diff = (pages / "diff" / f"{loaded.comparison.key}-proof.html").read_text(encoding="utf-8")
     examined(1, "comparison page")
     assert _text(_intake_cell(diff)) == "Same" and 'data-inputs-differ' not in diff
 

@@ -29,6 +29,8 @@ from onetrace_console.words import escape, verbatim, verbatim_rows, generated_fo
 from onetrace_console.incidents import (NOT_BUILT, RULE_TABLE_DIGEST, RULES, Incident,
                                         by_rule, derive, rule_table_digest)
 from onetrace_console.store import Store
+#: Where an incident links the run it names: the run's "Proof" view, which holds its check rows.
+from onetrace_console.views import RUN_PROOF
 
 INCIDENTS = "incidents.html"
 
@@ -102,7 +104,7 @@ def _incident_table(incidents: tuple[Incident, ...], store: Store, up: str = "")
     own = {r.id for r in RULES}
     rows = []
     for i in incidents:
-        run = (f'<a href="{up}runs/{escape(i.subject)}/case.html">{run_named(store, i.subject)}</a>'
+        run = (f'<a href="{up}runs/{escape(i.subject)}/{RUN_PROOF}">{run_named(store, i.subject)}</a>'
                if i.subject_kind == "run" else
                f'{escape(i.subject_kind)} <span class="mono">{escape(i.subject[:12])}</span>'
                + ("" if i.rule in own else
@@ -232,7 +234,7 @@ def render_incident_page(incident: Incident, store: Store, *, generated_at: str)
     up = "../"
     run = store.get_run(incident.subject) if incident.subject_kind == "run" else None
     label = next((p.label for p in pipelines(store) for r in p.runs if run and r.key == run.key), "")
-    who = (f'<a href="{up}runs/{run.key}/case.html"><span class="mono" data-words="record">'
+    who = (f'<a href="{up}runs/{run.key}/{RUN_PROOF}"><span class="mono" data-words="record">'
            f"{named(run.run_id)}</span></a>" if run else
            f'<span class="mono">{escape(incident.subject[:12])}</span>')
     raised = _raised_at(incident, store)
@@ -342,6 +344,23 @@ def _notes(notes: tuple[str, ...]) -> str:
     return "".join(f'<p data-state="couldnt-check">{escape(n)}</p>' for n in notes)
 
 
+def incident_total(store: Store) -> str:
+    """The Incidents page's first sentence: every incident the rules raised from the stored runs,
+    and how many runs they were raised from, each run once. The lines that drew it on the
+    Overview's Incidents card before the Overview led with its pipelines."""
+    runs = store.runs()
+    total = len(runs)
+    unit = "run" if total == 1 else "runs"
+    every = derive(store)
+    raised_from = len({i.subject for i in every if i.subject_kind == "run"})
+    incident_word = "incident" if len(every) == 1 else "incidents"
+    return f"{len(every)} {incident_word} raised from {raised_from} of {total} {unit}."
+
+
+#: Why no incident is called open.
+NO_OPEN_STATE = "This console keeps no open or closed state for an incident, so none is called open."
+
+
 def render_incidents(store: Store, *, generated_at: str,
                      extra_rules: tuple = (), extra_incidents: tuple = (),
                      extra_totals: dict = None, extra_notes: dict = None) -> str:
@@ -376,18 +395,23 @@ def render_incidents(store: Store, *, generated_at: str,
                f"{rule.unit}{'s' if total != 1 else ''} stored.</p>")
             + "</section>")
 
-    not_built = "".join(f"<li>{escape(r)}</li>" for r in NOT_BUILT)
+    #: One sentence on a line of its own; absent where every rule is built.
+    not_built = (f'<p data-section="not-built">Rules not built: {escape(", ".join(NOT_BUILT))}.</p>'
+                 if NOT_BUILT else "")
     digest_text = RULE_TABLE_DIGEST if not extra_rules else rule_table_digest(rules)
     body = [
         "<h1>Incidents</h1>",
+        f'<p data-section="total">{escape(incident_total(store))}</p>',
         '<p data-section="what">An incident records that a stored report says a specific '
         "thing. It is raised by a named rule, quotes the report's own field, and links to "
         "it. There is no severity, no score and nothing to acknowledge.</p>",
+        #: Said on the Overview's Incidents card before the Overview led with its pipelines.
+        f'<p data-section="no-state">{escape(NO_OPEN_STATE)}</p>',
         underived_note(store),
         "".join(groups),
+        #: Ends at the shortened digest: a mark after a closed Details would start a line.
         f'<div data-section="rule-table">Rule table digest: '
-        f'{fingerprint_html(digest_text)}. Rules not built: '
-        f'</div><ul class="plain" data-section="not-built">{not_built}</ul>',
+        f'{fingerprint_html(digest_text)}</div>{not_built}',
         f'<p class="limit" data-section="limit">{escape(_limit_sentence())}</p>',
         generated_footer(generated_at),
     ]

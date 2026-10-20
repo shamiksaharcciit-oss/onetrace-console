@@ -62,8 +62,10 @@ def _stdout(run, store) -> str:
 
 
 def _signed_rung(run, store) -> tuple[str, str]:
-    from onetrace_console.pages import CASE, render_execution
-    case = render_execution(run, store, generated_at=GENERATED_AT).pages[CASE]
+    from onetrace_console.pages import CASE, RUN_PROOF, render_execution
+    #: The ladder is on "What changed", or on "Proof" for a run whose records don't hold up.
+    drawn = render_execution(run, store, generated_at=GENERATED_AT).pages
+    case = drawn[CASE] + drawn[RUN_PROOF]
     found = re.search(r'<tr data-rung="signed" data-state="([^"]+)"><td>.*?</td><td>(.*?)</td></tr>',
                       case, re.S)
     assert found, "no signing rung"

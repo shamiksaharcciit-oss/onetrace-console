@@ -243,13 +243,22 @@ def item4_problems(case: str) -> list[str]:
     return out
 
 
+def _with_proof(pages: dict, rel: str) -> str:
+    """A page with its "Proof" view after it: what a reader can reach of it, wherever a part is."""
+    sibling = (rel[:-len("case.html")] + "proof.html" if rel.endswith("/case.html")
+               else rel[:-len(".html")] + "-proof.html")
+    return pages[rel] + pages.get(sibling, "")
+
+
 def test_the_step_table_says_the_shared_reason_once_and_names_each_receipt(pages, examined):
-    cases = [h for rel, h in pages.items() if rel.endswith("/case.html")]
+    cases = [rel for rel in pages if rel.endswith("/case.html")]
     examined(len(cases), "run pages")
     assert cases
-    for case in cases:
-        assert item4_problems(case) == []
-        header = re.search(r'<section data-section="case">.*?</section>', case, re.S).group(0)
+    for rel in cases:
+        case = pages[rel]
+        assert item4_problems(_with_proof(pages, rel)) == []
+        #: The case is on "What changed", or on "Proof" for a run whose records don't hold up.
+        header = re.search(r'<section data-section="case">.*?</section>', _with_proof(pages, rel), re.S).group(0)
         assert re.search(r"<time [^>]*>\d{4}-\d\d-\d\d \d\d:\d\d:\d\d UTC</time> → "
                          r"<time [^>]*>\d\d:\d\d:\d\d UTC</time>", header), "the date is not said once"
 
@@ -257,7 +266,8 @@ def test_the_step_table_says_the_shared_reason_once_and_names_each_receipt(pages
 @pytest.mark.parametrize("planted", ["the shared reason per step", "a full timestamp in a step",
                                      "an unnamed receipt"])
 def test_item4_sabotage_each_old_form_is_named(pages, planted, examined):
-    case = _unlabelled(next(h for rel, h in pages.items() if rel.endswith("/case.html")))
+    #: The run's step table is on whichever view holds it; the demo's runs come in no fixed order.
+    case = _unlabelled(next(_with_proof(pages, rel) for rel in sorted(pages) if rel.endswith("/case.html")))
     if planted == "the shared reason per step":
         bad = case.replace('<td><p>Checked — it holds.</p></td>',
                            "<td><p>Checked — it holds.</p><p>" + PER_STEP + ".</p></td>", 1)
@@ -388,7 +398,7 @@ def test_every_wide_table_scrolls_in_a_named_region(pages, examined):
         matched = [rel for rel in pages if re.fullmatch(pattern, rel)]
         assert matched, pattern
         for rel in matched:
-            assert item8_problems(rel, pages[rel], names) == []
+            assert item8_problems(rel, _with_proof(pages, rel), names) == []
             checked += 1
     examined(checked, "pages with wide tables")
 

@@ -97,6 +97,15 @@ def run_key(run_id: str, chain_head: str) -> str:
     return digest(run_id.encode("utf-8") + _KEY_SEPARATOR + chain_head.encode("utf-8"))
 
 
+def folder_key(run_id: str, chain_head: str, folder: str) -> str:
+    """The key of a run read from the run folder `folder`, where another run folder carries the
+    same run and chain head: runs are folders, not chain heads, so each such folder is a run of
+    its own, read on its own, and its key -- the address of its pages -- is its folder's. The same
+    folder gets the same key whichever of the two is read first."""
+    return digest(run_id.encode("utf-8") + _KEY_SEPARATOR + chain_head.encode("utf-8")
+                  + _KEY_SEPARATOR + b"folder:" + folder.encode("utf-8"))
+
+
 @dataclass(frozen=True, slots=True)
 class StoredRun:
     """One received run: what it is, what it is made of, and what was found about it.
@@ -158,7 +167,7 @@ class StoredRun:
     signed: str = ""
     #: "Ran as approved" as the run's own page reads it from its own check (`viewer.model.
     #: ran_as_approved`), recorded when the run is checked: approved, departed, edges-mismatch,
-    #: no-plan, not-a-graph-run, cant-check, does-not-verify or couldnt-check -- or empty where
+    #: no-plan, not-a-graph-run, cant-check, no-paths, does-not-verify or couldnt-check -- or empty where
     #: the page has no own check whose rows it reads. The runs list shows this.
     approved: str = ""
     #: "Records agree" as the run's own page decides rung 1 from its own check (`viewer.model.
@@ -192,6 +201,10 @@ class StoredRun:
     #: Stored because `I-COULD-NOT-CHECK` quotes a STATED reason, and a reason
     #: that only ever existed in memory is not something a rule can quote.
     topology_note: str = ""
+    #: The run folder it was read from, for a run a folder load delivered (`folder_load`); empty
+    #: for a run delivered any other way. Where two folders carry the same run and chain head,
+    #: each is stored under its own folder's key (`folder_key`) and pages name the folder.
+    folder: str = ""
 
     def to_json(self) -> str:
         d = asdict(self)

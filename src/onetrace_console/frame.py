@@ -136,6 +136,7 @@ PAGE_CSS = """
 .cp[data-view=receipt] table[data-section=receipt] td :is(.mono,q,code,span){white-space:normal;
   overflow-wrap:anywhere}
 .cp .io .fp,.cp .io .fp .mono{overflow-wrap:anywhere}
+.cp p[data-input]{overflow-wrap:anywhere}
 .cp[data-view=incident] [data-section=which] li{overflow-wrap:anywhere}
 .cp[data-view=incident] [data-scroll=found-rows]{max-height:448px;overflow:auto}
 .cp[data-view=incident] pre[data-found=summary]{white-space:pre-wrap;overflow-wrap:anywhere}
@@ -254,6 +255,8 @@ PAGE_CSS = """
   td[data-section=annotations]){overflow-wrap:anywhere}
 .cp table[data-section=changes] tr:last-child td{border-bottom:none}
 .cp table[data-section=changes] td[data-result="FIRST DIFFERENCE"]{color:var(--cc-ink);font-weight:600}
+.cp table[data-section=changes] td[data-section=annotations] [data-part=fold]{display:block;margin-top:6px;padding-top:4px;border-top:1px solid var(--line-soft)}
+.cp table[data-section=changes] td[data-section=annotations] [data-part=fold] details>summary{font-size:var(--fs-small)}
 .cp pre{background:var(--surface);border:1px solid var(--line);border-radius:var(--r-ctl);
   padding:10px 12px;overflow-x:auto;max-width:100%;font-size:var(--fs-small)}
 .cp>p[data-state=no-records]{align-self:flex-start;margin-top:-8px}
@@ -265,6 +268,45 @@ PAGE_CSS = """
   color:var(--ink);text-decoration:none}
 .cp [data-section=authorization] p[data-section=authorization-note]{font-size:var(--fs-small);
   color:var(--ink-muted)}
+.cp svg.mark{display:inline-block;vertical-align:-2px;margin-right:2px;flex:none}
+.cp svg.mark .f{fill:currentColor}
+.cp svg.mark .s{fill:none;stroke:currentColor;stroke-width:1.6}
+.cp svg.mark[data-tone=ok]{color:var(--ok-ink)}
+.cp svg.mark[data-tone=bad]{color:var(--bad-ink)}
+.cp svg.mark[data-tone=cc]{color:var(--cc-ink)}
+.cp svg.mark[data-tone=neu]{color:var(--neu-ink)}
+.cp .marks{display:flex;flex-wrap:wrap;gap:3px;margin:6px 0}
+.cp table.board[data-group]{background:var(--surface);border:1px solid var(--line);
+  border-radius:var(--r-card);border-collapse:separate;border-spacing:0}
+.cp table.board[data-group] td{vertical-align:top}
+.cp ul.legend{display:flex;flex-wrap:wrap;gap:4px 16px;margin:4px 0 0;font-size:var(--fs-small)}
+.cp [data-section=legend] p{margin:0;font-size:var(--fs-small);color:var(--ink-muted)}
+.cp ol.chain{display:flex;flex-wrap:wrap;gap:6px;list-style:none;margin:8px 0;padding:0}
+.cp ol.chain li{display:flex;flex-direction:column;align-items:center;gap:2px}
+.cp ol.chain .stage{border:1px solid var(--line-strong);border-radius:6px;padding:2px 8px;
+  font-size:var(--fs-small);background:var(--surface)}
+.cp ol.chain .n{font-size:var(--fs-small);font-weight:600}
+.cp ol.tiles{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:10px;
+  list-style:none;margin:10px 0;padding:0}
+.cp ol.tiles>li{background:var(--surface);border:1px solid var(--line);border-radius:var(--r-card);
+  padding:10px 12px;min-width:0}
+.cp ol.tiles>li>a{display:block;overflow-wrap:anywhere}
+.cp ol.tiles>li p{margin:4px 0 0;font-size:var(--fs-small)}
+.cp ol.tiles .n{color:var(--ink-muted)}
+.cp svg.bar{display:block;width:100%;height:8px;margin:8px 0 2px;border-radius:4px}
+.cp svg.bar [data-tone=ok]{fill:var(--ok-ink)}
+.cp svg.bar [data-tone=bad]{fill:var(--bad-ink)}
+.cp svg.bar [data-tone=cc]{fill:var(--cc-ink)}
+.cp svg.bar [data-tone=neu]{fill:var(--neu-ink)}
+.cp [data-section=pipeline-cards]{margin:14px 0}
+.cp .pcards{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;margin-top:10px}
+.cp a.pcard{display:block;background:var(--surface);border:1px solid var(--line);
+  border-radius:var(--r-card);padding:12px 14px;color:var(--ink);text-decoration:none;min-width:0}
+.cp a.pcard:hover{border-color:var(--line-strong)}
+.cp a.pcard:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.cp a.pcard h3{margin:0;font-size:var(--fs-body)}
+.cp a.pcard p{margin:4px 0 0;font-size:var(--fs-small);color:var(--ink-muted)}
+@media (max-width:760px){.cp .pcards{grid-template-columns:minmax(0,1fr)}}
 @media (max-width:1100px){.cp [data-section=cards]{grid-template-columns:repeat(2,minmax(0,1fr))}
   .cp .panels{grid-template-columns:minmax(0,1fr)}
   .cp .io,.cp[data-view=receipt] .io,.cp[data-view=text-diff] .io{grid-template-columns:minmax(0,1fr)}}
@@ -423,8 +465,9 @@ def stylesheet() -> bytes:
         f"font-display:swap;src:url(/static/fonts/{name}) format('woff2');unicode-range:{chars}}}\n"
         for name, (family, weight, chars) in _FACES.items())
     from onetrace_console.run_head import HEAD_CSS
+    from onetrace_console.views import VIEWS_CSS
     return (faces + root_css() + "\n" + scale_css() + "\n" + theme_css() + "\n" + CSS + FRAME_CSS + PAGE_CSS + CHIP_CSS
-            + THEME_CSS + PUBLIC_CSS + HEAD_CSS + NARROW_CSS).encode("utf-8")
+            + THEME_CSS + PUBLIC_CSS + HEAD_CSS + VIEWS_CSS + NARROW_CSS).encode("utf-8")
 
 
 def items(onedoor: bool) -> tuple[tuple[str, str, str], ...]:
@@ -446,22 +489,23 @@ def _current(rel: str) -> str | None:
     return None
 
 
-#: The theme switch, in the footer beside the version: a choice of light or dark for this
-#: browser, kept in its own storage under THEME_KEY and nowhere else -- nothing is sent, and the
-#: console stores nothing. With no choice made, the page follows the system, as it does with no
+#: The theme switch, in the footer beside the version: a choice of light, dark, or the system's
+#: setting for this browser, kept in its own storage under THEME_KEY and nowhere else -- nothing is
+#: sent, and the console stores nothing. With no choice saved, a page is dark, as it is with no
 #: script at all. Two buttons, because one that cycled through three states would not say what a
-#: press does: the first names the theme it switches to; the second, shown only once a choice is
-#: made, returns to the system's. Both are `hidden` until the script shows them, so a page read
+#: press does: the first names the theme it switches to; the second, shown until the system's
+#: setting is the choice, follows it. Both are `hidden` until the script shows them, so a page read
 #: without scripts is the page it was. Not a form: it posts nothing, and goes nowhere.
 THEME_KEY = "onetrace-console-theme"
 THEME_SWITCH = ('<div class="theme" data-theme-controls>'
-                '<button type="button" data-theme-switch hidden>Switch to dark theme</button>'
+                '<button type="button" data-theme-switch hidden>Switch to light theme</button>'
                 '<button type="button" data-theme-system hidden>Follow the system setting</button>'
                 "</div>")
-#: In `<head>`, before the stylesheet: the stored choice set before the page is first drawn, so a
-#: page set to dark never shows light first. Storage that is blocked leaves the system's theme.
+#: In `<head>`, before the stylesheet: the saved choice set before the page is first drawn, so a
+#: page set to light never shows dark first. Storage that is blocked leaves the default, dark.
 THEME_HEAD_SCRIPT = ("<script>try{var t=localStorage.getItem('" + THEME_KEY + "');"
-                     "if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t)"
+                     "if(t==='light'||t==='dark'||t==='system')"
+                     "document.documentElement.setAttribute('data-theme',t)"
                      "}catch(e){}</script>")
 #: After the buttons: shows them, and keeps their words true to what a press does. A choice is
 #: kept where the browser allows; where it doesn't, it holds for the page in view.
@@ -469,13 +513,14 @@ THEME_SCRIPT = (
     "<script>(function(){var d=document.documentElement,k='" + THEME_KEY + "',"
     "a=document.querySelector('[data-theme-switch]'),b=document.querySelector('[data-theme-system]'),"
     "m=matchMedia('(prefers-color-scheme: dark)');if(!a||!b)return;"
-    "function now(){return d.getAttribute('data-theme')||(m.matches?'dark':'light')}"
-    "function keep(v){try{v?localStorage.setItem(k,v):localStorage.removeItem(k)}catch(e){}}"
+    "function now(){var t=d.getAttribute('data-theme');"
+    "return t==='light'||t==='dark'?t:t==='system'?(m.matches?'dark':'light'):'dark'}"
+    "function keep(v){try{localStorage.setItem(k,v)}catch(e){}}"
     "function draw(){a.textContent='Switch to '+(now()==='dark'?'light':'dark')+' theme';"
-    "a.hidden=false;b.hidden=!d.hasAttribute('data-theme')}"
+    "a.hidden=false;b.hidden=d.getAttribute('data-theme')==='system'}"
     "a.addEventListener('click',function(){var v=now()==='dark'?'light':'dark';"
     "d.setAttribute('data-theme',v);keep(v);draw()});"
-    "b.addEventListener('click',function(){d.removeAttribute('data-theme');keep(null);draw();a.focus()});"
+    "b.addEventListener('click',function(){d.setAttribute('data-theme','system');keep('system');draw();a.focus()});"
     "m.addEventListener('change',draw);draw()})()</script>")
 
 

@@ -1506,7 +1506,7 @@ EDGES_ROW = "edges equal the edges derived from the receipts"
 @dataclass(frozen=True, slots=True)
 class Approval:
     """What the run's own check says of its plan. `state` is one of: `approved`, `departed`,
-    `edges-mismatch`, `no-plan`, `not-a-graph-run`, `cant-check`, `does-not-verify`,
+    `edges-mismatch`, `no-plan`, `not-a-graph-run`, `cant-check`, `no-paths`, `does-not-verify`,
     `not-checked`, `couldnt-check`. `detail` is the row's own detail where a state shows one
     (unescaped here; the page escapes it), or the verifier named for `cant-check`."""
     state: str
@@ -1553,6 +1553,16 @@ def rows_from_json(doc: dict, exit_status: str) -> CheckRows:
     return CheckRows(tuple(rows), exit_status, overall, readable)
 
 
+def no_paths_observed(manifest) -> bool:
+    """The record declares approved paths (`declared_edges`, at least one) and lists no path the
+    run took (`edges` empty): a plan nothing can be compared with. A run whose stages pass their
+    state on as fresh values, as a LangGraph graph does, records no edges at all."""
+    if not isinstance(manifest, dict):
+        return False
+    declared, taken = manifest.get("declared_edges"), manifest.get("edges")
+    return isinstance(declared, list) and bool(declared) and isinstance(taken, list) and not taken
+
+
 def ran_as_approved(manifest: dict, check: CheckRows | None, *, own_check: bool,
                     verifier: str | None) -> Approval:
     """The plan rung's state, from the page's own check only (as "Records agree", 29x §3 item 2).
@@ -1561,9 +1571,10 @@ def ran_as_approved(manifest: dict, check: CheckRows | None, *, own_check: bool,
     - no check, or one handed to the page: not checked;
     - its rows can't be read one by one, or a row is there twice: couldn't check;
     - no `edges` in the manifest, and neither row: not a graph run;
-    - `edges`, but either row missing: this verifier can't check the plan (0.1.2 has neither);
     - the plan row FAILs: departed from the plan, with its detail;
     - the edges row FAILs: the executed edges don't match the receipts, with its detail;
+    - approved paths declared but no path observed: couldn't check, never yes;
+    - `edges`, but either row missing: this verifier can't check the plan (0.1.2 has neither);
     - the plan row NOT-RUN: no approved plan recorded;
     - exit 0, the summary PASS and both rows PASS: ran as approved -- never the two
       rows alone;
@@ -1583,12 +1594,14 @@ def ran_as_approved(manifest: dict, check: CheckRows | None, *, own_check: bool,
     graph = isinstance(manifest, dict) and "edges" in manifest
     if plan is None and edges is None and not graph:
         return Approval("not-a-graph-run")
+    if plan is not None and plan[0] == "fail":
+        return Approval("departed", plan[1])
+    if edges is not None and edges[0] == "fail":
+        return Approval("edges-mismatch", edges[1])
+    if no_paths_observed(manifest):
+        return Approval("no-paths")
     if plan is None or edges is None:
         return Approval("cant-check", verifier or "")
-    if plan[0] == "fail":
-        return Approval("departed", plan[1])
-    if edges[0] == "fail":
-        return Approval("edges-mismatch", edges[1])
     if plan[0] == "not_run":
         return Approval("no-plan")
     if (check.exit_status == "0" and check.overall == "pass"
@@ -1606,6 +1619,7 @@ _APPROVAL_RUNG = {
     "no-plan": (("not-declared", "rung.state.not_declared"), "rung.approved.no_plan"),
     "not-a-graph-run": (("not-a-graph-run", ""), "rung.approved.linear"),
     "cant-check": (_COULDNT, "rung.approved.cant_check"),
+    "no-paths": (_COULDNT, "rung.approved.no_paths"),
     #: Not "No": that would say the run departed from its plan, which wasn't established.
     "does-not-verify": (("does-not-verify", "rung.state.couldnt_check"), "rung.approved.not_verified"),
     "not-checked": (_NOT_CHECKED, "rung.approved.not_checked"),

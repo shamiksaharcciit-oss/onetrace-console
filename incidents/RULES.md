@@ -37,6 +37,7 @@ cannot find words to quote, it **raises** rather than inventing any.
 | `I-RUNID-REUSED` | the run's own record, as the store wrote it | `flags`, the `run_id reused` entry | the store flagged `'run_id reused'` at ingest | two chains arrived under one run name |
 | `I-HEADER-DISAGREES` | the run's own record, as the store wrote it | `flags`, the header entry | the store flagged that a delivery header disagrees with the manifest | the delivery's header contradicted its own manifest |
 | `I-COULD-NOT-CHECK` | the check runner's record on the run | `check_note` and `topology_note` | the runner recorded a check it did not run, with a stated reason | a check was not run, and the record says why |
+| `I-HEAD-SHARED` | the store's records of two run folders | each folder's listing of its files and their object keys | two run folders carry the same run and chain head, and their files differ | Two folders share a chain head but their contents differ |
 
 ### Notes on each
 
@@ -57,6 +58,13 @@ when the reference topology check is not distributed — the example the rule wa
 for. A run recorded as `could not check` with **no** stated reason makes the derivation
 **raise**; the reason belongs where the runner records the outcome, not here.
 
+**`I-HEAD-SHARED`** reads two runs a folder load stored from two run folders that carry the same
+run and chain head. Runs are folders, not chain heads: each such folder is stored under its own
+key and read on its own. Where their files are the same, byte for byte, they are copies of one
+run and nothing is raised. Where any file differs, each of the two runs raises one incident,
+quoting the rule's sentence and naming both folders. It never says which folder is right; each
+folder's own check says what its record holds.
+
 ## Incident ids
 
     id = sha256(rule id ∥ NUL ∥ source sha ∥ NUL ∥ field path)
@@ -68,7 +76,7 @@ different splits of the same characters cannot produce one id.
 
 - `I-CONTRADICTS`, and the `check_note` half of `I-COULD-NOT-CHECK`, use the **stored check
   report's object key**, which is the sha of the report itself.
-- `I-RUNID-REUSED`, `I-HEADER-DISAGREES` and the `topology_note` half use the run's
+- `I-RUNID-REUSED`, `I-HEADER-DISAGREES`, `I-HEAD-SHARED` and the `topology_note` half use the run's
   **`MANIFEST.json` object key**. Those sources are the store's flags and the runner's note —
   recorded *about* a delivery rather than inside a report — and the manifest is the immutable,
   content-addressed thing they were recorded about. Using the mutable run record instead would

@@ -24,16 +24,16 @@ PINS_DOC = REPO / "PINS.md"
 
 #: The three hashes this channel has independently verified, named once here. If a pin is
 #: moved, this fails and names what disagreed -- the point of writing them out at all.
-#: The SDK's two: onetrace 0.2.2 and onetrace-verify 0.2.1 from PyPI, each wheel's sha256 as PyPI
-#: serves it (written here by script from PyPI's JSON).
-ONETRACE_WHL_SHA256 = "5fbefd657d0622d8dad8d9506f118be2b417a9586589d8e50d59fd2a5fa21b1f"
-ONETRACE_VERIFY_WHL_SHA256 = "c001019740798f907ae8a4adace32c597fb749cf52fca0e668c932723a792119"
+#: The SDK's two: onetrace 0.3.0 and onetrace-verify 0.3.0, the release candidate's wheels, each
+#: wheel's sha256 written here by script from the files.
+ONETRACE_WHL_SHA256 = "c20cc67cedd92a66b232af1cd970166df3c108cd86b31415ec299490f004a5bf"
+ONETRACE_VERIFY_WHL_SHA256 = "9b8f4db4ba75b4b7ae6871125246128de620cb25e7966bc1c140c3ad069483d2"
 #: The pinned SDK's version, as its distribution and `onetrace.__version__` report it; and the
-#: verifier's, now a patch behind it (the two are released in series: 0.2.x with 0.2.x).
-PINNED_SDK_VERSION = "0.2.2"
-PINNED_VERIFY_VERSION = "0.2.1"
-ONETRACE_LOCK_KEY = "onetrace==0.2.2"
-ONETRACE_VERIFY_LOCK_KEY = "onetrace-verify==0.2.1"
+#: verifier's, the same (the two are released in series: 0.3.x with 0.3.x).
+PINNED_SDK_VERSION = "0.3.0"
+PINNED_VERIFY_VERSION = "0.3.0"
+ONETRACE_LOCK_KEY = "onetrace==0.3.0"
+ONETRACE_VERIFY_LOCK_KEY = "onetrace-verify==0.3.0"
 
 _REQ = re.compile(
     r"^(?P<req>\S+)\s*\\?\s*$\n\s*--hash=sha256:(?P<sha>[0-9a-f]{64})",
@@ -72,6 +72,18 @@ def test_onetrace_verify_is_pinned_to_the_wheel_this_channel_verified(examined):
     entries = lock_entries()
     examined(1, "pin checked")
     assert entries.get(ONETRACE_VERIFY_LOCK_KEY) == ONETRACE_VERIFY_WHL_SHA256, entries
+
+
+def test_the_sdk_s_doctor_reads_the_pinned_pair_as_compatible(tmp_path, examined):
+    """`onetrace doctor`, in an empty folder, on what this console installs: its compatibility
+    line names the two pinned versions and says they are compatible, by the SDK's own table."""
+    p = subprocess.run([sys.executable, "-m", "onetrace", "doctor"], cwd=tmp_path, capture_output=True,
+                       text=True, timeout=120)
+    examined(1, "doctor's compatibility line")
+    line = (f"[ok]  onetrace and onetrace-verify: onetrace {PINNED_SDK_VERSION}, "
+            f"onetrace-verify {PINNED_VERIFY_VERSION}: compatible")
+    assert line in [l.strip() for l in p.stdout.splitlines()], p.stdout
+    assert p.returncode == 0, p.stdout + p.stderr
 
 
 def test_a_wrong_hash_fails_the_install(examined):
@@ -134,6 +146,19 @@ def test_the_pins_document_names_both_hashes(examined):
     examined(len(shas), "hashes checked against PINS.md")
     for sha in shas:
         assert sha in doc, f"PINS.md does not name {sha}"
+
+
+@pytest.mark.skipif(not PINS_DOC.is_file(),
+                    reason="PINS.md is the repository's own record of its pins and is left out "
+                           "of the public tree")
+def test_the_pins_document_names_the_0_3_0_release_s_four_files_from_pypi(examined):
+    from tests.test_pin_012 import RELEASE_0_3_0
+    doc = PINS_DOC.read_text(encoding="utf-8")
+    now = doc.split("\n## Before", 1)[0]
+    examined(len(RELEASE_0_3_0), "release files checked against PINS.md")
+    for name, sha in RELEASE_0_3_0.items():
+        assert sha in now, f"PINS.md's current section does not name {name}"
+    assert "Until they are on PyPI" not in now and "--find-links" not in now
 
 
 def test_no_pythonpath_clone_apparatus_remains(examined):

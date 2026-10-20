@@ -195,10 +195,10 @@ def test_the_summary_names_the_first_difference_and_what_is_not_established(
         diverging, examined):
     """Board 6's stage-level summary: where the first difference is, how many stages were
     identical before it (with its denominator), one plain sentence of what differs (each setting
-    by its short name with both values, how many stages after it changed) -- and that WHY it
-    differs is not established. No
-    causal word: the ladder gives order, and settings differing beside an output differing
-    is not evidence that one produced the other."""
+    by its short name with both values, how many stages after it changed). With a setting
+    recorded as differing at the stage, it no longer adds that why its output differs is not
+    established: the recorded change is named instead. No causal word: the ladder gives order,
+    and settings differing beside an output differing is not evidence that one produced the other."""
     comparison, store = diverging
     report = _diff_json(comparison, store)
     first = report["first_difference"]
@@ -208,8 +208,7 @@ def test_the_summary_names_the_first_difference_and_what_is_not_established(
     assert f"stage {first['index']} · {first['stage']}" in block
     assert f"Stages identical before it: {report['stages_identical_before_first_difference']} " \
            f"of {before}" in block
-    assert f"Why stage {first['index']} · {first['stage']}'s output differs is not " \
-           "established by this evidence." in block
+    assert "is not established by this evidence." not in block
     #: One plain sentence (the Compare board's): each differing setting by its short name, with
     #: both values, never its whole path; the stages the same before it; how many changed after.
     note = next(a for a in report["annotations"] if a["index"] == first["index"])
@@ -717,6 +716,10 @@ def test_every_link_on_home_points_at_a_page_that_was_rendered(new_pages, ten_ru
         run = re.fullmatch(r"runs/([0-9a-f]{64})/case\.html", href)
         if run:
             assert run.group(1) in stored, f"Home links to {href}, a run that is not stored"
+            continue
+        #: A link to a part of Home itself: the part must be there.
+        if href.startswith("#"):
+            assert f'id="{href[1:]}"' in new_pages[HOME], f"Home links to {href}, which it lacks"
             continue
         assert href in new_pages, f"Home links to {href}, which was not rendered"
 

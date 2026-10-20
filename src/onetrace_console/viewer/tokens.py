@@ -169,13 +169,16 @@ def palette_names() -> list[str]:
 
 
 def theme_css() -> str:
-    """The dark theme: the same roles, darker, when the reader's system asks for dark and the
-    page is not set to light, or when the page is set to dark. The light skin stays the
-    default; nothing else in any stylesheet changes, as every colour is a role."""
-    decls = "".join(f"--{r}:{v};" for r, v in dark_palette().items())
-    return (":root{color-scheme:light}\n"
-            f"@media (prefers-color-scheme:dark){{:root:not([data-theme=light]){{color-scheme:dark;{decls}}}}}\n"
-            f":root[data-theme=dark]{{color-scheme:dark;{decls}}}")
+    """The theme: dark by default -- with no theme set on the page, which is a page read without
+    scripts or with no choice saved -- and light only where a reader chose it, or chose to follow
+    a system set to light. Printing is always light: dark text on a light page. Nothing else in
+    any stylesheet changes, as every colour is a role."""
+    dark = "".join(f"--{r}:{v};" for r, v in dark_palette().items())
+    light = "".join(f"--{r}:{palette()['--' + r]};" for r in dark_palette())
+    return (f":root:not([data-theme=light]){{color-scheme:dark;{dark}}}\n"
+            ":root[data-theme=light]{color-scheme:light}\n"
+            f"@media (prefers-color-scheme:light){{:root[data-theme=system]{{color-scheme:light;{light}}}}}\n"
+            f"@media print{{:root:not([data-theme=light]){{color-scheme:light;{light}}}}}")
 
 
 # ------------------------------------------------------------------ the type scale and corners

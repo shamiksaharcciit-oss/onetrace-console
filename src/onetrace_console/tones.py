@@ -62,7 +62,7 @@ ATTENTION = {
     #: A stage's last attempt raised an error, which the record keeps; no check failed. Amber,
     #: as the boards draw it: the run did not finish what it declared, and nothing here says why.
     "last-attempt-failed": NOT_DONE,
-    "stopped-at-a-step": DECLINED,     # a step's own rule declined; the steps after it not reached
+    "stopped-at-a-step": DECLINED,     # a step's own rule declined; the run stopped there
     "changed": NOT_MADE,               # a change is not a fault, and no check failed
 }
 
@@ -70,9 +70,10 @@ ATTENTION = {
 BASELINE = {"same": HELD, "changed": NOT_MADE, "couldnt-check": NOT_DONE, "not-compared": NOT_MADE}
 
 #: An incident's rule, by what raised it: a check that ran and failed is red; a check that couldn't
-#: be done is amber; a fact the store recorded (a run id used twice) is neutral.
+#: be done is amber; a fact the store recorded (a run id used twice, two folders that share a chain
+#: head but differ) is neutral.
 INCIDENT = {"I-CONTRADICTS": FAILED, "I-HEADER-DISAGREES": FAILED, "I-COULD-NOT-CHECK": NOT_DONE,
-            "I-RUNID-REUSED": NOT_MADE}
+            "I-RUNID-REUSED": NOT_MADE, "I-HEAD-SHARED": NOT_MADE}
 
 
 #: A stage's verdict in a comparison of two runs (the Compare page's graph). A first difference

@@ -49,7 +49,9 @@ def test_the_forged_run_is_stored_as_contradicts_and_every_surface_says_so(uploa
     assert answers["a"]["check_verdict"] == "holds"
     b = answers["b"]
     status, case = _get(base, f"/runs/{b['run_key']}/case.html")
-    case = case.decode("utf-8")
+    #: The answer trail is on "Proof" for a run whose records don't hold up.
+    _status, proof = _get(base, f"/runs/{b['run_key']}/proof.html")
+    case = case.decode("utf-8") + proof.decode("utf-8")
     status, home = _get(base, "/counts.html")  # every count, whole
     assert status == 200
     home = home.decode("utf-8")
@@ -71,7 +73,7 @@ def test_on_0_2_0_the_forged_rows_read_and_the_digest_is_quoted_escaped(uploaded
     _, listed = _get(base, "/incidents-i-contradicts.html")
     #: The incident's own page, from its row on the rule's list: the verifier's rows are quoted there.
     own = re.search(r'<tr data-incident="[0-9a-f]+">.*?<a href="(incidents/[^"]+)">.*?'
-                    + re.escape(f"runs/{answers['b']['run_key']}/case.html"), listed.decode("utf-8"), re.S)
+                    + re.escape(f"runs/{answers['b']['run_key']}/proof.html"), listed.decode("utf-8"), re.S)
     assert own, "the forged run's incident is listed, linked to its page"
     _, incident = _get(base, "/" + own.group(1))
     examined(2, "run page and incident page read")
@@ -162,7 +164,9 @@ def test_the_consoles_own_words_on_a_refused_comparison_name_no_none(uploaded, e
     base, root, answers = uploaded
     status, body = _post(base, f"/compare?a={answers['a']['run_key']}&b={answers['b']['run_key']}")
     assert status == 200, body[:300]
-    page = (root / "pages" / json.loads(body)["pages"]["diff"].lstrip("/")).read_text(encoding="utf-8")
+    path = root / "pages" / json.loads(body)["pages"]["diff"].lstrip("/")
+    #: The page's two views: the SDK's own text layers are on "Proof".
+    page = path.read_text(encoding="utf-8") + path.with_name(path.stem + "-proof.html").read_text(encoding="utf-8")
     layers = re.findall(r"<pre[^>]*>.*?</pre>", page, re.S)
     outside = page
     for layer in layers:

@@ -19,7 +19,7 @@ from dataclasses import replace
 
 import pytest
 
-from onetrace_console.pages import ANSWER, AUTHORIZATION, CASE, render_execution
+from onetrace_console.pages import ANSWER, AUTHORIZATION, CASE, RUN_PROOF, render_execution
 from onetrace_console.render import HOME, render_all
 from tests.conftest import make_tar
 from tests.test_pages import GENERATED_AT, checked  # noqa: F401  (fixture)
@@ -176,7 +176,9 @@ def test_a_lone_surrogate_elsewhere_in_the_record_is_stored_and_shown_escaped(fi
     out["MANIFEST.json"] = json.dumps(manifest).replace('"__STAGE__"', '"al\\ud800pha"').encode()
     run = _stored(_resummed(out), store)
     from onetrace_console.unreadable import RUN_FAILED, TITLE
-    case = render_execution(run, store, generated_at=GENERATED_AT).pages[CASE]
+    drawn = render_execution(run, store, generated_at=GENERATED_AT).pages
+    #: Both views: the case, which names the stage, is on "Proof" for a run whose records don't hold up.
+    case = drawn[CASE] + drawn[RUN_PROOF]
     case.encode("utf-8")
     assert TITLE not in _text(case) and RUN_FAILED not in _text(case)
     assert "al\\ud800pha" in case

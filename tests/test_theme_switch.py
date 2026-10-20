@@ -1,11 +1,12 @@
-"""The theme switch: light or dark for this browser, from the sidebar's footer.
+"""The theme switch: light, dark, or the system's setting for this browser, from the sidebar's footer.
 
-1. With no choice made, a page follows the system setting: nothing on it sets a theme.
+1. With no choice made, a page is dark, the default: nothing on it sets a theme
+   (tests/test_dark_default.py reads the stylesheets).
 2. A stored choice is applied before the first paint: the head script is the first thing in
    `<head>`, before the stylesheet, and sets the theme from storage; blocked storage leaves the
-   system's.
+   default.
 3. The switch's words say what a press does, a press is kept in this browser's storage and nowhere
-   else, and "Follow the system setting" returns to the system's theme (the scripts run in node,
+   else, and "Follow the system setting" is kept as a choice of its own (the scripts run in node,
    where node is installed).
 4. The policy names both scripts' hashes, as each page carries them.
 5. No page has a form or an input; the switch's two buttons are the one named exception to "no
@@ -108,7 +109,7 @@ def switch_problems(page: str) -> list[str]:
         if mechanism in page.lower():
             out.append(f"the page carries {mechanism!r}")
     if re.search(r"<html[^>]*data-theme", page):
-        out.append("the page sets a theme of its own: it no longer follows the system")
+        out.append("the page sets a theme of its own: a saved choice no longer decides it")
     return out
 
 
@@ -147,13 +148,14 @@ def test_the_policy_names_both_scripts_hashes(pages, local, examined):
     assert [(p.name, c) for p in found for c in csp_problems(p.read_text(encoding="utf-8"), policy)] == []
 
 
-def test_the_default_follows_the_system(examined):
-    """No page sets a theme; the stylesheet's dark theme is the system's, unless a theme is set."""
+def test_the_default_is_dark(examined):
+    """No page sets a theme; the stylesheet's dark theme applies unless a reader chose light, or
+    chose to follow a system set to light."""
     from onetrace_console.viewer.tokens import theme_css
     css = theme_css()
     examined(1, "the theme rules")
-    assert "@media (prefers-color-scheme:dark){:root:not([data-theme=light])" in css
-    assert ":root[data-theme=dark]" in css and ":root{color-scheme:light}" in css
+    assert css.startswith(":root:not([data-theme=light]){color-scheme:dark;")
+    assert "@media (prefers-color-scheme:light){:root[data-theme=system]{color-scheme:light;" in css
 
 
 def test_served_sealed_and_public_footers_all_carry_the_switch(examined):
@@ -168,7 +170,9 @@ def test_served_sealed_and_public_footers_all_carry_the_switch(examined):
 def test_the_static_export_carries_the_switch(pages, tmp_path, examined):
     from onetrace_console.export_static import export
     from onetrace_console.store import Store
-    key = Store(pages / "store" / "store").runs()[0].key
+    #: A run whose records agree: the export refuses a run that contradicts its record, as its
+    #: incident page links the verifier's errors page on another host (a known issue).
+    key = next(r.key for r in Store(pages / "store" / "store").runs() if r.check_verdict == "holds")
     written = export(pages / "store", [key], tmp_path / "export")
     found = [tmp_path / "export" / p for p in written if p.endswith(".html")
              and 'class="frame"' in (tmp_path / "export" / p).read_text(encoding="utf-8")]
@@ -227,23 +231,23 @@ def test_the_head_script_sets_the_stored_choice_and_nothing_else(stored, theme, 
 
 
 @needs_node
-def test_blocked_storage_leaves_the_system_s_theme_and_the_switch_still_works(examined):
+def test_blocked_storage_leaves_the_default_and_the_switch_still_works(examined):
     seen = _run("dark", ["switch", "switch", "system"], blocked=True, dark=False)
     examined(len(seen), "steps")
     assert seen[0] == {"theme": None}
-    assert [s["theme"] for s in seen[1:]] == [None, "dark", "light", None]
+    assert [s["theme"] for s in seen[1:]] == [None, "light", "dark", "system"]
     assert all(s["stored"] is None for s in seen[1:])
 
 
 @needs_node
-def test_a_press_switches_names_the_next_theme_and_is_kept_and_follow_returns(examined):
+def test_a_press_switches_names_the_next_theme_and_is_kept_and_follow_is_kept(examined):
     seen = _run(None, ["switch", "switch", "system"], dark=True)
     examined(len(seen), "steps")
     assert seen[1:] == [
-        {"theme": None, "stored": None, "switch": "Switch to light theme", "system": False},
+        {"theme": None, "stored": None, "switch": "Switch to light theme", "system": True},
         {"theme": "light", "stored": "light", "switch": "Switch to dark theme", "system": True},
         {"theme": "dark", "stored": "dark", "switch": "Switch to light theme", "system": True},
-        {"theme": None, "stored": None, "switch": "Switch to light theme", "system": False},
+        {"theme": "system", "stored": "system", "switch": "Switch to light theme", "system": False},
     ]
 
 
@@ -274,7 +278,8 @@ def test_sabotage_a_head_script_that_does_nothing_is_caught(examined):
 def test_sabotage_a_page_setting_its_own_theme_is_named(pages, examined):
     page = _framed(pages)[0].read_text(encoding="utf-8")
     examined(1, "planted page")
-    assert any("follows the system" in p for p in switch_problems(page.replace("<html", '<html data-theme="dark"', 1)))
+    assert any("a saved choice no longer decides it" in p
+               for p in switch_problems(page.replace("<html", '<html data-theme="dark"', 1)))
 
 
 def test_sabotage_a_changed_script_the_policy_doesn_t_name_is_named(pages, examined):

@@ -55,12 +55,18 @@ BOX_W, BOX_H = 184, 40
 LABEL_LINE_H = 18
 #: A node's state, drawn as a chip: CHIP_H high, CHIP_CHAR wide per character, CHIP_PAD each side.
 CHIP_H, CHIP_CHAR, CHIP_PAD = 20, 6.6, 9
-#: Characters to a state line (12px sans, about 6.2px a character); a longer one is shortened,
-#: its whole text in its <title> and in the page's own table.
+#: Characters to a state line (12px sans, about 6.2px a character). The page's own words wrap
+#: to as many lines as they take and the box grows to hold them; a quoted line longer than this is
+#: shortened, its whole text in its own <title> and in the page's own table.
 STATE_MAX = 26
-#: A node's state lines (its verdict in the page's words, then the report's quoted words): at
-#: most TAG_LINES drawn in its box, each TAG_LINE_H high. The page's words are in the box's
-#: <title>, each quoted line in its own; all of them are in the page's own table.
+#: Characters to a state line as drawn: 12px mono, 7.2px a character as Chromium draws it, so 22 fit
+#: the box within its 10px each side (158px of 164). The page's own words wrap at it; a quoted line
+#: is shortened to it, its whole text in its own <title> and in the page's own table.
+STATE_WRAP = 22
+#: A node's state lines (its verdict in the page's words, then the report's quoted words), each
+#: TAG_LINE_H high: the page's own words whole, then quoted lines while the box has fewer than
+#: TAG_LINES of its tags. The page's words are in the box's <title>, each quoted line in its own;
+#: all of them are in the page's own table.
 TAG_LINES, TAG_LINE_H = 2, 16
 GAP_X, GAP_Y = 56, 24
 MARGIN = 12
@@ -205,8 +211,12 @@ def lay_out(nodes, edges, *, wrap: int = 0, wrap_labels: bool = False,
 
     tallest = max((len(col) for col in by_layer), default=0)
     chip = any(n.tags for n in nodes)
-    #: The state lines after the chip: the rest of the tags, then the report's quoted words.
-    lines = min(tag_lines, max((max(len(n.tags) - 1, 0) + len(n.quoted) for n in nodes), default=0))
+    #: The state lines after the chip: the rest of the tags, whole, then the report's quoted words.
+    #: Counted per box, over its members' tags and quoted words as the box joins them.
+    joined = {k: (tuple(dict.fromkeys(tag for m in members[k] for tag in m.tags)),
+                  tuple(dict.fromkeys(q for m in members[k] for q in m.quoted))) for k in keys}
+    lines = max((len(_drawn_lines(tags, quoted, tag_lines)) for tags, quoted in joined.values()),
+                default=0)
     labels = [(members[k][0].label or members[k][0].node_id) if len(members[k]) == 1 else sentence(
         "graph.fold", name=members[k][0].shown or members[k][0].name, n=str(len(members[k])))
         for k in keys]
@@ -226,8 +236,7 @@ def lay_out(nodes, edges, *, wrap: int = 0, wrap_labels: bool = False,
                 row=rows[k], x=MARGIN + col_no * (BOX_W + GAP_X),
                 y=MARGIN + offset + rows[k] * (box_h + GAP_Y),
                 href=ms[0].href, dashed=any(m.dashed for m in ms),
-                tags=tuple(dict.fromkeys(tag for m in ms for tag in m.tags)),
-                quoted=tuple(dict.fromkeys(q for m in ms for q in m.quoted)),
+                tags=joined[k][0], quoted=joined[k][1],
                 mark=next((m.mark for m in ms if m.mark), ""),
                 tone=next((m.tone for m in ms if m.tone), "")))
     width = MARGIN * 2 + max(len(by_layer), 1) * BOX_W + max(len(by_layer) - 1, 0) * GAP_X
@@ -295,6 +304,27 @@ def _short(label: str, most: int = LABEL_MAX) -> str:
     return label if len(label) <= most else label[:most - 1] + "…"
 
 
+def _state_lines(text: str) -> list[str]:
+    """The page's own words, whole, in lines of at most STATE_WRAP characters, each broken after a
+    space where the line has one, and otherwise at STATE_WRAP. Never cut: every character is drawn."""
+    lines, rest = [], text
+    while len(rest) > STATE_WRAP:
+        cut = rest.rfind(" ", 1, STATE_WRAP + 1)
+        cut = cut if cut > 0 else STATE_WRAP
+        lines.append(rest[:cut].rstrip(" "))
+        rest = rest[cut:].lstrip(" ")
+    return lines + [rest]
+
+
+def _drawn_lines(tags, quoted, tag_lines: int) -> list[tuple[str, bool]]:
+    """A box's state lines after its chip, as drawn: each of the page's own tags whole, wrapped;
+    then the report's quoted words, one shortened line each, while the box holds fewer than
+    `tag_lines` of its tags and quoted lines together."""
+    own = [(line, False) for tag in tags[1:] for line in _state_lines(tag)]
+    room = max(tag_lines - max(len(tags) - 1, 0), 0)
+    return own + [(q, True) for q in quoted[:room]]
+
+
 def svg(layout: Layout, esc=escape) -> str:
     """The drawing, as one <svg> element. Same layout, same bytes. `esc` escapes record words:
     the page passes its own, which also shows control and bidi characters escaped."""
@@ -345,12 +375,12 @@ def svg(layout: Layout, esc=escape) -> str:
                     f'rx="{CHIP_H // 2}"/><text class="chip" x="{b.x + 10 + CHIP_PAD}" '
                     f'y="{below + CHIP_H - 6}">{esc(_short(words, STATE_MAX))}</text>')
         after = below + (CHIP_H + 8 if layout.chip else 0) - 4
-        lines = [(tag, False) for tag in b.tags[1:]] + [(q, True) for q in b.quoted]
+        lines = _drawn_lines(b.tags, b.quoted, layout.tag_lines)
         states = "".join(
             f'<text class="state"{' data-words="report"' if quoted else ""} x="{b.x + 10}" '
-            f'y="{after + (i + 1) * TAG_LINE_H}">{esc(_short(text, STATE_MAX))}'
+            f'y="{after + (i + 1) * TAG_LINE_H}">{esc(_short(text, STATE_WRAP) if quoted else text)}'
             f'{f"<title>{esc(text)}</title>" if quoted else ""}</text>'
-            for i, (text, quoted) in enumerate(lines[:layout.tag_lines]))
+            for i, (text, quoted) in enumerate(lines))
         title = b.label + "".join(f" · {tag}" for tag in b.tags)
         parts.append(
             f'{opening}'

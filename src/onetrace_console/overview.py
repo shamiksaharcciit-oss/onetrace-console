@@ -46,7 +46,7 @@ ATTENTION_WORDS = {
     "no-verdict": "No verdict recorded",
     "missing-stage": "A declared stage missing",
     "last-attempt-failed": "Last attempt failed",
-    #: A step's own rule declined and the steps after it were not reached: rung 3's "Not reached".
+    #: A step's own rule declined the run's last recorded attempt, at any declared step.
     "stopped-at-a-step": "Stopped at a step",
     "changed": "Changed vs baseline",
 }
@@ -99,15 +99,21 @@ def nothing_missing_not_established(run: StoredRun) -> bool:
 
 
 def stopped_at_a_step(run: StoredRun) -> bool:
-    """Rung 3 reads "Not reached": the run stopped at a step's own rule."""
-    return run.nothing_missing == NOT_REACHED
+    """The run stopped at a step's own rule: rung 3 reads "Not reached", or its last recorded
+    attempt was declined (`declined`) -- at its last declared step too, where no declared step is
+    left unreached."""
+    return run.nothing_missing == NOT_REACHED or declined(run) is not None
 
 
 def _diff_of(comparison, store: Store) -> dict | None:
     """The stored diff report of a comparison, parsed, or None where there is none to read."""
     from onetrace_console.compare import DIFF
+    from onetrace_console.records import unchecked_sides
     run = comparison.verb(DIFF)
     if run is None or run.note:
+        return None
+    #: A side that couldn't be checked: nothing the SDK's diff says of the pair is read.
+    if unchecked_sides(comparison, store):
         return None
     key = dict(run.reports).get("diff.json")
     if key is None:
@@ -135,22 +141,31 @@ def vs_baseline(run: StoredRun, store: Store) -> tuple[str, str]:
     latest = latest_as_candidate(run, store)
     if latest is None:
         return "not-compared", "Not compared"
-    diff = _diff_of(latest, store)
+    state, _stages, words = comparison_reading(latest, store)
+    return state, words
+
+
+def comparison_reading(comparison, store: Store) -> tuple[str, tuple[str, ...], str]:
+    """(state, the stages where it first differs, words): one stored comparison as its stored diff
+    report reads, never compared anew. `changed` with the first differing stage (a graph's every
+    node where the two runs first differ), `same`, or `couldnt-check`. The stages are as the
+    runs record them; the words show them as every page does."""
+    diff = _diff_of(comparison, store)
     if diff and diff.get("shape") == "dag":
-        return _vs_baseline_graph(latest, store)
+        return _vs_baseline_graph(comparison, store)
     envelope = diff.get("envelope") if diff else None
     first = diff.get("first_difference") if diff else None
     if envelope == "diverged" and isinstance(first, dict) \
             and isinstance(first.get("index"), str) and isinstance(first.get("stage"), str):
         from onetrace_console.viewer.model import name_shown
-        return "changed", (f"First difference · stage {first['index']} · "
-                           f"{name_shown(first['stage'])}")
+        return "changed", (first["stage"],), (f"First difference · stage {first['index']} · "
+                                              f"{name_shown(first['stage'])}")
     if envelope == "identical":
-        return "same", "Same"
-    return "couldnt-check", "Couldn't check"
+        return "same", (), "Same"
+    return "couldnt-check", (), "Couldn't check"
 
 
-def _vs_baseline_graph(comparison, store: Store) -> tuple[str, str]:
+def _vs_baseline_graph(comparison, store: Store) -> tuple[str, tuple[str, ...], str]:
     """A two-run graph `diff` names no single first difference: it names a frontier, every node
     where the runs first differ. Read only through the viewer's strict reader, as the run page's
     marks are; a report that does not pass it decides nothing."""
@@ -160,15 +175,15 @@ def _vs_baseline_graph(comparison, store: Store) -> tuple[str, str]:
     from onetrace_console.pages import _strict_diff_report
     report = _strict_diff_report(comparison, store)
     if not isinstance(report, TwoRunDag):
-        return "couldnt-check", "Couldn't check"
+        return "couldnt-check", (), "Couldn't check"
     if report.envelope == "diverged" and report.first_difference_frontier:
         names = [name_shown(n) for n in report.first_difference_frontier]
         #: One node, or several in the report's order.
         head = "First difference" if len(names) == 1 else "First differences"
-        return "changed", f"{head} · {', '.join(names)}"
+        return "changed", tuple(report.first_difference_frontier), f"{head} · {', '.join(names)}"
     if report.envelope == "identical":
-        return "same", "Same"
-    return "couldnt-check", "Couldn't check"
+        return "same", (), "Same"
+    return "couldnt-check", (), "Couldn't check"
 
 
 def ran_at(run: StoredRun) -> str:
@@ -434,9 +449,8 @@ def same_change(comparison, store: Store) -> SameChange:
     Matched, by exact equality and within the candidate's pipeline, on the recorded settings the
     report's annotations say changed at that stage: a run matches when its receipt for the stage
     records the candidate's value of each. Where no recorded setting changed there, on the
-    recorded digest that differs -- settings, else code. Not on the stage's inputs: by the ladder
-    every stage before the first difference is the same in both runs, so the stage's inputs are
-    too, and cannot be what changed.
+    recorded digest that differs -- settings, else code, else one of the stage's own recorded
+    inputs (an input from outside the run's stages, which the stages before it don't decide).
     """
     diff = _diff_of(comparison, store)
     first = diff.get("first_difference") if diff else None
@@ -478,8 +492,31 @@ def same_change(comparison, store: Store) -> SameChange:
         if value and before.get((stage, key)) != value:
             break
     else:
-        return SameChange("unchanged", index, stage)
+        return _same_input(comparison, store, index, stage, label[candidate.key], in_pipeline, candidate)
     matches = tuple(r for r in in_pipeline if r.key != candidate.key
                     and (recorded_digests(r, store) or {}).get((stage, key)) == value)
     return SameChange("found", index, stage, words, value, label[candidate.key],
                       len(in_pipeline), matches)
+
+
+def _same_input(comparison, store: Store, index: str, stage: str, pipeline: str, in_pipeline: list,
+                candidate: StoredRun) -> SameChange:
+    """Matched on the first of the stage's own recorded inputs whose digest differs between the
+    pair, by exact equality of the candidate's digest; `unchanged` where none differs."""
+    from onetrace_console.render import _receipts_in_order, own_inputs
+
+    def inputs(run_key: str) -> dict[str, str] | None:
+        receipts = _receipts_in_order(run_key, store)
+        return own_inputs(receipts).get(stage, {}) if receipts else None
+    a, b = inputs(comparison.run_a), inputs(comparison.run_b)
+    if a is None or b is None:
+        return SameChange("unreadable", index, stage)
+    changed = sorted(n for n in a.keys() | b.keys() if a.get(n) != b.get(n) and b.get(n))
+    if not changed:
+        return SameChange("unchanged", index, stage)
+    name = changed[0]
+    held = {r.key: inputs(r.key) for r in in_pipeline if r.key != candidate.key}
+    matches = tuple(r for r in in_pipeline if r.key in held and held[r.key] is not None
+                    and held[r.key].get(name) == b[name])
+    return SameChange("found", index, stage, f"input {name}", b[name], pipeline, len(in_pipeline), matches,
+                      unread=sum(v is None for v in held.values()))

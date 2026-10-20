@@ -33,7 +33,7 @@ import json
 from onetrace_console.bounded_json import load_json_bounded
 from dataclasses import dataclass
 
-from onetrace_console.checks import CONTRADICTS, COULD_NOT_CHECK, HOLDS
+from onetrace_console.checks import CONTRADICTS, COULD_NOT_CHECK, HOLDS, shown_note
 from onetrace_console.ingest import RUN_ID_REUSED
 from onetrace_console.store import StoredRun, Store
 
@@ -174,7 +174,7 @@ def tallies(store: Store) -> tuple[Tally, ...]:
             #: in first-seen order, and never summarised into one.
             seen: list[str] = []
             for r in matched:
-                note = r.check_note or "no reason was recorded"
+                note = shown_note(r) or "no reason was recorded"
                 if note not in seen:
                     seen.append(note)
             reasons = tuple(seen)
@@ -219,10 +219,12 @@ def tallies(store: Store) -> tuple[Tally, ...]:
     out.append(Tally(slug="missing-a-declared-stage", label="missing a declared stage",
                      runs=tuple(r for r in runs if missing_a_declared_stage(r)),
                      denominator=total))
-    from onetrace_console.overview import stopped_at_a_step
+    #: Rung 3's own reading, so the row's counts stay one per run: a run declined at its last
+    #: declared step reads nothing missing here, and is listed as stopped in Needs attention.
+    from onetrace_console.overview import NOT_REACHED
     out.append(Tally(slug="stopped-at-a-step",
                      label="stopped at a step: the declared steps after it not reached",
-                     runs=tuple(r for r in runs if stopped_at_a_step(r)), denominator=total))
+                     runs=tuple(r for r in runs if r.nothing_missing == NOT_REACHED), denominator=total))
     out.append(Tally(slug="missing-not-established",
                      label="whose declared stages could not be established as all recorded",
                      runs=tuple(r for r in runs if nothing_missing_not_established(r)),

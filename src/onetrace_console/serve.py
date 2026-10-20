@@ -132,7 +132,7 @@ def _rendering(config: Config | None):
 
 
 def _render_run_pages(run, store: Store, root: Path, config: Config | None = None) -> None:
-    from onetrace_console.pages import (ANSWER, AUTHORIZATION, CASE, PageError,
+    from onetrace_console.pages import (ANSWER, AUTHORIZATION, CASE, RUN_PROOF, PageError,
                                         render_execution)
     try:
         with _rendering(config):
@@ -147,7 +147,7 @@ def _render_run_pages(run, store: Store, root: Path, config: Config | None = Non
             reason, from_viewer = refusal(e)
             page = render_unreadable_run(run, reason, generated_at=_now(),
                                          from_viewer=from_viewer)
-            pages = {ANSWER: page, CASE: page,
+            pages = {ANSWER: page, CASE: page, RUN_PROOF: page,
                      AUTHORIZATION: render_authorization(run, generated_at=_now(), case=CASE)}
             for name, html in pages.items():
                 _write(root, f"runs/{run.key}/{name}", html)
@@ -158,7 +158,7 @@ def _render_run_pages(run, store: Store, root: Path, config: Config | None = Non
         from onetrace_console.authorization import render_authorization
         from onetrace_console.unreadable import render_unchecked_run
         page = render_unchecked_run(run, generated_at=_now())
-        pages = {ANSWER: page, CASE: page,
+        pages = {ANSWER: page, CASE: page, RUN_PROOF: page,
                  AUTHORIZATION: render_authorization(run, generated_at=_now(), case=CASE)}
     for name, html in pages.items():
         _write(root, f"runs/{run.key}/{name}", html)
@@ -196,9 +196,15 @@ def _render_all_pages(store: Store, root: Path, config: Config | None = None) ->
 
 def _render_diff_page(comparison, store: Store, root: Path) -> str:
     from onetrace_console.render import render_diff
+    from onetrace_console import views
     html = render_diff(comparison, store, generated_at=_now())
     rel = f"diff/{comparison.key}.html"
-    _write(root, rel, html)
+    #: Its two views: "What changed" at the page's address, "Proof" beside it.
+    said, state = views.pair_said(comparison, store)
+    what, proof = views.split(html, "diff", f"{comparison.key}.html",
+                              views.proof_name(f"{comparison.key}.html"), said, state, views.WITHHELD_PAIR)
+    _write(root, rel, what)
+    _write(root, f"diff/{views.proof_name(comparison.key + '.html')}", proof)
     #: Its text diff on a page of its own, where it has one shown; where it has none, no page --
     #: never one left from an earlier drawing.
     from onetrace_console.textdiff_page import page_name, render_text_diff_page
@@ -265,7 +271,9 @@ def _render_startup_pages(store: Store, root: Path, config: Config | None = None
             from onetrace_console.pages import refusal
             from onetrace_console.unreadable import render_failed_page
             from onetrace_console.textdiff_page import page_name
-            for name in (f"diff/{comparison.key}.html", f"diff/{page_name(comparison)}"):
+            from onetrace_console.views import proof_name
+            for name in (f"diff/{comparison.key}.html", f"diff/{proof_name(comparison.key + '.html')}",
+                         f"diff/{page_name(comparison)}"):
                 _write(root, name, render_failed_page(refusal(e)[0], generated_at=_now()))
     for key in store.unreadable_comparison_keys:
         _render_unreadable_record_pages(store, root, key, kind="comparison")
@@ -278,7 +286,8 @@ def _render_unreadable_record_pages(store: Store, root: Path, key: str, *, kind:
     An unreadable comparison record was once left out of every count, and its old Diff
     page stayed on disk and was served, saying whatever it said before. The same held for a run
     record's own pages. Only a record named by a content address has pages to replace."""
-    from onetrace_console.pages import ANSWER, AUTHORIZATION, CASE
+    from onetrace_console.pages import ANSWER, AUTHORIZATION, CASE, RUN_PROOF
+    from onetrace_console.views import proof_name
     from onetrace_console.store import _SHA256
     from onetrace_console.unreadable import render_failed_page
     if not _SHA256.fullmatch(key):
@@ -289,8 +298,8 @@ def _render_unreadable_record_pages(store: Store, root: Path, key: str, *, kind:
               f"the Overview names it")
     page = render_failed_page(reason, generated_at=_now())
     from onetrace_console.textdiff_page import SUFFIX
-    names = ([f"runs/{key}/{n}" for n in (ANSWER, CASE, AUTHORIZATION)] if kind == "run"
-             else [f"diff/{key}.html", f"diff/{key}{SUFFIX}"])
+    names = ([f"runs/{key}/{n}" for n in (ANSWER, CASE, RUN_PROOF, AUTHORIZATION)] if kind == "run"
+             else [f"diff/{key}.html", f"diff/{proof_name(key + '.html')}", f"diff/{key}{SUFFIX}"])
     for name in names:
         _write(root, name, page)
 
@@ -1263,6 +1272,10 @@ def main(argv: list[str] | None = None, *, overrides: dict | None = None, prepar
         if refused is not None:
             print(f"refusing to start: {refused.message}\nfix: {refused.fix}", file=sys.stderr)
             return 1
+        #: The demo's own example inputs, which its build record (checked above) vouches for, are
+        #: the one kind of input from outside a pipeline this console may hand out.
+        from onetrace_console.demo_store import serve_examples
+        serve_examples(Path(config.trust_file).parent)
 
     #: Checked before anything else touches the network: a plain-HTTP, non-loopback
     #: listener with sign-in enabled refuses to start outright -- in words, with its fix,

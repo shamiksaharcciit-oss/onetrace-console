@@ -56,7 +56,8 @@ def row_problems(list_page: str, store, pages) -> list[str]:
         if own is None or not (pages / own.group(1)).exists():
             out.append(f"{short}: its chip opens no page of its own")
         if incident.subject_kind == "run":
-            if f'href="runs/{incident.subject}/case.html"' not in cells[1]:
+            #: Incident pages link the run at its "Proof" view.
+            if f'href="runs/{incident.subject}/proof.html"' not in cells[1]:
                 out.append(f"{short}: no link to its run")
             if _text(cells[2]) != label.get(incident.subject, ""):
                 out.append(f"{short}: pipeline {_text(cells[2])!r}")
@@ -75,7 +76,9 @@ def page_problems(page: str, incident, store, pages) -> list[str]:
     if "page-failed" in page:
         return ["the page could not be drawn"]
     run = store.get_run(incident.subject)
-    case = (pages / "runs" / run.key / "case.html").read_text(encoding="utf-8")
+    #: The run head whole is on "Proof": "What changed" withholds what it reads from a record
+    #: that does not hold up.
+    case = (pages / "runs" / run.key / "proof.html").read_text(encoding="utf-8")
     head = dict(re.findall(r'data-head-rung="([^"]+)" data-state="([^"]+)"', case))
     mine = dict(re.findall(r'data-head-rung="([^"]+)" data-state="([^"]+)"', page))
     if len(mine) != 4 or mine != head:

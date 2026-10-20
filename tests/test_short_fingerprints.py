@@ -60,7 +60,8 @@ def page_problems(html: str) -> list[str]:
     out = [f"a whole fingerprint shown in {where}" for where in dict.fromkeys(r.shown)]
     if r.in_p:
         out.append(f"{r.in_p} folds inside a paragraph")
-    for short, whole in re.findall(r'<details class="fingerprint"[^>]*><summary class="mono">([^<]*)…</summary>'
+    #: A summary may end with its sentence's closing mark, drawn after the "…" to keep it on the value's line.
+    for short, whole in re.findall(r'<details class="fingerprint"[^>]*><summary class="mono">([^<]*)…[.,;:]?</summary>'
                                    r'<span class="mono" data-fingerprint="whole">([^<]*)</span>', html):
         if not whole.startswith(short) or len(short.removeprefix("sha256:")) != 12:
             out.append(f"{short}… is not the start of {whole}")
@@ -107,6 +108,16 @@ def test_sabotage_each_fault_is_named(pages, what, examined):
     }[what]
     examined(1, f"planted page: {what}")
     assert planted != page and page_problems(planted) != [], what
+
+
+def test_sabotage_a_wrong_short_form_before_a_closing_mark_is_named(pages, examined):
+    """A fold whose summary ends with its sentence's closing mark is checked like any other."""
+    closed = re.compile(r'(<details class="fingerprint"[^>]*><summary class="mono">)([^<]*…[.,;:]</summary>)')
+    name, page = next((n, p) for n, p in sorted(pages.items()) if closed.search(p))
+    planted = closed.sub(r"\g<1>0\g<2>", page, count=1)
+    examined(1, f"planted page: {name}")
+    assert page_problems(page) == []
+    assert planted != page and page_problems(planted) != [], name
 
 
 def test_every_short_form_has_its_whole_value_on_the_same_page(pages, examined):

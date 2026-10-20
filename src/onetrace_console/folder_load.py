@@ -99,11 +99,45 @@ class _Undeliverable(Exception):
     pass
 
 
-def deliver_one(run_dir: Path, store: Store, config: Config) -> LoadedRun:
+def identity(run_dir: Path) -> tuple[str, str] | None:
+    """The run and chain head a run folder's MANIFEST.json names, or None where it can't be read:
+    what tells two folders carrying one run apart from two runs. Its reading never refuses a folder;
+    the delivery does that, in its own words."""
+    from onetrace_console.bounded_json import load_json_bounded
+    try:
+        m = load_json_bounded((run_dir / MANIFEST_NAME).read_bytes(), "a run's manifest")
+    except Exception:  # noqa: BLE001 - unreadable here is refused by the delivery, said there
+        return None
+    if not isinstance(m, dict):
+        return None
+    run_id, head = m.get("run_id"), m.get("chain_head")
+    return (run_id, head) if isinstance(run_id, str) and isinstance(head, str) else None
+
+
+def shared_heads(run_dirs) -> set[str]:
+    """The names of the folders among `run_dirs` that carry the same run and chain head as another
+    of them."""
+    by_identity: dict[tuple[str, str], list[str]] = {}
+    for d in run_dirs:
+        found = identity(d)
+        if found is not None:
+            by_identity.setdefault(found, []).append(d.name)
+    return {n for names in by_identity.values() if len(names) > 1 for n in names}
+
+
+def deliver_one(run_dir: Path, store: Store, config: Config, *,
+                shared: set[str] | None = None) -> LoadedRun:
     """One run folder, delivered and checked: what `load_folder` does for each folder at start,
-    and the folder watcher for each finished run after (`watch.py`). There is no second path."""
+    and the folder watcher for each finished run after (`watch.py`). There is no second path.
+
+    Runs are folders, not chain heads: a folder that carries the same run and chain head as
+    another folder beside it is stored under its own folder's key, and read on its own. `shared`:
+    the names of such folders, where the caller has read them all already."""
     from onetrace_console.checks import check_options, run_and_record
     from onetrace_console.ingest import Rejection, accept
+    if shared is None:
+        shared = shared_heads(p for p in run_dir.parent.iterdir()
+                              if p.is_dir() and (p / MANIFEST_NAME).is_file())
     try:
         data = delivery(run_dir)
     except _Undeliverable as e:
@@ -111,7 +145,8 @@ def deliver_one(run_dir: Path, store: Store, config: Config) -> LoadedRun:
     except OSError as e:
         from onetrace_console.oserror import said
         return LoadedRun(run_dir.name, None, f"not loaded: cannot read it: {said(e)}")
-    accepted = accept(data, store, limits=config)
+    accepted = accept(data, store, limits=config, run_folder=run_dir.name,
+                      shared_head=run_dir.name in shared)
     if isinstance(accepted, Rejection):
         return LoadedRun(run_dir.name, None,
                          "refused: " + "; ".join(r.strip() for r in accepted.rows))
@@ -137,12 +172,14 @@ def load_folder(folder: Path, store: Store, config: Config, *,
     if compare is not None:
         missing = [n for n in compare if n not in names]
         if missing and watched:
-            loaded = [deliver_one(run_dir, store, config) for run_dir in found]
+            shared = shared_heads(found)
+            loaded = [deliver_one(run_dir, store, config, shared=shared) for run_dir in found]
             return Loaded(tuple(loaded), None, WAITING.format(names=" and ".join(missing)))
         if missing:
             raise LoadRefused(f"--compare names {', '.join(missing)}, not a run folder in {folder} "
                               f"(there: {', '.join(names)}).")
-    loaded = [deliver_one(run_dir, store, config) for run_dir in found]
+    shared = shared_heads(found)
+    loaded = [deliver_one(run_dir, store, config, shared=shared) for run_dir in found]
     comparison, note = None, ""
     if compare is not None:
         comparison, note = _compare(loaded, compare, store)
@@ -183,7 +220,10 @@ def announce(folder: Path, loaded: Loaded, store: Store) -> tuple[list[tuple[str
         by_key = {r.run.key: r.name for r in ok}
         cmp = loaded.comparison
         opened = f"diff/{cmp.key}.html"
-        lines.append((f"compared {by_key[cmp.run_a]} with {by_key[cmp.run_b]}:", opened))
+        unchecked = records.unchecked_sides(cmp, store)
+        said = (" " + records.UNCHECKED_SAID.format(
+            names=" and ".join(by_key.get(r.key, r.run_id) for _, r in unchecked))) if unchecked else ""
+        lines.append((f"compared {by_key[cmp.run_a]} with {by_key[cmp.run_b]}:{said}", opened))
     elif loaded.compare_note:
         lines.append((loaded.compare_note, None))
     lines.append(("overview:", ""))
@@ -223,8 +263,10 @@ def build_public(folder: Path) -> tuple[list[tuple[str, str | None]], str]:
                     trust_file=str(folder / demo_store.TRUST_NAME),
                     sign_in={**Config().sign_in, "enabled": False})
     store = Store(store_root / "store")
-    loaded = demo_store.deliver(folder, store, config)
-    _render_startup_pages(store, store_root, config)
+    #: The demo's own example inputs, its build record vouching for them, are drawn as shown.
+    with demo_store.allowing_examples(folder):
+        loaded = demo_store.deliver(folder, store, config)
+        _render_startup_pages(store, store_root, config)
     demo_store.write_build_record(folder, (demo_store.RUNS_DIRNAME, demo_store.TRUST_NAME, "store"))
     return announce(folder / demo_store.RUNS_DIRNAME, loaded, store)
 

@@ -42,14 +42,16 @@ def test_a_straight_line_run_s_rung_is_its_line_alone(store):
     """The exam's ingest-r1 run A has no `edges`: no state word, only the line."""
     from pathlib import Path
     from onetrace_console.checks import run_and_record
-    from onetrace_console.pages import CASE, render_execution
+    from onetrace_console.pages import CASE, RUN_PROOF, render_execution
     from tests.test_checks import FIXED_RAN_AT, _require_installed
     from tests.test_compare import _deliver
     _require_installed()
     folder = (Path(__file__).resolve().parent.parent / ".sdk-fixtures" / "exam" / "fixtures"
               / "ingest-r1" / "run_A")
     run = run_and_record(_deliver(folder, store), store, ran_at=FIXED_RAN_AT)
-    page = render_execution(run, store, generated_at="2026-10-04T12:00:00+00:00").pages[CASE]
+    #: The ladder is on "What changed", or on "Proof" for a run whose records don't hold up.
+    drawn = render_execution(run, store, generated_at="2026-10-04T12:00:00+00:00").pages
+    page = drawn[CASE] + drawn[RUN_PROOF]
     state, said = _rung(page)
     assert state == "not-a-graph-run", (state, said)
     assert said == "Ran as approved a straight-line run: there is no plan to compare", said

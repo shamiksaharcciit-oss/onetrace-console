@@ -43,18 +43,18 @@ CACHE = REPO / ".wheel-cache"
 
 #: The same two references `requirements.lock` pins by hash -- typed here once, not
 #: derived from anything downloaded, so a mismatch is caught rather than assumed away.
-#: onetrace 0.2.2 and onetrace-verify 0.2.1 from PyPI, each as PyPI's JSON serves it.
+#: onetrace 0.3.0 and onetrace-verify 0.3.0, from PyPI.
 #: The "wheelhouse" source stays for a branch that pins a build on no index; nothing uses it now.
 SOURCE = "pypi"
 WHEELHOUSE = REPO / "wheelhouse" / "devbuild"
 WHEELS = {
-    "onetrace==0.2.2": (
-        "onetrace-0.2.2-py3-none-any.whl",
-        "5fbefd657d0622d8dad8d9506f118be2b417a9586589d8e50d59fd2a5fa21b1f",
+    "onetrace==0.3.0": (
+        "onetrace-0.3.0-py3-none-any.whl",
+        "c20cc67cedd92a66b232af1cd970166df3c108cd86b31415ec299490f004a5bf",
     ),
-    "onetrace-verify==0.2.1": (
-        "onetrace_verify-0.2.1-py3-none-any.whl",
-        "c001019740798f907ae8a4adace32c597fb749cf52fca0e668c932723a792119",
+    "onetrace-verify==0.3.0": (
+        "onetrace_verify-0.3.0-py3-none-any.whl",
+        "9b8f4db4ba75b4b7ae6871125246128de620cb25e7966bc1c140c3ad069483d2",
     ),
 }
 

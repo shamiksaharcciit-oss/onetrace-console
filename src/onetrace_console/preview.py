@@ -62,8 +62,9 @@ VERIFIER_FORMAT_CHECK = "manifest: format"
 #: the verifier dropping the format: a new preview delivery gets a 422, the row quoted, after
 #: this one sentence. Runs already stored stay.
 PREVIEW_NOT_RUN_ROW = "[NOT-RUN] manifest: chain format -- 'stage-receipt-chain/0.0-preview'"
-PREVIEW_NOT_INGESTED = ("Not ingested: this run uses the preview record format, which the 0.2.0 "
-                        "verifier doesn't check.")
+PREVIEW_NOT_INGESTED = ("Not ingested: this run is in the preview record format "
+                        "(stage-receipt/0.0-preview), and onetrace-verify does not check that format, "
+                        "so its receipts couldn't be checked.")
 
 
 def preview_not_run_row(said) -> str | None:

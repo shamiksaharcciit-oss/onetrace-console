@@ -267,12 +267,19 @@ def node_problems(page: str, receipts: list[dict]) -> list[str]:
     return out
 
 
+def _graph_view(folder) -> str:
+    """The run page's view that holds its graph: "What changed", or "Proof" where the step-by-step
+    verdicts are withheld (a run that contradicts its record or could not be checked)."""
+    case = (folder / "case.html").read_text(encoding="utf-8")
+    return case if 'data-section="graph"' in case else (folder / "proof.html").read_text(encoding="utf-8")
+
+
 def test_each_node_carries_a_fact_from_the_record_and_its_check(demo, examined):
     from onetrace_console.stage_pages import _steps
     store, pages = demo
     boxes = 0
     for run in store.runs():
-        page = (pages / "runs" / run.key / "case.html").read_text(encoding="utf-8")
+        page = _graph_view(pages / "runs" / run.key)
         receipts = [s["receipt"] for s in _steps(run, store)]
         assert node_problems(page, receipts) == [], run.run_id
         boxes += len(_box_titles(page))
@@ -286,15 +293,17 @@ def test_sabotage_a_node_fact_the_record_does_not_hold_is_named(demo, examined):
     from onetrace_console.stage_pages import _steps
     store, pages = demo
     run = store.runs()[0]
-    page = (pages / "runs" / run.key / "case.html").read_text(encoding="utf-8")
+    page = _graph_view(pages / "runs" / run.key)
     receipts = [s["receipt"] for s in _steps(run, store)]
     planted = re.sub(r"(<title>[^<]*?)\b1 output file\b", r"\g<1>318 chunks", page, count=1)
     examined(1, "planted page")
     assert planted != page and node_problems(page, receipts) == []
     assert any(": fact ['318 chunks']" in p for p in node_problems(planted, receipts))
+    #: A run whose graph is unmarked and shows the chip, on the view that holds its graph.
     unmarked = next((r, p) for r in store.runs()
-                    for p in [(pages / "runs" / r.key / "case.html").read_text(encoding="utf-8")]
-                    if 'data-section="graph-marked-from"' not in p)
+                    for p in [_graph_view(pages / "runs" / r.key)]
+                    if 'data-section="graph-marked-from"' not in p
+                    and re.search(r"<title>[^<]*?Checked — it holds\.", p))
     page2 = unmarked[1]
     chip = re.sub(r"(<title>[^<]*?)Checked — it holds\.", r"\g<1>Checked — all clear.", page2, count=1)
     examined(1, "planted page")

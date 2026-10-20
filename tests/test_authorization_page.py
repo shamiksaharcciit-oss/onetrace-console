@@ -20,7 +20,7 @@ from html import unescape
 
 import pytest
 
-from onetrace_console.pages import AUTHORIZATION, CASE, render_execution
+from onetrace_console.pages import AUTHORIZATION, CASE, RUN_PROOF, render_execution
 from tests.test_pages import GENERATED_AT, checked  # noqa: F401
 
 
@@ -89,9 +89,10 @@ def test_the_run_and_its_authorization_page_link_to_each_other(pages):
     """A relative link between pages generated together about the same run (the decision that
     let answer and case link to each other). The link sits inside the viewer's own Policy
     section, under its own marker -- never a name the viewer's page might already carry."""
-    policy = re.search(r'<section data-section="policy">(.*?)</section>', pages[CASE], re.S)
+    #: The Policy section is on the run page's "Proof" view.
+    policy = re.search(r'<section data-section="policy">(.*?)</section>', pages[RUN_PROOF], re.S)
     assert policy and 'href="authorization.html"' in policy.group(1)
-    assert pages[CASE].count('data-section="authorization-link"') == 1
+    assert pages[RUN_PROOF].count('data-section="authorization-link"') == 1
     assert 'href="case.html"' in pages[AUTHORIZATION]
 
 

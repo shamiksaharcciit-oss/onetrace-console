@@ -86,3 +86,32 @@ def said(run: StoredRun, store: Store) -> str:
 def runs_in(runs, store: Store, wanted: str) -> tuple[StoredRun, ...]:
     """The runs of `runs` whose rung 1 is `wanted`, in their order."""
     return tuple(r for r in runs if state(r, store) == wanted)
+
+
+#: A comparison with a side whose rung 1 reads "Couldn't check": what the SDK's `diff` says of
+#: the pair is never shown as a finding. {name}: that run, {role}: baseline or candidate.
+UNCHECKED_SIDE = ("Couldn't check {name}, the {role}: its own check could not be done, so this "
+                  "comparison shows no verdict.")
+#: The run page's reason, in its "Couldn't be checked from here" frame.
+UNCHECKED_MARKS = "{name}, the {role}, couldn't be checked, so this comparison shows no verdict"
+#: The start-up list's line for such a comparison. {names}: the folders, " and "-joined.
+UNCHECKED_SAID = "Couldn't check {names}, so no verdict is shown"
+
+
+def unchecked_sides(comparison, store: Store) -> tuple[tuple[str, StoredRun], ...]:
+    """(role, run) for each side of `comparison` whose "Records agree" reads "Couldn't check",
+    baseline first. The SDK's `diff` reads only the receipts it is given and calls a run the
+    verifier refuses identical to its baseline, so a pair with such a side shows no verdict from
+    `diff`: every page that reads a comparison asks this first."""
+    out = []
+    for role, key in (("baseline", getattr(comparison, "run_a", None)),
+                      ("candidate", getattr(comparison, "run_b", None))):
+        if not key:
+            continue
+        try:
+            run = store.get_run(key)
+        except Exception:  # noqa: BLE001 - a record that can't be read is said where it is read
+            run = None
+        if run is not None and state(run, store) == COULDNT:
+            out.append((role, run))
+    return tuple(out)

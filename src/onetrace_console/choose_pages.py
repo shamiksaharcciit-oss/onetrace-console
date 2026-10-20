@@ -27,6 +27,11 @@ def pair_href(label: str, a_key: str) -> str:
     return f"choose-{label.lower()}-{a_key}.html"
 
 
+def b_anchor(b_key: str) -> str:
+    """The id of run B's row on run A's page, which a link naming the pair opens at."""
+    return f"b-{b_key}"
+
+
 def compare_request(a_key: str, b_key: str) -> str:
     """The request that compares the pair, as text: run A the baseline, run B the candidate."""
     return f"POST /compare?a={a_key}&b={b_key}"
@@ -107,7 +112,8 @@ def render_pair(pipeline, a_run, store: Store, *, generated_at: str,
             cell = (f"Not compared yet. "
                     f'<code class="mono" data-command>{escape(compare_request(a_run.key, r.key))}</code>')
             state = "not-compared"
-        rows.append(f'<tr data-run="{_tag(r.key)}" data-pair="{state}"><td>{_run_link(store, r.key)}</td>'
+        rows.append(f'<tr data-run="{_tag(r.key)}" data-pair="{state}"><td><span id="{_tag(b_anchor(r.key))}"></span>'
+                    f'{_run_link(store, r.key)}</td>'
                     f"<td>{cell}</td></tr>")
     label = escape(pipeline.label)
     if not others:
