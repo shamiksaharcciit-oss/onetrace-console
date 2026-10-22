@@ -1,15 +1,17 @@
 """Where an explanation is kept, and how long its paths are: Windows' limit, held by measurement.
 
 On Windows with long paths off a path can be 259 characters at most, and a folder 247 (room for an 8.3
-name). The console keeps each comparison's explanations in `<store>/x/<first 16 hex of its key>/`,
-and hands the command `r` there. `explain.LIMIT` is the longest store folder that layout fits, from
-the parts the console sets and the parts onetrace-explain and its SDK set below `r`, as measured.
+name). Long paths on or off, a process cannot start in a working folder of more than 258. The console
+keeps each comparison's explanations in `<store>/x/<first 16 hex of its key>/`, and hands the command
+`r` there. `explain.LIMIT` is the longest store folder that layout fits, from the parts the console
+sets and the parts onetrace-explain and its SDK set below `r`, as measured.
 
 The measurement here runs a real explanation with the `fake:` provider under a store folder padded
 to exactly `LIMIT`, and records every path opened, made, renamed or replaced under it, in this
 process and in every Python process it starts (the command, and the console's onetrace and verifier
-runs), through an audit hook. It asks nothing of the operating system's own limit, so it holds on
-any platform; on Windows with long paths off it is also a real run at the limit.
+runs), through an audit hook, with the working folder of every process each of them starts. It asks
+nothing of the operating system's own limit, so it holds on any platform; on Windows with long paths
+off it is also a real run at the limit.
 """
 from __future__ import annotations
 
@@ -29,6 +31,9 @@ _HOOK = '''import os, sys
 _LOG = os.environ.get("EXPLAIN_PATHS_LOG")
 if _LOG:
     def _hook(event, args, _open=open):
+        if event == "subprocess.Popen" and args[2] is not None:
+            with _open(_LOG, "a", encoding="utf-8") as f:
+                f.write("start\\t" + os.path.abspath(os.fsdecode(args[2])) + "\\n")
         if event in ("open", "os.mkdir", "os.rename", "os.replace"):
             for a in (args[:2] if event in ("os.rename", "os.replace") else args[:1]):
                 if isinstance(a, (str, bytes, os.PathLike)) and not os.fsdecode(a) == _LOG:
@@ -42,11 +47,29 @@ _SEEN: list[tuple[str, str]] | None = None
 _HOOKED = False
 
 
+#: The working folder of each process this process starts, while `caught` runs a measurement.
+_STARTED: list[str] | None = None
+
+
 def _hook(event, args):
+    if event == "subprocess.Popen" and args[2] is not None:
+        folder = os.path.abspath(os.fsdecode(args[2]))
+        if _STARTED is not None:
+            _STARTED.append(folder)
+        if _SEEN is not None:
+            _SEEN.append(("start", folder))
     if _SEEN is not None and event in ("open", "os.mkdir", "os.rename", "os.replace"):
         for a in (args[:2] if event in ("os.rename", "os.replace") else args[:1]):
             if isinstance(a, (str, bytes, os.PathLike)):
                 _SEEN.append((event, os.path.abspath(os.fsdecode(a))))
+
+
+def _hooked() -> None:
+    """This process's hook, added once."""
+    global _HOOKED
+    if not _HOOKED:
+        sys.addaudithook(_hook)
+        _HOOKED = True
 
 
 def padded(tmp_path: Path, length: int) -> Path:
@@ -89,12 +112,13 @@ def versions(explain_command) -> dict[str, str]:
             "onetrace": importlib.metadata.version("onetrace")}
 
 
-def measured(tmp_path: Path, monkeypatch, explain_command) -> dict:
-    """An explanation, its packet and a check, run under a store folder of exactly `LIMIT`: every
-    path each process touched under it, the deepest, and the problems against Windows' limits."""
-    global _SEEN, _HOOKED
+def measured(tmp_path: Path, monkeypatch, explain_command, length: int | None = None) -> dict:
+    """An explanation, its packet and a check, run under a store folder of exactly `length` (`LIMIT`
+    unless given): every path each process touched under it and every working folder a process
+    started in there, the deepest path, and the problems against Windows' limits."""
+    global _SEEN
     from onetrace_console import explain
-    root = padded(tmp_path, explain.LIMIT)
+    root = padded(tmp_path, explain.LIMIT if length is None else length)
     store, comparison, config = pair_at(root, monkeypatch)
     hook = tmp_path / "hook"
     hook.mkdir()
@@ -103,9 +127,7 @@ def measured(tmp_path: Path, monkeypatch, explain_command) -> dict:
     log.write_text("", encoding="utf-8")
     monkeypatch.setenv("PYTHONPATH", os.pathsep.join([str(hook), os.environ.get("PYTHONPATH", "")]))
     monkeypatch.setenv("EXPLAIN_PATHS_LOG", str(log))
-    if not _HOOKED:
-        sys.addaudithook(_hook)
-        _HOOKED = True
+    _hooked()
     _fake(config, "mixed.json")
     _SEEN = []
     try:
@@ -121,13 +143,18 @@ def measured(tmp_path: Path, monkeypatch, explain_command) -> dict:
     problems = []
     if got.get("exit") != "0" or shown.get("exit") != "0" or check.get("exit") is None:
         problems.append(f"the explanation, its packet or its check did not run: {tried(store, comparison)}")
-    problems += [f"{len(p)} characters: {p}" for _, p in under if len(p) > FILE_MOST]
+    problems += [f"{len(p)} characters: {p}" for e, p in under if e != "start" and len(p) > FILE_MOST]
     problems += [f"a folder of {len(p)} characters: {p}" for e, p in under
                  if e == "os.mkdir" and len(p) > FOLDER_MOST]
+    problems += [f"a working folder of {len(p)} characters: {p}" for e, p in under
+                 if e == "start" and len(p) > WORKING_FOLDER_MOST]
     staging = [p for _, p in under if "_staging" in p and ".tmp" in p]
     if not staging:
         problems.append("no staged temporary file was seen: the measurement missed the command's deepest writes")
-    return {"root": root, "under": under, "deepest": len(under[0][1]) if under else 0, "problems": problems}
+    starts = [p for e, p in under if e == "start"]
+    paths = [p for e, p in under if e != "start"]
+    return {"root": root, "under": under, "deepest": len(paths[0]) if paths else 0, "problems": problems,
+            "starts": starts, "deepest_start": max((len(p) for p in starts), default=0)}
 
 
 def test_every_path_an_explanation_writes_fits_windows_limit_at_the_store_folder_limit(
@@ -137,15 +164,88 @@ def test_every_path_an_explanation_writes_fits_windows_limit_at_the_store_folder
         f"measured with {explain.MEASURED}; installed {versions(explain_command)}: measure the new "
         f"versions' parts below `{explain.REPORT}`, and set explain.MEASURED_BELOW from them")
     got = measured(tmp_path, monkeypatch, explain_command)
-    examined(len(got["under"]), "paths under a store folder at the limit")
+    examined(len(got["under"]) - len(got["starts"]), "paths under a store folder at the limit")
+    examined(len(got["starts"]), "working folders a process started in, under a store folder at the limit")
     assert got["problems"] == [], "\n".join(got["problems"])
     #: At the limit the deepest path is the limit's own: the layout and the measured parts agree.
     assert got["deepest"] == FILE_MOST, (got["deepest"], got["under"][:3])
 
 
+#: onetrace-explain's run id, measured with `explain.MEASURED`'s versions.
+RUN_ID = 27
+
+
+def limit_long_paths() -> int:
+    """The longest store folder whose deepest working folder fits `WORKING_FOLDER_MOST`: the
+    verifier's, in the record's folder `<store>/<FOLDER>/<KEY_HEX hex>/<REPORT>/explain/<run id>`, from
+    the layout's parts and the run id's measured length."""
+    from onetrace_console import explain
+    return WORKING_FOLDER_MOST - (len("/store") + len(f"/{explain.FOLDER}/") + explain.KEY_HEX
+                                  + len(f"/{explain.REPORT}") + len("/explain/") + RUN_ID)
+
+
+def _deeper_verifier(monkeypatch):
+    """The sabotage: the verifier started one folder below the record's."""
+    from onetrace_console import explain
+    run = explain.subprocess.run
+
+    def deeper(argv, *args, cwd=None, **kwargs):
+        if cwd is not None and Path(cwd).parent.name == "explain" and "MANIFEST.json" in argv:
+            cwd = Path(cwd) / "d"
+            cwd.mkdir(exist_ok=True)
+        return run(argv, *args, cwd=cwd, **kwargs)
+    monkeypatch.setattr(explain.subprocess, "run", deeper)
+
+
+def working_folder_problems(got: dict) -> list[str]:
+    return [p for p in got["problems"] if p.startswith(("a working folder", "the explanation, its packet",
+                                                         "no staged"))]
+
+
+def _long_paths_on_here():
+    """Skip where Windows says long paths are off: at `limit_long_paths()` and over, the store's own
+    files and the explanation's pass `FILE_MOST`."""
+    from onetrace_console import explain
+    if explain.long_paths() is False:
+        pytest.skip(f"at {limit_long_paths()} characters and over, the store's own files and the explanation's "
+                    f"pass {FILE_MOST}, which Windows with long paths off refuses; this runs where they are on")
+
+
+def test_with_long_paths_on_every_process_starts_within_windows_limit_at_its_store_folder_limit(
+        tmp_path, monkeypatch, explain_command, explain_installed, examined):
+    from onetrace_console import explain
+    _long_paths_on_here()
+    assert (explain.LIMIT_LONG_PATHS, explain.WORKING_FOLDER) == (limit_long_paths(), WORKING_FOLDER_MOST)
+    got = measured(tmp_path, monkeypatch, explain_command, limit_long_paths())
+    examined(len(got["starts"]), f"working folders a process started in, under a store folder of {limit_long_paths()}")
+    assert working_folder_problems(got) == [], "\n".join(got["problems"])
+    #: At the bound the deepest working folder is the limit's own: the layout and the run id agree.
+    assert got["deepest_start"] == WORKING_FOLDER_MOST, (got["deepest_start"], got["starts"])
+
+
+def test_sabotage_the_verifier_started_one_folder_deeper_is_named(tmp_path, monkeypatch, explain_command,
+                                                                  explain_installed, examined):
+    _long_paths_on_here()
+    _deeper_verifier(monkeypatch)
+    outcome, named = caught(lambda: measured(tmp_path, monkeypatch, explain_command, limit_long_paths()))
+    folders = [ln for ln in named.splitlines() if ln.startswith("a working folder")]
+    examined(len(folders), f"working folders past the limit named, the verifier one folder deeper, {outcome}")
+    #: Measured where nothing refuses the start; refused, with error 267, on Windows.
+    assert outcome in ("measured", "refused") and folders, named
+    assert all(f"of {WORKING_FOLDER_MOST + 2} characters" in ln for ln in folders), named
+
+
 #: Windows' error for a path past its limit (ERROR_FILENAME_EXCED_RANGE), which Python raises as
 #: FileNotFoundError.
 TOO_LONG = 206
+#: Windows' error when a process cannot start in the working folder it is given (ERROR_DIRECTORY),
+#: which Python raises as NotADirectoryError, with no filename: long paths on or off, CreateProcess
+#: refuses a working folder over `WORKING_FOLDER_MOST` characters.
+ERROR_DIRECTORY = 267
+#: The longest working folder a process starts in: MAX_PATH less its NUL and the trailing backslash
+#: Windows adds (SetCurrentDirectory's own documentation), measured by
+#: tests/test_windows_working_folder.py.
+WORKING_FOLDER_MOST = 258
 
 
 def _making_a_folder(e: BaseException) -> bool:
@@ -162,17 +262,29 @@ def _making_a_folder(e: BaseException) -> bool:
 def caught(measure) -> tuple[str, str]:
     """How a layout too deep for Windows was caught, and what was named: "measured" where the
     measurement completes and names paths over the limit; "refused" where the operating system
-    refuses an over-long path first, with Windows' own error. Anything else is "not caught", with
-    why: another error, or a run with no over-long path."""
+    refuses an over-long path first, with Windows' own error. For a process start refused with
+    error 267, which names no path, the path is the working folder this process was seen to pass to
+    that start. Anything else is "not caught", with why: another error, or a run with no over-long
+    path."""
+    global _STARTED
+    _STARTED = started = []
     try:
         got = measure()
     except OSError as e:
+        if getattr(e, "winerror", None) == ERROR_DIRECTORY and e.filename is None:
+            folder = started[-1] if started else ""
+            if len(folder) > WORKING_FOLDER_MOST:
+                return "refused", f"a working folder of {len(folder)} characters refused: {folder}"
+            return "not caught", (f"{type(e).__name__}, winerror {ERROR_DIRECTORY}, the last process start's "
+                                  f"working folder {len(folder)} characters: {folder or 'no process was started'}")
         path = os.fsdecode(e.filename) if e.filename is not None else ""
         windows = getattr(e, "winerror", None) == TOO_LONG or (os.name == "nt" and isinstance(e, FileNotFoundError))
         folder = _making_a_folder(e)
         if windows and len(path) > (FOLDER_MOST if folder else FILE_MOST):
             return "refused", f"{'a folder' if folder else 'a path'} of {len(path)} characters refused: {path}"
         return "not caught", f"{type(e).__name__}, winerror {getattr(e, 'winerror', None)}, {len(path)} characters: {e}"
+    finally:
+        _STARTED = None
     over = [p for p in got["problems"] if " characters: " in p]
     return ("measured", "\n".join(over)) if over else ("not caught", f"no over-long path: {got['problems']}")
 
@@ -209,7 +321,30 @@ def _open(error):
     return open_file
 
 
+def _directory_error() -> OSError:
+    """The error CreateProcess gives for a working folder past its limit, as Python raises it there."""
+    if os.name == "nt":
+        return OSError(0, "The directory name is invalid", None, ERROR_DIRECTORY)
+    e = NotADirectoryError(20, "The directory name is invalid")
+    e.winerror = ERROR_DIRECTORY
+    return e
+
+
+def _start(folder: str | None):
+    """A process start in `folder`, refused as Windows refuses it: the start is seen (its audit
+    event, as subprocess raises it before CreateProcess), then error 267 with no filename."""
+    def start():
+        _hooked()
+        if folder is not None:
+            sys.audit("subprocess.Popen", sys.executable, [sys.executable], folder, None)
+        raise _directory_error()
+    return start
+
+
 _DEEP = "C:\\" + "d" * 300
+#: An absolute folder of any length up to 300 on this platform (`/ddd...` or `C:\\ddd...`), as a
+#: working folder is passed.
+_ROOTED = os.path.abspath(os.sep) + "d" * 300
 PLANTED = {
     "a folder past 247, refused": (lambda: _mkdir(_windows_error(_DEEP[:248]))(), "refused"),
     "a file past 259, refused": (lambda: _open(_windows_error(_DEEP[:260]))(), "refused"),
@@ -218,6 +353,9 @@ PLANTED = {
     "Windows' error on a short folder": (lambda: _mkdir(_windows_error(_DEEP[:247]))(), "not caught"),
     "Windows' error on a file of 248": (lambda: _open(_windows_error(_DEEP[:248]))(), "not caught"),
     "no over-long path": (lambda: {"problems": []}, "not caught"),
+    "Windows' error 267 on a working folder past 258, refused": (lambda: _start(_ROOTED[:259])(), "refused"),
+    "Windows' error 267 on a working folder of 258": (lambda: _start(_ROOTED[:258])(), "not caught"),
+    "Windows' error 267 with no process started": (lambda: _start(None)(), "not caught"),
 }
 
 
@@ -347,6 +485,63 @@ def test_sabotage_the_line_s_words_changed_is_named(tmp_path, monkeypatch, expla
     monkeypatch.setattr(explain, "TOO_LONG", explain.TOO_LONG.replace("Turn on long paths", "Enable long paths"))
     examined(1, "comparison page")
     assert line_problems(store, comparison, config, monkeypatch, enabled=False) != []
+
+
+#: The panel's line past the working-folder bound, word for word as ruled; N and the limits filled in.
+RULED_EVEN_ON = ("This store's folder is {n} characters long. Explain needs it to be {limit} or fewer, even with "
+                 "long paths on: Windows starts no program in a folder of more than {most} characters. Move the "
+                 "store to a shorter folder.")
+
+
+def even_on_problems(store, comparison, monkeypatch, *, enabled: bool) -> list[str]:
+    """On Windows (as the console is told it is), long paths on or off: a store folder over
+    `limit_long_paths()` has the ruled line, word for word, and the command never runs; at it, with
+    long paths on, Explain is offered."""
+    from onetrace_console import explain
+    monkeypatch.setattr(explain, "_on_windows", lambda: True)
+    monkeypatch.setattr(explain, "long_paths", lambda: enabled)
+    n = len(str(Path(store.root).parent))
+    panel = _panel(_diff(store, comparison))
+    out = []
+    if n <= limit_long_paths():
+        if "data-explain=\"too-long\"" in panel or "Explain</button>" not in panel:
+            out.append(f"at {n}, long paths {'on' if enabled else 'off'}: Explain is not offered: {_text(panel)!r}")
+        return out
+    want = RULED_EVEN_ON.format(n=n, limit=limit_long_paths(), most=WORKING_FOLDER_MOST)
+    if _text(panel).removeprefix(explain.TITLE).strip() != want:
+        out.append(f"the panel: {_text(panel)!r}, not {want!r}")
+    for name, press in (("Explain", lambda: explain.explain(comparison, store)),
+                        ("Show the packet", lambda: explain.packet(comparison, store))):
+        try:
+            press()
+            out.append(f"{name}: the command was run")
+        except ValueError as e:
+            if str(e) != want:
+                out.append(f"{name}: refused with {e}")
+        except OSError as e:
+            out.append(f"{name}: the command was run, and failed: {e}")
+    if (Path(store.root) / explain.FOLDER).exists():
+        out.append("an explanation folder was made")
+    return out
+
+
+@pytest.mark.parametrize("length, enabled", [(0, True), (1, True), (1, False)],
+                         ids=["at the bound, long paths on", "one over, long paths on", "one over, long paths off"])
+def test_past_the_working_folder_bound_the_panel_says_so_long_paths_on_or_off(
+        tmp_path, monkeypatch, explain_installed, examined, length, enabled):
+    _long_paths_on_here()
+    store, comparison, config = pair_at(padded(tmp_path, limit_long_paths() + length), monkeypatch)
+    examined(1, "comparison page")
+    assert even_on_problems(store, comparison, monkeypatch, enabled=enabled) == []
+
+
+def test_sabotage_the_bound_s_line_words_changed_is_named(tmp_path, monkeypatch, explain_installed, examined):
+    from onetrace_console import explain
+    _long_paths_on_here()
+    store, comparison, config = pair_at(padded(tmp_path, limit_long_paths() + 1), monkeypatch)
+    monkeypatch.setattr(explain, "TOO_LONG_EVEN_ON", explain.TOO_LONG_EVEN_ON.replace("Move the store", "Move your store"))
+    examined(1, "comparison page")
+    assert even_on_problems(store, comparison, monkeypatch, enabled=True) != []
 
 
 def test_long_paths_is_read_from_the_registry_on_windows_only(examined):

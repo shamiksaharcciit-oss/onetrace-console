@@ -6,7 +6,8 @@ never imports `onetrace_explain` (tests/test_explain_panel.py holds it to that),
 draws as a verdict, a badge, a count, a summary line or an incident reads an explanation back.
 
 Each comparison has a folder of its own, `x/<first 16 hex of its key>/` in the store, short so
-that on Windows with long paths off an explanation fits a store folder of up to `LIMIT` characters:
+that on Windows with long paths off an explanation fits a store folder of up to `LIMIT` characters,
+and with long paths on, every process it starts does, up to `LIMIT_LONG_PATHS`:
 - `key`: the comparison's full key; a folder whose `key` names another comparison is refused;
 - `a/` and `b/`: the two stored runs, laid out byte for byte (`checks.materialise`);
 - `r/`: `onetrace localize a b --out r`, the folder the command reads (`diff` where localize
@@ -108,7 +109,9 @@ FOLDER, KEY_HEX, REPORT, KEY_FILE = "x", 16, "r", "key"
 #: onetrace-explain's (27 characters), the staging folder and temporary name the SDK's
 #: (tests/test_explain_paths.py measures them, and refuses other versions).
 MEASURED = {"onetrace-explain": "0.1.0", "onetrace": "0.4.0"}
-MEASURED_BELOW = len("/explain/") + 27 + len("/artifacts/_staging/post_check/checked.json") + len(".12345678.tmp")
+#: onetrace-explain's run id, as measured with those versions.
+RUN_ID = 27
+MEASURED_BELOW = len("/explain/") + RUN_ID + len("/artifacts/_staging/post_check/checked.json") + len(".12345678.tmp")
 #: The longest path Windows opens with long paths off, its NUL apart.
 WINDOWS_PATH = 259
 #: The longest store folder (`store_root`, the Store's own folder `store` within it) an explanation
@@ -116,6 +119,16 @@ WINDOWS_PATH = 259
 LIMIT = WINDOWS_PATH - (len("/store") + len(f"/{FOLDER}/") + KEY_HEX + len(f"/{REPORT}") + MEASURED_BELOW)
 TOO_LONG = ("This store's folder is {n} characters long. On Windows with long paths off, Explain needs it "
             "to be {limit} or fewer. Turn on long paths, or move the store to a shorter folder.")
+#: The longest working folder Windows starts a process in, long paths on or off: MAX_PATH less its NUL
+#: and the trailing backslash Windows adds (tests/test_windows_working_folder.py measures it).
+WORKING_FOLDER = 258
+#: The longest store folder whose processes all start on Windows, long paths on or off. The deepest
+#: working folder is the verifier's, the record's own folder `<store>/x/<KEY_HEX hex>/r/explain/<run id>`.
+LIMIT_LONG_PATHS = WORKING_FOLDER - (len("/store") + len(f"/{FOLDER}/") + KEY_HEX + len(f"/{REPORT}")
+                                     + len("/explain/") + RUN_ID)
+TOO_LONG_EVEN_ON = ("This store's folder is {n} characters long. Explain needs it to be {limit} or fewer, even with "
+                    "long paths on: Windows starts no program in a folder of more than {most} characters. Move the "
+                    "store to a shorter folder.")
 
 
 def _on_windows() -> bool:
@@ -136,12 +149,18 @@ def long_paths() -> bool | None:
 
 
 def too_long(store) -> str | None:
-    """The panel's line where the store folder is longer than `LIMIT` on Windows with long paths
-    off, the command then never run; None where it fits, long paths are on, or not on Windows."""
-    if not _on_windows() or long_paths():
+    """The panel's line where the store folder is too long on Windows, the command then never run:
+    longer than `LIMIT_LONG_PATHS`, long paths on or off, the line that says to move it; longer than
+    `LIMIT` with long paths off, the line that also offers turning them on. None where it fits, or not
+    on Windows."""
+    if not _on_windows():
         return None
     n = len(str(Path(os.path.abspath(store.root)).parent))
-    return TOO_LONG.format(n=n, limit=LIMIT) if n > LIMIT else None
+    if n > LIMIT_LONG_PATHS:
+        return TOO_LONG_EVEN_ON.format(n=n, limit=LIMIT_LONG_PATHS, most=WORKING_FOLDER)
+    if n > LIMIT and not long_paths():
+        return TOO_LONG.format(n=n, limit=LIMIT)
+    return None
 
 
 def folder_of(store, key: str) -> Path:

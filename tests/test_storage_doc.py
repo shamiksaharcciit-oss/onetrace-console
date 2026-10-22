@@ -260,7 +260,8 @@ def test_the_delivery_test_takes_its_bash_from_the_control():
 
 def explanation_limit_problems(section: str) -> list[str]:
     """The storage section names the explanations' folder as the console lays it out, and states
-    their store-folder limit as the console derives it (`explain.LIMIT`)."""
+    their store-folder limits as the console derives them: `explain.LIMIT` with long paths off, and
+    `explain.LIMIT_LONG_PATHS` with them on, from Windows' working-folder limit."""
     from onetrace_console import explain
     text = " ".join(section.split())
     out = []
@@ -268,12 +269,32 @@ def explanation_limit_problems(section: str) -> list[str]:
         out.append(f"the explanations' folder is not named as {explain.FOLDER}/<first {explain.KEY_HEX} hex of its key>/")
     if f"An explanation fits a `store_root` of up to {explain.LIMIT} characters" not in text:
         out.append(f"the explanations' limit is not stated as {explain.LIMIT}")
+    if "neither limit applies" in text:
+        out.append("it still says that with long paths on neither limit applies")
+    on = getattr(explain, "LIMIT_LONG_PATHS", None)
+    most = getattr(explain, "WORKING_FOLDER", None)
+    if on is None or most is None:
+        out.append("the console derives no limit for long paths on")
+        return out
+    for said in (f"an explanation still needs a `store_root` of {on} characters or fewer",
+                 f"Windows starts no program in a working folder of more than {most} characters",
+                 f"in a folder {most - on} characters below `store_root`"):
+        if said not in text:
+            out.append(f"it does not say: {said}")
     return out
 
 
 def test_the_readme_states_the_explanations_folder_and_its_limit(examined):
     examined(1, "storage section")
     assert explanation_limit_problems(_section()) == []
+
+
+def test_sabotage_another_long_paths_limit_in_the_readme_is_named(examined):
+    from onetrace_console import explain
+    examined(1, "storage section, its long-paths limit changed")
+    on = explain.LIMIT_LONG_PATHS
+    planted = _section().replace(f"of {on} characters or fewer", f"of {on + 1} characters or fewer", 1)
+    assert planted != _section() and explanation_limit_problems(planted) != []
 
 
 def test_sabotage_another_limit_in_the_readme_is_named(examined):

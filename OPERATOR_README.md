@@ -351,7 +351,10 @@ started from, in local mode. As `serve.py` lays it out:
 The console's own files fit a `store_root` of up to 164 characters, as measured from its deepest,
 `pages/runs/<run key>/authorization.html`. An explanation fits a `store_root` of up to 140
 characters: on Windows with long paths off, where the folder is longer, the comparison's page says
-so and Explain does not run `onetrace-explain`. With long paths on, neither limit applies.
+so and Explain does not run `onetrace-explain`. With long paths on, the console's own files have no
+such limit, but an explanation still needs a `store_root` of 195 characters or fewer: Windows starts
+no program in a working folder of more than 258 characters, long paths on or off, and Explain starts
+the verifier in a folder 63 characters below `store_root`.
 
 `pages/` is *derived* from `store/` -- deterministically, by this console's own rendering -- but
 both are kept in the one volume rather than treating `pages/` as disposable, because losing it would
