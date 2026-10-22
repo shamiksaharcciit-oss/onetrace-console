@@ -44,7 +44,9 @@ def policy_problems(policy: str, *, local: bool) -> list[str]:
         name, *sources = part.split()
         directives[name] = sources
     out = []
-    shipped = {_hash(s) for s in inline_scripts()}
+    from onetrace_console.explain_script import EXPLAIN_SCRIPT
+    #: The explanation panel's buttons are the local console's only.
+    shipped = {_hash(s) for s in inline_scripts() + ((EXPLAIN_SCRIPT,) if local else ())}
     if set(directives.get("script-src", [])) != shipped:
         out.append(f"script-src is not exactly the shipped scripts' hashes: {directives.get('script-src')}")
     for name, sources in directives.items():

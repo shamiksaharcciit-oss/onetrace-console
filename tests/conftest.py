@@ -205,6 +205,47 @@ def ipv6_loopback_port(*, windows: bool | None = None) -> int:
         pytest.skip(f"this host has no IPv6 loopback ({said})")
 
 
+@pytest.fixture(scope="session")
+def explain_command(tmp_path_factory) -> tuple[Path, Path]:
+    """The published onetrace-explain, installed from the wheel cache by its pinned hash into a folder
+    of its own: never into this environment, never a dependency of the console. (command, its
+    library folder), found by the console's own lookup with the folder's scripts first. Refuses
+    rather than skips where the cache is not ready, as the pin tests do."""
+    import os
+    import subprocess
+    import sys
+    from onetrace_console import explain as e
+    from tools import fetch_wheel_cache as w
+    if not w.check():
+        pytest.fail(f"the local wheel cache is not there or does not match: {w.CACHE}\n"
+                    f"    python tools/fetch_wheel_cache.py")
+    (requirement, (_, sha)), = w.TEST_COMMANDS.items()
+    root = tmp_path_factory.mktemp("onetrace-explain")
+    req = root / "requirement.txt"
+    req.write_text(f"{requirement} --hash=sha256:{sha}\n", encoding="utf-8")
+    lib = root / "lib"
+    done = subprocess.run([sys.executable, "-m", "pip", "install", "--no-deps", "--no-index", "--find-links",
+                           str(w.CACHE), "--require-hashes", "--target", str(lib), "-r", str(req)],
+                          capture_output=True, text=True, timeout=300)
+    assert done.returncode == 0, done.stdout + done.stderr
+    scripts = next((lib / d for d in ("Scripts", "bin") if (lib / d).is_dir()), None)
+    found = e.find(os.name == "nt", str(scripts) if scripts else None, str(root / "no-python"), lambda n: None)
+    assert found is not None and found.parent == scripts, (found, scripts)
+    return found, lib
+
+
+@pytest.fixture
+def explain_installed(explain_command, monkeypatch) -> Path:
+    """The console finds the published onetrace-explain: its lookup answers the installed command,
+    whose library folder is put first on the command's import path."""
+    import os
+    from onetrace_console import explain as e
+    found, lib = explain_command
+    monkeypatch.setattr(e, "command", lambda: found)
+    monkeypatch.setenv("PYTHONPATH", os.pathsep.join(filter(None, [str(lib), os.environ.get("PYTHONPATH")])))
+    return found
+
+
 @pytest.fixture
 def delivery(files: dict[str, bytes]) -> bytes:
     return make_tar(files)
@@ -224,6 +265,13 @@ def server(tmp_path):
     module) because `tests/test_upload_hardening.py` needs the identical fixture
     `tests/test_serve.py` already had.
     """
+    with serving(tmp_path) as served:
+        yield served
+
+
+@contextmanager
+def serving(tmp_path: Path):
+    """`server`'s console, for a fixture of another scope: the same console, the same teardown."""
     import threading
 
     from http.server import ThreadingHTTPServer
@@ -316,3 +364,81 @@ def whole_folds(html: str) -> str:
     on the page, one fold away."""
     import re
     return re.sub(r'(<details class="fingerprint"[^>]*>)<summary class="mono">[^<]*</summary>', r"\1", html)
+
+
+# ---------------------------------------------------------- the public demo, built once a session
+
+#: The shared builds, by name: each one's folder, what its build returned, and its contents digest.
+SHARED: dict[str, dict] = {}
+
+
+def tree_digest(root: Path) -> str:
+    """The contents digest in its standing form: the sha256 of the `sha256sum -b` lines of every
+    file under `root`, named `./<path>` and sorted by bytes (`find . -type f | LC_ALL=C sort`)."""
+    names = sorted(("./" + p.relative_to(root).as_posix()).encode("utf-8")
+                   for p in root.rglob("*") if p.is_file())
+    lines = b"".join(hashlib.sha256((root / n[2:].decode("utf-8")).read_bytes()).hexdigest().encode()
+                     + b" *" + n + b"\n" for n in names)
+    return hashlib.sha256(lines).hexdigest()
+
+
+def _shared(name: str, folder: Path, said=None) -> dict:
+    SHARED[name] = {"folder": folder, "said": said, "digest": tree_digest(folder)}
+    return SHARED[name]
+
+
+@pytest.fixture(scope="session")
+def shared_demo(tmp_path_factory) -> dict:
+    """The public demo, built once a session with `build_public` and read by every module that
+    reads the demo as built. Read-only: a module that changes it fails `_shared_demo_unchanged`.
+    A module that writes takes its own copy (`demo_copy`)."""
+    from onetrace_console.folder_load import build_public
+    from tests.test_checks import _require_installed
+    _require_installed()
+    folder = tmp_path_factory.mktemp("shared-demo") / "demo"
+    said, _ = build_public(folder)
+    return _shared("shared_demo", folder, said)
+
+
+@pytest.fixture(scope="session")
+def shared_cli_demo(tmp_path_factory) -> dict:
+    """The public demo, built once a session as the image builds it (`demo --public --build`), and
+    read by every module that reads that build. Read-only, as `shared_demo` is."""
+    import os
+    import subprocess
+    import sys
+    from tests.test_checks import _require_installed
+    _require_installed()
+    folder = tmp_path_factory.mktemp("shared-cli-demo") / "demo"
+    out = subprocess.run([sys.executable, "-B", "-m", "onetrace_console", "demo", "--public",
+                          "--build", str(folder)], capture_output=True, text=True, timeout=600,
+                         env={**{k: v for k, v in os.environ.items()
+                                 if k != "ONETRACE_CONSOLE_CONFIG"},
+                              "PYTHONPATH": str(REPO / "src")})
+    assert out.returncode == 0, out.stdout + out.stderr
+    return _shared("shared_cli_demo", folder)
+
+
+def demo_copy(shared: dict, dest: Path) -> Path:
+    """A module's own copy of a shared build, for a module that changes what it reads."""
+    import shutil
+    shutil.copytree(shared["folder"], dest, symlinks=True, copy_function=shutil.copy2)
+    return dest
+
+
+@pytest.fixture(scope="module", autouse=True)
+def _shared_demo_unchanged(request):
+    """After each module: every shared build still has the contents digest it was built with. A
+    changed one fails here, naming the module; the next module is held to the changed digest, so
+    each change is named once, by the module that made it."""
+    yield
+    changed = []
+    for name, shared in SHARED.items():
+        now = tree_digest(shared["folder"])
+        if now != shared["digest"]:
+            changed.append(f"{name} ({shared['folder']}): {shared['digest']} before, {now} after")
+            shared["digest"] = now
+    if changed:
+        pytest.fail(f"{request.module.__name__} changed a shared demo build, which every module "
+                    f"reads as built: " + "; ".join(changed) + ". Give the module its own copy "
+                    f"(demo_copy).", pytrace=False)

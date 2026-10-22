@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "onetrace-console"
-version = "0.2.1"
+version = "0.3.0"
 description = "The onetrace console: every run in one place, read from the reports the verifier and the verbs produced."
 readme = "PYPI_DESCRIPTION.md"     # the README with absolute image links: tools/pypi_description.py
 requires-python = ">=3.12"
@@ -21,8 +21,8 @@ authors = [{ name = "Shamik Saha" }]
 # server is `http.server`, the store is files, the index is `sqlite3`, the tar is
 # `tarfile`, the digests are `hashlib`: all standard library. See DESIGN_GAPS.md.
 dependencies = [
-    "onetrace==0.3.0",                 # the SDK this release was tested with: the verbs
-    "onetrace-verify[crypto]==0.3.0",  # the verifier, with what it needs to check signatures
+    "onetrace==0.4.0",                 # the SDK this release was tested with: the verbs
+    "onetrace-verify[crypto]==0.4.0",  # the verifier, with what it needs to check signatures
 ]
 
 [project.scripts]

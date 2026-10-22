@@ -22,13 +22,11 @@ def _text(html: str) -> str:
 
 
 @pytest.fixture(scope="module")
-def demo(tmp_path_factory):
-    from onetrace_console.folder_load import build_public
+def demo(shared_demo):
     from onetrace_console.store import Store
     from tests.test_checks import _require_installed
     _require_installed()
-    folder = tmp_path_factory.mktemp("demo") / "demo"
-    build_public(folder)
+    folder = shared_demo["folder"]
     return Store(folder / "store" / "store"), folder / "store" / "pages", folder / "runs"
 
 

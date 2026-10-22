@@ -82,10 +82,10 @@ def _build(folder: Path) -> Demo:
 
 
 @pytest.fixture(scope="module")
-def demo(tmp_path_factory) -> Demo:
+def demo(shared_demo) -> Demo:
     from tests.test_checks import _require_installed
     _require_installed()
-    return _build(tmp_path_factory.mktemp("one-reading") / "demo")
+    return Demo(shared_demo["folder"], shared_demo["said"])
 
 
 # ------------------------------------------------------------- the checks

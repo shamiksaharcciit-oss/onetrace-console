@@ -88,10 +88,24 @@ def test_a_comparison_without_a_shown_text_diff_has_no_page_and_no_link(demo, mo
     assert "-text.html" not in render_diff(comparison, store, generated_at="now")
 
 
-def test_sabotage_each_check_catches_its_fault(demo, examined):
+def _plantable(found, store):
+    """The comparisons, in the store's order, whose text diff is shown and lists inputs: the ones
+    every fault below can be planted in, whatever order a build's keys come in."""
     from onetrace_console.textdiff_page import shown_document
+    out = []
+    for f in found:
+        doc = shown_document(f[0], store)
+        if doc is not None and any(n["inputs"] for n in doc["nodes"] if n["verdict"] in LISTED):
+            out.append(f)
+    return out
+
+
+def test_sabotage_each_check_catches_its_fault(demo, examined):
     store, found = _pages(demo)
-    comparison, text, diff = next(f for f in found if shown_document(f[0], store) is not None)
+    plantable = _plantable(found, store)
+    assert plantable, ("no comparison of this build has a shown text diff that lists inputs, so the "
+                       "faults have nowhere to be planted")
+    comparison, text, diff = plantable[0]
     page = text.read_text(encoding="utf-8")
     faults = {
         "no link from the Diff page": (lambda p: p, lambda d: d.replace("-text.html", "-gone.html"), "does not link"),

@@ -31,7 +31,9 @@ def _holds_for_a_graph_comparison(page: str) -> None:
     from onetrace_console.render import NOT_SHOWN_WHY
     assert 'data-section="first-difference"' in page, "the page shows no first difference"
     assert 'data-section="same-change"' not in page, "a graph pair draws the panel"
-    folded = re.search(r'<details data-section="not-shown">(.*?)</details>\s*(<p data-section="sdk"|$)',
+    #: The suggested explanation's own frame may come between it and the SDK's line (`explain`).
+    folded = re.search(r'<details data-section="not-shown">(.*?)</details>\s*'
+                       r'(?:<section data-section="explain"[^>]*>.*?</section>\s*)?(<p data-section="sdk"|$)',
                        page, re.S)
     assert folded, "no closed line for what is not shown"
     said = unescape(folded.group(1))

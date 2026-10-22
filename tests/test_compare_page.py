@@ -27,13 +27,13 @@ WIDTH_AT_1280 = 1280 - 232 - 2 * 36 - 2 * 18
 
 
 @pytest.fixture(scope="module")
-def demo(tmp_path_factory):
-    from onetrace_console.folder_load import build_public
+def demo(shared_demo, tmp_path_factory):
+    """Its own copy of the session's demo build: the pages drawn here change the store."""
     from onetrace_console.store import Store
+    from tests.conftest import demo_copy
     from tests.test_checks import _require_installed
     _require_installed()
-    folder = tmp_path_factory.mktemp("compare") / "demo"
-    build_public(folder)
+    folder = demo_copy(shared_demo, tmp_path_factory.mktemp("compare") / "demo")
     return folder, Store(folder / "store" / "store")
 
 

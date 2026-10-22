@@ -65,11 +65,22 @@ def test_a_0_1_delivery_is_taken(store, examined):
     assert got.run.format == "stage-receipt-chain/0.1"
 
 
-def test_a_0_2_delivery_is_taken(store, tmp_path, examined):
+def test_a_delivery_in_the_installed_sdk_s_format_is_taken(store, tmp_path, examined):
+    """What the pinned SDK writes now (format 0.3, onetrace 0.4.0) is taken."""
     _require_installed()
     from tests.test_last_attempt_failed import _emit
-    _emit(tmp_path / "r", "a-0-2-run", [("a", "1", "ok"), ("b", "1", "ok")])
+    _emit(tmp_path / "r", "a-0-3-run", [("a", "1", "ok"), ("b", "1", "ok")])
     got = accept(_delivery(tmp_path / "r"), store)
+    examined(1, "0.3 delivery taken")
+    assert got.run is not None, getattr(got, "body", got)
+    assert got.run.format == "stage-receipt-chain/0.3", got.run.format
+
+
+def test_a_0_2_delivery_is_taken(store, examined):
+    """A 0.2 run, the reference demo's committed day 1, is still taken."""
+    _require_installed()
+    folder = Path(__file__).resolve().parent.parent / "examples" / "reference-demo" / "runs" / "day-1"
+    got = accept(_delivery(folder), store)
     examined(1, "0.2 delivery taken")
     assert got.run is not None, getattr(got, "body", got)
     assert got.run.format == "stage-receipt-chain/0.2", got.run.format

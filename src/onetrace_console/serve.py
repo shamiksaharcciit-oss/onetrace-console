@@ -54,6 +54,7 @@ import json
 import os
 import re
 import socket
+import subprocess
 import sys
 import threading
 import time
@@ -194,10 +195,11 @@ def _render_all_pages(store: Store, root: Path, config: Config | None = None) ->
                render_rule_list(store, RULE.id, generated_at=_now(), **args))
 
 
-def _render_diff_page(comparison, store: Store, root: Path) -> str:
+def _render_diff_page(comparison, store: Store, root: Path, *, public: bool = False) -> str:
+    """`public`: drawn for a public console, whose explanation panel is its place only."""
     from onetrace_console.render import render_diff
     from onetrace_console import views
-    html = render_diff(comparison, store, generated_at=_now())
+    html = render_diff(comparison, store, generated_at=_now(), public=public)
     rel = f"diff/{comparison.key}.html"
     #: Its two views: "What changed" at the page's address, "Proof" beside it.
     said, state = views.pair_said(comparison, store)
@@ -264,7 +266,7 @@ def _render_startup_pages(store: Store, root: Path, config: Config | None = None
         _render_unreadable_record_pages(store, root, key, kind="run")
     for comparison in store.comparisons():
         try:
-            _render_diff_page(comparison, store, root)
+            _render_diff_page(comparison, store, root, public=bool(config and config.public))
         except Exception as e:  # noqa: BLE001 - that page says so, and the log has it
             #: One comparison's failure never keeps the console from starting (the second
             #: confirmation review).
@@ -776,6 +778,14 @@ class Handler(BaseHTTPRequestHandler):
                     self._respond(403, b"missing or mismatched CSRF token\n", "text/plain")
                     return
                 self._handle_compare(query)
+            elif split.path in ("/explain", "/explain/packet", "/explain/check"):
+                if not self._enforce_role("POST", split.path):
+                    return
+                query = parse_qs(split.query)
+                if not self._check_action_csrf(query=query):
+                    self._respond(403, b"missing or mismatched CSRF token\n", "text/plain")
+                    return
+                self._handle_explain(split.path, query)
             elif split.path == "/text-diff/more":
                 if not self._enforce_role("POST", "/text-diff/more"):
                     return
@@ -1043,12 +1053,52 @@ class Handler(BaseHTTPRequestHandler):
             self._respond_json(400, {"error": f"this console cannot lay out a run of this pair "
                                               f"on this host: {e}"})
             return
-        rel = _render_diff_page(comparison, self.store, self.store_root)
+        rel = _render_diff_page(comparison, self.store, self.store_root, public=self.config.public)
         #: Storing a comparison re-renders its candidate's pages, whose
         #: graph is marked from it; nothing else re-renders them but start-up.
         _render_run_pages(b_run, self.store, self.store_root, self.config)
         _render_all_pages(self.store, self.store_root, self.config)
         self._respond_json(200, {"comparison_key": comparison.key, "pages": {"diff": f"/{rel}"}})
+
+    def _handle_explain(self, path: str, query: dict[str, list[str]]) -> None:
+        """One press on a comparison's explanation panel (`explain`): Explain, Send (`send=yes`,
+        the only press that passes `--yes`), Show the packet, or Run a check the explanation names
+        (`e`, `i`), rebuilt from the explanation and never from the request. The page is drawn
+        again after each; the command's own exit and lines are kept, never read as a verdict."""
+        from onetrace_console import explain
+        from onetrace_console.store import StoreError
+        key = (query.get("c") or [""])[0]
+        try:
+            comparison = self.store.get_comparison(key) if key else None
+        except (StoreError, OSError, ValueError):
+            comparison = None
+        if comparison is None:
+            self._respond_json(400, {"error": "unknown or malformed comparison key"})
+            return
+        if explain.command() is None:
+            self._respond_json(400, {"error": "onetrace-explain is not installed with this console"})
+            return
+        try:
+            if path == "/explain":
+                got = explain.explain(comparison, self.store, send=(query.get("send") or [""])[0] == "yes")
+            elif path == "/explain/packet":
+                got = explain.packet(comparison, self.store)
+            else:
+                index = (query.get("i") or [""])[0]
+                if not index.isdigit():
+                    raise ValueError("no such check")
+                got = explain.run_check(self.store, comparison.key, (query.get("e") or [""])[0], int(index))
+        except ValueError as e:
+            self._respond_json(400, {"error": str(e)})
+            return
+        except (OSError, subprocess.SubprocessError) as e:
+            #: Its reason, never its whole text: an OSError's carries a path of this machine.
+            self._respond_json(500, {"error": f"the command could not be run: "
+                                              f"{getattr(e, 'strerror', None) or type(e).__name__}"})
+            return
+        rel = _render_diff_page(comparison, self.store, self.store_root, public=self.config.public)
+        self._respond_json(200, {"comparison_key": comparison.key, "exit": got.get("exit", ""),
+                                 "pages": {"diff": f"/{rel}"}})
 
     def _handle_text_diff_more(self, query: dict[str, list[str]]) -> None:
         """The comparison's text diff again at the console's one larger
@@ -1074,7 +1124,7 @@ class Handler(BaseHTTPRequestHandler):
         except ComparisonError as e:
             self._respond_json(400, {"error": str(e)})
             return
-        rel = _render_diff_page(comparison, self.store, self.store_root)
+        rel = _render_diff_page(comparison, self.store, self.store_root, public=self.config.public)
         self._respond_json(200, {"comparison_key": comparison.key, "max_lines": TEXT_DIFF_MORE_LINES,
                                  "pages": {"diff": f"/{rel}"}})
 

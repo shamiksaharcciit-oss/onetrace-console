@@ -57,6 +57,8 @@ _VIEWER_GET_PATTERNS = tuple(re.compile(p) for p in (
     r"^comparisons\.html$",
     #: A pipeline's page, and its two filters.
     r"^pipeline-p[0-9]+(-agree|-attention)?\.html$",
+    #: A pipeline's drift page, against the first run or each run's previous.
+    r"^drift-p[0-9]+(-previous)?\.html$",
     #: Choose two runs: a pipeline's runs as run A, and run A's page of the others as run B.
     r"^choose-p[0-9]+\.html$",
     r"^choose-p[0-9]+-[0-9a-f]{64}\.html$",
@@ -74,6 +76,11 @@ _POST_ROLES = {
     #: "Show more" on a comparison's text diff -- who may run a comparison
     #: may run its text diff at the console's larger limit.
     "/text-diff/more": VIEWER,
+    #: The explanation panel's three presses (`explain`): who may run a comparison may ask for a
+    #: suggestion about it, see the packet, and run a check the explanation names.
+    "/explain": VIEWER,
+    "/explain/packet": VIEWER,
+    "/explain/check": VIEWER,
 }
 
 

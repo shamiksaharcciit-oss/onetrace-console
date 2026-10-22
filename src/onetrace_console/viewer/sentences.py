@@ -173,6 +173,8 @@ RULED_10CD = "pin report sentences"
 RULED_29KZ = "anchor rung wording"
 #: The stage page's anchoring badge, as specified.
 RULED_29LD = "stage anchoring badge"
+#: The three sentences format 0.3 puts before the check's own row, as ruled.
+RULED_FORMAT_03 = "format 0.3 sentences"
 
 #: Sentences whose ruling is **in force by relay** but whose sealed source has not been
 #: delivered to the archive of sealed sources yet, so no test can look the words up in it. C025 §2 keeps
@@ -195,6 +197,20 @@ RULED_PENDING_DELIVERY: dict[str, str] = {
 }
 
 RULED: dict[str, tuple[str, str]] = {
+    #: Format 0.3's three sentences, each followed by the check's own row, quoted whole.
+    "declined.held": (
+        "The check says:",
+        RULED_FORMAT_03 + ": beside the banner, the check's own row for a step the plan held before "
+        "it ran (refused.attempted); accepted as written"),
+    "rung.missing.optional": (
+        "The check, asked whether every required step ran, says:",
+        RULED_FORMAT_03 + ": rung 3 when the check run with --require-complete passes a run that left "
+        "out only stages it declares optional; reworded and ruled"),
+    "rung.records.outputs_not_kept": (
+        "The check did not look at the run's output files. This page does not say the records agree. "
+        "The check says:",
+        RULED_FORMAT_03 + ": rung 1 when the check's run: artifacts row says the run declares it keeps "
+        "no output files (outputs_kept: none); reworded and ruled"),
     #: Rung 3 for a run stopped at a step's own rule. The ruled "Not reached: stopped at {step}" is
     #: drawn as the rung's state word, "Not reached", then this line.
     "rung.missing.stopped_at": (

@@ -35,12 +35,10 @@ def _text(page: str) -> str:
 
 
 @pytest.fixture(scope="module")
-def built(tmp_path_factory) -> Path:
-    from onetrace_console.folder_load import build_public
+def built(shared_demo) -> Path:
     from tests.test_checks import _require_installed
     _require_installed()
-    folder = tmp_path_factory.mktemp("example-inputs") / "demo"
-    build_public(folder)
+    folder = shared_demo["folder"]
     return folder
 
 

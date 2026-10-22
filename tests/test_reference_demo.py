@@ -57,10 +57,37 @@ def regenerated(tmp_path_factory) -> Path:
     return out
 
 
-def test_the_committed_runs_are_exactly_what_the_script_produces(regenerated, examined):
-    """Every file the script writes, byte for byte. The signatures beside the chain are not the
-    script's: they were added after, with a demo key that no longer exists (the README says so), so
-    they are held by the signing tests below, and are the only files the script does not make."""
+#: The committed runs were recorded by onetrace 0.3.0, in format 0.2, and signed with a demo key that
+#: no longer exists; they are kept as recorded. The pinned SDK (0.4.0) records the same runs in
+#: format 0.3: measured, the only differences are the format's minor version in the manifest and each
+#: receipt, the manifest's new `outputs_kept`, and the digests those change. Every other byte is the
+#: same.
+COMMITTED_FORMAT = ("stage-receipt-chain/0.2", "stage-receipt/0.2")
+_DIGEST = re.compile(rb"[0-9a-f]{64}")
+
+
+def same_run_in_a_later_format(committed: bytes, made: bytes) -> bool:
+    """`made` is `committed` recorded in format 0.3: the same JSON once its 64-hex digests are masked,
+    its format strings read as 0.2 and its manifest's `outputs_kept: all` left out. Nothing else."""
+    try:
+        a, b = (json.loads(_DIGEST.sub(b"<digest>", x).decode("utf-8")) for x in (committed, made))
+    except ValueError:
+        return False
+    if not (isinstance(a, dict) and isinstance(b, dict)):
+        return False
+    if b.get("format") in ("stage-receipt-chain/0.3", "stage-receipt/0.3"):
+        b["format"] = b["format"][:-1] + "2"
+    if b.get("outputs_kept") == "all" and "outputs_kept" not in a:
+        del b["outputs_kept"]
+    return a == b
+
+
+def test_the_committed_runs_are_what_the_script_produces(regenerated, examined):
+    """Every file the script writes: byte for byte, or -- the manifest and the receipts, which the
+    pinned SDK records in format 0.3 -- the same run in that later format and nothing else. The
+    signatures beside the chain are not the script's: they were added after, with a demo key that no
+    longer exists (the README says so), so they are held by the signing tests below, and are the
+    only files the script does not make."""
     checked = 0
     for day in DAYS:
         committed, made = _files(RUNS / f"day-{day}"), _files(regenerated / f"day-{day}")
@@ -68,11 +95,23 @@ def test_the_committed_runs_are_exactly_what_the_script_produces(regenerated, ex
         assert [str(rel).replace("\\", "/") for rel in sorted(signed)] == ["signatures/1.json"], day
         committed = [rel for rel in committed if rel not in signed]
         assert committed == made, day
+        assert json.loads((RUNS / f"day-{day}" / "MANIFEST.json").read_bytes())["format"] == COMMITTED_FORMAT[0]
         for rel in committed:
-            assert (RUNS / f"day-{day}" / rel).read_bytes() == \
-                (regenerated / f"day-{day}" / rel).read_bytes(), rel
+            x, y = (RUNS / f"day-{day}" / rel).read_bytes(), (regenerated / f"day-{day}" / rel).read_bytes()
+            recorded = rel == "MANIFEST.json" or str(rel).replace("\\", "/").startswith("receipts/")
+            assert x == y or (recorded and same_run_in_a_later_format(x, y)), rel
             checked += 1
     examined(checked, "files of the two committed runs compared with a fresh generation")
+
+
+def test_sabotage_a_changed_value_in_a_regenerated_receipt_is_named(regenerated, examined):
+    """Beyond the format, one changed value is still a difference."""
+    rel = "receipts/05-model.json"
+    x, y = (RUNS / "day-1" / rel).read_bytes(), (regenerated / "day-1" / rel).read_bytes()
+    examined(2, "planted receipts")
+    assert same_run_in_a_later_format(x, y)
+    assert not same_run_in_a_later_format(x, y.replace(b'"model"', b'"modeL"', 1))
+    assert not same_run_in_a_later_format(x, y.replace(b'"stage-receipt/0.3"', b'"stage-receipt/0.4"', 1))
 
 
 def _data(receipt: dict) -> list[str]:
@@ -148,12 +187,12 @@ def test_the_first_difference_is_the_model_stage_and_only_its_seed_differs(tmp_p
 
 
 def test_the_store_takes_exactly_the_listed_formats():
-    """Format 0.2 added, and the store's lists are exactly these -- a format
+    """Format 0.3 added, and the store's lists are exactly these -- a format
     joins or leaves them only by changing this test."""
     from onetrace_console.ingest import MANIFEST_FORMATS, RECEIPT_FORMATS
-    assert MANIFEST_FORMATS == ("stage-receipt-chain/0.2", "stage-receipt-chain/0.1",
-                                "stage-receipt-chain/0.0-preview")
-    assert RECEIPT_FORMATS == ("stage-receipt/0.2", "stage-receipt/0.1",
+    assert MANIFEST_FORMATS == ("stage-receipt-chain/0.3", "stage-receipt-chain/0.2",
+                                "stage-receipt-chain/0.1", "stage-receipt-chain/0.0-preview")
+    assert RECEIPT_FORMATS == ("stage-receipt/0.3", "stage-receipt/0.2", "stage-receipt/0.1",
                                "stage-receipt/0.0-preview")
     fmt = json.loads((RUNS / "day-1" / "MANIFEST.json").read_bytes())["format"]
     assert fmt in MANIFEST_FORMATS, "the demo's own format is one the store implements"

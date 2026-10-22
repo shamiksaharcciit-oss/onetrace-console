@@ -27,18 +27,18 @@ META = tomllib.loads((REPO / "pyproject.toml").read_text(encoding="utf-8"))["pro
 def test_the_version_is_0_2_0_everywhere(examined):
     import onetrace_console
     examined(3, "places the version is stated")
-    assert META["version"] == "0.2.1"
-    assert onetrace_console.__version__ == "0.2.1"
+    assert META["version"] == "0.3.0"
+    assert onetrace_console.__version__ == "0.3.0"
     out = subprocess.run([sys.executable, "-m", "onetrace_console", "--version"], capture_output=True,
                          text=True, env={**os.environ, "PYTHONPATH": str(REPO / "src")})
-    assert out.stdout.strip() == "0.2.1", out
+    assert out.stdout.strip() == "0.3.0", out
 
 
 def test_the_metadata_names_the_sdk_it_was_tested_with(examined):
     deps = META["dependencies"]
     examined(len(deps), "declared dependencies")
-    assert "onetrace==0.3.0" in deps
-    assert "onetrace-verify[crypto]==0.3.0" in deps
+    assert "onetrace==0.4.0" in deps
+    assert "onetrace-verify[crypto]==0.4.0" in deps
     assert META["requires-python"] == ">=3.12"
     assert len(META["authors"]) == 1 and META["authors"][0].get("name", "").strip(), META["authors"]
 
@@ -64,6 +64,100 @@ def test_the_pins_command_reads_the_lock_shipped_in_the_package(examined):
                          env={**os.environ, "PYTHONPATH": str(REPO / "src")})
     assert out.returncode == 0, out.stderr
     assert out.stdout.replace(b"\r\n", b"\n") == shipped.read_bytes().replace(b"\r\n", b"\n")
+
+
+def test_the_shipped_lock_pins_the_published_0_4_0_wheels(examined):
+    """The lock the installed package carries pins the SDK's two wheels as PyPI serves them."""
+    from tests.test_pin_012 import RELEASE_0_4_0
+    from tests.test_pins import _REQ
+    text = (REPO / "src" / "onetrace_console" / "requirements.lock").read_text(encoding="utf-8")
+    entries = {m.group("req"): m.group("sha") for m in _REQ.finditer(text)}
+    examined(2, "SDK pins in the shipped lock")
+    assert entries["onetrace==0.4.0"] == RELEASE_0_4_0["onetrace-0.4.0-py3-none-any.whl"]
+    assert entries["onetrace-verify==0.4.0"] == RELEASE_0_4_0["onetrace_verify-0.4.0-py3-none-any.whl"]
+
+
+#: onetrace-explain is never a dependency: the console runs it as a command where it is installed.
+EXPLAIN_NAMES = re.compile(r"onetrace[-_.]explain", re.I)
+#: The one sentence each README gives it, and the page it links.
+EXPLAIN_INSTALL = "`pip install onetrace-explain`"
+EXPLAIN_FORMAT = "https://oneproof.dev/onetrace/explain-format.md"
+
+
+def dependency_problems(files: dict[str, str]) -> list[str]:
+    """{name: text} of pyproject.toml and the two locks: none names onetrace-explain."""
+    return [f"{name} names onetrace-explain" for name, text in files.items() if EXPLAIN_NAMES.search(text)]
+
+
+def _dependency_files() -> dict[str, str]:
+    return {n: (REPO / n).read_text(encoding="utf-8")
+            for n in ("pyproject.toml", "requirements.lock", "src/onetrace_console/requirements.lock")}
+
+
+def test_onetrace_explain_is_never_a_dependency(examined):
+    files = _dependency_files()
+    examined(len(files), "dependency files read")
+    assert dependency_problems(files) == []
+
+
+def test_sabotage_onetrace_explain_as_an_extra_is_named(examined):
+    files = _dependency_files()
+    files["pyproject.toml"] = files["pyproject.toml"].replace(
+        "\n[project.scripts]", '\n[project.optional-dependencies]\nexplain = ["onetrace-explain==0.1.0"]\n\n[project.scripts]', 1)
+    examined(1, "planted pyproject")
+    assert "onetrace-explain==0.1.0" in files["pyproject.toml"]
+    assert dependency_problems(files) == ["pyproject.toml names onetrace-explain"]
+
+
+#: The ruled words of "Where it runs": the console's own network, and what the command does.
+NETWORK_WORDS = ("The console makes no network calls. The Explain button runs onetrace-explain, if you install it, "
+                 "and that command sends an evidence packet to the model you configure. The first time it would send "
+                 "a kind of item it has never sent to that endpoint, it lists them and asks first.")
+
+
+def _sentences(text: str) -> list[str]:
+    return re.split(r"(?<=[.!?])\s+(?=[A-Z`])", " ".join(text.split()))
+
+
+def explain_sentence_problems(name: str, text: str) -> list[str]:
+    """The README says how to install onetrace-explain in one sentence, which links the explain
+    format page; its "Where it runs" holds the ruled words, exactly; no other sentence names the
+    command."""
+    out = []
+    install = [s for s in _sentences(text) if EXPLAIN_INSTALL in s]
+    if len(install) != 1:
+        out.append(f"{name}: {len(install)} sentences give {EXPLAIN_INSTALL}")
+    elif EXPLAIN_FORMAT not in install[0]:
+        out.append(f"{name}: the install sentence lacks {EXPLAIN_FORMAT!r}")
+    where = text.split("\n## Where it runs\n", 1)[1].split("\n## ", 1)[0] if "\n## Where it runs\n" in text else ""
+    if NETWORK_WORDS not in " ".join(where.split()):
+        out.append(f"{name}: \"Where it runs\" does not hold the ruled words")
+    ruled = _sentences(NETWORK_WORDS)
+    out += [f"{name}: another sentence names onetrace-explain: {s[:80]!r}" for s in _sentences(text)
+            if EXPLAIN_NAMES.search(s) and s not in install and s not in ruled]
+    return out
+
+
+@pytest.mark.parametrize("name", ["README.md", "PYPI_DESCRIPTION.md"])
+def test_each_readme_says_how_to_make_explain_work_and_what_it_sends(name, examined):
+    examined(1, name)
+    assert explain_sentence_problems(name, (REPO / name).read_text(encoding="utf-8")) == []
+
+
+def test_sabotage_a_readme_without_the_format_link_is_named(examined):
+    text = (REPO / "README.md").read_text(encoding="utf-8")
+    examined(1, "planted README")
+    assert EXPLAIN_FORMAT in text
+    assert explain_sentence_problems("README.md", text.replace(EXPLAIN_FORMAT, "https://example.invalid/")) == [
+        f"README.md: the install sentence lacks {EXPLAIN_FORMAT!r}"]
+
+
+def test_sabotage_a_readme_whose_network_words_differ_from_the_ruled_ones_is_named(examined):
+    text = (REPO / "README.md").read_text(encoding="utf-8")
+    examined(1, "planted README")
+    assert "and asks first." in text
+    assert explain_sentence_problems("README.md", text.replace("and asks first.", "and asks.")) == [
+        'README.md: "Where it runs" does not hold the ruled words']
 
 
 def test_a_plain_install_is_identified_by_its_record(tmp_path, examined):
@@ -113,8 +207,8 @@ def test_a_plain_pip_install_compares_with_the_same_report_as_the_pinned_install
         subprocess.run([sys.executable, "-c", f"import sys; from setuptools import build_meta as b; "
                         f"print(b.{build}(sys.argv[1]))", str(dist)], cwd=tree, check=True,
                        capture_output=True, env=clean)
-    console_whl = next(dist.glob("onetrace_console-0.2.1-*.whl"))
-    _check_the_viewer_ships_without_its_tests(console_whl, next(dist.glob("onetrace_console-0.2.1.tar.gz")))
+    console_whl = next(dist.glob("onetrace_console-0.3.0-*.whl"))
+    _check_the_viewer_ships_without_its_tests(console_whl, next(dist.glob("onetrace_console-0.3.0.tar.gz")))
     #: The wheel carries the demo store's builder and trust file, so `onetrace-console demo` works
     #: installed: it builds the demo's runs where it is started (0.1.1).
     import zipfile

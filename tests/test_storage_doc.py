@@ -256,3 +256,28 @@ def test_the_delivery_test_takes_its_bash_from_the_control():
     body = source.split("def test_the_readme_s_delivery_command_makes_a_delivery_the_console_stores(",
                         1)[1].split("\ndef ", 1)[0]
     assert "_require_bash(" in body and 'which("bash")' not in body
+
+
+def explanation_limit_problems(section: str) -> list[str]:
+    """The storage section names the explanations' folder as the console lays it out, and states
+    their store-folder limit as the console derives it (`explain.LIMIT`)."""
+    from onetrace_console import explain
+    text = " ".join(section.split())
+    out = []
+    if f"`store/{explain.FOLDER}/`" not in text or f"`{explain.FOLDER}/<first {explain.KEY_HEX} hex of its key>/`" not in text:
+        out.append(f"the explanations' folder is not named as {explain.FOLDER}/<first {explain.KEY_HEX} hex of its key>/")
+    if f"An explanation fits a `store_root` of up to {explain.LIMIT} characters" not in text:
+        out.append(f"the explanations' limit is not stated as {explain.LIMIT}")
+    return out
+
+
+def test_the_readme_states_the_explanations_folder_and_its_limit(examined):
+    examined(1, "storage section")
+    assert explanation_limit_problems(_section()) == []
+
+
+def test_sabotage_another_limit_in_the_readme_is_named(examined):
+    from onetrace_console import explain
+    examined(1, "storage section, its limit changed")
+    planted = _section().replace(f"up to {explain.LIMIT}\n", f"up to {explain.LIMIT + 1}\n", 1)
+    assert planted != _section() and explanation_limit_problems(planted) != []

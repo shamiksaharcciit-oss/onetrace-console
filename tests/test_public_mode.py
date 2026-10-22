@@ -47,15 +47,11 @@ def _tree(root: Path) -> dict[str, tuple[str, int]]:
 
 
 @pytest.fixture(scope="module")
-def built(tmp_path_factory) -> Path:
+def built(shared_cli_demo) -> Path:
     """The public demo, built once into a new folder as the image builds it."""
     from tests.test_checks import _require_installed
     _require_installed()
-    folder = tmp_path_factory.mktemp("public") / "demo"
-    out = subprocess.run([sys.executable, "-B", "-m", "onetrace_console", "demo", "--public",
-                          "--build", str(folder)], capture_output=True, text=True, timeout=600,
-                         env={**_clean_env(), "PYTHONPATH": str(REPO / "src")})
-    assert out.returncode == 0, out.stdout + out.stderr
+    folder = shared_cli_demo["folder"]
     return folder
 
 

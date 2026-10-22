@@ -302,7 +302,11 @@ def check(run_dir: Path, *, ran_at: str | None = None, trust_file: str | None = 
     #: holds `artifacts/`, again with the output files required (the evidence for "Records
     #: agree"). With the flag a run without output files FAILs, so the flag is never the check.
     shipped_verifier()                  # the verifier is installed, or this refuses as before
-    envelope = capture_cli(run_dir, outputs=(run_dir / "artifacts").is_dir(),
+    #: A run recorded in format 0.3 may declare optional stages; the check is run once more with
+    #: every required stage asked for, and only its row says what was left out (`viewer.report`).
+    #: An earlier format's check is the check it was.
+    complete = _manifest(manifest_path).get("format") in COMPLETENESS_FORMATS
+    envelope = capture_cli(run_dir, outputs=(run_dir / "artifacts").is_dir(), complete=complete,
                            timeout=CHECK_TIMEOUT_SECONDS,
                            trust=Path(trust_file) if trust_file else None,
                            tsa=(Path(tsa_cert), [Path(r) for r in tsa_roots]) if tsa_cert else None)
@@ -340,18 +344,28 @@ def check(run_dir: Path, *, ran_at: str | None = None, trust_file: str | None = 
         topology_note=topology_note(declares_edges=declares_edges, output=report.output))
 
 
-def nothing_missing_state(folder: Path) -> str:
+#: The chain formats whose check is run again with `--require-complete` (`check`).
+COMPLETENESS_FORMATS = ("stage-receipt-chain/0.3",)
+
+
+def nothing_missing_state(folder: Path, envelope: dict | None = None) -> str:
     """Rung 3, "nothing missing", as the run's own page decides it, for Home to count
     (Home once counted from the chain and said an early-stopped run missed nothing,
     while its page said "No"). The viewer's own test, `viewer.model.nothing_missing`, over the
-    record read as the page reads it; empty -- not established -- where the viewer refuses the
+    record read as the page reads it, beside this console's own check (`envelope`) where it has one;
+    empty -- not established -- where the viewer refuses the
     record, as the page then says, or reading it fails any other way."""
     from onetrace_console.viewer.model import nothing_missing, refuse_unreadable_parts
     from onetrace_console.viewer.record import RecordError, read_record
+    from onetrace_console.viewer.report import ReportUnreadable, parse
     try:
         record = read_record(folder)
         refuse_unreadable_parts(record)
-        return nothing_missing(record).state
+        try:
+            report = parse(envelope) if envelope is not None else None
+        except ReportUnreadable:
+            report = None
+        return nothing_missing(record, report).state
     except RecordError:
         return ""
     except Exception:  # noqa: BLE001 - not established, and logged; the check still stands
@@ -525,7 +539,7 @@ def derived_from(folder: Path, envelope: dict | None = None) -> dict:
                              and isinstance(outcome.get("status"), str) else "",
                              outcome.get("reason") if isinstance(outcome, dict)
                              and isinstance(outcome.get("reason"), str) else ""))
-    return {"nothing_missing": nothing_missing_state(folder),
+    return {"nothing_missing": nothing_missing_state(folder, envelope),
             "anchored": anchored_state(folder, envelope),
             "signed": signed_state(folder, envelope),
             "approved": approved_state(folder, envelope),

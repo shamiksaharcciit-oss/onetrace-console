@@ -24,14 +24,12 @@ import pytest
 
 
 @pytest.fixture(scope="module")
-def demo(tmp_path_factory):
+def demo(shared_demo):
     """The public demo, built once."""
-    from onetrace_console.folder_load import build_public
     from onetrace_console.store import Store
     from tests.test_checks import _require_installed
     _require_installed()
-    folder = tmp_path_factory.mktemp("demo") / "demo"
-    build_public(folder)
+    folder = shared_demo["folder"]
     return Store(folder / "store" / "store"), folder / "store" / "pages"
 
 

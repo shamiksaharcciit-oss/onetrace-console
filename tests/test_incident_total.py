@@ -76,13 +76,11 @@ def test_one_run_tripping_two_rules_is_counted_once(two_rules, examined):
 
 
 @pytest.fixture(scope="module")
-def demo(tmp_path_factory):
-    from onetrace_console.folder_load import build_public
+def demo(shared_demo):
     from onetrace_console.store import Store
     from tests.test_checks import _require_installed
     _require_installed()
-    folder = tmp_path_factory.mktemp("incident-total") / "demo"
-    build_public(folder)
+    folder = shared_demo["folder"]
     pages = folder / "store" / "pages"
     return Store(folder / "store" / "store"), (pages / "incidents.html").read_text(encoding="utf-8")
 

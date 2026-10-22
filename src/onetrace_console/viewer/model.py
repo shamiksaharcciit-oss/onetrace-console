@@ -267,6 +267,9 @@ class PageModel:
     last_failed: tuple = ()
     #: (step, reason, steps left) where the run stopped at a step's own rule (`declined_at_step`).
     declined: tuple = ()
+    #: Beside the banner where the run stopped: the check's own row for each step the plan held
+    #: before it ran (format 0.3, `refused.attempted`), quoted whole.
+    held: tuple = ()
     #: The check ran as the installed `onetrace-verify`: regenerated with
     #: `generate --cli`, which has no verifier path to name.
     report_cli: bool = False
@@ -676,7 +679,8 @@ def _unchecked(record: Record, report: Report | None) -> tuple[tuple[Line, ...],
                 named += (_more(len(gaps) - LIST_CAP),)
             rows.append((line("unchecked.gaps_at_step", n=(str(n), "value"),
                               step=_stage_shown(s)),) + named)
-    incomplete = bool(missing_stages(record))
+    optional_only = _completeness_passed(report)
+    incomplete = bool(missing_stages(record)) and optional_only is None
     # 023 §4: "Every step that was declared left a receipt; nothing is missing from the trail."
     # True only when no step records a gap AND no step says the run was partly unrecorded:
     # shown beside "Part of this run wasn't recorded", it would contradict it.
@@ -684,6 +688,8 @@ def _unchecked(record: Record, report: Report | None) -> tuple[tuple[Line, ...],
         rows.append((line("checks.gaps_none"),))
     if incomplete:
         rows.append((line("coverage.incomplete"),))
+    if optional_only is not None and missing_stages(record):
+        rows.append((line("rung.missing.optional") + (Text(" "), Text(optional_only, "check")),))
     if _unanchored(record):
         rows.append((line("unchecked.unanchored"), line("anchoring.would_add")))
     if report is not None:
@@ -1043,6 +1049,11 @@ def _records_agree(record: Record, report: Report | None, strip: Strip,
             if (exit_req, result_req) != ("0", "pass"):
                 return _rung("records-agree", _COULDNT, strip.sentence)
         elif "--require-artifacts" not in report.command:
+            kept_none = _kept_none_row(report)
+            if kept_none is not None:
+                #: Format 0.3: the run declares it keeps no output files, in the check's own row.
+                return _rung("records-agree", _NOT_CHECKED, line("rung.records.outputs_not_kept")
+                             + (Text(" "), Text(kept_none, "check")))
             return _rung("records-agree", _NOT_CHECKED, line("rung.records.no_artifacts"))
         n = count_findings(report, "pass")
         return _rung("records-agree", _YES, line("checks.held_one") if n == 1
@@ -1065,7 +1076,10 @@ def records_agree_reading(record: Record, report: Report | None,
     """Rung 1 over the page's own check, decided by `_records_agree` as the run page decides it:
     `report` is the parsed report, or None with `problem` where it could not be parsed."""
     rung = _records_agree(record, report, _strip(record, report, problem), problem, True)
-    no_outputs = rung.evidence == (line("rung.records.no_artifacts"),)
+    no_outputs = (rung.evidence == (line("rung.records.no_artifacts"),)
+                  or (len(rung.evidence) == 1
+                      and rung.evidence[0][:len(line("rung.records.outputs_not_kept"))]
+                      == line("rung.records.outputs_not_kept")))
     return AgreeReading(rung.state, "no-outputs" if no_outputs else "")
 
 
@@ -1080,7 +1094,35 @@ def _names(value) -> bool:
     return all(isinstance(x, str) and x for x in value)
 
 
-def _nothing_missing(record: Record) -> Rung:
+def _completeness_passed(report: Report | None) -> str | None:
+    """The check's `run complete` row, as it writes it, where the check run with every required
+    stage asked for PASSED (format 0.3: only stages the run declares optional were left out); None
+    otherwise. Read from the check, never from the receipts' `coverage.optional_stages`."""
+    said = report.completeness_required if report is not None else None
+    if said is None or said[:2] != ("0", "pass"):
+        return None
+    return said[2]
+
+
+def held_rows(report: Report | None) -> tuple[Line, ...]:
+    """The check's own row for each step the plan held before it ran (format 0.3), quoted whole."""
+    if report is None:
+        return ()
+    return tuple(line("declined.held") + (Text(" "), Text(f.line, "check"))
+                 for f in report.findings if f.property == "step held before running")
+
+
+def _kept_none_row(report: Report | None) -> str | None:
+    """The check's `run: artifacts` row where it says the run declares it keeps no output files
+    (format 0.3, `outputs_kept: none`), as the check writes it; None otherwise."""
+    if report is None:
+        return None
+    found = [f.line for f in report.findings if f.subject == "run" and f.property == "artifacts"
+             and f.outcome == "not_run" and "outputs_kept: none" in f.detail]
+    return found[0] if len(found) == 1 else None
+
+
+def _nothing_missing(record: Record, report: Report | None = None) -> Rung:
     """Rung 3. Yes only when every receipt says what was declared, what emitted, whether the run
     is complete and what it left out -- and none of it is missing, from the trail itself.
 
@@ -1127,6 +1169,11 @@ def _nothing_missing(record: Record) -> Rung:
         set(c["declared_stages"]) - set(c["emitting_stages"])
         for c in coverages if c["completeness"] == "complete")
     gapped = [s for s in record.steps if count_gaps(s)]
+    optional_only = _completeness_passed(report)
+    if optional_only is not None and missing_stages(record) and not gapped and not says_complete_and_is_not:
+        #: Format 0.3: the check, run with every required stage asked for, passed. Its row says
+        #: which optional stages didn't run; this page decides nothing about them.
+        return _rung("nothing-missing", _YES, line("rung.missing.optional") + (Text(" "), Text(optional_only, "check")))
     if (missing_stages(record) or coverages[-1]["completeness"] != "complete"
             or declared - in_trail or says_complete_and_is_not):
         stopped = not_reached(record)
@@ -1491,10 +1538,11 @@ def signed_by_known_recorder(record: Record, report: Report | None, own_check: b
     return _rung("signed", _COULDNT, (Text(read.detail, "report"),))
 
 
-def nothing_missing(record: Record) -> Rung:
+def nothing_missing(record: Record, report: Report | None = None) -> Rung:
     """Rung 3, "nothing missing", exactly as the run's page decides it -- for a caller that counts
-    it across runs (the console's Home: counted by the same test the page uses)."""
-    return _nothing_missing(record)
+    it across runs (the console's Home: counted by the same test the page uses). `report`: the
+    page's own check, whose run with every required stage asked for the page reads."""
+    return _nothing_missing(record, report)
 
 
 #: The rung "Ran as approved": the verifier's two rows,
@@ -1654,7 +1702,7 @@ def ladder(record: Record, report: Report | None, strip: Strip, verbs: dict | No
     return (
         agree,
         signed_by_known_recorder(record, report, own_check),
-        _nothing_missing(record),
+        _nothing_missing(record, report),
         approved_rung(record.manifest, rows_from_report(report) if report else None,
                       own_check, checker),
         _reproduced(record, verbs, agree.state),
@@ -1776,6 +1824,7 @@ def build_model(record: Record, envelope: dict | None, generated_at: str,
         preview_format=str(record.manifest.get("format", "")),
         last_failed=last_attempt_failed(record),
         declined=declined_at_step(record),
+        held=held_rows(report),
         steps=tuple(_step_view(record, report, s) for s in record.steps),
         unchecked=_unchecked(record, report),
         case_ran=_case_ran(record), case_for=case_for, case_for_more=case_for_more,

@@ -229,12 +229,10 @@ def test_the_scale_check_names_a_size_off_the_scale(examined):
 # ------------------------------------------------------------------ 4. every chip keeps its words
 
 @pytest.fixture(scope="module")
-def demo_pages(tmp_path_factory) -> dict[str, str]:
-    from onetrace_console.folder_load import build_public
+def demo_pages(shared_demo) -> dict[str, str]:
     from tests.test_checks import _require_installed
     _require_installed()
-    folder = tmp_path_factory.mktemp("f0") / "demo"
-    build_public(folder)
+    folder = shared_demo["folder"]
     root = folder / "store" / "pages"
     return {p.relative_to(root).as_posix(): p.read_text(encoding="utf-8") for p in root.rglob("*.html")}
 

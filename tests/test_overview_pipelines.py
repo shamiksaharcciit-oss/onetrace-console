@@ -26,13 +26,11 @@ DEMO: dict = {}
 
 
 @pytest.fixture(scope="module")
-def demo(tmp_path_factory):
-    from onetrace_console.folder_load import build_public
+def demo(shared_demo):
     from onetrace_console.store import Store
     from tests.test_checks import _require_installed
     _require_installed()
-    folder = tmp_path_factory.mktemp("overview-pipelines") / "demo"
-    build_public(folder)
+    folder = shared_demo["folder"]
     pages = folder / "store" / "pages"
     DEMO.update(store=Store(folder / "store" / "store"), pages=pages,
                 home=(pages / "home.html").read_text(encoding="utf-8"))

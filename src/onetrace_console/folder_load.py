@@ -266,6 +266,9 @@ def build_public(folder: Path) -> tuple[list[tuple[str, str | None]], str]:
     #: The demo's own example inputs, its build record vouching for them, are drawn as shown.
     with demo_store.allowing_examples(folder):
         loaded = demo_store.deliver(folder, store, config)
+        #: Each pipeline's two drift reports, kept now: a public console never runs the command.
+        from onetrace_console.drift import ensure_all
+        ensure_all(store)
         _render_startup_pages(store, store_root, config)
     demo_store.write_build_record(folder, (demo_store.RUNS_DIRNAME, demo_store.TRUST_NAME, "store"))
     return announce(folder / demo_store.RUNS_DIRNAME, loaded, store)
@@ -419,7 +422,7 @@ class _Watching:
             if not self.serving:
                 return              # at start: the start-up drawing draws everything
             if self.compared is not None and before is None:
-                _render_diff_page(self.compared, self.store, self.root)
+                _render_diff_page(self.compared, self.store, self.root, public=self.config.public)
             _render_all_pages(self.store, self.root, self.config)
 
     def prepare(self, store: Store, config: Config):

@@ -43,18 +43,29 @@ CACHE = REPO / ".wheel-cache"
 
 #: The same two references `requirements.lock` pins by hash -- typed here once, not
 #: derived from anything downloaded, so a mismatch is caught rather than assumed away.
-#: onetrace 0.3.0 and onetrace-verify 0.3.0, from PyPI.
+#: onetrace 0.4.0 and onetrace-verify 0.4.0 from PyPI, each checked against these hashes.
 #: The "wheelhouse" source stays for a branch that pins a build on no index; nothing uses it now.
 SOURCE = "pypi"
 WHEELHOUSE = REPO / "wheelhouse" / "devbuild"
 WHEELS = {
-    "onetrace==0.3.0": (
-        "onetrace-0.3.0-py3-none-any.whl",
-        "c20cc67cedd92a66b232af1cd970166df3c108cd86b31415ec299490f004a5bf",
+    "onetrace==0.4.0": (
+        "onetrace-0.4.0-py3-none-any.whl",
+        "1a064a390de6d912d3bc873041247aa39f6bc4835bc6c2985f6a3b3ce96f0a86",
     ),
-    "onetrace-verify==0.3.0": (
-        "onetrace_verify-0.3.0-py3-none-any.whl",
-        "9b8f4db4ba75b4b7ae6871125246128de620cb25e7966bc1c140c3ad069483d2",
+    "onetrace-verify==0.4.0": (
+        "onetrace_verify-0.4.0-py3-none-any.whl",
+        "b2e0df9547a3d6c6761f5722762983b275cd114e5d5b82e4a3a4d5a773a5a2be",
+    ),
+}
+
+
+#: A command the tests run, never a dependency of the console and never in the lock: the published
+#: onetrace-explain, whose wheel the explanation panel's tests install into a folder of their own
+#: (tests/conftest.py, `explain_command`). Typed here once, like WHEELS, from PyPI's JSON.
+TEST_COMMANDS = {
+    "onetrace-explain==0.1.0": (
+        "onetrace_explain-0.1.0-py3-none-any.whl",
+        "122ea6af68bad45eecc78681e270955aa7fd27f59bc7bcbde96d8c6cc7fa434f",
     ),
 }
 
@@ -83,12 +94,12 @@ def _crypto_ready() -> list[str]:
 
 
 def check() -> bool:
-    missing = [name for name, _ in WHEELS.values() if not (CACHE / name).is_file()]
+    missing = [name for name, _ in (*WHEELS.values(), *TEST_COMMANDS.values()) if not (CACHE / name).is_file()]
     missing += [f"{pin} (any of its pinned wheels)" for pin in _crypto_ready()]
     if missing:
         print(f"NOT READY: missing under {CACHE}: {missing}")
         return False
-    for name, sha in WHEELS.values():
+    for name, sha in (*WHEELS.values(), *TEST_COMMANDS.values()):
         got = hashlib.sha256((CACHE / name).read_bytes()).hexdigest()
         if got != sha:
             print(f"NOT READY: {name} does not match its pinned hash "
@@ -114,8 +125,8 @@ def _verified(wheel: Path, sha: str, source: str) -> None:
 def fetch() -> None:
     with tempfile.TemporaryDirectory(prefix="onetrace-wheel-cache-") as tmp:
         tmp_path = Path(tmp)
-        for requirement, (filename, sha) in WHEELS.items():
-            if SOURCE == "wheelhouse":
+        for requirement, (filename, sha) in {**WHEELS, **TEST_COMMANDS}.items():
+            if SOURCE == "wheelhouse" and requirement in WHEELS:
                 if (WHEELHOUSE / filename).is_file():
                     shutil.copyfile(WHEELHOUSE / filename, tmp_path / filename)
                 _verified(tmp_path / filename, sha,
@@ -143,11 +154,11 @@ def fetch() -> None:
             raise SystemExit(f"pip download failed for the crypto extra:\n{proc.stdout}\n{proc.stderr}")
         shutil.rmtree(CACHE, ignore_errors=True)
         CACHE.mkdir(parents=True)
-        for filename, _ in WHEELS.values():
+        for filename, _ in (*WHEELS.values(), *TEST_COMMANDS.values()):
             shutil.copy(tmp_path / filename, CACHE / filename)
         for wheel in crypto.glob("*.whl"):
             shutil.copy(wheel, CACHE / wheel.name)
-    print(f"{'fetched' if SOURCE == 'pypi' else 'read'} and verified {len(WHEELS)} wheel(s) "
+    print(f"{'fetched' if SOURCE == 'pypi' else 'read'} and verified {len(WHEELS) + len(TEST_COMMANDS)} wheel(s) "
           f"from {SOURCE} into {CACHE}")
 
 

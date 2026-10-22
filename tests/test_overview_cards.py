@@ -38,12 +38,10 @@ PAGES: list = []
 
 
 @pytest.fixture(scope="module")
-def home(tmp_path_factory) -> str:
-    from onetrace_console.folder_load import build_public
+def home(shared_demo) -> str:
     from tests.test_checks import _require_installed
     _require_installed()
-    folder = tmp_path_factory.mktemp("overview") / "demo"
-    build_public(folder)
+    folder = shared_demo["folder"]
     PAGES[:] = [folder / "store" / "pages"]
     return (folder / "store" / "pages" / "home.html").read_text(encoding="utf-8")
 

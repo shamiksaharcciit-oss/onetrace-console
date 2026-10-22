@@ -1,0 +1,11 @@
+{"claims": [
+ {"text": "The scorer's recorded settings differ at this step.", "kind": "lead", "cites": ["node/score#1/instrument"]},
+ {"text": "The loader reads the same on both sides.", "kind": "ruled out", "cites": ["node/load#1"]},
+ {"text": "The decision differs downstream of the scorer.", "kind": "note", "cites": ["node/decide#1"]},
+ {"text": "The threshold change caused this.", "kind": "lead", "cites": ["node/score#1"]},
+ {"text": "Look at the cache.", "kind": "lead", "cites": ["node/cache#1"]}],
+ "checks": [
+ {"check": "text", "node": "score#1"},
+ {"check": "for", "node": "decide#1"},
+ {"check": "match", "run": "candidate"},
+ {"check": "mask", "setting": "threshold"}]}

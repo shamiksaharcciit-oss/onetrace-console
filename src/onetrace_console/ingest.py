@@ -66,9 +66,15 @@ from onetrace_console.store import (SameFileError, StoredRun, Store, StoreError,
 #: verifier reads it (major 0). Until then this store refused every run the SDK it pins makes.
 #: Files a 0.2 run carries beside its chain (`anchors/<n>.json`, `signatures/<n>.json` from
 #: 0.2.0) are accepted and kept like any listed file and are not part of the chain.
-MANIFEST_FORMATS = ("stage-receipt-chain/0.2", "stage-receipt-chain/0.1",
+#:
+#: 0.3 is accepted because it is what onetrace 0.4.0 writes, and onetrace-verify 0.4 reads it (major
+#: 0). Its new members -- a run's optional stages, a held step's attempted links, the manifest's
+#: `outputs_kept` -- are shown as the check's own rows say them (`viewer.model`), never read from
+#: the receipts here. An earlier format reads as before; one this list does not name is refused.
+MANIFEST_FORMATS = ("stage-receipt-chain/0.3", "stage-receipt-chain/0.2", "stage-receipt-chain/0.1",
                     "stage-receipt-chain/0.0-preview")
-RECEIPT_FORMATS = ("stage-receipt/0.2", "stage-receipt/0.1", "stage-receipt/0.0-preview")
+RECEIPT_FORMATS = ("stage-receipt/0.3", "stage-receipt/0.2", "stage-receipt/0.1",
+                   "stage-receipt/0.0-preview")
 
 SUMS_NAME = "SHA256SUMS"
 MANIFEST_NAME = "MANIFEST.json"

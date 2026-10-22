@@ -17,13 +17,17 @@ WHAT CHANGES, AND NOTHING ELSE
   (`/`, `/executions-all.html`, `/static/console.css`, `/runs/<key>/record.tar`, the fonts in the
   stylesheet) becomes relative to the file that holds it; `/` is the Overview, `home.html`.
 - **The banner,** the work order's words, as the first thing in every page's `<main>`.
+- **A comparison's explanation panel** is drawn as its place only, as a public console draws it:
+  a file can press nothing, so it carries no button and no script, and no explanation.
 - **A sealed page is sealed again** after both, so the check it prints for its reader still says
   "matches" on the exported copy. Its fingerprint is therefore not the served page's, and
   `SEALS.txt` relates the two: for each sealed page, one line -- the page,
   the fingerprint the console serves it with, and the exported copy's.
 
 Routes that write, sign in or ingest are left out by construction: only pages, the stylesheet,
-the fonts and the records are written, and no served page carries a form.
+the fonts and the records are written, and no served page carries a form. A comparison's
+explanation panel is drawn as its place only, with no button and no script (`explain.no_presses`):
+a file can press nothing.
 
 THE CHECKS IT RUNS ON ITS OWN OUTPUT
 ------------------------------------
@@ -65,7 +69,10 @@ _CSS_ROOTED = re.compile(r"url\((/(?!/)[^)]*)\)")
 #: The opening of a page's `<main>`: the console's bare, the viewer's with its class and view.
 _MAIN = re.compile(r"<main(?:\s[^>]*)?>")
 _SLOT = re.compile(r"(<!--fingerprint-->)[0-9a-f]{64}(<!--/fingerprint-->)")
-_STORE_PARTS = {"objects", "runs", "comparisons"}
+#: `drift`: the drift reports, each copied where every run it covers is listed; `x`, the
+#: explanations (`explain.FOLDER`): never copied, and the panel drawn as its place only
+#: (`explain.no_presses`).
+_STORE_PARTS = {"objects", "runs", "comparisons", "drift", "x"}
 _FINGERPRINT = re.compile(r"<!--fingerprint-->([0-9a-f]{64})<!--/fingerprint-->")
 SEALS = "SEALS.txt"
 _SEALS_HEAD = ("# Each sealed page of this export: its path, the fingerprint the console serves it "
@@ -161,6 +168,14 @@ def _scratch(source: Path, keys: list[str], into: Path):
             target.mkdir(exist_ok=True)
             shutil.copy2(store_dir / "comparisons" / f"{comparison.key}.json",
                          target / f"{comparison.key}.json")
+    #: The drift reports this console holds over listed runs only: a page reads the report this
+    #: console made, rather than one the export would make again.
+    for p in sorted((store_dir / "drift").glob("*.json")) if (store_dir / "drift").is_dir() else ():
+        record = source_store.get_drift(p.stem)
+        if record is not None and set(record.get("runs") or ()) <= listed and record.get("runs"):
+            target = into / "store" / "drift"
+            target.mkdir(exist_ok=True)
+            shutil.copy2(p, target / p.name)
     return Store(into / "store")
 
 
@@ -186,7 +201,9 @@ def export(source: Path, keys: list[str], out: Path) -> dict[str, str]:
     made = False
     try:
         store = _scratch(source, keys, work)
-        _render_startup_pages(store, work, _local_config(Config()))
+        from onetrace_console.explain import no_presses
+        with no_presses():
+            _render_startup_pages(store, work, _local_config(Config()))
         files: dict[str, bytes] = {}
         seals: list[str] = []
         pages = work / PAGES_DIRNAME

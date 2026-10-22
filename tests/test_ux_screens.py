@@ -24,7 +24,7 @@ from pathlib import Path
 
 import pytest
 
-from tests.conftest import make_tar
+from tests.conftest import make_tar, serving
 
 RUNS = Path(__file__).resolve().parent / "fixtures" / "demo-runs-rc2"
 NAMES = ("ingest-day1", "ingest-day2", "query-day1", "query-day2")
@@ -86,15 +86,15 @@ def _pages(root: Path) -> dict[str, str]:
             for p in sorted((root / "pages").rglob("*.html"))}
 
 
-@pytest.fixture
-def demo(server):
+@pytest.fixture(scope="module")
+def demo(tmp_path_factory):
     """(base URL, store root, {name: run key}, comparison key) after the four runs are delivered and
-    the two query runs compared."""
+    the two query runs compared: once for the module, as every case that takes it only reads it."""
     _checked_fixture()
-    base, root = server
-    keys = {name: _deliver(base, name) for name in NAMES}
-    cmp = _post(f"{base}/compare?a={keys['query-day1']}&b={keys['query-day2']}")["comparison_key"]
-    return base, root, keys, cmp
+    with serving(tmp_path_factory.mktemp("ux-screens")) as (base, root):
+        keys = {name: _deliver(base, name) for name in NAMES}
+        cmp = _post(f"{base}/compare?a={keys['query-day1']}&b={keys['query-day2']}")["comparison_key"]
+        yield base, root, keys, cmp
 
 
 # ------------------------------------------------------------------ 1. no incident for an unshipped check

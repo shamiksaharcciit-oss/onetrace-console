@@ -95,12 +95,10 @@ def _demo_words(drawing: str) -> dict[str, str]:
 
 
 @pytest.fixture(scope="module")
-def demo_graphs(tmp_path_factory):
-    from onetrace_console.folder_load import build_public
+def demo_graphs(shared_demo):
     from tests.test_checks import _require_installed
     _require_installed()
-    folder = tmp_path_factory.mktemp("graph-text") / "demo"
-    build_public(folder)
+    folder = shared_demo["folder"]
     out = {}
     for page in sorted((folder / "store" / "pages" / "runs").glob("*/*.html")):
         text = page.read_text(encoding="utf-8")

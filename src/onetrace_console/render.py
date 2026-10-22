@@ -1310,7 +1310,8 @@ def _not_shown(hidden: list[tuple[str, list[str]]]) -> str:
             f"{body}</details>")
 
 
-def render_diff(comparison: StoredComparison, store: Store, *, generated_at: str) -> str:
+def render_diff(comparison: StoredComparison, store: Store, *, generated_at: str,
+                public: bool | None = None) -> str:
     """One pair's Diff page: the SDK's changes table, its localized set, and the command.
 
     The reports are read with the viewer's strict reader, so an SDK report this console has
@@ -1336,6 +1337,7 @@ def render_diff(comparison: StoredComparison, store: Store, *, generated_at: str
     #: A graph-shaped pair: what its pages cannot draw is one closed line at the end, not
     #: sections that say so (`_not_shown`).
     dag, hidden = False, []
+    node_steps: dict[str, str] = {}
     #: A side that couldn't be checked: said, and nothing the SDK's verbs say of the pair is
     #: drawn -- no verdict, no first difference, no same-value panel; only how to repeat them.
     from onetrace_console.records import UNCHECKED_SIDE, unchecked_sides
@@ -1402,6 +1404,11 @@ def render_diff(comparison: StoredComparison, store: Store, *, generated_at: str
                     blocks.append(report_refused(verb, reason, from_viewer=viewers))
                     refused = True
 
+        if report is not None and verb == DIFF and getattr(report, "ladder", None):
+            #: Each node's row, as the graph links it: what the explanation panel's cites open.
+            node_steps.update({row.node: f"#step-{n}" for n, row in enumerate(report.ladder, start=1)}
+                              if isinstance(report, TwoRunDag)
+                              else {row.stage: f"#step-{row.index}" for row in report.ladder})
         if report is not None:
             #: In plain words; the exit code is the SDK's own, kept in its report below.
             blocks.append(
@@ -1499,6 +1506,10 @@ def render_diff(comparison: StoredComparison, store: Store, *, generated_at: str
     #: `sdk_build_digest` (the installed wheel's own sha256, since the SDK came from PyPI --
     #: a commit, before it), which is what a reader sees instead: a strictly finer signal
     #: for "which exact build produced this", truncated the same way the digest was.
+    #: The suggested explanation: its own frame, below the verdicts and apart from them
+    #: (`explain`). Nothing above reads it.
+    from onetrace_console.explain import panel as explain_panel
+    blocks.append(explain_panel(comparison, store, public=public, steps=node_steps))
     build = comparison.sdk_build_digest or "unknown"
     blocks.append(
         f'<p data-section="sdk">Compared with onetrace {escape(comparison.sdk_version)}, '
@@ -2189,6 +2200,11 @@ def render_all(store: Store, *, generated_at: str) -> dict[str, str]:
             pages[page_href(p.label, f)] = drawn(lambda p=p, f=f: render_pipeline(
                 p, store, generated_at=generated_at, which=f))
         pages[choose_href(p.label)] = drawn(lambda p=p: render_choose(p, store, generated_at=generated_at))
+        #: Its drift page, against the first run and against each run's previous.
+        from onetrace_console.drift import AGAINST, page_href as drift_href, render_drift
+        for a in AGAINST:
+            pages[drift_href(p.label, a)] = drawn(lambda p=p, a=a: render_drift(
+                p, store, generated_at=generated_at, against=a, held=held))
         for r in p.runs:
             pages[pair_href(p.label, r.key)] = drawn(lambda p=p, r=r: render_pair(
                 p, r, store, generated_at=generated_at, held=held))

@@ -1,0 +1,4 @@
+{"claims": [
+ {"text": "The threshold change caused this.", "kind": "lead", "cites": ["node/score#1"]},
+ {"text": "Look at the cache.", "kind": "lead", "cites": ["node/cache#1"]}],
+ "checks": [{"check": "text", "node": "score#1"}]}

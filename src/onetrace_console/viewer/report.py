@@ -167,6 +167,11 @@ class Report:
     #: required (`--json --require-artifacts`), as (exit status, result) -- or None where it was
     #: not run (the run holds no `artifacts/`, or the report predates it).
     outputs_required: tuple[str, str] | None = None
+    #: The same check run again with every required stage asked for (`--json
+    #: --require-complete`), as (exit status, result, its `run complete` row as the check writes
+    #: it) -- or None where it was not run (a run recorded before format 0.3, or a report that
+    #: predates it). Format 0.3's optional stages are read from this row, never from the record.
+    completeness_required: tuple[str, str, str] | None = None
 
     def count(self, outcome: str) -> int:
         return sum(1 for f in self.findings if f.outcome == outcome)
@@ -287,7 +292,7 @@ def parse(envelope: dict) -> Report:
         raise ReportUnreadable("the report's time carries no zone")
     #: A report stored before capture wrote \r\n as \n reads as one stored since.
     envelope = dict(envelope, stdout=_lf(envelope["stdout"]))
-    for part in ("rows_json", "outputs_required"):
+    for part in ("rows_json", "outputs_required", "completeness_required"):
         if isinstance(envelope.get(part), dict) and isinstance(envelope[part].get("stdout"), str):
             envelope[part] = dict(envelope[part], stdout=_lf(envelope[part]["stdout"]))
 
@@ -333,6 +338,7 @@ def parse(envelope: dict) -> Report:
         readable = False
 
     required = None
+    completeness = None
     if "rows_json" in envelope:
         #: The rows from the same check's `--json`, whose summary must agree
         #: with the text's -- exit status, result and counts -- or the report can't be read.
@@ -367,13 +373,21 @@ def parse(envelope: dict) -> Report:
             _doc, exit_req, result_req = _json_doc(envelope["outputs_required"],
                                                    "--json --require-artifacts")
             required = (exit_req, result_req)
+        if "completeness_required" in envelope:
+            doc_c, exit_c, result_c = _json_doc(envelope["completeness_required"],
+                                                "--json --require-complete")
+            said = [r for r in doc_c.get("rows") or [] if isinstance(r, dict) and r.get("name") == "run complete"
+                    and isinstance(r.get("result"), str) and isinstance(r.get("detail"), str)]
+            if len(said) != 1:
+                raise ReportUnreadable("the --json --require-complete run has no one `run complete` row")
+            completeness = (exit_c, result_c, _text_line(said[0]))
 
     _check_trailer(trailer, findings, readable)
     return Report(ran_at=envelope["ran_at"], command=tuple(envelope["command"]),
                   cwd_note=envelope["cwd_note"], exit_status=envelope["exit_status"],
                   output=envelope["stdout"], findings=tuple(findings) if readable else (),
                   overall=overall, source=SOURCE_TEXT, rows_readable=readable,
-                  outputs_required=required)
+                  outputs_required=required, completeness_required=completeness)
 
 
 def _text_line(row: dict) -> str:
@@ -406,7 +420,7 @@ def _cli_run(run_dir: Path, module: str, shown_as: str, args: tuple[str, ...],
 def capture_cli(run_dir: Path, *, outputs: bool, module: str = "onetrace_verify.cli",
                 shown_as: str = "onetrace-verify", manifest_name: str = "MANIFEST.json",
                 timeout: int = 120, trust: Path | None = None,
-                tsa: tuple[Path, list[Path]] | None = None) -> dict:
+                tsa: tuple[Path, list[Path]] | None = None, complete: bool = False) -> dict:
     """The check as the installed CLI, three ways.
 
     1. `onetrace-verify MANIFEST.json`: the verdict and the check's own words (the envelope).
@@ -417,6 +431,9 @@ def capture_cli(run_dir: Path, *, outputs: bool, module: str = "onetrace_verify.
        --require-artifacts MANIFEST.json` (`outputs_required`), the evidence for "Records agree".
        Without `artifacts/` it is not run: run with the flag, a run
        without output files FAILs, which is not a verdict about its records.
+    4. Only where `complete` (a run recorded in format 0.3): `onetrace-verify --json
+       --require-complete MANIFEST.json` (`completeness_required`), whose `run complete` row says
+       whether only stages the run declares optional were left out. Its exit is never the verdict.
 
     `trust`: the reader's trust file of signing keys, passed to all three as
     `--trust <file>` and kept in each command as it was run; None runs them without it.
@@ -438,6 +455,10 @@ def capture_cli(run_dir: Path, *, outputs: bool, module: str = "onetrace_verify.
         envelope["outputs_required"] = _cli_run(run_dir, module, shown_as,
                                                 ("--json", "--require-artifacts", *trusted),
                                                 manifest_name, timeout)
+    if complete:
+        envelope["completeness_required"] = _cli_run(run_dir, module, shown_as,
+                                                     ("--json", "--require-complete", *trusted),
+                                                     manifest_name, timeout)
     return envelope
 
 

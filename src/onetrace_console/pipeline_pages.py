@@ -194,6 +194,7 @@ def _tile(i: int, run, store: Store) -> str:
 def render_pipeline(pipeline, store: Store, *, generated_at: str, which: str = "all") -> str:
     """The pipeline's page, or one of its filters."""
     from onetrace_console.choose_pages import choose_href
+    from onetrace_console.drift import page_href as drift_href
     counts, n_held, same, unread = stage_counts(pipeline, store)
     if n_held:
         said = (f"Under each stage: how many of this pipeline's {n_held} stored comparison"
@@ -216,7 +217,8 @@ def render_pipeline(pipeline, store: Store, *, generated_at: str, which: str = "
         f'<p data-section="what">{n} run{"" if n == 1 else "s"} declaring these stages, oldest first '
         "as this console received them.</p>",
         f'<p data-section="compare"><a href="{_tag(choose_href(pipeline.label))}" '
-        'data-link="compare">Compare two runs</a></p>',
+        'data-link="compare">Compare two runs</a> · '
+        f'<a href="{_tag(drift_href(pipeline.label))}" data-link="drift">Drift across its runs</a></p>',
         chain(pipeline, counts),
         f'<p data-section="first-differences">{escape(said)}</p>',
         f'<p data-section="filters">Show: {filters}</p>',

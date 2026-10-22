@@ -32,12 +32,10 @@ from onetrace_console import frame
 
 
 @pytest.fixture(scope="module")
-def pages(tmp_path_factory) -> Path:
-    from onetrace_console.folder_load import build_public
+def pages(shared_demo) -> Path:
     from tests.test_checks import _require_installed
     _require_installed()
-    folder = tmp_path_factory.mktemp("theme") / "demo"
-    build_public(folder)
+    folder = shared_demo["folder"]
     return folder
 
 

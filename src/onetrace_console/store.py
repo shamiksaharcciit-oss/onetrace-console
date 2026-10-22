@@ -494,6 +494,34 @@ class Store:
         self.unreadable_comparison_keys = tuple(keys)
         return tuple(out)
 
+    # ------------------------------------------------------------ drift reports
+
+    def _drift_path(self, key: str) -> Path:
+        if not _SHA256.match(key):
+            raise StoreError(f"not a drift report key: {key!r}")
+        d = self.root / "drift"
+        d.mkdir(parents=True, exist_ok=True)
+        return d / f"{key}.json"
+
+    def put_drift(self, key: str, record: dict) -> None:
+        """Keep what `onetrace drift` wrote over a pipeline's runs (`drift.run_drift`). In its own
+        directory, as comparisons are: `runs()` never counts it."""
+        _atomic_write(self._drift_path(key),
+                      json.dumps(record, sort_keys=True, separators=(",", ":")).encode("utf-8"))
+
+    def get_drift(self, key: str) -> dict | None:
+        path = self._drift_path(key)
+        if not path.exists():
+            return None
+        from onetrace_console.bounded_json import load_json_bounded
+        try:
+            record = load_json_bounded(path.read_bytes().decode("utf-8"), path.name)
+        except _UNREADABLE as e:
+            raise StoreError(f"the stored drift report {path.name} cannot be read: {_why(e)}") from None
+        if not isinstance(record, dict):
+            raise StoreError(f"the stored drift report {path.name} is not an object")
+        return record
+
     # --------------------------------------------------------- decision exports
 
     def _decision_export_path(self, key: str) -> Path:

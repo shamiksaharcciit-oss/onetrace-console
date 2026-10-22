@@ -15,18 +15,13 @@ measures them.
 """
 from __future__ import annotations
 
-import os
 import re
-import subprocess
-import sys
-from pathlib import Path
 
 import pytest
 
 from onetrace_console.viewer.page import CSS
 from onetrace_console.textdiff_page import SUFFIX as TEXT_PAGE
 
-REPO = Path(__file__).resolve().parent.parent
 FADE = 48          #: px, at the edge with more to see
 SCROLLBAR = 12     #: px, the drawn scrollbar's height, which the fade leaves alone
 
@@ -92,17 +87,11 @@ def test_taking_out_any_part_of_the_cue_is_caught(removed, examined):
 # ------------------------------------------------------------------ the pages, as drawn
 
 @pytest.fixture(scope="module")
-def pages(tmp_path_factory) -> dict[str, str]:
+def pages(shared_cli_demo) -> dict[str, str]:
     """The demo's pages, drawn as the console draws them: the comparison page and the run pages."""
     from tests.test_checks import _require_installed
     _require_installed()
-    folder = tmp_path_factory.mktemp("cue") / "demo"
-    out = subprocess.run([sys.executable, "-B", "-m", "onetrace_console", "demo", "--public",
-                          "--build", str(folder)], capture_output=True, text=True, timeout=600,
-                         env={**{k: v for k, v in os.environ.items()
-                                 if k != "ONETRACE_CONSOLE_CONFIG"},
-                              "PYTHONPATH": str(REPO / "src")})
-    assert out.returncode == 0, out.stdout + out.stderr
+    folder = shared_cli_demo["folder"]
     root = folder / "store" / "pages"
     return {p.relative_to(root).as_posix(): p.read_text(encoding="utf-8")
             for p in root.rglob("*.html")}

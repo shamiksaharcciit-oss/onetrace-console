@@ -569,6 +569,8 @@ def _declined(m: PageModel) -> str:
     if len(left) > LIST_CAP:
         named += " " + template("list.more").format(n=str(len(left) - LIST_CAP)).rstrip(".")
     said += " " + (_t("declined.left", steps=named) if left else _t("declined.none_left"))
+    #: Format 0.3: the check's own row for each step the plan held before it ran.
+    said += "".join(" " + _line(h) for h in m.held)
     return f'<div data-section="declined"><p class="declined">{said}</p></div>'
 
 

@@ -49,7 +49,9 @@ FROM_TRAIL = 'data-from="trail"'
 #: envelope on, are on "Proof" with the SDK's reports as it wrote them.
 DIFF_BOTH = {"pair", "limit", "preview"}
 DIFF_PROOF_PARTS = {"stage-table", "sdk", "localize-envelope", "localize-repeat"}
-DIFF_STEPS = {"first-difference", "graph", "settings-changed", "text-diff", "localized"}
+#: The suggested explanation goes with the step-by-step verdicts it speaks of: on "What changed"
+#: where they are, and on "Proof" with them where they are withheld.
+DIFF_STEPS = {"first-difference", "graph", "settings-changed", "text-diff", "localized", "explain"}
 
 #: The integrity line's words. Each state as `records` defines it, said of this run.
 RUN_SAID = {

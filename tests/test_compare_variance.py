@@ -191,14 +191,15 @@ def _diff_and_sdk(tmp_path, **kw) -> tuple[str, list[str]]:
 
 # ------------------------------------------------------------------ the states
 
-DAYS = "assertions.constants.days"
+#: How the SDK names the later change: onetrace 0.4.0 by the setting's own name and what it does
+#: (0.3.0 gave its path, `assertions.constants.days`).
+DAYS = "days differs"
 
 
 def test_the_demo_pair_names_the_policy_stage(demo, examined):  # noqa: F811
     page = _page(demo, *DEMO_PAIR)
     examined(1, "the demo's pair")
-    assert variance_problems(page, "later", "draft", "policy_check",
-                             "assertions.constants.refund_days") == []
+    assert variance_problems(page, "later", "draft", "policy_check", "refund_days differs") == []
 
 
 def test_a_later_recorded_change_is_named(tmp_path, examined):
@@ -266,11 +267,11 @@ def test_a_later_step_s_own_input_is_not_a_recorded_change_after_it(tmp_path, ex
 
 def test_the_first_stage_s_own_input_is_named_and_no_sentence_follows(tmp_path, examined):
     """Where the first difference's stage reads an input of its own that differs, the card names
-    it and says nothing more, as before, though the SDK's report carries its sentence (it counts
-    recorded settings only)."""
+    it and says nothing more, as before. onetrace 0.4.0 writes no sentence here (0.3.0 wrote one,
+    counting recorded settings only), so the card and the SDK's report now agree."""
     page, sdk = _diff_and_sdk(tmp_path, stub_input=True)
     examined(1, "comparison page")
-    assert sdk == [sentence("stub", "check", DAYS)], "the SDK still writes its sentence here"
+    assert sdk == [], "onetrace 0.4.0 writes no sentence where the stage's own input differs"
     assert "input style changed" in _card(page)
     assert variance_problems(page, "absent") == []
 

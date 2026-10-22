@@ -118,6 +118,18 @@ def _unbanner(page: str) -> str:
     return re.sub(r'<p data-export="banner"[^>]*>.*?</p>', "", page, count=1, flags=re.S)
 
 
+_EXPLAIN = re.compile(r'<section data-section="explain"[^>]*>.*?</section>', re.S)
+
+
+def _explain(page: str) -> str:
+    found = _EXPLAIN.search(page)
+    return found.group(0) if found else ""
+
+
+def _without_explain(page: str) -> str:
+    return _EXPLAIN.sub("", page)
+
+
 def _served_path(rel: str, value: str) -> str:
     """Where an exported relative link points, as the served page spelled it: from the site's
     root, the Overview as `/`."""
@@ -145,6 +157,12 @@ def test_every_exported_page_is_the_served_page_less_the_rewrite_and_the_banner(
             continue
         page = _unbanner(got.decode("utf-8"))
         served_page = want.decode("utf-8")
+        #: The one part drawn otherwise: a comparison's explanation panel, its place only on a file
+        #: (no button, no script), where the console serves its presses.
+        page, served_page, mine = _without_explain(page), _without_explain(served_page), _explain(page)
+        if mine:
+            assert "data-explain-post" not in mine and "<script" not in mine, rel
+            assert 'data-explain="not-set-up"' in mine, rel
         exported_links = _ATTR.findall(page)
         served_links = _ATTR.findall(served_page)
         assert len(exported_links) == len(served_links), rel

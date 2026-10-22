@@ -66,13 +66,11 @@ def _text(page: str) -> str:
 
 
 @pytest.fixture(scope="module")
-def demo(tmp_path_factory):
-    from onetrace_console.folder_load import build_public
+def demo(shared_demo):
     from onetrace_console.store import Store
     from tests.test_checks import _require_installed
     _require_installed()
-    folder = tmp_path_factory.mktemp("physical") / "demo"
-    build_public(folder)
+    folder = shared_demo["folder"]
     store = Store(folder / "store" / "store")
     return folder, store, {r.run_id: r for r in store.runs()}
 

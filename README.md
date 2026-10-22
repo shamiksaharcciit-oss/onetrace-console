@@ -10,7 +10,9 @@ The console never computes a verdict of its own. It keeps each run's files exact
 pip install onetrace-console
 ```
 
-It needs Python 3.12 or later. It installs from PyPI alone: `onetrace` 0.3.0 and `onetrace-verify` 0.3.0, with the `[crypto]` extra so signatures and anchors are checked. The pages' viewer ships inside the package.
+It needs Python 3.12 or later. It installs from PyPI alone: `onetrace` 0.4.0 and `onetrace-verify` 0.4.0, with the `[crypto]` extra so signatures and anchors are checked. The pages' viewer ships inside the package.
+
+`pip install onetrace-explain` makes the Explain button on the local console's comparison page work: the console runs that command, which sends a packet of the comparison to the model you name, and its format is set out at [explain-format.md](https://oneproof.dev/onetrace/explain-format.md).
 
 ## See it with the demo's runs
 
@@ -79,7 +81,7 @@ A run's record does not show:
 
 ## Where it runs
 
-Started as above, it listens on 127.0.0.1 only, and makes no network calls; `--open` asks your browser to open the local page. A folder load keeps what it stores in a `store` folder under the folder you start it from, and `demo` keeps it in `onetrace-console-demo/`.
+Started as above, it listens on 127.0.0.1 only; `--open` asks your browser to open the local page. The console makes no network calls. The Explain button runs onetrace-explain, if you install it, and that command sends an evidence packet to the model you configure. The first time it would send a kind of item it has never sent to that endpoint, it lists them and asks first. A folder load keeps what it stores in a `store` folder under the folder you start it from, and `demo` keeps it in `onetrace-console-demo/`.
 
 To run it for a team, as a container with sign-in, see [OPERATOR_README.md](OPERATOR_README.md).
 

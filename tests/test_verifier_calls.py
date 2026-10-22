@@ -9,8 +9,8 @@ not being refused as a call. The commands a page gives a reader to repeat the ch
 same way.
 
 What a call asks for is listed by its arguments, and the list is checked to hold each form the
-console builds: the check three ways (its words, `--json`, `--json --require-artifacts`), each
-with the evidence options; the two verbs; the text diff with and without a line limit; and the
+console builds: the check three ways (its words, `--json`, `--json --require-artifacts`), and for a
+run recorded in format 0.3 a fourth (`--json --require-complete`), each with the evidence options; the two verbs; the text diff with and without a line limit; and the
 trace with its runs root.
 """
 from __future__ import annotations
@@ -113,6 +113,7 @@ def test_the_calls_hold_each_form_the_console_builds(demo_calls, warranty_calls,
         (VERIFIER,), (VERIFIER, "--json"), (VERIFIER, "--json", "--require-artifacts"),
         (VERIFIER, "--trust"), (VERIFIER, "--json", "--trust"),
         (VERIFIER, "--json", "--require-artifacts", "--trust"),
+        (VERIFIER, "--json", "--require-complete", "--trust"),
         (SDK, "diff", "--out"), (SDK, "localize", "--out"),
         (SDK, "diff", "--text", "--json", "--no-follow", "--out"),
         (SDK, "diff", "--text", "--json", "--runs-root", "--out"),
@@ -137,7 +138,8 @@ def test_a_check_with_a_time_stamp_authority_s_files_is_a_call_the_verifier_acce
     assert {_form(c[0]) for c in calls} == {
         (VERIFIER, "--trust", "--tsa-cert", "--tsa-root", "--tsa-root"),
         (VERIFIER, "--json", "--trust", "--tsa-cert", "--tsa-root", "--tsa-root"),
-        (VERIFIER, "--json", "--require-artifacts", "--trust", "--tsa-cert", "--tsa-root", "--tsa-root")}
+        (VERIFIER, "--json", "--require-artifacts", "--trust", "--tsa-cert", "--tsa-root", "--tsa-root"),
+        (VERIFIER, "--json", "--require-complete", "--trust", "--tsa-cert", "--tsa-root", "--tsa-root")}
     assert [refusal(*c) for c in calls if refusal(*c)] == []
 
 
@@ -156,15 +158,21 @@ REQUIREMENTS = {"--require-signature": "signature required", "--require-trusted"
                 "--require-complete": "run complete"}
 
 
-def test_the_console_asks_the_verifier_for_none_of_its_requirements(demo_calls, warranty_calls, examined):
-    """The verifier adds a row for each requirement only when a call asks for it, and this console
-    asks for none: no call carries one, and no row the verifier wrote names one."""
+def test_the_console_asks_the_verifier_for_one_requirement_only(demo_calls, warranty_calls, examined):
+    """The verifier adds a row for each requirement only when a call asks for it. This console asks
+    for one, `--require-complete`, in its own `--json` call beside the check of a run recorded in
+    format 0.3 (its `run complete` row is how the verifier reads optional stages); never the two
+    signing requirements, and never in the check whose verdict the console keeps."""
     calls = [c for c in demo_calls + warranty_calls if c[0][2] == VERIFIER]
     examined(len(calls), "verifier calls read")
     asked = sorted({a for c in calls for a in c[0] if a in REQUIREMENTS})
     assert [c[0][3:] for c in calls if not row_names(c[3])] == [], "a call whose rows were not read"
-    rows = sorted({row for c in calls for row in row_names(c[3]) if row in REQUIREMENTS.values()})
-    assert (asked, rows) == ([], [])
+    assert asked == ["--require-complete"], asked
+    alone = [c for c in calls if "--require-complete" in c[0]]
+    assert all("--json" in c[0] and "--require-artifacts" not in c[0] for c in alone), [c[0][3:] for c in alone]
+    rows = sorted({row for c in calls if "--require-complete" not in c[0]
+                   for row in row_names(c[3]) if row in REQUIREMENTS.values()})
+    assert rows == [], "a requirement's row in a call that did not ask for it"
 
 
 def test_sabotage_a_requirement_asked_for_adds_its_row(tmp_path, examined):

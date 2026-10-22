@@ -688,8 +688,19 @@ def test_the_new_pages_pass_the_five_prohibitions(new_pages, examined):
         assert not [w for w in FORBIDDEN_WORDS if w in body], f"{name}: score or grade"
         assert not [w for w in INFERENCE_WORDS if w in body], f"{name}: inference"
         assert not re.findall(r"\d+(?:\.\d+)?\s*%", _body(page)), f"{name}: percentage"
+        #: The one mechanism a page may carry: the explanation panel's buttons, which a person
+        #: presses to ask for a suggestion (`explain`), each posting to one of its three routes.
+        panel = re.search(r'<section data-section="explain".*?</section>', body, re.S)
+        rest = body.replace(panel.group(0), "") if panel else body
         for mechanism in ("<button", "<form", "<input", "onclick=", "onsubmit="):
-            assert mechanism not in body, f"{name} carries {mechanism!r}"
+            assert mechanism not in rest, f"{name} carries {mechanism!r}"
+        if panel:
+            for m in ("<form", "<input", "onclick=", "onsubmit="):
+                assert m not in panel.group(0), f"{name}'s explanation panel carries {m!r}"
+            posts = re.findall(r'<button type="button" data-explain-post="([^"]*)"', panel.group(0))
+            assert panel.group(0).count("<button") == len(posts), f"{name}: a button that posts nowhere named"
+            assert all(re.fullmatch(r"/explain(/packet|/check)?\?c=[0-9a-f]{64}(&amp;[a-z]=[^&\"]*)*", p)
+                       for p in posts), posts
         inline = re.findall(r'style="[^"]*(?:color|background)[^"]*"', page, re.I)
         assert not inline, f"{name} carries inline colour: {inline[:2]}"
 

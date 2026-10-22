@@ -11,7 +11,17 @@ from __future__ import annotations
 import re
 from html import unescape
 
-from tests.test_compare_page import demo  # noqa: F401
+import pytest
+
+from tests.conftest import demo_copy
+
+
+@pytest.fixture(scope="module")
+def demo(shared_demo, tmp_path_factory):
+    """Its own copy of the session's demo build: these tests export a store holding a tampered run."""
+    from onetrace_console.store import Store
+    folder = demo_copy(shared_demo, tmp_path_factory.mktemp("export-contradicting") / "demo")
+    return folder, Store(folder / "store" / "store")
 
 TAMPERED = "p7-41-cold-chain-decision-tampered"
 BASELINE = "p7-39-cold-chain-baseline"

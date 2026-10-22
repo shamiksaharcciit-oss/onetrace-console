@@ -339,11 +339,19 @@ started from, in local mode. As `serve.py` lays it out:
 | `store/objects/` | every received file (receipts, manifest, output files, `SHA256SUMS`) and every check or compare report, each kept once under its own sha256 in `store/objects/<first two hex>/`, never overwritten |
 | `store/runs/` | one record per stored run: its folder listing (path to object), its verdict and the report it came from |
 | `store/comparisons/` | one record per comparison |
+| `store/drift/` | one record per drift report: what `onetrace drift` wrote over a pipeline's runs (`drift.json`, `drift.txt`, kept as objects) and its exit |
+| `store/x/` | the explanations, one folder per comparison, `x/<first 16 hex of its key>/`: its full key (`key`), the two runs laid out (`a/`, `b/`), the report `onetrace-explain` reads (`r/`), and each explanation, check and verdict of its record that a person asked for on the comparison's page (local mode) |
 | `store/decision_exports/` | one record per decision export, when the decisions extension (configuration key `extensions.onedoor`) is on |
 | `pages/` | the rendered HTML, derived from `store/` and redrawn on every start, upload and compare: `pages/runs/<run key>/` for each run's pages, `pages/diff/` for each comparison's, `pages/incidents/` for each incident's own page |
 | `access_log/` | the access log: `NNNNNN.jsonl` segments, each entry chained to the one before, and `HEAD.json` |
 | `accounts/` | sign-in accounts, in sign-in mode only (local mode refuses to start on a store that holds them) |
 | `tokens/` | ingester tokens, in sign-in mode only |
+
+**Path lengths on Windows.** With long paths off, Windows opens a path of 259 characters at most.
+The console's own files fit a `store_root` of up to 164 characters, as measured from its deepest,
+`pages/runs/<run key>/authorization.html`. An explanation fits a `store_root` of up to 140
+characters: on Windows with long paths off, where the folder is longer, the comparison's page says
+so and Explain does not run `onetrace-explain`. With long paths on, neither limit applies.
 
 `pages/` is *derived* from `store/` -- deterministically, by this console's own rendering -- but
 both are kept in the one volume rather than treating `pages/` as disposable, because losing it would

@@ -40,13 +40,11 @@ def two_builds(tmp_path_factory) -> tuple[Path, Path]:
 
 
 @pytest.fixture(scope="module")
-def built(tmp_path_factory) -> Path:
+def built(shared_demo) -> Path:
     """The public demo, built once, as the image builds it (`demo --public --build`)."""
-    from onetrace_console.folder_load import build_public
     from tests.test_checks import _require_installed
     _require_installed()
-    folder = tmp_path_factory.mktemp("demo-store") / "demo"
-    build_public(folder)
+    folder = shared_demo["folder"]
     return folder
 
 

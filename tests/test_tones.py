@@ -51,12 +51,10 @@ def test_every_state_is_the_kind_the_rule_makes_it(table, examined):
 
 
 @pytest.fixture(scope="module")
-def pages(tmp_path_factory) -> dict[str, str]:
-    from onetrace_console.folder_load import build_public
+def pages(shared_demo) -> dict[str, str]:
     from tests.test_checks import _require_installed
     _require_installed()
-    folder = tmp_path_factory.mktemp("tones") / "demo"
-    build_public(folder)
+    folder = shared_demo["folder"]
     root = folder / "store" / "pages"
     return {p.relative_to(root).as_posix(): p.read_text(encoding="utf-8") for p in root.rglob("*.html")}
 
