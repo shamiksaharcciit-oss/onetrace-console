@@ -1,5 +1,9 @@
 # Changelog
 
+## [Unreleased]
+
+- **The hosted demo shows four kept explanations.** `deploy/fly/kept/` holds the demo's runs and onetrace-explain's own records of four of its comparisons, made once and served as files; the hosted demo's image builds from them where the folder is there (`--runs-from` and `--explanations`), and as before where it is not. A changed byte in a kept run stops the build; one in a kept record is refused with its reason. The package is unchanged.
+
 ## [0.3.1]
 
 - **Kept explanations on a public console, read-only.** A public console runs no command; it now shows the explanations its build kept, as it shows the drift reports its build kept: on the comparison's page, in the "Suggested explanation" section, each under the label the local console gives it, with its model, its claims with their cites linked into the record, the checks it names, and the claims dropped with the reason. It offers no Explain, Send, Run or "Show the packet" button. `onetrace-console demo --public --build` takes them with `--explanations`, as onetrace-explain's own records, and keeps one only where its record verifies, it reads as its record holds it, and the two runs it explains are a comparison the build holds; every other file is refused, with its reason printed, and never shown. Each build records the demo's runs anew, so `--runs-from` takes an earlier build's runs, where its build record vouches for every byte, and the explanations made of them. The build record vouches for each one kept. Without `--explanations`, the page says "Explanations are not set up on this demo." as before. The local console is unchanged.

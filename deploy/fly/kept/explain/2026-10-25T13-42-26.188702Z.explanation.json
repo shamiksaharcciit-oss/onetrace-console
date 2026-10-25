@@ -1,0 +1,51 @@
+{
+ "checks": [
+  {
+   "check": "text",
+   "node": "read_tool_log"
+  },
+  {
+   "check": "text",
+   "node": "read_tool_log"
+  },
+  {
+   "check": "text",
+   "node": "torque_check"
+  },
+  {
+   "check": "text",
+   "node": "station_decision"
+  }
+ ],
+ "checks_dropped": {},
+ "claims": [
+  {
+   "cites": [
+    "comparison/verdict",
+    "node/read_tool_log/input/tool_log.csv"
+   ],
+   "kind": "lead",
+   "text": "The input file `tool_log.csv` differs between runs and is the first difference detected; this is the most likely source of the divergence."
+  },
+  {
+   "cites": [
+    "node/read_tool_log/input/tool_log.csv"
+   ],
+   "kind": "note",
+   "text": "The candidate `tool_log.csv` is the same size (`61` bytes) as the baseline but has a different digest, suggesting a changed torque value rather than a structural change."
+  },
+  {
+   "cites": [
+    "node/station_decision/output/decision.json"
+   ],
+   "kind": "note",
+   "text": "The final `decision.json` differs in size (`39` bytes baseline vs `41` bytes candidate), confirming the changed input propagates to the pipeline output."
+  }
+ ],
+ "dropped": {
+  "quotes a value its cites don't hold": "3"
+ },
+ "label": "Suggested explanation \u2014 AI-generated, may be wrong",
+ "model": "anthropic:claude-sonnet-4-6",
+ "record": "2026-10-25T13-42-26.188702Z"
+}

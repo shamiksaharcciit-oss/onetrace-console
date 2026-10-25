@@ -8,6 +8,8 @@
 !LICENSE
 !config/container.json
 !deploy/fly/public.json
+# deploy/fly/ as a whole: the hosted demo's Dockerfile copies it, so its build reads deploy/fly/kept/.
+!deploy/fly/
 # Byte-code and an editable install's metadata are never part of an image, even inside src/.
 **/__pycache__/
 **/*.pyc

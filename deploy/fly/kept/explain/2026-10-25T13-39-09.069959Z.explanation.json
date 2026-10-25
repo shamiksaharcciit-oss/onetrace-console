@@ -1,0 +1,48 @@
+{
+ "checks": [
+  {
+   "check": "match",
+   "run": "candidate"
+  },
+  {
+   "check": "text",
+   "node": "calibrate"
+  },
+  {
+   "check": "text",
+   "node": "calibrate"
+  },
+  {
+   "check": "reproduce",
+   "node": "calibrate",
+   "run": "candidate"
+  }
+ ],
+ "checks_dropped": {},
+ "claims": [
+  {
+   "cites": [
+    "comparison/verdict",
+    "node/calibrate/instrument"
+   ],
+   "kind": "lead",
+   "text": "The first difference originates at the `calibrate` node, where the candidate's `sensor-calibration` transform has a different config digest than the baseline, making it the most likely culprit for all downstream divergence."
+  },
+  {
+   "cites": [
+    "node/readings",
+    "node/readings/instrument",
+    "node/readings/input/readings.csv",
+    "node/readings/output/readings.json"
+   ],
+   "kind": "ruled out",
+   "text": "The `readings` node is identical in both runs: same instrument config, same input, same output."
+  }
+ ],
+ "dropped": {
+  "quotes a value its cites don't hold": "4"
+ },
+ "label": "Suggested explanation \u2014 AI-generated, may be wrong",
+ "model": "anthropic:claude-sonnet-4-6",
+ "record": "2026-10-25T13-39-09.069959Z"
+}

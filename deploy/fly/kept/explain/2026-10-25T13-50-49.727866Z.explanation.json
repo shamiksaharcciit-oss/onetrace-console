@@ -1,0 +1,58 @@
+{
+ "checks": [
+  {
+   "check": "match",
+   "run": "baseline"
+  },
+  {
+   "check": "text",
+   "node": "match"
+  },
+  {
+   "check": "text",
+   "node": "approve_payment"
+  },
+  {
+   "check": "reproduce",
+   "node": "match",
+   "run": "candidate"
+  }
+ ],
+ "checks_dropped": {},
+ "claims": [
+  {
+   "cites": [
+    "node/match",
+    "node/match/output/match.json"
+   ],
+   "kind": "lead",
+   "text": "The `match` node is identified as the first difference point, and its output `match.json` differs in both size and digest between baseline and candidate."
+  },
+  {
+   "cites": [
+    "node/approve_payment",
+    "node/approve_payment/upstream",
+    "node/approve_payment/input/match.json",
+    "node/approve_payment/output/payment.json"
+   ],
+   "kind": "ruled out",
+   "text": "The `approve_payment` node is downstream of `match` and its differing input `match.json` and output `payment.json` are a consequence of the upstream change in `match`, not an independent source of divergence."
+  },
+  {
+   "cites": [
+    "node/read_invoice",
+    "node/read_invoice/instrument",
+    "node/read_invoice/input/invoice",
+    "node/read_invoice/output/invoice.json"
+   ],
+   "kind": "ruled out",
+   "text": "The `read_invoice` node, its instrument, inputs, and outputs are identical between runs, ruling it out as a source of divergence."
+  }
+ ],
+ "dropped": {
+  "quotes a value its cites don't hold": "3"
+ },
+ "label": "Suggested explanation \u2014 AI-generated, may be wrong",
+ "model": "anthropic:claude-sonnet-4-6",
+ "record": "2026-10-25T13-50-49.727866Z"
+}

@@ -1,0 +1,17 @@
+Suggested explanation — AI-generated, may be wrong
+model: anthropic:claude-sonnet-4-6
+
+- possible culprit: The `match` node is identified as the first difference point, and its output `match.json` differs in both size and digest between baseline and candidate.
+  shown by: node/match, node/match/output/match.json
+- ruled out: The `approve_payment` node is downstream of `match` and its differing input `match.json` and output `payment.json` are a consequence of the upstream change in `match`, not an independent source of divergence.
+  shown by: node/approve_payment, node/approve_payment/upstream, node/approve_payment/input/match.json, node/approve_payment/output/payment.json
+- ruled out: The `read_invoice` node, its instrument, inputs, and outputs are identical between runs, ruling it out as a source of divergence.
+  shown by: node/read_invoice, node/read_invoice/instrument, node/read_invoice/input/invoice, node/read_invoice/output/invoice.json
+
+dropped: 3 quotes a value its cites don't hold
+
+checks onetrace can run (a lead is confirmed or ruled out only by what these report):
+  onetrace match a
+  onetrace diff a b --text --stage match
+  onetrace diff a b --text --stage approve_payment
+  onetrace reproduce b match --runner <your runner>

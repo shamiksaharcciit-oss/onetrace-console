@@ -1,0 +1,9 @@
+{
+  "format": "onetrace-trust/0.1",
+  "keys": [
+    {
+      "key_id": "sha256:6e20550ae0dc6b4471d54336d09d74d14f3f623b735045eddd053c444ec3b14c",
+      "label": "demo key (public seed: proves the record wasn't changed since signing, not who signed it)"
+    }
+  ]
+}

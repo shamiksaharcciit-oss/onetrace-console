@@ -43,7 +43,13 @@ builds:
    kept.
 
 Without `--explanations`, each comparison's page says "Explanations are not set up on this demo."
-The Dockerfile here builds without it.
+
+The Dockerfile here uses `kept/` where it is there: its build line is step 3, with `--runs-from
+/app/deploy/fly/kept --explanations /app/deploy/fly/kept`, so the image serves `kept/runs/` and the
+four explanations under `kept/explain/`, and every other comparison's page says they are not set
+up. Its build record is `kept/BUILD_RECORD.json`, over `kept/runs/` and `kept/trust.json` only; the
+record the first build wrote is beside it, unchanged (`kept/README.md`). Where `kept/` is not there,
+the Dockerfile builds as before: the runs recorded at build time and no explanation kept.
 
 ## Deploy
 

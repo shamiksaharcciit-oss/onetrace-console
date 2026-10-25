@@ -3,8 +3,8 @@
 #   docker build -f deploy/fly/Dockerfile -t onetrace-console-demo .
 #
 # What it serves is built into the image: the demo store's runs, recorded at build time by its
-# builder, delivered, checked and compared, and every page drawn with the public banner
-# (`onetrace-console demo --public --build`).
+# builder (or taken from deploy/fly/kept/, with the explanations kept there), delivered, checked and
+# compared, and every page drawn with the public banner (`onetrace-console demo --public --build`).
 # The built store is owned by root and not writable, and the console runs as another user, so a
 # write the code did not intend fails at the operating system as well. Every machine started from
 # the image serves exactly that store; nothing is checked, compared or drawn at start.
@@ -29,6 +29,9 @@ COPY tools/install_pinned.py ./tools/install_pinned.py
 COPY src/ ./src/
 COPY LICENSE ./LICENSE
 COPY deploy/fly/public.json /etc/onetrace-console/public.json
+# deploy/fly/ as a whole, so the build reads deploy/fly/kept/ where the repository holds it; a COPY
+# naming that folder alone would fail the build where it does not.
+COPY deploy/fly/ ./deploy/fly/
 
 # The pinned install (tools/install_pinned.py: every wheel checked against requirements.lock).
 RUN python tools/install_pinned.py
@@ -38,8 +41,15 @@ RUN printf '#!/bin/sh\nexec python -m onetrace_console "$@"\n' > /usr/local/bin/
 
 # The demo's store, built now, then made read-only: owned by root, readable by every user (the
 # serving user reads it, and checks it against its build record at start), no write bit anywhere. The
-# configuration file and the code are root's too.
-RUN python -m onetrace_console demo --public --build /srv/onetrace-demo \
+# configuration file and the code are root's too. Where deploy/fly/kept/ is there, the build takes its
+# runs, as its build record vouches for them, and keeps the explanations under it
+# (deploy/fly/kept/README.md); where it is not, the runs are recorded now and none is kept.
+RUN if [ -d deploy/fly/kept ]; then \
+        python -m onetrace_console demo --public --build /srv/onetrace-demo \
+            --runs-from /app/deploy/fly/kept --explanations /app/deploy/fly/kept; \
+    else \
+        python -m onetrace_console demo --public --build /srv/onetrace-demo; \
+    fi \
     && chown -R root:root /srv/onetrace-demo /etc/onetrace-console /app \
     && chmod -R a+rX,a-w /srv/onetrace-demo /etc/onetrace-console
 

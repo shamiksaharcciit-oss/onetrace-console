@@ -1,0 +1,62 @@
+```json
+{
+  "claims": [
+    {
+      "text": "The `price_tolerance` constant in the `match` node differs between runs: baseline uses `2.00%` and candidate uses `5.00%`, and the config digests for that node also differ, indicating a configuration change is the source of divergence.",
+      "kind": "lead",
+      "cites": ["node/match/constant/price_tolerance", "node/match/instrument"]
+    },
+    {
+      "text": "The `match` node is identified as the first difference point, and its output `match.json` differs in both size and digest between baseline and candidate.",
+      "kind": "lead",
+      "cites": ["node/match", "node/match/output/match.json"]
+    },
+    {
+      "text": "The `approve_payment` node is downstream of `match` and its differing input `match.json` and output `payment.json` are a consequence of the upstream change in `match`, not an independent source of divergence.",
+      "kind": "ruled out",
+      "cites": ["node/approve_payment", "node/approve_payment/upstream", "node/approve_payment/input/match.json", "node/approve_payment/output/payment.json"]
+    },
+    {
+      "text": "The `read_invoice` node, its instrument, inputs, and outputs are identical between runs, ruling it out as a source of divergence.",
+      "kind": "ruled out",
+      "cites": ["node/read_invoice", "node/read_invoice/instrument", "node/read_invoice/input/invoice", "node/read_invoice/output/invoice.json"]
+    },
+    {
+      "text": "The `approve_payment` instrument config digest is identical between runs, so the payment-approval policy itself was not changed.",
+      "kind": "note",
+      "cites": ["node/approve_payment/instrument"]
+    },
+    {
+      "text": "The run IDs `p8-42-invoice-tolerance-2pct` and `p8-43-invoice-tolerance-5pct` suggest the tolerance change was intentional, but the downstream effect on `payment.json` should be verified.",
+      "kind": "note",
+      "cites": ["comparison/verdict"]
+    }
+  ],
+  "checks": [
+    {
+      "check": "match",
+      "node": "match",
+      "setting": "price_tolerance",
+      "run": "baseline"
+    },
+    {
+      "check": "text",
+      "node": "match",
+      "setting": "match.json",
+      "run": "candidate"
+    },
+    {
+      "check": "text",
+      "node": "approve_payment",
+      "setting": "payment.json",
+      "run": "candidate"
+    },
+    {
+      "check": "reproduce",
+      "node": "match",
+      "setting": "price_tolerance",
+      "run": "candidate"
+    }
+  ]
+}
+```

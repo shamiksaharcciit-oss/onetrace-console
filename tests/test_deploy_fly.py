@@ -48,10 +48,12 @@ def scan(folder: Path) -> list[str]:
     return found
 
 
-def test_the_folder_holds_the_four_files(examined):
+def test_the_folder_holds_the_four_files_and_the_kept_inputs(examined):
+    """The four files, and `kept/`, the inputs the Dockerfile builds from where they are there
+    (tests/test_deploy_fly_kept.py holds what is in it)."""
     names = sorted(p.name for p in DEPLOY.iterdir())
     examined(len(names), "files in deploy/fly")
-    assert names == ["Dockerfile", "README.md", "fly.toml", "public.json"], names
+    assert names == ["Dockerfile", "README.md", "fly.toml", "kept", "public.json"], names
 
 
 def test_public_json_is_a_public_configuration_on_the_port_fly_toml_names(examined):
