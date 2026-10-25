@@ -4,10 +4,12 @@ One page per pipeline lists its runs, newest first; each picks that run as run A
 A's page lists the pipeline's other runs as run B. Where this console holds a comparison of the
 pair (run A the baseline, run B the candidate), the row links to it. Where it holds none, the row
 says "Not compared yet" and shows the request that makes it, `POST /compare` with both keys
-filled in from the store's own values, as plain text: no form, no button, no copy button. No page
-makes a comparison, and no GET route does: a GET that wrote would be the opening a cross-site
-request needs. A public console makes no comparison, so it lists only the pairs it holds, and
-says so.
+filled in from the store's own values. On a local console the row also has a Compare button: its
+script (`compare_script`) sends that same request, with the session's CSRF token, through the same
+guards as any other, and opens the comparison the console answers with. No form posts, and no GET
+route makes a comparison: a GET that wrote would be the opening a cross-site request needs. Without
+the script the button stays hidden and the request stays shown. A public console makes no
+comparison, so it lists only the pairs it holds, has no button, and says so.
 """
 from __future__ import annotations
 
@@ -109,8 +111,12 @@ def render_pair(pipeline, a_run, store: Store, *, generated_at: str,
             cell = f'<a href="diff/{_tag(c.key)}.html">Open the comparison</a>'
             state = "compared"
         else:
-            cell = (f"Not compared yet. "
-                    f'<code class="mono" data-command>{escape(compare_request(a_run.key, r.key))}</code>')
+            request = compare_request(a_run.key, r.key)
+            cell = (f'<button type="button" hidden '
+                    f'data-compare-post="{_tag(request.split(" ", 1)[1])}">Compare</button> '
+                    f"Not compared yet. "
+                    f'<code class="mono" data-command>{escape(request)}</code>'
+                    f'<span data-compare-said role="status"></span>')
             state = "not-compared"
         rows.append(f'<tr data-run="{_tag(r.key)}" data-pair="{state}"><td><span id="{_tag(b_anchor(r.key))}"></span>'
                     f'{_run_link(store, r.key)}</td>'
@@ -135,9 +141,9 @@ def render_pair(pipeline, a_run, store: Store, *, generated_at: str,
                f"pairs it holds: {len(compared)} of the {len(others)} other runs of {label} "
                f"{'has' if len(compared) == 1 else 'have'} a comparison with this run as run A.</p>")
     else:
-        how = ('<p data-section="how">A pair not compared yet shows the request that compares it. Send '
-               "it to this console, signed in, with your session's CSRF token, as the operator's "
-               "guide shows. Nothing on this page makes a comparison.</p>")
+        how = ('<p data-section="how">A pair not compared yet has a Compare button, which sends this '
+               "console the request shown beside it, with your session's CSRF token, and opens the "
+               "comparison. The request can also be sent by hand, as the operator's guide shows.</p>")
     body = [
         f'<p class="crumbs" data-section="crumbs"><a href="comparisons.html">Comparisons</a> / '
         f'<a href="{_tag(choose_href(pipeline.label))}">{label}</a> / run A</p>',
@@ -149,6 +155,9 @@ def render_pair(pipeline, a_run, store: Store, *, generated_at: str,
         listing,
         generated_footer(generated_at),
     ]
+    if not public and any('data-pair="not-compared"' in row for row in rows):
+        from onetrace_console.compare_script import COMPARE_SCRIPT
+        body.append(COMPARE_SCRIPT)
     return _document(f"Choose run B · {pipeline.label}", "\n".join(['<div class="cp">', *body, "</div>"]))
 
 

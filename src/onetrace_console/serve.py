@@ -133,6 +133,11 @@ def _rendering(config: Config | None):
 
 
 def _render_run_pages(run, store: Store, root: Path, config: Config | None = None) -> None:
+    with store.reading():
+        _render_run_pages_read(run, store, root, config)
+
+
+def _render_run_pages_read(run, store: Store, root: Path, config: Config | None = None) -> None:
     from onetrace_console.pages import (ANSWER, AUTHORIZATION, CASE, RUN_PROOF, PageError,
                                         render_execution)
     try:
@@ -166,6 +171,11 @@ def _render_run_pages(run, store: Store, root: Path, config: Config | None = Non
 
 
 def _render_all_pages(store: Store, root: Path, config: Config | None = None) -> None:
+    with store.reading():
+        _render_all_pages_read(store, root, config)
+
+
+def _render_all_pages_read(store: Store, root: Path, config: Config | None = None) -> None:
     from onetrace_console.render import render_all
     with _rendering(config):
         rendered = render_all(store, generated_at=_now())
@@ -196,7 +206,13 @@ def _render_all_pages(store: Store, root: Path, config: Config | None = None) ->
 
 
 def _render_diff_page(comparison, store: Store, root: Path, *, public: bool = False) -> str:
-    """`public`: drawn for a public console, whose explanation panel is its place only."""
+    """`public`: drawn for a public console, whose explanation panel is its place only. In one
+    reading of the store (`Store.reading`), as every drawing is, even drawn alone."""
+    with store.reading():
+        return _render_diff_page_read(comparison, store, root, public=public)
+
+
+def _render_diff_page_read(comparison, store: Store, root: Path, *, public: bool = False) -> str:
     from onetrace_console.render import render_diff
     from onetrace_console import views
     html = render_diff(comparison, store, generated_at=_now(), public=public)
@@ -219,6 +235,12 @@ def _render_diff_page(comparison, store: Store, root: Path, *, public: bool = Fa
 
 
 def _render_startup_pages(store: Store, root: Path, config: Config | None = None) -> None:
+    """`_render_startup_pages_read`, in one reading of the store (`Store.reading`)."""
+    with store.reading():
+        _render_startup_pages_read(store, root, config)
+
+
+def _render_startup_pages_read(store: Store, root: Path, config: Config | None = None) -> None:
     """Every page `pages/` should hold, rebuilt from `store/` alone -- so a restart is a
     re-render, never a loss. `_render_all_pages` alone (Home, the tally pages, Incidents,
     the rule lists) is not enough on its own: it does not touch a run's own detail pages
@@ -648,7 +670,18 @@ class Handler(BaseHTTPRequestHandler):
         return bool(submitted) and submitted == cookie == session.csrf_token
 
     # -------------------------------------------------------------- GET
+    def _reading(self):
+        """One request's reading of the store (`Store.reading`): every page it draws shares one
+        read of the runs and comparisons; none where no store is set."""
+        from contextlib import nullcontext
+        store = getattr(self, "store", None)
+        return store.reading() if store is not None else nullcontext()
+
     def do_GET(self) -> None:                                       # noqa: N802
+        with self._reading():
+            self._do_get()
+
+    def _do_get(self) -> None:
         self._resolve_request_identity()
         if not self._local_guard("GET"):
             return
@@ -692,6 +725,17 @@ class Handler(BaseHTTPRequestHandler):
         if record:
             self._handle_record(record.group(1))
             return
+        if rel == "explain/state":
+            #: A comparison's press now running, read by its panel's script while it waits.
+            from onetrace_console import explain
+            key = (parse_qs(urlsplit(self.path).query).get("c") or [""])[0]
+            try:
+                said = explain.state(self.store, key)
+            except ValueError:
+                self._respond_json(400, {"error": "unknown or malformed comparison key"})
+                return
+            self._respond_json(200, said)
+            return
         pages = (self.store_root / PAGES_DIRNAME).resolve()
         target = self.store_root / PAGES_DIRNAME / rel
         try:
@@ -718,6 +762,10 @@ class Handler(BaseHTTPRequestHandler):
 
     # -------------------------------------------------------------- POST
     def do_POST(self) -> None:                                      # noqa: N802
+        with self._reading():
+            self._do_post()
+
+    def _do_post(self) -> None:
         if self.config.public:
             #: The public mode's one check, ahead of everything else -- the routing, the
             #: Content-Length, the body: every POST is refused, a route added later included, and
@@ -1078,9 +1126,17 @@ class Handler(BaseHTTPRequestHandler):
         if explain.command() is None:
             self._respond_json(400, {"error": "onetrace-explain is not installed with this console"})
             return
+        store, root, public = self.store, self.store_root, self.config.public
         try:
+            if explain._lock(comparison.key).locked():
+                raise explain.Busy(explain.BUSY)
             if path == "/explain":
-                got = explain.explain(comparison, self.store, send=(query.get("send") or [""])[0] == "yes")
+                #: The press starts the work and answers at once; the page is drawn again when it ends.
+                explain.start(comparison, store, send=(query.get("send") or [""])[0] == "yes",
+                              done=lambda: _render_diff_page(comparison, store, root, public=public))
+                self._respond_json(202, {"comparison_key": comparison.key, "started": True,
+                                         "state": f"/explain/state?c={comparison.key}"})
+                return
             elif path == "/explain/packet":
                 got = explain.packet(comparison, self.store)
             else:
@@ -1088,6 +1144,9 @@ class Handler(BaseHTTPRequestHandler):
                 if not index.isdigit():
                     raise ValueError("no such check")
                 got = explain.run_check(self.store, comparison.key, (query.get("e") or [""])[0], int(index))
+        except explain.Busy as e:
+            self._respond_json(409, {"error": str(e)})
+            return
         except ValueError as e:
             self._respond_json(400, {"error": str(e)})
             return
@@ -1505,7 +1564,7 @@ def main(argv: list[str] | None = None, *, overrides: dict | None = None, prepar
     #: An IPv6 address is bracketed, or the line is not a URL (the third review, NEW-15).
     shown_host = f"[{config.host}]" if ":" in config.host else config.host
     base = f"{scheme}://{shown_host}:{config.port}"
-    print(f"onetrace-console serving on {base} (store root: {store_root})", flush=True)
+    print(startup_line(base, store_root), flush=True)
     lines, opened = ready
     for text, path in lines[:-1]:
         print(text if path is None else f"{text} {base}/{path}", flush=True)
@@ -1561,3 +1620,9 @@ class _sigterm_as_interrupt:
 
 if __name__ == "__main__":
     raise SystemExit(main())
+
+
+def startup_line(base: str, store_root) -> str:
+    """The line a console prints when it listens: its address, and the folder its store is in --
+    the store root's `store`, where `x/` and every record are, as an explanation's paths name it."""
+    return f"onetrace-console serving on {base} (store: {os.path.join(str(store_root), 'store')})"

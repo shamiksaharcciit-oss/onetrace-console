@@ -24,6 +24,27 @@ docker run --rm -p 127.0.0.1:8080:8080 onetrace-console-demo
 Then open http://127.0.0.1:8080/. Without Docker, `onetrace-console demo --public` serves the
 same read-only demo from a temporary folder.
 
+## Kept explanations
+
+A public console presses nothing, so it asks onetrace-explain for nothing. It shows the explanations
+its build kept, read-only, on each comparison's page: each with its label, its model, its claims with
+their cites, and the claims dropped with the reason, and no button. An explanation belongs to the two
+runs it explains, byte for byte, and each build records the demo's runs anew, so it is kept in two
+builds:
+
+1. `onetrace-console demo --public --build <first>` records the runs.
+2. On a local console of those runs (`onetrace-console <first>/runs --trust <first>/trust.json
+   --compare A B`), Explain is pressed with your own model. The command writes its records in the
+   store's `x/<16 hex>/r/explain/`.
+3. `onetrace-console demo --public --build <second> --runs-from <first> --explanations <that r folder>`
+   takes the first build's runs, where its build record vouches for every byte, and keeps each
+   explanation whose record verifies and whose two runs are a comparison this build holds. Every other
+   file is refused, with its reason printed, and never shown. The build record vouches for each one
+   kept.
+
+Without `--explanations`, each comparison's page says "Explanations are not set up on this demo."
+The Dockerfile here builds without it.
+
 ## Deploy
 
 From the repository root, signed in to Fly.io with `fly auth login`:

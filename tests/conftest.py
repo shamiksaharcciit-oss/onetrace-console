@@ -391,13 +391,26 @@ def _shared(name: str, folder: Path, said=None) -> dict:
 def shared_demo(tmp_path_factory) -> dict:
     """The public demo, built once a session with `build_public` and read by every module that
     reads the demo as built. Read-only: a module that changes it fails `_shared_demo_unchanged`.
-    A module that writes takes its own copy (`demo_copy`)."""
+    A module that writes takes its own copy (`demo_copy`). It also says how many run records the
+    build read from disk (`run_records_read`, held by tests/test_store_reading.py)."""
     from onetrace_console.folder_load import build_public
+    from onetrace_console.store import StoredRun
     from tests.test_checks import _require_installed
     _require_installed()
     folder = tmp_path_factory.mktemp("shared-demo") / "demo"
-    said, _ = build_public(folder)
-    return _shared("shared_demo", folder, said)
+    real, seen = StoredRun.from_json, [0]
+
+    def counted(text):
+        seen[0] += 1
+        return real(text)
+    StoredRun.from_json = staticmethod(counted)
+    try:
+        said, _ = build_public(folder)
+    finally:
+        StoredRun.from_json = staticmethod(real)
+    shared = _shared("shared_demo", folder, said)
+    shared["run_records_read"] = seen[0]
+    return shared
 
 
 @pytest.fixture(scope="session")

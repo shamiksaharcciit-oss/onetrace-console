@@ -49,6 +49,7 @@ import hashlib
 from onetrace_console.bounded_json import load_json_bounded
 import json
 import re
+import threading
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -114,6 +115,13 @@ def _read_head(path: Path) -> dict:
     return head
 
 
+#: One append at a time, in this process: the server answers requests on threads, and an append
+#: composes its entry from the chain head, writes it, then replaces HEAD.json. Two at once broke the
+#: chain (two entries naming one `prev`), and on Windows a replace onto a file another replace is
+#: writing is refused, so a request answered 500 (`AccessLogExhausted`) among 200s.
+_APPEND_LOCK = threading.Lock()
+
+
 @dataclass
 class AccessLog:
     """One access log, rooted at `root` (typically `<store-root>/access_log/`)."""
@@ -144,8 +152,12 @@ class AccessLog:
               now: str | None = None) -> dict:
         """Append one entry. Raises `AccessLogExhausted` -- never returns partially --
         if the entry cannot be written at all (rotation itself failing, or the
-        underlying filesystem refusing the write).
+        underlying filesystem refusing the write). One at a time (`_APPEND_LOCK`).
         """
+        with _APPEND_LOCK:
+            return self._append(principal=principal, method=method, path=path, status=status, now=now)
+
+    def _append(self, *, principal: str, method: str, path: str, status: int, now: str | None) -> dict:
         entry = {
             "principal": principal,
             "method": method,

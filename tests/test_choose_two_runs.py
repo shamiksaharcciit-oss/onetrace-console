@@ -1,10 +1,11 @@
-"""Choose two runs from a pipeline's runs, by links alone.
+"""Choose two runs from a pipeline's runs.
 
 A page per pipeline lists its runs, newest first, each choosing itself as run A. Run A's page lists
 the pipeline's other runs as run B: a link to the comparison this console holds of the pair, or
 "Not compared yet" with the request that makes it, `POST /compare?a=<run A>&b=<run B>`, both keys
-the store's own, escaped, as plain text. No page carries a form, a button or an input, and no GET
-makes a comparison. A public console lists only the pairs it holds, and says so.
+the store's own, escaped, as plain text, and on a local console a Compare button that sends that
+request. No page carries a form or an input, its only buttons are those, and no GET makes a
+comparison. A public console lists only the pairs it holds, has no button, and says so.
 """
 from __future__ import annotations
 
@@ -107,9 +108,10 @@ def test_the_request_carries_the_stores_keys_and_a_hostile_name_stays_text(three
     examined(1, "run A page with a hostile run name as run B")
     assert f"POST /compare?a={comparison.run_a}&amp;b={hostile.key}" in page, "escaped, keys whole"
     #: The console's own scripts, each named in the policy by its hash, are the page's only ones.
+    from onetrace_console.compare_script import COMPARE_SCRIPT
     from onetrace_console.public import inline_scripts
     rest = page
-    for script in inline_scripts():
+    for script in inline_scripts() + (COMPARE_SCRIPT,):
         rest = rest.replace(script, "")
     assert "<script>" not in rest and HOSTILE not in page
     for name, html in pages.items():
@@ -132,13 +134,53 @@ def test_sabotage_a_request_with_a_wrong_key_is_named(three, examined):
     assert any("not linked" in x for x in pair_problems(unlinked, comparison.run_a, _held(store), others))
 
 
-def test_no_page_carries_a_form_a_button_or_an_input(three, examined):
+COMPARE_BUTTON = re.compile(r'<button type="button" hidden data-compare-post="/compare\?a=([0-9a-f]{64})&amp;b=([0-9a-f]{64})">Compare</button>')
+
+
+def test_no_page_carries_a_form_or_an_input_and_its_only_button_is_compare(three, examined):
     comparison, store, hostile = three
     pages = {k: v for k, v in _pages(store).items() if k.startswith("choose-")}
     examined(len(pages), "choose pages")
     for name, html in pages.items():
-        for tag in ("<form", "<button", "<input", "<select", "<textarea", "onclick", "clipboard"):
+        for tag in ("<form", "<input", "<select", "<textarea", "onclick", "clipboard"):
             assert tag not in html.lower(), (name, tag)
+        #: Every button is a Compare button for one pair not compared yet, the pair its row shows.
+        assert html.count("<button") == len(COMPARE_BUTTON.findall(html)), name
+        for a, b in COMPARE_BUTTON.findall(html):
+            assert f"POST /compare?a={a}&amp;b={b}</code>" in html, name
+
+
+def test_a_compare_button_is_offered_only_for_a_pair_not_compared_and_carries_its_script(three, examined):
+    comparison, store, hostile = three
+    from onetrace_console.compare_script import COMPARE_SCRIPT
+    from onetrace_console.overview import pipelines
+    (p,) = pipelines(store)
+    page = _pages(store)[pair_href(p.label, comparison.run_a)]
+    examined(2, "rows")
+    rows = {state: cells for _, state, cells in
+            re.findall(r'<tr data-run="([0-9a-f]{64})" data-pair="([a-z-]+)">(.*?)</tr>', page, re.S)}
+    assert "<button" not in rows["compared"] and "<button" in rows["not-compared"]
+    assert page.count(COMPARE_SCRIPT) == 1
+
+
+def test_sabotage_a_button_without_its_request_is_named(three, examined):
+    comparison, store, hostile = three
+    from onetrace_console.overview import pipelines
+    (p,) = pipelines(store)
+    page = _pages(store)[pair_href(p.label, comparison.run_a)]
+    examined(1, "sabotaged page")
+    broken = re.sub(r"<code class=\"mono\" data-command>[^<]*</code>", "", page)
+    (a, b), *_ = COMPARE_BUTTON.findall(broken)
+    assert f"POST /compare?a={a}&amp;b={b}</code>" not in broken
+
+
+def test_a_public_console_carries_no_compare_button_or_script(three, examined):
+    comparison, store, hostile = three
+    from onetrace_console.compare_script import COMPARE_SCRIPT
+    pages = {k: v for k, v in _pages(store, public=True).items() if k.startswith("choose-")}
+    examined(len(pages), "public choose pages")
+    for name, html in pages.items():
+        assert "<button" not in html and COMPARE_SCRIPT not in html, name
 
 
 def test_a_public_console_lists_only_the_pairs_it_holds_and_says_so(three, examined):

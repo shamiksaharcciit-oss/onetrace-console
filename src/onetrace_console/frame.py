@@ -443,6 +443,20 @@ nav.frame footer .theme button:focus-visible{outline:2px solid var(--nav-on-ink)
 nav.frame footer .theme button[hidden]{display:none}
 """
 
+#: "Choose run B"'s Compare button, shaped as the theme switch is, in the page's own ink and lines in
+#: both themes; and the line under the request where its script says what the console answered,
+#: taking no space while it is empty.
+COMPARE_CSS = """
+.cp button[data-compare-post]{font:inherit;color:var(--ink);background:var(--surface);
+  border:1px solid var(--line-strong);border-radius:var(--r-ctl);padding:4px 10px;cursor:pointer}
+.cp button[data-compare-post]:hover{background:var(--surface-sunk)}
+.cp button[data-compare-post]:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.cp button[data-compare-post]:disabled{color:var(--ink-faint);cursor:default}
+.cp button[data-compare-post][hidden]{display:none}
+.cp [data-compare-said]{display:block;margin-top:4px}
+.cp [data-compare-said]:empty{display:none}
+"""
+
 #: The public mode's banner, in the navigation (`banner()`): only a public console's pages carry it.
 PUBLIC_CSS = """
 nav.frame [data-frame=banner]{margin:0 0 14px;padding:10px 14px;border-radius:var(--r-ctl);
@@ -467,7 +481,7 @@ def stylesheet() -> bytes:
     from onetrace_console.run_head import HEAD_CSS
     from onetrace_console.views import VIEWS_CSS
     return (faces + root_css() + "\n" + scale_css() + "\n" + theme_css() + "\n" + CSS + FRAME_CSS + PAGE_CSS + CHIP_CSS
-            + THEME_CSS + PUBLIC_CSS + HEAD_CSS + VIEWS_CSS + NARROW_CSS).encode("utf-8")
+            + THEME_CSS + COMPARE_CSS + PUBLIC_CSS + HEAD_CSS + VIEWS_CSS + NARROW_CSS).encode("utf-8")
 
 
 def items(onedoor: bool) -> tuple[tuple[str, str, str], ...]:
@@ -547,9 +561,10 @@ def sealed_footer(sign_in: bool, *, public: bool = False) -> str:
 
 
 def banner() -> str:
-    """The public mode's banner, the first thing under the brand on every page."""
+    """The public mode's banner, the first thing under the brand on every page. The command ends its
+    sentence: a full stop after it, outside its code type, before the sentence on the demo's runs."""
     from onetrace_console.public import BANNER, BANNER_COMMAND, banner_runs
-    return (f'<p data-frame="banner">{escape(BANNER)} <code>{escape(BANNER_COMMAND)}</code> '
+    return (f'<p data-frame="banner">{escape(BANNER)} <code>{escape(BANNER_COMMAND)}</code>. '
             f'{escape(banner_runs())}</p>')
 
 

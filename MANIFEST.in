@@ -1,0 +1,2 @@
+# The build backend pyproject.toml names, so a wheel builds from the sdist by it.
+include tools/build_backend/reproducible_sdist.py

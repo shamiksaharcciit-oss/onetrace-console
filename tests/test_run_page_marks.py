@@ -178,7 +178,9 @@ def _titles(page: str) -> dict[str, str]:
 #: the same.
 #: Moved by the version, 0.2.1 to 0.3.0, from d4bb6b42f8ffa52c21f055ee42c469476114e081a911581516229ca2d90f6bfc.
 #: Measured by diffing the two renderings: the footer's "onetrace-console 0.2.1." only.
-UNMARKED_R_CASE_SHA256 = "ae2ee920bb68f3c50940679ef5dce8ac0a04cdffcefc345f6e110e0d51a4a1c4"
+#: Moved by the version, 0.3.0 to 0.3.1, from ae2ee920bb68f3c50940679ef5dce8ac0a04cdffcefc345f6e110e0d51a4a1c4.
+#: Measured by rendering it with the version alone set back to 0.3.0: the old digest.
+UNMARKED_R_CASE_SHA256 = "e12450fa1001a7b56d0cd7b00206dd5218eb5299272b26555f600c5b750595a9"
 _VERIFIER_PATH = re.compile(r"\S*onetrace_verify[/\\]verify\.py")
 _FINGERPRINT = re.compile(r"<!--fingerprint-->[0-9a-f]{64}<!--/fingerprint-->")
 _VERIFIER_BLOCK = re.compile(r'(<pre data-layer="3">)(\[[A-Z][A-Z-]* *\] .*?)(</pre>)', re.S)

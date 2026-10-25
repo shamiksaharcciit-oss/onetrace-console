@@ -319,3 +319,34 @@ def test_sabotage_a_slower_line_left_out_or_in_a_table_is_named(drift_store, tmp
     assert slower_problems(gone, txt, report) != []
     inside = page.replace("</table>", "<tr><td>slower</td></tr></table>", 1)
     assert slower_problems(inside, txt, report) != []
+
+
+#: The space a cell of the runs table keeps after its text, so the next column never meets it.
+COLUMN_GAP_PX = 18
+
+
+def column_gap_problems(page: str) -> list[str]:
+    """Each cell of the runs table but a row's last keeps COLUMN_GAP_PX after its text."""
+    table = re.search(r'<table data-section="drift-runs".*?</table>', page, re.S)
+    if table is None:
+        return ["no runs table"]
+    out = []
+    for row in re.findall(r"<tr\b.*?</tr>", table.group(0), re.S):
+        cells = re.findall(r"<t[hd]\b([^>]*)>", row)
+        for attrs in cells[:-1]:
+            pad = re.search(r"padding-right:\s*(\d+)px", attrs)
+            if pad is None or int(pad.group(1)) < COLUMN_GAP_PX:
+                out.append(f"a cell keeps {pad.group(1) + 'px' if pad else 'no space'} before the next column")
+    return out
+
+
+def test_each_column_of_the_runs_table_keeps_its_space(drift_store, examined):
+    page = _page(drift_store)
+    examined(1, "drift page")
+    assert column_gap_problems(page) == []
+
+
+def test_sabotage_the_column_space_taken_out_is_named(drift_store, examined):
+    page = _page(drift_store)
+    examined(1, "planted drift page")
+    assert column_gap_problems(re.sub(r"padding-right:\s*\d+px", "padding-right:0px", page)) != []

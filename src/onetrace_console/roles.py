@@ -61,6 +61,8 @@ _VIEWER_GET_PATTERNS = tuple(re.compile(p) for p in (
     r"^drift-p[0-9]+(-previous)?\.html$",
     #: Choose two runs: a pipeline's runs as run A, and run A's page of the others as run B.
     r"^choose-p[0-9]+\.html$",
+    #: A comparison's explanation press now running, as its panel's script reads it.
+    r"^explain/state$",
     r"^choose-p[0-9]+-[0-9a-f]{64}\.html$",
     r"^policy\.html$",
     r"^policy/[^/]+\.html$",

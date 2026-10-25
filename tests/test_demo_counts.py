@@ -6,11 +6,15 @@ held here, on every page a public console serves of the demo built as the image 
 pipelines the console finds in that store. The README, the PyPI description
 and the changelog say the same counts in prose; each is held to the builder: its pipelines, its
 runs and its comparisons, and the README and the PyPI description the runs it breaks on purpose
-(`demo_store.PLANTED`). Each check has its sabotage.
+(`demo_store.PLANTED`). The README's Overview image says, in its PNG Description, the runs and
+pipelines its Runs card showed when it was taken, and those are the builder's. Each check has its
+sabotage.
 """
 from __future__ import annotations
 
 import re
+import struct
+import zlib
 from html import unescape
 
 import pytest
@@ -58,6 +62,57 @@ def doc_problems(name: str, text: str) -> list[str]:
     return out
 
 
+OVERVIEW = REPO / "docs" / "screenshots" / "overview.png"
+
+
+def image_problems(png: bytes) -> list[str]:
+    """The Overview image's Description text chunk: well formed, and the builder's runs and pipelines."""
+    from onetrace_console.demo_store import pipeline_names, runs
+    if png[:8] != b"\x89PNG\r\n\x1a\n":
+        return ["not a PNG"]
+    said, at = None, 8
+    while at < len(png):
+        (size,) = struct.unpack(">I", png[at:at + 4])
+        kind, data = png[at + 4:at + 8], png[at + 8:at + 8 + size]
+        if struct.unpack(">I", png[at + 8 + size:at + 12 + size])[0] != zlib.crc32(kind + data):
+            return [f"a {kind!r} chunk's CRC does not hold"]
+        if kind == b"tEXt" and data.startswith(b"Description\x00"):
+            said = data.split(b"\x00", 1)[1].decode("latin-1")
+        at += 12 + size
+    found = re.fullmatch(r"The Overview of onetrace-console's demo: (\d+) runs stored, in (\d+) pipelines", said or "")
+    if found is None:
+        return [f"the image says {said!r}"]
+    want = (str(len(runs())), str(len(pipeline_names())))
+    return [] if found.groups() == want else [f"the image shows {found.groups()}, the builder makes {want}"]
+
+
+def test_the_overview_image_shows_the_builder_s_runs(examined):
+    examined(1, "image")
+    assert image_problems(OVERVIEW.read_bytes()) == []
+
+
+def _with_description(png: bytes, said: str | None) -> bytes:
+    """The image with its Description chunk (right after IHDR) replaced by `said`, or taken out."""
+    (size,) = struct.unpack(">I", png[33:37])
+    assert png[37:41] == b"tEXt"
+    rest = png[:33] + png[45 + size:]
+    if said is None:
+        return rest
+    data = b"Description\x00" + said.encode("latin-1")
+    chunk = struct.pack(">I", len(data)) + b"tEXt" + data + struct.pack(">I", zlib.crc32(b"tEXt" + data))
+    return rest[:33] + chunk + rest[33:]
+
+
+def test_sabotage_an_image_from_an_older_demo_without_its_description_or_broken_is_named(examined):
+    png = OVERVIEW.read_bytes()
+    older = _with_description(png, "The Overview of onetrace-console's demo: 41 runs stored, in 7 pipelines")
+    broken = png[:40] + bytes([png[40] ^ 1]) + png[41:]
+    examined(3, "planted images")
+    assert image_problems(older) == ["the image shows ('41', '7'), the builder makes ('48', '9')"]
+    assert image_problems(_with_description(png, None)) == ["the image says None"]
+    assert image_problems(broken) != []
+
+
 def test_every_public_page_s_banner_counts_the_store_s_pipelines(served, examined):  # noqa: F811
     from onetrace_console.demo_store import pipeline_names
     from onetrace_console.overview import pipelines
@@ -85,8 +140,8 @@ def test_sabotage_each_check_catches_its_fault(served, monkeypatch, examined):  
     page = container_check.fetch(served[0], "/home.html")[2].decode("utf-8")
     caught = 0
     #: The count typed into the banner's words, as it was: three.
-    typed = page.replace("from seven small", "from three small")
-    assert typed != page and "the banner says three" in banner_problems(typed, 7)[0]
+    typed = page.replace("from nine small", "from three small")
+    assert typed != page and "the banner says three" in banner_problems(typed, 9)[0]
     caught += 1
     #: The builder's list read wrong: one pipeline left out of it.
     names = demo_store.pipeline_names()
@@ -94,10 +149,10 @@ def test_sabotage_each_check_catches_its_fault(served, monkeypatch, examined):  
     assert banner_problems(banner(), len(names)) != []
     monkeypatch.undo()
     caught += 1
-    for name, old, new in [("README.md", "from seven small", "from six small"),
-                           ("PYPI_DESCRIPTION.md", "stores ten comparisons", "stores nine comparisons"),
-                           ("README.md", "the demo's 41 runs", "the demo's 40 runs"),
-                           ("CHANGELOG.md", "records 41 runs", "records 40 runs")]:
+    for name, old, new in [("README.md", "from nine small", "from eight small"),
+                           ("PYPI_DESCRIPTION.md", "stores 14 comparisons", "stores 13 comparisons"),
+                           ("README.md", "the demo's 48 runs", "the demo's 47 runs"),
+                           ("CHANGELOG.md", "records 48 runs", "records 47 runs")]:
         text = (REPO / name).read_text(encoding="utf-8")
         assert old in text, name
         assert doc_problems(name, text.replace(old, new)) != [], name

@@ -338,7 +338,7 @@ def test_the_demo_reads_as_its_table_says(demo, examined):
     by_id = {r.run_id: r.key for r in demo.runs}
     counts = {s: _count(demo, s) for s in COUNTED}
     examined(len(demo.runs), "runs read")
-    assert counts == {"yes": 37, "no": 3, "couldnt-check": 0, "not-checked": 1, "no-verdict": 0}
+    assert counts == {"yes": 44, "no": 3, "couldnt-check": 0, "not-checked": 1, "no-verdict": 0}
     key = by_id["p1-16-candidate-set5-no-artifacts"]
     assert (demo.state[key], demo.why[key]) == ("not-checked", "held without its output files required")
 

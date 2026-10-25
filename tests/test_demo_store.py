@@ -232,6 +232,18 @@ EXPECTED = {
     "p7-39-cold-chain-baseline": ("holds", "yes", TRUSTED, None, "not-compared"),
     "p7-40-cold-chain-one-reading-changed": ("holds", "yes", TRUSTED, "changed", "changed"),
     "p7-41-cold-chain-decision-tampered": ("contradicts", "no", TRUSTED, "contradicts", "not-compared"),
+    #: P8, invoice match: the price tolerance changed, 2% to 5% (first difference match); one line's
+    #: quantity changed (first difference read_invoice); declined at approve_payment, its last
+    #: declared step, as over the approver's limit.
+    "p8-42-invoice-tolerance-2pct": ("holds", "yes", TRUSTED, None, "not-compared"),
+    "p8-43-invoice-tolerance-5pct": ("holds", "yes", TRUSTED, "changed", "changed"),
+    "p8-44-invoice-quantity-changed": ("holds", "yes", TRUSTED, "changed", "changed"),
+    "p8-45-invoice-over-limit-declined": ("holds", "yes", TRUSTED, "stopped-at-a-step", "not-compared"),
+    #: P9, wheel-bolt torque check: the tool's firmware changed and its readings did not (same, the
+    #: version a changed setting); one bolt below the window (first difference read_tool_log).
+    "p9-46-torque-baseline": ("holds", "yes", TRUSTED, None, "not-compared"),
+    "p9-47-torque-tool-firmware-changed": ("holds", "yes", TRUSTED, None, "same"),
+    "p9-48-torque-one-bolt-low": ("holds", "yes", TRUSTED, "changed", "changed"),
 }
 
 
@@ -258,15 +270,16 @@ def test_every_run_reads_as_the_stores_table_says(built, examined):
                            vs_baseline(run, store)[0])
         assert rungs["Committed by a known time"] == "not-anchored", (run.run_id, "every run")
     assert got == EXPECTED
-    #: Seven pipelines, labelled P1-P7 in order of first arrival. That order is read from
+    #: Nine pipelines, labelled P1-P9 in order of first arrival. That order is read from
     #: `received_at`, kept to the second, so two pipelines whose first runs arrive in the same
     #: second take their labels in key order -- which varies from build to build. The demo's
     #: pipelines are held by their stages and runs here, not by the label each one gets.
     found = {(p.stages[0], len(p.runs)) for p in pipelines(store)}
-    assert sorted(p.label for p in pipelines(store)) == [f"P{n}" for n in range(1, 8)]
+    assert sorted(p.label for p in pipelines(store)) == [f"P{n}" for n in range(1, 10)]
     assert found == {("load_docs", 20), ("request", 2), ("intake", 6), ("question", 3),
-                     ("readings", 4), ("measure", 3), ("fill_gaps", 3)}
-    assert len(store.comparisons()) == 10
+                     ("readings", 4), ("measure", 3), ("fill_gaps", 3), ("read_invoice", 4),
+                     ("read_tool_log", 3)}
+    assert len(store.comparisons()) == 14
 
 
 def test_the_headline_comparison_moves_an_answer_at_split(built, examined):

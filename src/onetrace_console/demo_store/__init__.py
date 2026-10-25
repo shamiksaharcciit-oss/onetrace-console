@@ -26,10 +26,16 @@ The pipelines:
 - P5, `pump_maintenance.py`: a pump's vibration readings to a maintenance work order;
 - P6, `fill_inspection.py`: a camera frame of a bottle to a fill level and a reject command;
 - P7, `cold_chain.py`: a temperature logger's readings to releasing or quarantining a shipment; it
-  keeps the logger's file, invented example data, beside its digest.
+  keeps the logger's file, invented example data, beside its digest;
+- P8, `invoice_match.py`: a supplier's invoice matched against its purchase order and goods receipt,
+  to paying or holding it; it keeps the invoice's file, invented example data, beside its digest.
+  Its last run is over the approver's limit, and the approval stage declines it;
+- P9, `torque_check.py`: a tightening tool's wheel-bolt torques to passing the wheel or sending it to
+  rework.
 
-P5, P6 and P7 are physical-world pipelines over invented data the builder makes: the demo records
-and compares them, and controls no equipment.
+P5, P6, P7 and P9 are physical-world pipelines over invented data the builder makes: the demo
+records and compares them, and controls no equipment. P8 pays nothing: the demo records and compares
+it, and contacts no payment system.
 
 A run folder or trust file whose bytes the build record doesn't hold -- edited, added or removed
 after the build -- is refused wherever the built folder is used again (`check_build_record`).
@@ -82,8 +88,8 @@ def _p3(n: int, ticket: str, rules: str, **kw) -> RunSpec:
 
 
 def runs() -> list[RunSpec]:
-    """Every run of the demo, in delivery order: P1's first, then P2's, and so on to P7's, so the
-    console's pipeline labels (first arrival) read P1 to P7."""
+    """Every run of the demo, in delivery order: P1's first, then P2's, and so on to P9's, so the
+    console's pipeline labels (first arrival) read P1 to P9."""
     out = [_p1(n, "baseline", str(n)) for n in range(1, 7)]
     out += [_p1(n + 6, "candidate", str(n)) for n in range(1, 7)]
     out += [
@@ -116,6 +122,14 @@ def runs() -> list[RunSpec]:
         RunSpec("p7-39-cold-chain-baseline", "p7", {"changed": False}),
         RunSpec("p7-40-cold-chain-one-reading-changed", "p7", {"changed": True}),
         RunSpec("p7-41-cold-chain-decision-tampered", "p7", {"changed": False}, after="tamper-decision"),
+        RunSpec("p8-42-invoice-tolerance-2pct", "p8", {"invoice": "base", "tolerance_bp": "200"}),
+        RunSpec("p8-43-invoice-tolerance-5pct", "p8", {"invoice": "base", "tolerance_bp": "500"}),
+        RunSpec("p8-44-invoice-quantity-changed", "p8", {"invoice": "quantity-400", "tolerance_bp": "500"}),
+        #: Declined at approve_payment by its own rule: over the approver's limit.
+        RunSpec("p8-45-invoice-over-limit-declined", "p8", {"invoice": "large", "tolerance_bp": "500"}),
+        RunSpec("p9-46-torque-baseline", "p9", {"firmware": "4.2", "low_bolt": False}),
+        RunSpec("p9-47-torque-tool-firmware-changed", "p9", {"firmware": "4.3", "low_bolt": False}),
+        RunSpec("p9-48-torque-one-bolt-low", "p9", {"firmware": "4.2", "low_bolt": True}),
     ]
     return out
 
@@ -125,14 +139,14 @@ def runs() -> list[RunSpec]:
 #: invents for them (`example_input_digests`), may be shown on a public console, and only for a
 #: demo whose build record vouches for every byte (`allowing_examples`). It lives here, in the
 #: builder's spec, and in no configuration: no setting can extend it to another store.
-EXAMPLE_DATA = ("p4", "p7")
+EXAMPLE_DATA = ("p4", "p7", "p8")
 
 
 #: Each pipeline's name, as its own module's first line gives it. A public demo shows it beside the
 #: console's label; a local console shows the label only.
 PIPELINE_NAMES = {"p1": "refund-policy Q&A", "p2": "reference demo pipeline", "p3": "ticket triage",
                   "p4": "support reply", "p5": "pump maintenance", "p6": "fill-level inspection",
-                  "p7": "cold-chain release"}
+                  "p7": "cold-chain release", "p8": "invoice match", "p9": "wheel-bolt torque check"}
 
 
 def name_of(run_ids) -> str | None:
@@ -146,8 +160,8 @@ def name_of(run_ids) -> str | None:
 
 
 def _module(pipeline: str):
-    from onetrace_console.demo_store import cold_chain, support_reply
-    return {"p4": support_reply, "p7": cold_chain}[pipeline]
+    from onetrace_console.demo_store import cold_chain, invoice_match, support_reply
+    return {"p4": support_reply, "p7": cold_chain, "p8": invoice_match}[pipeline]
 
 
 def example_input_digests() -> frozenset:
@@ -213,6 +227,14 @@ COMPARISONS = [
     ("p6-36-fill-baseline", "p6-38-fill-below-reject-line"),
     #: One logger reading differs, past the range: the decision changes.
     ("p7-39-cold-chain-baseline", "p7-40-cold-chain-one-reading-changed"),
+    #: The price tolerance changed, 2% to 5%: match differs, and the invoice held is paid after it.
+    ("p8-42-invoice-tolerance-2pct", "p8-43-invoice-tolerance-5pct"),
+    #: One invoice line's quantity differs, 40 to 400: the invoice is held.
+    ("p8-43-invoice-tolerance-5pct", "p8-44-invoice-quantity-changed"),
+    #: The tool's firmware version changed and its readings did not.
+    ("p9-46-torque-baseline", "p9-47-torque-tool-firmware-changed"),
+    #: One bolt reads below the window: the wheel goes to rework.
+    ("p9-46-torque-baseline", "p9-48-torque-one-bolt-low"),
 ]
 
 
@@ -241,6 +263,12 @@ def _record(spec: RunSpec, run_dir: Path) -> None:
     elif spec.pipeline == "p7":
         from onetrace_console.demo_store import cold_chain
         cold_chain.main(run_dir, run_id, **spec.args)
+    elif spec.pipeline == "p8":
+        from onetrace_console.demo_store import invoice_match
+        invoice_match.main(run_dir, run_id, **spec.args)
+    elif spec.pipeline == "p9":
+        from onetrace_console.demo_store import torque_check
+        torque_check.main(run_dir, run_id, **spec.args)
     else:
         raise ValueError(f"no pipeline {spec.pipeline!r}")
 
@@ -315,6 +343,25 @@ def build(folder: Path) -> list[RunSpec]:
     (folder / TRUST_NAME).write_bytes(keys.trust_file_bytes())
     write_build_record(folder, (RUNS_DIRNAME, TRUST_NAME))
     return specs
+
+
+def build_from(folder: Path, earlier: Path) -> None:
+    """An earlier build's runs and trust file into `folder`, byte for byte, with a build record over
+    them, as `build` writes one: only where the earlier build's record vouches for every byte. A
+    builder explains one build's runs; a later build from them keeps those explanations."""
+    folder, earlier = Path(folder), Path(earlier)
+    if folder.exists() and (not folder.is_dir() or any(folder.iterdir())):
+        raise FileExistsError(f"{folder} is not a new, empty folder")
+    problems = check_build_record(earlier)
+    if problems:
+        raise ValueError(f"{earlier} is not the demo as its builder made it: {'; '.join(problems[:5])}"
+                         f"{' and more' if len(problems) > 5 else ''}")
+    for p in (earlier / RUNS_DIRNAME).rglob("*"):
+        if p.is_symlink():
+            raise ValueError(f"{earlier} holds a link, {p.relative_to(earlier)}; a build copies files only")
+    shutil.copytree(earlier / RUNS_DIRNAME, folder / RUNS_DIRNAME)
+    shutil.copyfile(earlier / TRUST_NAME, folder / TRUST_NAME)
+    write_build_record(folder, (RUNS_DIRNAME, TRUST_NAME))
 
 
 def _digest(path: Path) -> str:

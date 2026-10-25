@@ -682,6 +682,7 @@ def test_the_command_and_a_check_get_an_empty_pipe_for_stdin(pair, tmp_path, mon
 
 def test_sabotage_nul_for_stdin_is_named(pair, tmp_path, monkeypatch, examined):
     mutated(monkeypatch, "_run", 'input=b""', "stdin=subprocess.DEVNULL")
+    mutated(monkeypatch, "_press", "stdin=subprocess.PIPE", "stdin=subprocess.DEVNULL")
     mutated(monkeypatch, "run_check", 'input=b""', "stdin=subprocess.DEVNULL")
     examined(3, "runs with NUL for stdin")
     assert [p.split(":")[0] for p in stdin_problems(*pair, tmp_path, monkeypatch)] == ["explain", "packet", "check"]

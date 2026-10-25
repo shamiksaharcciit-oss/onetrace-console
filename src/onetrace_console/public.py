@@ -76,10 +76,12 @@ def content_security_policy(*, local: bool = False) -> str:
 
     `local`: the console on this machine, which also lets the watched folder's notice ask the
     console itself what it has taken in (`connect-src 'self'`). Nothing else differs."""
+    from onetrace_console.compare_script import COMPARE_SCRIPT
     from onetrace_console.explain_script import EXPLAIN_SCRIPT
-    #: The explanation panel's buttons are a local console's only: a public one has no button and
-    #: refuses every POST, so its policy does not name their script.
-    hashes = " ".join(_script_hash(s) for s in inline_scripts() + ((EXPLAIN_SCRIPT,) if local else ()))
+    #: The explanation panel's and the Compare buttons are a local console's only: a public one has
+    #: no button and refuses every POST, so its policy does not name their scripts.
+    hashes = " ".join(_script_hash(s) for s in inline_scripts()
+                      + ((EXPLAIN_SCRIPT, COMPARE_SCRIPT) if local else ()))
     return ("default-src 'none'; style-src 'self' 'unsafe-inline'; font-src 'self'; "
             f"img-src 'self' data:; script-src {hashes}; "
             + ("connect-src 'self'; " if local else "")

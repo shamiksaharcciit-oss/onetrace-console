@@ -285,9 +285,10 @@ its own CSRF token, for `/compare`) for everything else. See "Signing in."
 curl -H "Authorization: Bearer <token>" --data-binary @run.tar http://127.0.0.1:8080/v1/runs
 
 # Compare two ingested runs, by the run_key each ingest returned -- from a browser,
-# signed in, with its own CSRF token. No page carries a compare form: under
-# Comparisons, "Choose two runs" lists each pipeline's runs, and run A's page shows
-# this request, both keys filled in, for each pair not compared yet.
+# signed in, with its own CSRF token. Under Comparisons, "Choose two runs" lists each
+# pipeline's runs; on run A's page each pair not compared yet has a Compare button, which
+# sends this request with the session's CSRF token and opens the comparison, and beside it
+# the request itself, both keys filled in, to send by hand as below. No form posts it.
 curl -X POST -b "onetrace_session=<cookie>; onetrace_csrf=<cookie>" \
   -H "X-CSRF-Token: <same value as the onetrace_csrf cookie>" \
   "http://127.0.0.1:8080/compare?a=<run_key>&b=<run_key>"

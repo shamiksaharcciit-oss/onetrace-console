@@ -688,10 +688,16 @@ def test_the_new_pages_pass_the_five_prohibitions(new_pages, examined):
         assert not [w for w in FORBIDDEN_WORDS if w in body], f"{name}: score or grade"
         assert not [w for w in INFERENCE_WORDS if w in body], f"{name}: inference"
         assert not re.findall(r"\d+(?:\.\d+)?\s*%", _body(page)), f"{name}: percentage"
-        #: The one mechanism a page may carry: the explanation panel's buttons, which a person
-        #: presses to ask for a suggestion (`explain`), each posting to one of its three routes.
+        #: The only two mechanisms a page carries: the explanation panel's buttons, which a person
+        #: presses to ask for a suggestion (`explain`), each posting to one of its three routes; and
+        #: "Choose run B"'s Compare buttons, each posting one pair to /compare and nothing else.
         panel = re.search(r'<section data-section="explain".*?</section>', body, re.S)
         rest = body.replace(panel.group(0), "") if panel else body
+        compare = re.findall(r'<button type="button" hidden data-compare-post="/compare\?a=[0-9a-f]{64}&amp;b=[0-9a-f]{64}">'
+                             r'compare</button>', rest)
+        assert not compare or name.startswith("choose-"), f"{name} carries a compare button"
+        for button in compare:
+            rest = rest.replace(button, "")
         for mechanism in ("<button", "<form", "<input", "onclick=", "onsubmit="):
             assert mechanism not in rest, f"{name} carries {mechanism!r}"
         if panel:

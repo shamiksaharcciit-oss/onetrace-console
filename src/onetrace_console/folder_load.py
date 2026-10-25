@@ -247,31 +247,56 @@ def demo_folder(cwd: Path) -> Path:
     return target
 
 
-def build_public(folder: Path) -> tuple[list[tuple[str, str | None]], str]:
+def build_public(folder: Path, *, runs_from: Path | None = None,
+                 explanations: Path | None = None) -> tuple[list[tuple[str, str | None]], str]:
     """Build the public demo into `folder`, which must not exist yet or be empty: the demo store's
     runs and trust file, the runs delivered, checked and compared, every page drawn as a public
     console serves it, and a build record over all of it, which a public console checks before it
-    starts. Returns what to print once it is served, and the page `--open` opens."""
+    starts. Returns what to print once it is served, and the page `--open` opens.
+
+    `runs_from`: an earlier build's runs and trust file, where its build record vouches for every
+    byte, in place of runs recorded now. `explanations`: the folder onetrace-explain wrote
+    `explain/` under; the explanations of comparisons this build holds are kept, read-only
+    (`explain.keep`), and every other file is refused with its reason, printed."""
     from onetrace_console import demo_store
     from onetrace_console.config import Config
     from onetrace_console.serve import _render_startup_pages
     if folder.exists() and (not folder.is_dir() or any(folder.iterdir())):
         raise LoadRefused(f"{folder} is not a new, empty folder; the public demo is built into one.")
-    demo_store.build(folder)
+    if runs_from is not None:
+        try:
+            demo_store.build_from(folder, runs_from)
+        except (ValueError, FileExistsError) as e:
+            raise LoadRefused(str(e)) from None
+    else:
+        demo_store.build(folder)
     store_root = folder / "store"
     config = Config(public=True, store_root=str(store_root),
                     trust_file=str(folder / demo_store.TRUST_NAME),
                     sign_in={**Config().sign_in, "enabled": False})
     store = Store(store_root / "store")
     #: The demo's own example inputs, its build record vouching for them, are drawn as shown.
-    with demo_store.allowing_examples(folder):
+    with demo_store.allowing_examples(folder), store.reading():
         loaded = demo_store.deliver(folder, store, config)
         #: Each pipeline's two drift reports, kept now: a public console never runs the command.
         from onetrace_console.drift import ensure_all
         ensure_all(store)
+        said = []
+        if explanations is not None:
+            #: The explanations the builder names, kept before any page is drawn.
+            from onetrace_console.explain import keep
+            try:
+                kept = keep(explanations, store)
+            except ValueError as e:
+                raise LoadRefused(str(e)) from None
+            n = len(kept["kept"])
+            said.append((f"kept {n} explanation{'' if n == 1 else 's'} from {explanations}; "
+                         f"refused {len(kept['refused'])}", None))
+            said += [(shown(f"  refused {r['file']}: {r['reason']}"), None) for r in kept["refused"]]
         _render_startup_pages(store, store_root, config)
     demo_store.write_build_record(folder, (demo_store.RUNS_DIRNAME, demo_store.TRUST_NAME, "store"))
-    return announce(folder / demo_store.RUNS_DIRNAME, loaded, store)
+    lines, opened = announce(folder / demo_store.RUNS_DIRNAME, loaded, store)
+    return said + lines, opened
 
 
 def main(argv: list[str], *, demo: bool) -> int:
@@ -308,6 +333,13 @@ def main(argv: list[str], *, demo: bool) -> int:
                                  "every page")
         parser.add_argument("--build", type=Path, metavar="FOLDER", default=None,
                             help="with --public: build the public demo into a new folder and exit")
+        parser.add_argument("--runs-from", type=Path, metavar="FOLDER", default=None,
+                            help="with --public --build: take an earlier build's runs and trust "
+                                 "file, where its build record vouches for every byte")
+        parser.add_argument("--explanations", type=Path, metavar="FOLDER", default=None,
+                            help="with --public --build: keep the explanations onetrace-explain "
+                                 "wrote under FOLDER/explain/ of comparisons this build holds, "
+                                 "read-only")
     parser.add_argument("--open", action="store_true", help="open the page in your browser")
     parser.add_argument("--port", type=int, default=None,
                         help="the port to listen on (default: 8080, or the configuration file's)")
@@ -316,6 +348,8 @@ def main(argv: list[str], *, demo: bool) -> int:
         parser.error("--port takes a TCP port, 1 to 65535")
     if demo and args.build is not None and not args.public:
         parser.error("--build builds the public demo: give --public with it")
+    if demo and (args.runs_from is not None or args.explanations is not None) and args.build is None:
+        parser.error("--runs-from and --explanations go into a build: give --public --build with them")
     if demo and args.public:
         return _public_demo(args)
 
@@ -499,10 +533,13 @@ def _public_demo(args) -> int:
                   "takes no --open or --port.", file=sys.stderr)
             return 2
         try:
-            build_public(args.build)
+            lines, _ = build_public(args.build, runs_from=args.runs_from, explanations=args.explanations)
         except LoadRefused as e:
             print(f"refusing to build the public demo: {e}", file=sys.stderr)
             return 1
+        for text, _ in lines:
+            if text.startswith(("kept ", "  refused ")):
+                print(text)
         print(f"built the public demo in {args.build}: its store is {args.build / 'store'}, its "
               f"trust file {args.build / 'trust.json'}")
         return 0

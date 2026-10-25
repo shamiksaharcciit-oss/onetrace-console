@@ -1,10 +1,14 @@
 [build-system]
 requires = ["setuptools>=77"]     # a licence given as an SPDX expression (PEP 639)
-build-backend = "setuptools.build_meta"
+# setuptools' backend, with the sdist written again with SOURCE_DATE_EPOCH's time on every member
+# and in its gzip header, so two builds of one commit are the same bytes. MANIFEST.in carries it
+# into the sdist, so the wheel builds from the sdist by the same backend.
+build-backend = "reproducible_sdist"
+backend-path = ["tools/build_backend"]
 
 [project]
 name = "onetrace-console"
-version = "0.3.0"
+version = "0.3.1"
 description = "The onetrace console: every run in one place, read from the reports the verifier and the verbs produced."
 readme = "PYPI_DESCRIPTION.md"     # the README with absolute image links: tools/pypi_description.py
 requires-python = ">=3.12"

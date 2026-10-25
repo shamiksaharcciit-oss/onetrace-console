@@ -1,13 +1,13 @@
-"""The demo's three physical-world pipelines: each run reads as its builder made it.
+"""The demo's four physical-world pipelines: each run reads as its builder made it.
 
-P5 (pump maintenance), P6 (fill-level inspection) and P7 (cold-chain release) are recorded by the
-demo's builder over invented example data, and read by the console's own checks and comparisons --
+P5 (pump maintenance), P6 (fill-level inspection), P7 (cold-chain release) and P9 (wheel-bolt
+torque check) are recorded by the demo's builder over invented example data, and read by the console's own checks and comparisons --
 nothing about them is set by hand. Held here, on the public demo:
 
 1. each run's "Records agree" and whether it was declined, as the console reads it;
 2. each of their comparisons' verdicts, stage by stage, from the SDK's diff the console stored, and
    the Overview's "Vs baseline" for each candidate;
-3. the firmware run is the same as its baseline, with the version shown as a setting change; the
+3. each firmware run is the same as its baseline, with the version shown as a setting change; the
    cold-chain comparison shows the changed reading beside the changed decision, and its kept
    logger file is shown on the public demo (the demo's example-data exception);
 4. every step page of theirs says its data is invented example data.
@@ -35,7 +35,12 @@ READINGS = {
     "p7-39-cold-chain-baseline": ("Records agree", False),
     "p7-40-cold-chain-one-reading-changed": ("Records agree", False),
     "p7-41-cold-chain-decision-tampered": ("Contradicts its record", False),
+    "p9-46-torque-baseline": ("Records agree", False),
+    "p9-47-torque-tool-firmware-changed": ("Records agree", False),
+    "p9-48-torque-one-bolt-low": ("Records agree", False),
 }
+#: The physical-world pipelines, by the builder's names.
+PHYSICAL = ("p5", "p6", "p7", "p9")
 #: Each comparison: the diff's envelope, and each stage's verdict in the SDK's words, in order.
 COMPARED = {
     ("p5-32-pump-baseline", "p5-33-pump-offset-changed"): ("diverged", [
@@ -50,6 +55,10 @@ COMPARED = {
         ("measure", "FIRST DIFFERENCE"), ("classify", "downstream"), ("reject_command", "downstream")]),
     ("p7-39-cold-chain-baseline", "p7-40-cold-chain-one-reading-changed"): ("diverged", [
         ("fill_gaps", "FIRST DIFFERENCE"), ("excursion_check", "downstream"), ("release", "downstream")]),
+    ("p9-46-torque-baseline", "p9-47-torque-tool-firmware-changed"): ("identical", [
+        ("read_tool_log", "same"), ("torque_check", "same"), ("station_decision", "same")]),
+    ("p9-46-torque-baseline", "p9-48-torque-one-bolt-low"): ("diverged", [
+        ("read_tool_log", "FIRST DIFFERENCE"), ("torque_check", "downstream"), ("station_decision", "downstream")]),
 }
 VS_BASELINE = {
     "p5-33-pump-offset-changed": ("changed", "First difference · stage 2 · calibrate"),
@@ -57,7 +66,12 @@ VS_BASELINE = {
     "p6-37-fill-exposure-changed": ("changed", "First difference · stage 1 · measure"),
     "p6-38-fill-below-reject-line": ("changed", "First difference · stage 1 · measure"),
     "p7-40-cold-chain-one-reading-changed": ("changed", "First difference · stage 1 · fill_gaps"),
+    "p9-47-torque-tool-firmware-changed": ("same", "Same"),
+    "p9-48-torque-one-bolt-low": ("changed", "First difference · stage 1 · read_tool_log"),
 }
+#: Each firmware run: its pair, and the setting the page shows changed (stage, setting, before, after).
+FIRMWARE = {("p5-32-pump-baseline", "p5-34-pump-firmware-changed"): r"readings sensor_firmware 3\.1 3\.2",
+            ("p9-46-torque-baseline", "p9-47-torque-tool-firmware-changed"): r"read_tool_log tool_firmware 4\.2 4\.3"}
 
 
 def _text(page: str) -> str:
@@ -80,11 +94,11 @@ def _comparison(store, runs, a, b):
     return found
 
 
-def test_the_builder_makes_the_three_pipelines_and_their_runs(demo, examined):
+def test_the_builder_makes_the_four_pipelines_and_their_runs(demo, examined):
     from onetrace_console.demo_store import COMPARISONS, pipeline_names, runs
     examined(1, "the builder's spec")
-    assert pipeline_names()[-3:] == ["p5", "p6", "p7"]
-    assert {s.folder for s in runs() if s.pipeline in ("p5", "p6", "p7")} == set(READINGS)
+    assert [n for n in pipeline_names() if n in PHYSICAL] == list(PHYSICAL)
+    assert {s.folder for s in runs() if s.pipeline in PHYSICAL} == set(READINGS)
     assert set(COMPARISONS) >= set(COMPARED)
 
 
@@ -109,14 +123,20 @@ def test_each_comparison_finds_what_its_builder_changed(demo, pair, examined):
     assert vs_baseline(runs[pair[1]], store) == VS_BASELINE[pair[1]]
 
 
-def test_the_firmware_change_is_same_with_the_version_as_a_changed_setting(demo, examined):
+def firmware_problems(page: str, setting: str) -> list[str]:
+    """A firmware comparison's page: the two runs do not differ, and the version is a changed setting."""
+    out = [] if "The two runs do not differ." in page else ["the page does not say the runs do not differ"]
+    section = page[page.index("Settings that changed"):] if "Settings that changed" in page else ""
+    return out + ([] if re.search(setting, section) else [f"no {setting!r} in Settings that changed"])
+
+
+@pytest.mark.parametrize("pair", sorted(FIRMWARE), ids=lambda p: p[1])
+def test_the_firmware_change_is_same_with_the_version_as_a_changed_setting(demo, pair, examined):
     folder, store, runs = demo
-    c = _comparison(store, runs, "p5-32-pump-baseline", "p5-34-pump-firmware-changed")
+    c = _comparison(store, runs, *pair)
     page = _text((folder / "store" / "pages" / "diff" / f"{c.key}.html").read_text(encoding="utf-8"))
     examined(1, "comparison page")
-    assert "The two runs do not differ." in page
-    section = page[page.index("Settings that changed"):]
-    assert re.search(r"readings sensor_firmware 3\.1 3\.2", section), section[:300]
+    assert firmware_problems(page, FIRMWARE[pair]) == []
 
 
 def test_the_cold_chain_comparison_shows_the_changed_reading_beside_the_decision(demo, examined):

@@ -43,6 +43,9 @@ ONE_RUN = "One run: nothing to compare it with."
 SLOWER_HEAD = "Slower than the run it was compared with"
 TIMING_NOTE = "Timing is shown apart from the verdicts and never changes one."
 NULL_CELL = "-"
+#: The space each cell of the runs table but a row's last keeps after its text, so the longest run
+#: name never meets the next column.
+GAP = ' style="padding-right:18px"'
 
 
 def page_href(label: str, against: str = "first") -> str:
@@ -203,9 +206,9 @@ def render_drift(pipeline, store: Store, *, generated_at: str, against: str = "f
             c = by_cand.get(r["index"])
             name = (f'<a href="runs/{_tag(run.key)}/case.html" class="mono">{escape(run.run_id)}</a>'
                     if run is not None else escape(str(r.get("run_id") or "")))
-            rows.append(f'<tr data-run="{_tag(r["index"])}"><td>{escape(r["index"])}</td><td>{name}</td>'
+            rows.append(f'<tr data-run="{_tag(r["index"])}"><td{GAP}>{escape(r["index"])}</td><td{GAP}>{name}</td>'
                         f'<td data-line>{pair_link(c, _line(c)) if c else escape(_line(c))}</td></tr>')
-        body.append(scroll_region('<table data-section="drift-runs"><thead><tr><th>#</th><th>Run</th>'
+        body.append(scroll_region(f'<table data-section="drift-runs"><thead><tr><th{GAP}>#</th><th{GAP}>Run</th>'
                                   "<th>Against the run it was compared with</th></tr></thead>"
                                   f"<tbody>{''.join(rows)}</tbody></table>",
                                   "Each run's verdict", "drift-runs"))

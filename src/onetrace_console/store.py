@@ -35,6 +35,8 @@ import json
 import os
 import re
 import tempfile
+import threading
+from contextlib import contextmanager
 from dataclasses import asdict, dataclass, field, replace
 from pathlib import Path
 
@@ -331,6 +333,8 @@ class Store:
     #: Each run and rule whose incidents the last `incidents.derive` could not derive, named
     #: Set there, read by the pages that count incidents.
     underived: tuple[str, ...] = field(default=(), init=False)
+    #: This thread's reading scope (`reading`): its depth, and the records read in it.
+    _local: threading.local = field(default_factory=threading.local, init=False, repr=False, compare=False)
 
     def __post_init__(self) -> None:
         self.root = Path(self.root)
@@ -338,6 +342,39 @@ class Store:
         self._runs = self.root / "runs"
         for d in (self._objects, self._runs):
             d.mkdir(parents=True, exist_ok=True)
+
+    # ------------------------------------------------------------------ reading
+
+    @contextmanager
+    def reading(self):
+        """One request's or one build's reading: within it, on this thread, `runs()` and
+        `comparisons()` read the records once and give the same records again, so a page that asks
+        for every run reads none of them a second time. Any write through this store forgets what
+        was read, so the next read is fresh; outside a reading, every call reads the files, as
+        before. Nested readings are one reading. Another thread's reading is its own."""
+        local = self._local
+        if getattr(local, "depth", 0):
+            local.depth += 1
+            try:
+                yield self
+            finally:
+                local.depth -= 1
+            return
+        local.depth, local.read = 1, {}
+        try:
+            yield self
+        finally:
+            local.depth, local.read = 0, None
+
+    def _read(self) -> dict | None:
+        """This thread's records read in its reading; None outside one."""
+        return getattr(self._local, "read", None)
+
+    def _forget(self) -> None:
+        """A write: what this thread's reading has read is read again."""
+        read = self._read()
+        if read is not None:
+            read.clear()
 
     # ------------------------------------------------------------------ objects
 
@@ -360,6 +397,7 @@ class Store:
             return key
         path.parent.mkdir(parents=True, exist_ok=True)
         _atomic_write(path, data)
+        self._forget()
         return key
 
     def get(self, key: str) -> bytes:
@@ -398,6 +436,7 @@ class Store:
             raise StoreError(f"not written: the record of run {run.key} names "
                              f"{', '.join(gone)}, which this store does not hold")
         _atomic_write(self._run_path(run.key), run.to_json().encode("utf-8"))
+        self._forget()
 
     def _as_held(self, run: StoredRun) -> StoredRun:
         """A run whose record names an object this store does not hold reads as could not check,
@@ -413,10 +452,23 @@ class Store:
 
     def get_run(self, key: str) -> StoredRun | None:
         path = self._run_path(key)
+        read = self._read()
+        if read is not None:
+            #: In a reading: the run as it read it, whether with every run or alone. A key it has
+            #: not read -- none such, or a record it could not read -- is looked for on disk, as
+            #: before, and a record read alone is kept for the rest of the reading.
+            if "runs" in read and "by_key" not in read:
+                read["by_key"] = {r.key: r for r in read["runs"][0]}
+            for held in (read.get("by_key"), read.get("one")):
+                if held is not None and key in held:
+                    return held[key]
         if not path.exists():
             return None
         try:
-            return self._as_held(StoredRun.from_json(path.read_bytes().decode("utf-8")))
+            run = self._as_held(StoredRun.from_json(path.read_bytes().decode("utf-8")))
+            if read is not None:
+                read.setdefault("one", {})[key] = run
+            return run
         except _UNREADABLE as e:
             raise StoreError(f"the stored record {path.name} cannot be read: "
                              f"{_why(e)}") from None
@@ -431,15 +483,27 @@ class Store:
         out and named in `unreadable_runs`, so Home can say so, instead of stopping every page,
         ingest and start (the third confirmation review, NEW-6; round 4, S3). It is never
         repaired."""
+        read = self._read()
+        if read is not None and "runs" in read:
+            runs, self.unreadable_runs, self.unreadable_run_keys = read["runs"]
+            return runs
         out, unreadable, keys = [], [], []
+        alone = read.get("one", {}) if read is not None else {}
         for path in sorted(self._runs.glob("*.json")):
+            if path.stem in alone:
+                #: Read alone earlier in this reading: that record, not read again.
+                out.append(alone[path.stem])
+                continue
             try:
                 out.append(self._as_held(StoredRun.from_json(path.read_bytes().decode("utf-8"))))
             except _UNREADABLE as e:
                 unreadable.append(f"{path.name}: {_why(e)}")
                 keys.append(path.stem)
         self.unreadable_runs, self.unreadable_run_keys = tuple(unreadable), tuple(keys)
-        return tuple(arrival_order(out, newest_first=True))
+        runs = tuple(arrival_order(out, newest_first=True))
+        if read is not None:
+            read["runs"] = (runs, self.unreadable_runs, self.unreadable_run_keys)
+        return runs
 
     def runs_with_id(self, run_id: str) -> tuple[StoredRun, ...]:
         return tuple(r for r in self.runs() if r.run_id == run_id)
@@ -463,6 +527,7 @@ class Store:
         """
         _atomic_write(self._comparison_path(comparison.key),
                       comparison.to_json().encode("utf-8"))
+        self._forget()
 
     def get_comparison(self, key: str):
         from onetrace_console.compare import StoredComparison
@@ -478,6 +543,10 @@ class Store:
 
     def comparisons(self) -> tuple:
         from onetrace_console.compare import StoredComparison
+        read = self._read()
+        if read is not None and "comparisons" in read:
+            comparisons, self.unreadable_comparisons, self.unreadable_comparison_keys = read["comparisons"]
+            return comparisons
         d = self.root / "comparisons"
         if not d.is_dir():
             return ()
@@ -492,6 +561,8 @@ class Store:
                 keys.append(p.stem)
         self.unreadable_comparisons = tuple(unreadable)
         self.unreadable_comparison_keys = tuple(keys)
+        if read is not None:
+            read["comparisons"] = (tuple(out), self.unreadable_comparisons, self.unreadable_comparison_keys)
         return tuple(out)
 
     # ------------------------------------------------------------ drift reports

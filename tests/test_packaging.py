@@ -27,11 +27,11 @@ META = tomllib.loads((REPO / "pyproject.toml").read_text(encoding="utf-8"))["pro
 def test_the_version_is_0_2_0_everywhere(examined):
     import onetrace_console
     examined(3, "places the version is stated")
-    assert META["version"] == "0.3.0"
-    assert onetrace_console.__version__ == "0.3.0"
+    assert META["version"] == "0.3.1"
+    assert onetrace_console.__version__ == "0.3.1"
     out = subprocess.run([sys.executable, "-m", "onetrace_console", "--version"], capture_output=True,
                          text=True, env={**os.environ, "PYTHONPATH": str(REPO / "src")})
-    assert out.stdout.strip() == "0.3.0", out
+    assert out.stdout.strip() == "0.3.1", out
 
 
 def test_the_metadata_names_the_sdk_it_was_tested_with(examined):
@@ -116,7 +116,10 @@ NETWORK_WORDS = ("The console makes no network calls. The Explain button runs on
 
 
 def _sentences(text: str) -> list[str]:
-    return re.split(r"(?<=[.!?])\s+(?=[A-Z`])", " ".join(text.split()))
+    """The sentences of `text`: split at its paragraphs first, so a paragraph's end ends its
+    sentence, then within each at a stop before a capital or a backquote."""
+    return [s for para in re.split(r"\n\s*\n", text) if para.strip()
+            for s in re.split(r"(?<=[.!?])\s+(?=[A-Z`])", " ".join(para.split()))]
 
 
 def explain_sentence_problems(name: str, text: str) -> list[str]:
@@ -149,6 +152,18 @@ def test_sabotage_a_readme_without_the_format_link_is_named(examined):
     examined(1, "planted README")
     assert EXPLAIN_FORMAT in text
     assert explain_sentence_problems("README.md", text.replace(EXPLAIN_FORMAT, "https://example.invalid/")) == [
+        f"README.md: the install sentence lacks {EXPLAIN_FORMAT!r}"]
+
+
+def test_sabotage_the_link_moved_out_of_the_install_sentence_is_named(examined):
+    """The link put in a paragraph of its own, after the sentence: a paragraph's end ends its
+    sentence, whatever character the next paragraph begins with."""
+    text = (REPO / "README.md").read_text(encoding="utf-8")
+    old = ", and its format is set out at [explain-format.md](https://oneproof.dev/onetrace/explain-format.md)."
+    examined(1, "planted README")
+    assert old in text
+    moved = text.replace(old, ".\n\n[explain-format.md](https://oneproof.dev/onetrace/explain-format.md) sets out its format.")
+    assert explain_sentence_problems("README.md", moved) == [
         f"README.md: the install sentence lacks {EXPLAIN_FORMAT!r}"]
 
 
@@ -207,8 +222,8 @@ def test_a_plain_pip_install_compares_with_the_same_report_as_the_pinned_install
         subprocess.run([sys.executable, "-c", f"import sys; from setuptools import build_meta as b; "
                         f"print(b.{build}(sys.argv[1]))", str(dist)], cwd=tree, check=True,
                        capture_output=True, env=clean)
-    console_whl = next(dist.glob("onetrace_console-0.3.0-*.whl"))
-    _check_the_viewer_ships_without_its_tests(console_whl, next(dist.glob("onetrace_console-0.3.0.tar.gz")))
+    console_whl = next(dist.glob("onetrace_console-0.3.1-*.whl"))
+    _check_the_viewer_ships_without_its_tests(console_whl, next(dist.glob("onetrace_console-0.3.1.tar.gz")))
     #: The wheel carries the demo store's builder and trust file, so `onetrace-console demo` works
     #: installed: it builds the demo's runs where it is started (0.1.1).
     import zipfile
