@@ -63,6 +63,8 @@ _VIEWER_GET_PATTERNS = tuple(re.compile(p) for p in (
     r"^choose-p[0-9]+\.html$",
     #: A comparison's explanation press now running, as its panel's script reads it.
     r"^explain/state$",
+    #: The setup page, read-only (`explain_setup`).
+    r"^explain/setup$",
     r"^choose-p[0-9]+-[0-9a-f]{64}\.html$",
     r"^policy\.html$",
     r"^policy/[^/]+\.html$",

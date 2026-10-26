@@ -26,7 +26,7 @@ from pathlib import Path
 import pytest
 
 from tests.test_explain_kept import read_only_problems
-from tests.test_explain_panel import LABEL, _panel, _text
+from tests.test_explain_panel import _panel, _text
 
 REPO = Path(__file__).resolve().parent.parent
 KEPT = REPO / "deploy" / "fly" / "kept"
@@ -116,7 +116,8 @@ def _page(folder: Path, comparison) -> str:
 
 def kept_problems(folder, store, pairs) -> list[str]:
     """Where the build did not keep exactly the four, each on its comparison's page as the command
-    wrote it: its label, its model, each claim with its cites, no button."""
+    wrote it, in 0.3.2's layout: the heading once, the AI line with its model, one card per claim
+    with its badge, its text and a chip for each cite, no button."""
     from onetrace_console import explain
     out = []
     record = explain.kept_record(store) or {}
@@ -131,13 +132,24 @@ def kept_problems(folder, store, pairs) -> list[str]:
         panel = _panel(_page(folder, pairs[pair]))
         said = _text(panel)
         e = json.loads((KEPT / "explain" / f"{rid}.explanation.json").read_text(encoding="utf-8"))
-        if LABEL not in said or f"Model: {MODEL}" not in said or e["model"] != MODEL:
-            out.append(f"{rid}: its label or its model is not on its page")
+        if (said.count(explain.TITLE) != 1 or f"{explain.AI_LINE} · model {MODEL}" not in said
+                or e["model"] != MODEL):
+            out.append(f"{rid}: its heading, its AI line or its model is not on its page")
+        cards = re.findall(r'<div class="card claim" data-claim="([^"]*)">'
+                           r'<span class="badge" data-kind="[^"]*">([^<]*)</span>'
+                           r'<p data-claim-text>(.*?)</p><ul class="chips"[^>]*>(.*?)</ul></div>', panel, re.S)
+        if len(cards) != len(e["claims"]):
+            out.append(f"{rid}: {len(cards)} cards, {len(e['claims'])} claims made")
         for claim in e["claims"]:
-            if " ".join(claim["text"].split()) not in said:
+            mine = [c for c in cards if " ".join(_text(c[2]).split()) == " ".join(claim["text"].split())]
+            if not mine:
                 out.append(f"{rid}: a claim is not on its page: {claim['text'][:60]!r}")
-        if said.count("shown by") != len(e["claims"]):
-            out.append(f"{rid}: {said.count('shown by')} claims cited, {len(e['claims'])} made")
+                continue
+            kind, badge, _, chips = mine[0]
+            if (kind, badge) != (claim["kind"], explain.KIND_WORDS[claim["kind"]]):
+                out.append(f"{rid}: a claim's badge reads {badge!r}")
+            if re.findall(r'data-cite="([^"]*)"', chips) != claim["cites"]:
+                out.append(f"{rid}: a claim's chips are not its cites")
         out += [f"{rid}: {p}" for p in read_only_problems(panel)]
     return out
 
@@ -154,6 +166,155 @@ def test_sabotage_an_explanation_shown_on_another_page_is_named(built, examined)
     swapped = {**pairs, p1: pairs[p5], p5: pairs[p1]}
     examined(1, "planted pairing")
     assert kept_problems(folder, store, swapped) != []
+
+
+def kept_checks_problems(pages: dict) -> list[str]:
+    """Each kept explanation's checks on its page: each command once, in the order first asked, as
+    text under "This demo runs none of them.", with no button; and no timings, nor a placeholder
+    for them (the build kept none)."""
+    from onetrace_console import explain
+    out = []
+    for rid, panel in pages.items():
+        e = json.loads((KEPT / "explain" / f"{rid}.explanation.json").read_text(encoding="utf-8"))
+        e["_text"] = (KEPT / "explain" / f"{rid}.explanation.txt").read_text(encoding="utf-8")
+        want = list(dict.fromkeys(explain.check_lines(e)))
+        rows = re.findall(r'<li data-check="\d+">(.*?)</li>', panel, re.S)
+        got = [_text(r) for r in rows]
+        if got != want:
+            out.append(f"{rid}: checks {got}")
+        if any("<button" in r for r in rows) or explain.KEPT_CHECKS not in _text(panel):
+            out.append(f"{rid}: a check is offered, or the line saying none is run is missing")
+        if 'data-explain="steps"' in panel or re.search(r"\bunknown\b", _text(panel), re.I):
+            out.append(f"{rid}: timings, or a placeholder for them")
+    return out
+
+
+def _kept_pages(folder, pairs) -> dict[str, str]:
+    return {rid: _panel(_page(folder, pairs[pair])) for rid, pair in RECORDS.items()}
+
+
+def test_each_kept_explanation_s_commands_are_merged_and_shown_as_text_with_no_timings(built, examined):
+    folder, _, pairs = built
+    pages = _kept_pages(folder, pairs)
+    examined(len(pages), "kept explanations' checks")
+    assert sum(len(re.findall(r"^  onetrace ", (KEPT / "explain" / f"{r}.explanation.txt").read_text(encoding="utf-8"), re.M))
+               for r in RECORDS) > sum(len(re.findall(r'<li data-check="', p)) for p in pages.values())
+    assert kept_checks_problems(pages) == []
+
+
+def test_sabotage_a_kept_explanation_drawn_unmerged_is_named(built, monkeypatch, examined):
+    from onetrace_console import explain
+    from onetrace_console.render import render_diff
+    folder, store, pairs = built
+    monkeypatch.setattr(explain, "merged_checks", lambda e: list(enumerate(explain.check_lines(e))))
+    pages = {rid: _panel(render_diff(pairs[pair], store, generated_at="2026-01-01T00:00:00+00:00", public=True))
+             for rid, pair in RECORDS.items()}
+    examined(len(pages), "kept explanations drawn unmerged")
+    assert sorted(p.split(":")[0] for p in kept_checks_problems(pages)) == sorted(
+        ["2026-10-25T13-39-09.069959Z", "2026-10-25T13-42-26.188702Z"])
+
+
+def test_the_build_s_copy_of_each_kept_file_is_byte_identical_to_deploy_fly_kept(built, examined):
+    """What the build keeps is the folder's own bytes: each file of each record, and its explanation
+    and text, under its comparison's folder in the build's store."""
+    from onetrace_console import explain
+    folder, store, pairs = built
+    compared = 0
+    for rid, pair in RECORDS.items():
+        into = explain.folder_of(store, pairs[pair].key) / explain.REPORT / "explain"
+        for p in sorted((KEPT / "explain").rglob("*")):
+            rel = p.relative_to(KEPT / "explain")
+            if p.is_file() and rel.parts[0].startswith(rid):
+                assert (into / rel).read_bytes() == p.read_bytes(), rel
+                compared += 1
+    examined(compared, "kept files compared")
+    assert compared > len(RECORDS) * 3
+
+
+# ------------------------------------------------------------------ the explanation's place on the page
+
+#: Where each part begins on a comparison page: the short answer, the explanation, "What changed
+#: between the two runs", and the line that repeats diff (the last of diff's own sections).
+_PLACES = {"short": '<section data-section="short-answer"', "explain": '<section data-section="explain"',
+           "what": "<h2>What changed between the two runs</h2>", "repeat": 'data-section="diff-repeat"'}
+
+
+def order_problems(page: str, kept: bool) -> list[str]:
+    """With an explanation shown (kept, or on a local console): the short answer, then the
+    explanation, then "What changed"; with none kept on a public console, the short answer, then
+    "What changed", and the explanation's one line at the foot, after diff's sections."""
+    at = {k: page.find(v) for k, v in _PLACES.items()}
+    if any(v < 0 for v in at.values()):
+        return [f"a part is not on the page: {sorted(k for k, v in at.items() if v < 0)}"]
+    want = ["short", "explain", "what", "repeat"] if kept else ["short", "what", "repeat", "explain"]
+    got = sorted(at, key=at.get)
+    return [] if got == want else [f"order {got}"]
+
+
+def _foot(page: str) -> str:
+    """The page with its explanation section moved back to the foot, where 0.3.1 drew it: the end of
+    the page's own content."""
+    found = re.search(r'<section data-section="explain"[^>]*>.*?</section>', page, re.S).group(0)
+    rest = page.replace(found, "", 1)
+    at = rest.rindex("</main>")
+    return rest[:at] + found + rest[at:]
+
+
+@pytest.fixture(scope="module")
+def local_p1(tmp_path_factory):
+    """A local console's store of the kept runs, with the four explanations kept beside their
+    comparisons as a press keeps one: P1's page as the local console draws it."""
+    from onetrace_console import demo_store, explain
+    from onetrace_console.config import Config
+    from onetrace_console.store import Store
+    from tests.test_checks import _require_installed
+    _require_installed()
+    root = tmp_path_factory.mktemp("local-kept")
+    store = Store(root / "store")
+    with demo_store.allowing_examples(KEPT):
+        demo_store.deliver(KEPT, store, Config(store_root=str(root), trust_file=str(KEPT / demo_store.TRUST_NAME)))
+    record = explain.keep(KEPT, store)
+    runs = {r.key: r.run_id for r in store.runs()}
+    pairs = {(runs[c.run_a], runs[c.run_b]): c for c in store.comparisons()}
+    assert len(record["kept"]) == len(RECORDS)
+    return store, pairs[RECORDS["2026-10-25T13-45-05.744195Z"]]
+
+
+def _local_page(store, comparison) -> str:
+    from onetrace_console.render import render_diff
+    return render_diff(comparison, store, generated_at="2026-01-01T00:00:00+00:00", public=False)
+
+
+def test_the_explanation_is_directly_under_the_short_answer(built, local_p1, explain_installed, examined):
+    """P1 kept on the public build and P1 on a local console with its explanation: right under the
+    short answer. P8 43->44, none kept, public: its one line stays at the foot."""
+    folder, _, pairs = built
+    p1 = _page(folder, pairs[("p1-02-baseline-set2", "p1-08-candidate-set2")])
+    p8 = _page(folder, pairs[("p8-43-invoice-tolerance-5pct", "p8-44-invoice-quantity-changed")])
+    local = _local_page(*local_p1)
+    examined(3, "comparison pages: P1 kept, P8 43->44 none kept, the local P1")
+    assert "<article data-explanation=" in local and 'data-explain="buttons"' in local
+    assert {"public P1": order_problems(p1, True), "public P8 43->44": order_problems(p8, False),
+            "local P1": order_problems(local, True)} == {"public P1": [], "public P8 43->44": [], "local P1": []}
+
+
+def test_no_page_of_the_kept_build_nor_the_local_p1_shows_an_escape(built, local_p1, explain_installed, examined):
+    from tests.test_no_escape_shown import pages_problems
+    folder, _, _ = built
+    root = folder / "store" / "pages"
+    pages = {p.relative_to(root).as_posix(): p.read_text(encoding="utf-8") for p in sorted(root.rglob("*.html"))}
+    pages["local P1"] = _local_page(*local_p1)
+    examined(len(pages), "pages: the kept build's, and the local P1")
+    assert pages_problems(pages) == []
+
+
+def test_sabotage_the_explanation_back_at_the_foot_is_named(built, local_p1, explain_installed, examined):
+    folder, _, pairs = built
+    p1 = _page(folder, pairs[("p1-02-baseline-set2", "p1-08-candidate-set2")])
+    local = _local_page(*local_p1)
+    examined(2, "pages with the section moved back to the foot")
+    assert order_problems(_foot(p1), True) == ["order ['short', 'what', 'repeat', 'explain']"]
+    assert order_problems(_foot(local), True) == ["order ['short', 'what', 'repeat', 'explain']"]
 
 
 def test_every_other_comparisons_page_says_none_is_kept(built, examined):

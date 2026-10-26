@@ -251,6 +251,28 @@ def records_words(comparison, store: Store) -> str:
             + words[b][1].format(who="the candidate") + (f" ({why_b})" if why_b else "") + ".")
 
 
+def _short_answer(report, annotations: list[dict], comparison, store: Store) -> str:
+    """The page's short answer (`short_answer`), from diff's report and the two runs' receipts."""
+    from onetrace_console import short_answer
+    from onetrace_console.viewer.verbs import TwoRunDag
+    a, b = _receipts_in_order(comparison.run_a, store), _receipts_in_order(comparison.run_b, store)
+    ins_a, ins_b = (own_inputs(a), own_inputs(b)) if a and b else ({}, {})
+
+    def inputs_at(stage: str) -> list[str]:
+        x, y = ins_a.get(stage, {}), ins_b.get(stage, {})
+        return sorted(n for n in x.keys() | y.keys() if x.get(n) != y.get(n))
+    notes = {stage: inputs_at(stage) for stage in ins_a.keys() | ins_b.keys() if inputs_at(stage)}
+    if isinstance(report, TwoRunDag):
+        try:
+            edges = _union_edges(comparison, store)
+        except ValueError:
+            edges = None
+        answer = short_answer.for_graph(report, annotations, edges, inputs_at, notes)
+    else:
+        answer = short_answer.for_line(report, annotations, inputs_at, notes)
+    return short_answer.render(answer)
+
+
 def _first_difference_summary(report, annotations: list[dict], identical: int,
                               command: str = "", records: str = "", variance: str = "",
                               inputs: list[str] | None = None) -> str:
@@ -1334,6 +1356,8 @@ def render_diff(comparison: StoredComparison, store: Store, *, generated_at: str
         f"{run_named(store, comparison.run_b)}</p>"]
     #: First, when the two runs come from different pipelines.
     blocks.append(_different_pipelines(pair))
+    #: The short answer goes here, first: drawn once diff's report is read below (`short_answer`).
+    top, short, chip_facts = len(blocks), "", {}
     #: A graph-shaped pair: what its pages cannot draw is one closed line at the end, not
     #: sections that say so (`_not_shown`).
     dag, hidden = False, []
@@ -1404,6 +1428,12 @@ def render_diff(comparison: StoredComparison, store: Store, *, generated_at: str
                     blocks.append(report_refused(verb, reason, from_viewer=viewers))
                     refused = True
 
+        if report is not None and verb == DIFF and getattr(report, "ladder", None):
+            short = _short_answer(report, annotations, comparison, store)
+            #: What the explanation's chips say of a node and of the comparison, in this page's words.
+            chip_facts = {"envelope": report.envelope,
+                          "verdicts": {getattr(row, "node", None) or row.stage: _RESULT_WORDS.get(row.verdict, row.verdict)
+                                       for row in report.ladder}}
         if report is not None and verb == DIFF and getattr(report, "ladder", None):
             #: Each node's row, as the graph links it: what the explanation panel's cites open.
             node_steps.update({row.node: f"#step-{n}" for n, row in enumerate(report.ladder, start=1)}
@@ -1494,6 +1524,8 @@ def render_diff(comparison: StoredComparison, store: Store, *, generated_at: str
                                         if 'data-section="localize-unreadable"' not in b
                                         and "report-refused" not in b]))
 
+    if short:
+        blocks.insert(top, short)
     same = "" if unchecked else _same_change(comparison, store)
     if dag and 'data-state="graph"' in same:
         hidden.append(("same-change", []))
@@ -1506,10 +1538,15 @@ def render_diff(comparison: StoredComparison, store: Store, *, generated_at: str
     #: `sdk_build_digest` (the installed wheel's own sha256, since the SDK came from PyPI --
     #: a commit, before it), which is what a reader sees instead: a strictly finer signal
     #: for "which exact build produced this", truncated the same way the digest was.
-    #: The suggested explanation: its own frame, below the verdicts and apart from them
-    #: (`explain`). Nothing above reads it.
+    #: The suggested explanation: its own frame, apart from the verdicts (`explain`), directly under
+    #: the short answer; nothing on the page reads it. On a public console (or a file) with none kept,
+    #: its one line stays at the foot, and "What changed" follows the short answer.
     from onetrace_console.explain import panel as explain_panel
-    blocks.append(explain_panel(comparison, store, public=public, steps=node_steps))
+    panel = explain_panel(comparison, store, public=public, steps=node_steps, facts=chip_facts)
+    if "<article data-explanation=" not in panel and re.search(r'data-explain="(none-kept|not-set-up)"', panel):
+        blocks.append(panel)
+    else:
+        blocks.insert(top + bool(short), panel)
     build = comparison.sdk_build_digest or "unknown"
     blocks.append(
         f'<p data-section="sdk">Compared with onetrace {escape(comparison.sdk_version)}, '

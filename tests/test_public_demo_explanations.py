@@ -18,7 +18,7 @@ from html import unescape
 import pytest
 
 from tests.test_explain_kept import read_only_problems
-from tests.test_explain_panel import LABEL, _fake, _panel, _text
+from tests.test_explain_panel import _fake, _panel, _text
 
 
 @pytest.fixture(scope="module")
@@ -61,7 +61,8 @@ def test_a_build_from_an_earlier_build_s_runs_keeps_its_explanation_and_vouches_
     assert len(record["kept"]) == 1 and record["refused"] == []
     page = (folder / "store" / "pages" / "diff" / f"{record['kept'][0]['comparison']}.html").read_text(encoding="utf-8")
     panel = _panel(page)
-    assert f"<h3>{LABEL}</h3>" in unescape(panel) and read_only_problems(panel) == []
+    assert (f"<h2>{explain.TITLE}</h2>" in unescape(panel) and explain.AI_LINE in unescape(panel)
+            and read_only_problems(panel) == [])
     assert any("kept 1 explanation" in text for text, _ in lines), lines
     (folder / "store" / "store" / explain.FOLDER / explain.KEPT_FILE).write_text("{}", encoding="utf-8")
     assert demo_store.check_build_record(folder) != []

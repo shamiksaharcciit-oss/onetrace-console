@@ -8,7 +8,7 @@ backend-path = ["tools/build_backend"]
 
 [project]
 name = "onetrace-console"
-version = "0.3.1"
+version = "0.3.2"
 description = "The onetrace console: every run in one place, read from the reports the verifier and the verbs produced."
 readme = "PYPI_DESCRIPTION.md"     # the README with absolute image links: tools/pypi_description.py
 requires-python = ">=3.12"

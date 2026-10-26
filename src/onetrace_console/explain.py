@@ -48,12 +48,13 @@ from datetime import datetime, timezone
 from pathlib import Path
 from types import SimpleNamespace
 
-#: The label every explanation is shown under, the command's own.
+#: The label the command writes into every explanation it records (`keep` checks it is there).
 LABEL = "Suggested explanation — AI-generated, may be wrong"
-#: The panel's own title; each explanation inside it keeps LABEL, with its model.
-TITLE = "Suggested explanation"
-#: The command's three words for a kept claim's kind.
-KIND_WORDS = {"lead": "possible culprit", "ruled out": "ruled out", "note": "note"}
+#: The panel's own heading, once; every explanation inside it carries AI_LINE with its model.
+TITLE = "What may have happened"
+AI_LINE = "AI-generated, may be wrong"
+#: A kept claim's kind, as the command records it, by its badge.
+KIND_WORDS = {"lead": "Lead (possible culprit)", "ruled out": "Ruled out", "note": "Note"}
 KIND_ORDER = ("lead", "ruled out", "note")
 #: Where the formats the panel reads are written down.
 FORMAT_PAGE = "https://oneproof.dev/onetrace/explain-format.md"
@@ -567,15 +568,104 @@ def _button(path: str, words: str) -> str:
     return f'<button type="button" data-explain-post="{escape(path)}" hidden>{escape(words)}</button>'
 
 
-def _cite(cite: str, steps: dict) -> str:
-    """A cite, linked to its node's row as the page's graph links it (`steps`: node -> href); the
-    field after the node stays as text. A cite of no node on this page is its words alone."""
-    from onetrace_console.words import escape
+def receipts_by_node(comparison, store) -> tuple[dict, dict]:
+    """Each run's receipts by node, as onetrace-explain names a node in its cites (`name`, or
+    `name#instance`): what a chip reads to say whether a cited item differs. Empty where a run's
+    receipts can't be read."""
+    from onetrace_console.render import _receipts_in_order
+
+    def by_node(key: str) -> dict:
+        out = {}
+        for r in _receipts_in_order(key, store):
+            st = r.get("stage") if isinstance(r.get("stage"), dict) else {}
+            node = str(st.get("name", "")) + ("#" + str(st["instance"]) if st.get("instance") else "")
+            out.setdefault(node, r)
+        return out
+    return by_node(comparison.run_a), by_node(comparison.run_b)
+
+
+#: The instrument's fields a packet carries, and so the ones a chip compares.
+_INSTRUMENT = ("id", "kind", "version", "config_digest")
+
+
+def _files(r: dict | None, which: str) -> dict:
+    return {i["name"]: i for i in (r or {}).get(which) or [] if isinstance(i, dict) and isinstance(i.get("name"), str)}
+
+
+def chip(cite: str, facts: dict) -> tuple[list, str]:
+    """A cite as its chip says it, and its node: the chip's pieces, each a list of (words, as
+    code?), joined by " · " when drawn. From the comparison's record: the stage, the item, and where
+    the record holds them, its two values or whether it differs, with "checked" where the console
+    read that from the two runs' receipts itself. `facts`: "a" and "b", the two runs' receipts by
+    node (`receipts_by_node`); "verdicts", each node's verdict in the page's words; "envelope", the
+    comparison's. A cite this does not know is its words alone."""
     parts = cite.split("/")
-    href = (steps.get(parts[1]) or steps.get(parts[1].split("#", 1)[0])) if parts[0] == "node" and len(parts) >= 2 else None
-    if href:
-        return f'<a href="{escape(href)}" class="mono" data-cite>{escape(cite)}</a>'
-    return f'<span class="mono" data-cite>{escape(cite)}</span>'
+    if parts[:2] == ["comparison", "verdict"] and facts.get("envelope"):
+        return [[("comparison", False)], [("verdict ", False), (facts["envelope"], True)]], ""
+    if parts[0] != "node" or len(parts) < 2:
+        return [[(cite, True)]], ""
+    node, rest = parts[1], parts[2:]
+    a, b = facts.get("a", {}).get(node), facts.get("b", {}).get(node)
+    read = a is not None and b is not None
+    head = [[(node, True)]]
+    checked = [[("checked", False)]]
+
+    def pair(x: str, y: str) -> list:
+        return [[(x, True), (" same", False)]] if x == y else [[(x, True), (" → ", False), (y, True)]]
+    if not rest:
+        word = facts.get("verdicts", {}).get(node)
+        return head + [[("stage", False)]] + ([[(word, False)]] if word else []), node
+    kind = rest[0]
+    if kind in ("input", "output") and len(rest) >= 2:
+        name = "/".join(rest[1:])
+        if name.endswith("/text") and kind == "output":
+            return head + [[("output ", False), (name[:-len("/text")], True), (" text", False)]], node
+        out = head + [[(kind + " ", False), (name, True)]]
+        if read:
+            x, y = _files(a, kind + "s").get(name), _files(b, kind + "s").get(name)
+            if x is not None or y is not None:
+                same = (x or {}).get("digest") == (y or {}).get("digest")
+                out += [[("same" if same else "differs", False)]] + checked
+        return out, node
+    if kind == "constant" and len(rest) >= 2:
+        name = "/".join(rest[1:])
+        out = head + [[(name, True)]]
+        if read:
+            ca = ((a.get("assertions") or {}).get("constants") or {}) if isinstance(a.get("assertions"), dict) else {}
+            cb = ((b.get("assertions") or {}).get("constants") or {}) if isinstance(b.get("assertions"), dict) else {}
+            if name in ca and name in cb:
+                out += pair(str(ca[name]), str(cb[name])) + checked
+        return out, node
+    if kind == "instrument":
+        out = head + [[("instrument", False)]]
+        if read:
+            ia = a.get("instrument") if isinstance(a.get("instrument"), dict) else {}
+            ib = b.get("instrument") if isinstance(b.get("instrument"), dict) else {}
+            same = all(ia.get(k) == ib.get(k) for k in _INSTRUMENT)
+            out += [[("same" if same else "differs", False)]] + checked
+        return out, node
+    if kind == "outcome":
+        out = head + [[("outcome", False)]]
+        if read:
+            x = str((a.get("outcome") or {}).get("class", "")) if isinstance(a.get("outcome"), dict) else ""
+            y = str((b.get("outcome") or {}).get("class", "")) if isinstance(b.get("outcome"), dict) else ""
+            if x and y:
+                out += pair(x, y) + checked
+        return out, node
+    return head + [[(" / ".join(rest), False)]], node
+
+
+def _cite(cite: str, steps: dict, facts: dict | None = None) -> str:
+    """A cite as a chip (`chip`), linked to its node's row as the page's graph links it (`steps`:
+    node -> href); the cite's own id in its title. A cite of no node on this page is not linked."""
+    from onetrace_console.words import escape
+    said, node = chip(cite, facts or {})
+    inner = " · ".join("".join(f"<code>{escape(w)}</code>" if code else escape(w) for w, code in piece)
+                       for piece in said)
+    href = (steps.get(node) or steps.get(node.split("#", 1)[0])) if node else None
+    tag = "a" if href else "span"
+    return (f'<li><{tag} class="chip" data-cite="{escape(cite)}" title="{escape(cite)}"'
+            + (f' href="{escape(href)}"' if href else "") + f">{inner}</{tag}></li>")
 
 
 def _format_page() -> str:
@@ -655,18 +745,23 @@ def _asks(a: dict) -> list[str]:
     return [ln for ln in a.get("stdout", "").splitlines() if any(m in ln for m in ASKS_MARKS)]
 
 
-def panel(comparison, store, *, public: bool | None = None, steps: dict | None = None) -> str:
-    """The comparison's explanation panel: its own frame, below the verdicts, apart from them."""
+def panel(comparison, store, *, public: bool | None = None, steps: dict | None = None,
+          facts: dict | None = None) -> str:
+    """The comparison's explanation panel: its own frame, below the verdicts, apart from them.
+    `facts`, what the page read of the comparison for the chips (`chip`): its verdicts by node and
+    its envelope; the two runs' receipts are read here, only where an explanation is drawn."""
     from onetrace_console.words import escape
-    head = (f'<section data-section="explain" class="explain"><h2>{escape(TITLE)}</h2>')
+    head = (f'<section data-section="explain" id="explain" class="explain"><h2>{escape(TITLE)}</h2>')
     is_public = _public() if public is None else public
     held = kept_record(store) if is_public and not _NO_PRESSES.get() else None
     if held is not None:
-        return head + _kept_panel(comparison, store, held, steps or {}) + "</section>"
+        return head + _kept_panel(comparison, store, held, steps or {}, facts) + "</section>"
     if is_public or _NO_PRESSES.get():
         return head + f'<p data-explain="not-set-up">{escape(NOT_SET_UP_DEMO)}</p></section>'
+    from onetrace_console.explain_setup import LINK, PATH
+    setup = f'<p data-explain="setup"><a href="{PATH}">{escape(LINK)}</a></p>'
     if command() is None:
-        return head + f'<p data-explain="not-installed">{escape(NOT_INSTALLED)} {_format_page()}</p></section>'
+        return head + f'<p data-explain="not-installed">{escape(NOT_INSTALLED)} {_format_page()}</p>{setup}</section>'
     if too_long(store):
         return head + f'<p data-explain="too-long">{escape(too_long(store))}</p></section>'
     key = comparison.key
@@ -690,7 +785,7 @@ def panel(comparison, store, *, public: bool | None = None, steps: dict | None =
         body.append(_attempt_line(latest))
     if now["running"]:
         body.append(_running_line(now))
-    body.append('<p data-explain="buttons">' + " ".join(buttons) + "</p>")
+    body.append('<p data-explain="buttons">' + " ".join(buttons) + "</p>" + setup)
     pk = next((a for a in reversed(tried) if a["kind"] == "packet"), None)
     if pk is not None:
         lines = pk.get("stdout", "").splitlines()
@@ -700,62 +795,142 @@ def panel(comparison, store, *, public: bool | None = None, steps: dict | None =
                         f'<pre><code>{escape(lines[0])}</code></pre></details>')
         else:
             body.append(_attempt_line(pk))
-    for e in explanations(store, key):
-        body.append(_one(e, comparison, store, steps or {}))
-    if 'data-explain-post' in "".join(body):
+    made = explanations(store, key)
+    full = {**(facts or {}), **dict(zip(("a", "b"), receipts_by_node(comparison, store)))} if made else {}
+    for e in made:
+        body.append(_one(e, comparison, store, steps or {}, facts=full))
+    if 'data-explain-post' in "".join(body) or "data-copy=" in "".join(body):
         from onetrace_console.explain_script import EXPLAIN_SCRIPT
         body.append(EXPLAIN_SCRIPT)
     body.append("</section>")
     return "".join(body)
 
 
-def _one(e: dict, comparison, store, steps: dict, read_only: bool = False) -> str:
-    """One explanation, as the command wrote it: kept claims by kind, the checks, the drops.
-    `read_only`, as a public console draws a kept one: the checks are named and none is offered."""
-    from onetrace_console.words import escape
+#: The explanation's look, in the console's stylesheet (`frame.stylesheet`): a card per claim, its
+#: badge in words, its cites as chips; the footer and the record under it in the muted ink (still
+#: 4.5:1 or more in both themes). "Hide the details" is a native disclosure: closed, the chips and
+#: the footer are not shown, and the cards stay.
+EXPLAIN_CSS = """
+.cp .explain [data-explain=ai]{margin:0 0 8px;color:var(--ink-soft)}
+.cp .explain [data-explain=ai] .ai{font-weight:600;color:var(--cc-ink)}
+.cp .explain article+article{margin-top:22px;padding-top:14px;border-top:1px solid var(--line)}
+.cp .explain details.ex-more{margin:0 0 8px}
+.cp .explain details.ex-more>summary{cursor:pointer;color:var(--accent);font-size:var(--fs-small)}
+.cp .explain details.ex-more[open] .when-closed,.cp .explain details.ex-more:not([open]) .when-open{display:none}
+.cp .explain details.ex-more:not([open])~.cards [data-cites],
+.cp .explain details.ex-more:not([open])~.ex-foot{display:none}
+.cp .explain .cards{display:flex;flex-direction:column;gap:10px}
+.cp .explain .claim{background:var(--surface);border:1px solid var(--line);border-radius:var(--r-ctl);
+  padding:10px 12px;min-width:0}
+.cp .explain .claim>p{margin:6px 0}
+.cp .explain .badge{display:inline-block;font-size:var(--fs-small);font-weight:600;padding:2px 8px;
+  border-radius:var(--r-ctl);background:var(--neu-bg);color:var(--neu-ink)}
+.cp .explain .badge[data-kind=lead]{background:var(--cc-bg);color:var(--cc-ink)}
+.cp .explain .chips{display:flex;flex-wrap:wrap;gap:6px;list-style:none;margin:6px 0 0;padding:0}
+.cp .explain .chip{display:inline-block;max-width:100%;font-size:var(--fs-small);padding:2px 8px;
+  border:1px solid var(--line-strong);border-radius:var(--r-ctl);color:var(--ink);overflow-wrap:anywhere}
+.cp .explain a.chip{color:var(--accent)}
+.cp .explain .checks h3{margin:16px 0 4px;font-size:14px}
+.cp .explain .checks li{margin:4px 0}
+.cp .explain button[data-copy]{font:inherit;font-size:var(--fs-small);color:var(--ink);background:var(--surface);
+  border:1px solid var(--line-strong);border-radius:var(--r-ctl);padding:2px 8px;cursor:pointer}
+.cp .explain button[data-copy][hidden]{display:none}
+.cp .explain .ex-foot{margin-top:12px;font-size:var(--fs-small);color:var(--ink-muted)}
+.cp .explain .ex-foot summary{cursor:pointer}
+.cp .explain .ex-foot .meta p{margin:4px 0;overflow-wrap:anywhere}
+"""
+#: The checks' heading and its lead; on a public console, KEPT_CHECKS follows the lead.
+CHECKS = "Checks"
+CHECKS_LEAD = "onetrace can run these. A lead is confirmed or ruled out only by what they report."
+COPY = "Copy the command"
+#: The footer: every claim the post-check read, and those it left out, with their reasons.
+FOOTER = "{n} claims checked against the record · {m} left out"
+HIDE, SHOW = "Hide the details", "Show the details"
+
+
+def merged_checks(e: dict) -> list[tuple[int, str]]:
+    """The explanation's checks, each command once, in its first place: (its first index, the
+    command as the command printed it). A check with no printed command is kept under its index."""
+    shown, seen, out = check_lines(e), set(), []
+    for i, _ in enumerate(e.get("checks") or []):
+        cmd = shown[i] if i < len(shown) else ""
+        if cmd and cmd in seen:
+            continue
+        seen.add(cmd)
+        out.append((i, cmd))
+    return out
+
+
+def _dropped(e: dict) -> int:
+    """How many claims the post-check left out: the sum of its counts by reason."""
+    total = 0
+    for n in (e.get("dropped") or {}).values():
+        try:
+            total += int(n)
+        except (TypeError, ValueError):
+            continue
+    return total
+
+
+def _one(e: dict, comparison, store, steps: dict, read_only: bool = False, facts: dict | None = None) -> str:
+    """One explanation, as the command wrote it: the AI line with its model; a card per kept claim,
+    its kind as a badge, its text, its cites as chips; the checks, each command once; the footer,
+    what was checked and left out; then its record, dimmed. `read_only`, as a public console draws
+    a kept one: the checks are named and none is offered. "Hide the details" folds the chips and
+    the footer, with no script: the cards stay."""
+    from onetrace_console.words import escape, verbatim
     rec = e.get("record", "")
-    parts = [f'<article data-explanation="{escape(rec)}"><h3>{escape(LABEL)}</h3>',
-             f'<p data-explain="model">Model: <span class="mono">{escape(e.get("model", ""))}</span></p>',
-             f'<p data-explain="record">Its record: <span class="mono">explain/{escape(rec)}/</span>, '
-             f'onetrace-verify: <span class="mono" data-verified>{escape(verified(store, comparison.key, rec))}</span></p>',
-             "" if read_only else _steps_line(store, comparison.key, rec)]
+    facts = facts if facts is not None else {}
+    parts = [f'<article data-explanation="{escape(rec)}">',
+             f'<p data-explain="ai"><span class="ai">{escape(AI_LINE)}</span> · model '
+             f'<span class="mono" data-explain="model">{escape(e.get("model", ""))}</span></p>',
+             f'<details class="ex-more" open data-explain="toggle"><summary><span class="when-open">{escape(HIDE)}'
+             f'</span><span class="when-closed">{escape(SHOW)}</span></summary></details>']
     claims = e.get("claims") or []
     if not claims:
         parts.append(f'<p data-explain="all-dropped">{escape(ALL_DROPPED)}</p>')
     else:
-        items = []
+        cards = []
         for kind in KIND_ORDER:
             for c in (c for c in claims if c.get("kind") == kind):
-                cites = ", ".join(_cite(x, steps) for x in c.get("cites", []))
-                items.append(f'<li data-claim="{escape(kind)}"><span data-kind>{escape(KIND_WORDS[kind])}</span>: '
-                             f'{escape(c.get("text", ""))} <span data-cites>(shown by {cites})</span></li>')
-        parts.append('<ul class="plain" data-explain="claims">' + "".join(items) + "</ul>")
-    shown = check_lines(e)
+                chips = "".join(_cite(x, steps, facts) for x in c.get("cites", []))
+                cards.append(f'<div class="card claim" data-claim="{escape(kind)}">'
+                             f'<span class="badge" data-kind="{escape(kind)}">{escape(KIND_WORDS[kind])}</span>'
+                             f'<p data-claim-text>{escape(c.get("text", ""))}</p>'
+                             f'<ul class="chips" data-cites aria-label="What it cites">{chips}</ul></div>')
+        parts.append('<div class="cards" data-explain="claims">' + "".join(cards) + "</div>")
+    merged = merged_checks(e)
     checks = e.get("checks") or []
-    if checks:
+    if merged:
         rows = []
-        for i, k in enumerate(checks):
-            cmd = shown[i] if i < len(shown) else ""
+        for i, cmd in merged:
             if read_only:
                 rows.append(f'<li data-check="{i}"><code>{escape(cmd)}</code></li>')
                 continue
             run = (_button(f"/explain/check?c={comparison.key}&e={rec}&i={i}", "Run")
-                   if check_argv(k) is not None else '<span data-explain="not-run">needs a file or runner you name</span>')
+                   if check_argv(checks[i]) is not None else
+                   f'<button type="button" data-copy="{escape(cmd)}" hidden>{escape(COPY)}</button>')
             got = check_result(store, comparison.key, rec, i)
             out = (f'<details data-explain="check-output"><summary>What it reported: exit '
-                   f'<span data-exit>{escape(got["exit"])}</span></summary><pre><code>{escape(got["output"])}'
+                   f'<span data-exit>{escape(got["exit"])}</span></summary><pre><code>{verbatim(got["output"])}'
                    "</code></pre></details>" if got else "")
             rows.append(f'<li data-check="{i}"><code>{escape(cmd)}</code> {run}{out}</li>')
-        parts.append('<p data-explain="checks-lead">Checks onetrace can run. A lead is confirmed or ruled '
-                     "out only by what these report." + (f" {KEPT_CHECKS}" if read_only else "") + "</p>"
-                     '<ul class="plain" data-explain="checks">' + "".join(rows) + "</ul>")
-    drops = {**(e.get("dropped") or {})}
+        parts.append(f'<div class="checks" data-explain="checks-block"><h3>{escape(CHECKS)}</h3>'
+                     f'<p data-explain="checks-lead">{escape(CHECKS_LEAD)}'
+                     + (f" {escape(KEPT_CHECKS)}" if read_only else "") + "</p>"
+                     '<ul class="plain" data-explain="checks">' + "".join(rows) + "</ul></div>")
+    drops = e.get("dropped") or {}
     cdrops = e.get("checks_dropped") or {}
-    if drops or cdrops:
-        said = "; ".join(f"{n} {why}" for why, n in sorted(drops.items()))
-        csaid = "; ".join(f"{n} {why}" for why, n in sorted(cdrops.items()))
-        parts.append(f'<p data-explain="dropped">Dropped before anyone read them: '
-                     f'{escape(said or "no claim")}' + (f'; checks: {escape(csaid)}' if csaid else "") + ".</p>")
+    left = _dropped(e)
+    said = escape(FOOTER.format(n=len(claims) + left, m=left))
+    reasons = [f"<li>{escape(str(n))} {escape(why)}</li>" for why, n in sorted(drops.items())]
+    reasons += [f"<li>checks: {escape(str(n))} {escape(why)}</li>" for why, n in sorted(cdrops.items())]
+    foot = (f'<details data-explain="left-out"><summary>{said}</summary><ul class="plain">{"".join(reasons)}</ul></details>'
+            if reasons else f'<p data-explain="left-out">{said}</p>')
+    meta = [f'<p data-explain="record">Its record: <span class="mono">explain/{escape(rec)}/</span>, '
+            f'onetrace-verify: <span class="mono" data-verified>{escape(verified(store, comparison.key, rec))}</span></p>',
+            "" if read_only else _steps_line(store, comparison.key, rec)]
+    parts.append(f'<div class="ex-foot" data-explain="footer">{foot}<div class="meta">{"".join(meta)}</div></div>')
     parts.append("</article>")
     return "".join(parts)
 
@@ -914,11 +1089,12 @@ def keep(source: Path, store) -> dict:
     return record
 
 
-def _kept_panel(comparison, store, held: dict, steps: dict) -> str:
+def _kept_panel(comparison, store, held: dict, steps: dict, facts: dict | None = None) -> str:
     """The kept explanations of this comparison, read-only; only those the build's record lists."""
     from onetrace_console.words import escape
     mine = {k["record"] for k in held.get("kept", []) if k.get("comparison") == comparison.key}
     shown = [e for e in explanations(store, comparison.key) if e.get("record") in mine] if mine else []
     if not shown:
         return f'<p data-explain="none-kept">{escape(KEPT_NONE)}</p>'
-    return "".join(_one(e, comparison, store, steps, read_only=True) for e in shown)
+    full = {**(facts or {}), **dict(zip(("a", "b"), receipts_by_node(comparison, store)))}
+    return "".join(_one(e, comparison, store, steps, read_only=True, facts=full) for e in shown)

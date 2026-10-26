@@ -27,11 +27,11 @@ META = tomllib.loads((REPO / "pyproject.toml").read_text(encoding="utf-8"))["pro
 def test_the_version_is_0_2_0_everywhere(examined):
     import onetrace_console
     examined(3, "places the version is stated")
-    assert META["version"] == "0.3.1"
-    assert onetrace_console.__version__ == "0.3.1"
+    assert META["version"] == "0.3.2"
+    assert onetrace_console.__version__ == "0.3.2"
     out = subprocess.run([sys.executable, "-m", "onetrace_console", "--version"], capture_output=True,
                          text=True, env={**os.environ, "PYTHONPATH": str(REPO / "src")})
-    assert out.stdout.strip() == "0.3.1", out
+    assert out.stdout.strip() == "0.3.2", out
 
 
 def test_the_metadata_names_the_sdk_it_was_tested_with(examined):
@@ -222,8 +222,8 @@ def test_a_plain_pip_install_compares_with_the_same_report_as_the_pinned_install
         subprocess.run([sys.executable, "-c", f"import sys; from setuptools import build_meta as b; "
                         f"print(b.{build}(sys.argv[1]))", str(dist)], cwd=tree, check=True,
                        capture_output=True, env=clean)
-    console_whl = next(dist.glob("onetrace_console-0.3.1-*.whl"))
-    _check_the_viewer_ships_without_its_tests(console_whl, next(dist.glob("onetrace_console-0.3.1.tar.gz")))
+    console_whl = next(dist.glob("onetrace_console-0.3.2-*.whl"))
+    _check_the_viewer_ships_without_its_tests(console_whl, next(dist.glob("onetrace_console-0.3.2.tar.gz")))
     #: The wheel carries the demo store's builder and trust file, so `onetrace-console demo` works
     #: installed: it builds the demo's runs where it is started (0.1.1).
     import zipfile

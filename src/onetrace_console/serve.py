@@ -725,6 +725,20 @@ class Handler(BaseHTTPRequestHandler):
         if record:
             self._handle_record(record.group(1))
             return
+        if rel == "explain/setup":
+            #: The setup page, a local console's only: drawn as it is asked for, read-only, and
+            #: framed as every page is. A public console has none.
+            if self.config.public:
+                self._respond(404, b"not found\n", "text/plain")
+                return
+            from onetrace_console import roles
+            from onetrace_console.explain_setup import page as setup_page
+            from onetrace_console.frame import fill
+            user = self._principal() if getattr(self, "_request_role", None) == roles.VIEWER else None
+            self._respond(200, fill(setup_page(self.store).encode("utf-8"), rel,
+                                    onedoor=bool(self.config.extensions.get("onedoor")), user=user,
+                                    setup_link=True), "text/html; charset=utf-8")
+            return
         if rel == "explain/state":
             #: A comparison's press now running, read by its panel's script while it waits.
             from onetrace_console import explain
@@ -757,7 +771,7 @@ class Handler(BaseHTTPRequestHandler):
         from onetrace_console.frame import fill
         user = self._principal() if getattr(self, "_request_role", None) == roles.VIEWER else None
         page = fill(target.read_bytes(), rel, onedoor=bool(self.config.extensions.get("onedoor")),
-                    user=user, public=self.config.public)
+                    user=user, public=self.config.public, setup_link=not self.config.public)
         self._respond(200, page, "text/html; charset=utf-8")
 
     # -------------------------------------------------------------- POST

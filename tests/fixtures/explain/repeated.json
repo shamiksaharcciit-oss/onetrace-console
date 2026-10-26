@@ -1,0 +1,8 @@
+{"claims": [
+ {"text": "The scorer's recorded settings differ at this step.", "kind": "lead", "cites": ["node/score#1/instrument"]}],
+ "checks": [
+ {"check": "text", "node": "score#1"},
+ {"check": "text", "node": "score#1"},
+ {"check": "for", "node": "decide#1"},
+ {"check": "reproduce", "node": "score#1", "run": "candidate"},
+ {"check": "reproduce", "node": "score#1", "run": "candidate"}]}

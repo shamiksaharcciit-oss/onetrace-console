@@ -127,7 +127,11 @@ def _explain(page: str) -> str:
 
 
 def _without_explain(page: str) -> str:
-    return _EXPLAIN.sub("", page)
+    """The page less its explanation section, and each run of empty lines as one line break: a local
+    console draws the section under the short answer and a file at the foot, and a view keeps the
+    line breaks between the parts it leaves out, so where an empty line falls differs. Both pages
+    are read alike."""
+    return re.sub(r"\n{2,}", "\n", _EXPLAIN.sub("", page))
 
 
 def _served_path(rel: str, value: str) -> str:
@@ -156,7 +160,9 @@ def test_every_exported_page_is_the_served_page_less_the_rewrite_and_the_banner(
             assert got.decode() == want.decode().replace("url(/static/fonts/", "url(fonts/"), rel
             continue
         page = _unbanner(got.decode("utf-8"))
-        served_page = want.decode("utf-8")
+        #: A local console serves its footer with a link to its setup page; a file has none.
+        from onetrace_console.frame import SETUP_LINK
+        served_page = want.decode("utf-8").replace(SETUP_LINK, "", 1)
         #: The one part drawn otherwise: a comparison's explanation panel, its place only on a file
         #: (no button, no script), where the console serves its presses.
         page, served_page, mine = _without_explain(page), _without_explain(served_page), _explain(page)

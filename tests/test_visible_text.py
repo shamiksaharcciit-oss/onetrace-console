@@ -1232,6 +1232,11 @@ NEW_PAGES.update({f"drift-{p}{m}.html": "a pipeline's drift page, as onetrace dr
 _EXPLAIN_PANEL = "the comparison's suggested explanation panel, nothing asked for yet"
 EXPLAINED.setdefault("diff[held-a,held-b]", {}).setdefault("new", {}).update(dict.fromkeys(
     ["A suggestion about this comparison's record from a model you configure for onetrace-explain, never a reading of it. The verdicts above are what they are without it. Nothing is sent until you press Explain.", "Explain Show the packet", "Suggested explanation"], _EXPLAIN_PANEL))
+#: 0.3.2: the panel's heading is "What may have happened", and a local console's panel links to its
+#: setup page. Measured, not typed.
+_EXPLAIN_032 = "the explanation panel's 0.3.2 heading, and its link to the setup page"
+EXPLAINED.setdefault("diff[held-a,held-b]", {}).setdefault("new", {}).update(dict.fromkeys(
+    ["What may have happened", "Set up Explain"], _EXPLAIN_032))
 
 @pytest.fixture(scope="module")
 def now(tmp_path_factory, explain_command):

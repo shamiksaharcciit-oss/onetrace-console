@@ -24,8 +24,13 @@ import pytest
 GENERATED_AT = "2026-10-04T12:00:00+00:00"
 RAN_AT = "2026-09-26T12:00:00+02:00"
 REPLIES = Path(__file__).resolve().parent / "fixtures" / "explain"
+#: The label the command writes into every explanation it records.
 LABEL = "Suggested explanation — AI-generated, may be wrong"
-TITLE = "Suggested explanation"
+#: The panel's heading, once, and the line every explanation in it carries with its model (0.3.2).
+TITLE = "What may have happened"
+AI_LINE = "AI-generated, may be wrong"
+#: The command's kinds, by the badge the console gives them.
+BADGES = [("lead", "Lead (possible culprit)"), ("ruled out", "Ruled out"), ("note", "Note")]
 
 
 def _make(root: Path) -> list[Path]:
@@ -145,20 +150,23 @@ def _without_panel(page: str) -> str:
 # ------------------------------------------------------------------ what it shows
 
 def explained_problems(page: str) -> list[str]:
-    """An explanation as the command wrote mixed.json's: its label and model, the kept claims in
-    order with their kinds' words and cites, the checks, the drops."""
+    """An explanation as the command wrote mixed.json's, in 0.3.2's layout: the AI line and the
+    model, a card per kept claim in order with its kind's badge and its cites as chips, nothing
+    struck through, the checks, the drops."""
     panel = _panel(page)
     out = []
     article = re.search(r"<article data-explanation=.*?</article>", panel, re.S)
     if article is None:
         return ["no explanation drawn"]
     a = article.group(0)
-    if LABEL not in unescape(a) or "fake:" not in unescape(a):
-        out.append("the label or the model is missing")
-    kinds = re.findall(r'<li data-claim="([^"]*)"><span data-kind>([^<]*)</span>', a)
-    if kinds != [("lead", "possible culprit"), ("ruled out", "ruled out"), ("note", "note")]:
+    if AI_LINE not in unescape(a) or "fake:" not in unescape(a):
+        out.append("the AI line or the model is missing")
+    kinds = re.findall(r'<div class="card claim" data-claim="([^"]*)"><span class="badge" data-kind="[^"]*">([^<]*)</span>', a)
+    if kinds != BADGES:
         out.append(f"claims {kinds}")
-    cite = re.search(r'<a href="([^"]*)" class="mono" data-cite>node/score#1/instrument</a>', a)
+    if re.search(r"<(s|del|strike)\b|line-through", a):
+        out.append("something is struck through")
+    cite = re.search(r'<a class="chip" data-cite="node/score#1/instrument" title="[^"]*" href="([^"]*)">', a)
     if cite is None or cite.group(1) != "#step-2":
         out.append("a cite does not link to its node's row, as the graph links it")
     checks = re.findall(r'<li data-check="(\d+)"><code>([^<]*)</code>', a)
@@ -235,20 +243,22 @@ def test_the_label_is_on_every_explanation(pair, examined):
     articles = re.findall(r"<article data-explanation=.*?</article>", panel, re.S)
     assert len(articles) == 2, tried(store, comparison)
     examined(len(articles), "explanations")
-    assert all(LABEL in unescape(a) for a in articles)
+    assert all(AI_LINE in unescape(a) and "fake:" in unescape(a) for a in articles)
 
 
 
 def title_problems(panel: str) -> list[str]:
-    """The section is titled "Suggested explanation"; each explanation in it keeps the full label
-    and its model."""
+    """The section is headed "What may have happened", once (it showed twice before);
+    each explanation in it carries the AI line and its model."""
     out = []
     heads = re.findall(r'<section data-section="explain"[^>]*><h2>(.*?)</h2>', panel, re.S)
     if [unescape(h) for h in heads] != [TITLE]:
         out.append(f"the section's title is {heads}")
+    if unescape(panel).count(TITLE) != 1 or LABEL in unescape(panel):
+        out.append("the heading shows more than once")
     for a in re.findall(r"<article data-explanation=.*?</article>", panel, re.S):
-        if f"<h3>{LABEL}</h3>" not in unescape(a) or "fake:" not in unescape(a):
-            out.append("an explanation without its label or its model")
+        if f"{AI_LINE}</span> · model" not in unescape(a) or "fake:" not in unescape(a):
+            out.append("an explanation without its AI line or its model")
     return out
 
 
@@ -269,7 +279,7 @@ def _titled_panels(store, comparison, config, monkeypatch) -> dict[str, str]:
     return out
 
 
-def test_the_section_is_titled_suggested_explanation_and_each_explanation_keeps_its_label(
+def test_the_section_is_headed_once_and_each_explanation_carries_the_ai_line_and_its_model(
         pair, monkeypatch, examined):
     store, comparison, config = pair
     panels = _titled_panels(store, comparison, config, monkeypatch)
@@ -815,7 +825,7 @@ def test_the_routes_are_a_viewer_s_and_the_script_is_named_in_the_local_policy_o
 
 # ------------------------------------------------------------------ the sabotages
 
-def test_sabotage_a_drawn_explanation_missing_its_label_or_a_claim_is_named(pair, examined):
+def test_sabotage_a_drawn_explanation_missing_its_ai_line_a_claim_or_its_drops_or_struck_through_is_named(pair, examined):
     from onetrace_console import explain
     store, comparison, config = pair
     _fake(config, "mixed.json")
@@ -824,9 +834,13 @@ def test_sabotage_a_drawn_explanation_missing_its_label_or_a_claim_is_named(pair
     examined(3, "planted pages")
     assert "<article data-explanation=" in page, tried(store, comparison)
     article = re.search(r"<article data-explanation=.*?</article>", page, re.S).group(0)
-    assert explained_problems(page.replace(article, article.replace(LABEL, "Explanation"), 1)) != []
-    assert explained_problems(re.sub(r'<li data-claim="note">.*?</li>', "", page, count=1, flags=re.S)) != []
-    assert explained_problems(re.sub(r'<p data-explain="dropped">.*?</p>', "", page, count=1, flags=re.S)) != []
+    assert explained_problems(page.replace(article, article.replace(AI_LINE, "Explanation"), 1)) != []
+    assert explained_problems(re.sub(r'<div class="card claim" data-claim="note">.*?</div>', "", page, count=1,
+                                     flags=re.S)) != []
+    assert explained_problems(re.sub(r'<details data-explain="left-out">.*?</details>', "", page, count=1,
+                                     flags=re.S)) != []
+    struck = article.replace("<p data-claim-text>", "<p data-claim-text><s>", 1)
+    assert explained_problems(page.replace(article, struck, 1)) == ["something is struck through"]
 
 
 def test_sabotage_an_explanation_inside_the_verdicts_is_named(pair, examined):

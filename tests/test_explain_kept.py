@@ -72,11 +72,11 @@ def _local_page(store, comparison) -> str:
 
 def read_only_problems(panel: str) -> list[str]:
     """What a public console's panel offers that computes or sends: any button, any press's
-    address, the packet's offer."""
+    address, the packet's offer, a link to the setup page (a local console's only)."""
     out = []
     for b in re.findall(r"<button\b[^>]*>(.*?)</button>", panel, re.S):
         out.append(f"a button: {_text(b)!r}")
-    for path in ("/explain?", "/explain/packet", "/explain/check"):
+    for path in ("/explain?", "/explain/packet", "/explain/check", "/explain/setup"):
         if path in panel:
             out.append(f"a press's address: {path}")
     if "Show the packet" in panel:
@@ -99,7 +99,7 @@ def test_a_kept_explanation_is_shown_on_a_public_page_as_the_command_wrote_it(ke
     panel = _panel(_public_page(build, cmp))
     assert explained_problems(panel) == [], panel
     assert read_only_problems(panel) == []
-    assert f"<h3>{LABEL}</h3>" in unescape(panel)
+    assert f"<h2>{explain.TITLE}</h2>" in unescape(panel)
 
 
 def test_the_kept_record_is_in_the_build_s_store_and_reads_as_written(kept, examined):
@@ -246,6 +246,6 @@ def test_sabotage_a_kept_explanation_with_a_button_is_named(kept, monkeypatch, e
     build, cmp, source = kept
     explain.keep(source, build)
     real = explain._one
-    monkeypatch.setattr(explain, "_one", lambda e, c, s, steps, read_only=False: real(e, c, s, steps))
+    monkeypatch.setattr(explain, "_one", lambda e, c, s, steps, read_only=False, facts=None: real(e, c, s, steps, facts=facts))
     examined(1, "kept explanation with a button")
     assert read_only_problems(_panel(_public_page(build, cmp))) != []

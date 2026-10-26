@@ -480,8 +480,12 @@ def stylesheet() -> bytes:
         for name, (family, weight, chars) in _FACES.items())
     from onetrace_console.run_head import HEAD_CSS
     from onetrace_console.views import VIEWS_CSS
+    from onetrace_console.short_answer import SHORT_CSS
+    from onetrace_console.explain import EXPLAIN_CSS
+    from onetrace_console.explain_setup import SETUP_CSS
     return (faces + root_css() + "\n" + scale_css() + "\n" + theme_css() + "\n" + CSS + FRAME_CSS + PAGE_CSS + CHIP_CSS
-            + THEME_CSS + COMPARE_CSS + PUBLIC_CSS + HEAD_CSS + VIEWS_CSS + NARROW_CSS).encode("utf-8")
+            + THEME_CSS + COMPARE_CSS + PUBLIC_CSS + HEAD_CSS + VIEWS_CSS + SHORT_CSS + EXPLAIN_CSS + SETUP_CSS
+            + NARROW_CSS).encode("utf-8")
 
 
 def items(onedoor: bool) -> tuple[tuple[str, str, str], ...]:
@@ -538,17 +542,26 @@ THEME_SCRIPT = (
     "m.addEventListener('change',draw);draw()})()</script>")
 
 
-def _footer(mode: str) -> str:
-    return (f"<footer><div>{mode}</div><div>onetrace-console {escape(__version__)}</div>"
+from onetrace_console.explain_setup import LINK as _SETUP_WORDS, PATH as _SETUP_PATH  # noqa: E402
+
+#: The link to the setup page (`explain_setup`), in a local console's footer as it serves a page.
+SETUP_LINK = f'<div><a href="{_SETUP_PATH}" data-frame="setup">{_SETUP_WORDS}</a></div>'
+
+
+def _footer(mode: str, setup_link: bool = False) -> str:
+    link = SETUP_LINK if setup_link else ""
+    return (f"<footer><div>{mode}</div><div>onetrace-console {escape(__version__)}</div>{link}"
             f"{THEME_SWITCH}{THEME_SCRIPT}</footer>")
 
 
-def footer(user: str | None, *, public: bool = False) -> str:
-    """An unsealed page's footer, filled as it is served: the session and the version."""
+def footer(user: str | None, *, public: bool = False, setup_link: bool = False) -> str:
+    """An unsealed page's footer, filled as it is served: the session and the version; on a local
+    console as it serves the page (`setup_link`), the link to the setup page. Never on a public
+    console, nor on an export, whose pages are files."""
     from onetrace_console.public import FOOTER_MODE
     if public:
         return _footer(FOOTER_MODE)
-    return _footer("Local mode" if user is None else f"Signed in as {escape(user)}")
+    return _footer("Local mode" if user is None else f"Signed in as {escape(user)}", setup_link)
 
 
 def sealed_footer(sign_in: bool, *, public: bool = False) -> str:
@@ -576,14 +589,15 @@ def nav(rel: str, *, onedoor: bool, foot: str, public: bool = False) -> str:
     return f'<div class="brand">onetrace</div>{banner() if public else ""}{links}{foot}'
 
 
-def fill(page: bytes, rel: str, *, onedoor: bool, user: str | None, public: bool = False) -> bytes:
+def fill(page: bytes, rel: str, *, onedoor: bool, user: str | None, public: bool = False,
+         setup_link: bool = False) -> bytes:
     """An unsealed page with its frame filled as it is served, or the page unchanged when it has
     no empty frame -- a sealed page, whose frame was filled before its seal."""
     from onetrace_console.viewer.page import FRAME_NAV
     marker = FRAME_NAV.encode("utf-8")
     if page.count(marker) != 1:
         return page
-    return page.replace(marker, nav(rel, onedoor=onedoor, foot=footer(user, public=public),
+    return page.replace(marker, nav(rel, onedoor=onedoor, foot=footer(user, public=public, setup_link=setup_link),
                                     public=public).encode("utf-8"))
 
 

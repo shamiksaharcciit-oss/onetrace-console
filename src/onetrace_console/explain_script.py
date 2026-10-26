@@ -6,7 +6,7 @@ Explain and Send answer at once (202) and the work goes on: the script then read
 from the console each second (`GET /explain/state`), says it in the panel's running line, and
 reloads the page when the press has ended. Show the packet and Run answer when done, and the page
 is reloaded. A refusal (a press while one runs, or any other) is said in the panel, in the console's
-words. Named by hash in the local console's Content-Security-Policy only
+words. "Copy the command" puts a check's command on this browser's clipboard, and sends nothing. Named by hash in the local console's Content-Security-Policy only
 (`public.content_security_policy`); no public page carries it.
 """
 EXPLAIN_SCRIPT = (
@@ -30,4 +30,7 @@ EXPLAIN_SCRIPT = (
     "return r.json().then(function(j){b.disabled=false;line('refused-press').textContent=j.error},"
     "function(){b.disabled=false;line('refused-press').textContent='The console answered '+r.status+'.'})},"
     "function(){b.disabled=false})})});"
+    "s.querySelectorAll('button[data-copy]').forEach(function(b){if(!navigator.clipboard)return;"
+    "b.hidden=false;b.addEventListener('click',function(){navigator.clipboard.writeText(b.getAttribute('data-copy'))"
+    ".then(function(){b.textContent='Copied'},function(){b.textContent='Not copied'})})});"
     "if(s.querySelector('[data-explain=running]'))poll()})()</script>")

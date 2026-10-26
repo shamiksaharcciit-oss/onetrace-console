@@ -48,12 +48,14 @@ def _items(page: bytes) -> list[tuple[str, str, bool]]:
 
 def _footer_text(page: bytes) -> str:
     """What the footer states: its mode and version. The theme switch beside them, and its script,
-    are each there once and left out of what it states (tests/test_theme_switch.py holds them)."""
-    from onetrace_console.frame import THEME_SCRIPT, THEME_SWITCH
+    are each there once and left out of what it states (tests/test_theme_switch.py holds them), as
+    is a local console's link to the setup page (tests/test_explain_setup.py holds it)."""
+    from onetrace_console.frame import SETUP_LINK, THEME_SCRIPT, THEME_SWITCH
     footer = FOOTER.findall(_nav(page))
     assert len(footer) == 1
     assert footer[0].count(THEME_SWITCH) == 1 and footer[0].count(THEME_SCRIPT) == 1
-    stated = footer[0].replace(THEME_SWITCH, "").replace(THEME_SCRIPT, "")
+    assert footer[0].count(SETUP_LINK) <= 1
+    stated = footer[0].replace(THEME_SWITCH, "").replace(THEME_SCRIPT, "").replace(SETUP_LINK, "")
     return " ".join(re.sub(r"<[^>]+>", " ", stated).split())
 
 
@@ -99,7 +101,8 @@ def test_nothing_is_drawn_as_not_available(onedoor, examined):
         nav = _nav(page).lower()
         for word in ("not available", "unavailable", "coming soon", "disabled"):
             assert word not in nav, word
-        assert nav.count("<a ") == len(_items(page)), "an item that is not a link"
+        from onetrace_console.frame import SETUP_LINK
+        assert nav.count("<a ") - nav.count(SETUP_LINK.lower()) == len(_items(page)), "an item that is not a link"
 
 
 def test_every_item_is_a_page_that_exists(onedoor, examined):
