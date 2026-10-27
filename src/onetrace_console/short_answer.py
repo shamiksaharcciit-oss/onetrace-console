@@ -243,6 +243,52 @@ def for_graph(report, annotations: list[dict], edges, inputs_at, input_notes: di
     return Answer(head, second, strip)
 
 
+def with_descent(answer: Answer, nested_at: str) -> Answer:
+    """Where the SDK descended into the first difference (onetrace 0.5's `nested_at`): the headline
+    names the deepest differing step in its words ("inside `plan`, at `price_lookup`"; "into run <id>
+    at `settle`"); where an inner run's folder was not given, the second line says so, as the CLI
+    does. Unchanged with no descent."""
+    from onetrace_console.nesting_view import descent
+    d = descent(nested_at)
+    if d is None:
+        return answer
+    if "not_given" in d:
+        extra = [" "] + [x for rid in d["not_given"] for x in ("Nested run ", Code(rid), ": folder not given. ")]
+        return Answer(answer.headline, (answer.second + extra[:-1] + [extra[-1].rstrip()]) if answer.second
+                      else extra[1:-1] + [extra[-1].rstrip()], answer.strip)
+    from onetrace_console.nesting_view import path_parts
+    head = ["The runs first differ "] + path_parts(d["path"]) + ["."]
+    return Answer(head, answer.second, answer.strip)
+
+
+def with_authorization(answer: Answer, found: list[tuple[str, str]]) -> Answer:
+    """A gated step whose recorded decision or permit differs, said as a plain fact on the second
+    line: "The permit at `approve_payment` also differs." Unchanged where none differs."""
+    if not found:
+        return answer
+    #: "The two runs agree." only where nothing recorded differs (30ai): a decision or a permit is
+    #: recorded, so its difference is named and the outputs said to be the same.
+    headline = (["Every recorded output is the same."] if answer.headline == ["The two runs agree."]
+                else answer.headline)
+    answer = Answer(headline, answer.second, answer.strip)
+    extra: list = []
+    for stage, what in found:
+        extra += [" The ", what, " at ", Code(stage), " also differs."]
+    second = answer.second + extra if answer.second else [x.lstrip() if i == 0 else x for i, x in enumerate(extra)]
+    return Answer(answer.headline, second, answer.strip)
+
+
+def _count_mark(answer: Answer) -> str:
+    """The line under the headline counts stages; its mark says what was counted, the
+    comparison's rows by the SDK's own verdicts, adding up to the stages compared."""
+    from collections import Counter
+    from onetrace_console.info_mark import mark, stages_note
+    if not answer.strip or not any(ch.isdigit() for ch in text(answer.second)):
+        return ""
+    counts = Counter(v for _, v, _ in answer.strip)
+    return mark(stages_note(counts, len(answer.strip)))
+
+
 def render(answer: Answer) -> str:
     """The short answer, drawn: the kicker, the headline, the line under it, the stage strip, and
     the line saying it is checked from the records."""
@@ -256,6 +302,6 @@ def render(answer: Answer) -> str:
     return ('<section data-section="short-answer" class="short-answer">'
             f'<p class="kicker">{escape(KICKER)}</p>'
             f'<p class="headline" data-short="headline">{_html(answer.headline)}</p>'
-            + (f'<p data-short="second">{_html(answer.second)}</p>' if answer.second else "")
+            + (f'<p data-short="second">{_html(answer.second)}{_count_mark(answer)}</p>' if answer.second else "")
             + f'<ol class="strip" data-short="strip" aria-label="Each stage, in order, with its result">{"".join(marks)}</ol>'
             f'<p class="checked" data-short="checked">{escape(CHECKED)}</p></section>')

@@ -259,8 +259,9 @@ def test_a_folder_load_serves_the_runs_and_the_comparison_it_was_asked_for(tmp_p
 
 
 def _demo_runs() -> list[str]:
-    from onetrace_console.demo_store import runs
-    return sorted(r.folder for r in runs())
+    """What the demo's `runs/` holds: its run folders, and what the builder writes beside them."""
+    from onetrace_console.demo_store import BESIDE_RUNS, runs
+    return sorted([r.folder for r in runs()] + list(BESIDE_RUNS))
 
 
 def test_the_demo_builds_loads_compares_and_reads_the_signatures_with_its_trust_file(tmp_path, console,

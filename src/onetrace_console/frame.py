@@ -137,6 +137,7 @@ PAGE_CSS = """
   overflow-wrap:anywhere}
 .cp .io .fp,.cp .io .fp .mono{overflow-wrap:anywhere}
 .cp p[data-input]{overflow-wrap:anywhere}
+.cp .onedoor code,.cp .span-context code,.cp .nesting code,.cp [data-section=descent] code,.cp .model-call code{overflow-wrap:anywhere}
 .cp[data-view=incident] [data-section=which] li{overflow-wrap:anywhere}
 .cp[data-view=incident] [data-scroll=found-rows]{max-height:448px;overflow:auto}
 .cp[data-view=incident] pre[data-found=summary]{white-space:pre-wrap;overflow-wrap:anywhere}
@@ -254,6 +255,9 @@ PAGE_CSS = """
 .cp table[data-section=changes] :is(td[data-cell=digest],td[data-section=settings],
   td[data-section=annotations]){overflow-wrap:anywhere}
 .cp table[data-section=changes] tr:last-child td{border-bottom:none}
+.cp table[data-section=changes] tr[data-child-of] td[data-label=node],.cp table[data-section=changes] tr[data-nested-run]>td{padding-left:32px}
+.cp table[data-section=changes] tr[data-depth="2"] td[data-label=node],.cp table[data-section=changes] tr[data-nested-run][data-depth="2"]>td{padding-left:52px}
+.cp tr[data-child-of] .inside{font-size:var(--fs-small);color:var(--ink-muted)}
 .cp table[data-section=changes] td[data-result="FIRST DIFFERENCE"]{color:var(--cc-ink);font-weight:600}
 .cp table[data-section=changes] td[data-section=annotations] [data-part=fold]{display:block;margin-top:6px;padding-top:4px;border-top:1px solid var(--line-soft)}
 .cp table[data-section=changes] td[data-section=annotations] [data-part=fold] details>summary{font-size:var(--fs-small)}
@@ -388,6 +392,14 @@ CHIP_CSS = (
     #: run's id, and a long command, breaking where they must (copied, the same characters).
     f".cp [data-attention]>.value .rel{{display:block;text-align:right}}\n"
     f".shell .page table.timeline .mono{{overflow-wrap:anywhere}}\n"
+    #: onetrace 0.5.0's parts on a run's page (the viewer's): code in them breaks anywhere at 390.
+    f".shell .page .onedoor code,.shell .page .span-context code,.shell .page .nesting code{{overflow-wrap:anywhere}}\n"
+    #: Steps inside steps in a run's table of steps (`nesting_ladder`): each child, and each nested
+    #: run's row, indented under its calling step.
+    f".shell .page tr[data-child-of]>td:first-child{{padding-left:32px}}\n"
+    f".shell .page tr[data-depth=\"2\"]>td:first-child{{padding-left:52px}}\n"
+    f".shell .page tr[data-child-of] .inside{{font-size:var(--fs-small);color:var(--ink-muted)}}\n"
+    f".shell .page tr[data-nested-run] code{{overflow-wrap:anywhere}}\n"
     #: The runs list's run names: at desktop width a name broke every four characters,
     #: because `anywhere` let the table shrink the column to almost nothing. `break-word` still
     #: breaks a name that must, but leaves the column its longest piece between hyphens as its
@@ -395,6 +407,10 @@ CHIP_CSS = (
     f".shell .page table.timeline[data-section=runs-table] td:first-child .mono{{overflow-wrap:break-word}}\n"
     f"@media (min-width:761px){{.shell .page table.timeline[data-section=runs-table] td:first-child"
     f"{{min-width:12ch}}}}\n"
+    #: Its answers' chips a little narrower than elsewhere: a "Couldn't check" in "Ran as approved"
+    #: (an agent's run, a graph with no plan row) took the table 12 pixels past its frame at 1280.
+    f".shell .page table.timeline[data-section=runs-table] td[data-answer] .pill{{margin-right:0;"
+    f"padding-left:6px;padding-right:6px}}\n"
     f".cp code{{overflow-wrap:anywhere}}\n"
     #: A runs list with no run in it: its one line, grey as the Overview's zeros are.
     f".shell .page p.zero[data-section=no-runs]{{color:var(--ink-faint)}}\n"
@@ -483,8 +499,9 @@ def stylesheet() -> bytes:
     from onetrace_console.short_answer import SHORT_CSS
     from onetrace_console.explain import EXPLAIN_CSS
     from onetrace_console.explain_setup import SETUP_CSS
+    from onetrace_console.info_mark import INFO_CSS
     return (faces + root_css() + "\n" + scale_css() + "\n" + theme_css() + "\n" + CSS + FRAME_CSS + PAGE_CSS + CHIP_CSS
-            + THEME_CSS + COMPARE_CSS + PUBLIC_CSS + HEAD_CSS + VIEWS_CSS + SHORT_CSS + EXPLAIN_CSS + SETUP_CSS
+            + THEME_CSS + COMPARE_CSS + PUBLIC_CSS + HEAD_CSS + VIEWS_CSS + SHORT_CSS + EXPLAIN_CSS + SETUP_CSS + INFO_CSS
             + NARROW_CSS).encode("utf-8")
 
 
@@ -609,6 +626,8 @@ class Rendering:
     onedoor: bool
     sign_in: bool
     public: bool = False
+    #: A local console's link pattern to the person's tracing tool (`config.tracing`); "" for none.
+    tracing_link: str = ""
 
 
 _RENDERING: contextvars.ContextVar[Rendering | None] = contextvars.ContextVar("rendering",
@@ -616,15 +635,22 @@ _RENDERING: contextvars.ContextVar[Rendering | None] = contextvars.ContextVar("r
 
 
 @contextlib.contextmanager
-def rendering(*, onedoor: bool, sign_in: bool, public: bool = False):
+def rendering(*, onedoor: bool, sign_in: bool, public: bool = False, tracing_link: str = ""):
     """`with rendering(...)`: sealed pages drawn inside are framed, under this configuration.
     The server renders every page inside one; outside it -- a caller with no console around it --
     a sealed page is drawn as the viewer draws it, with no frame."""
-    token = _RENDERING.set(Rendering(onedoor=onedoor, sign_in=sign_in, public=public))
+    token = _RENDERING.set(Rendering(onedoor=onedoor, sign_in=sign_in, public=public,
+                                     tracing_link="" if public else tracing_link))
     try:
         yield
     finally:
         _RENDERING.reset(token)
+
+
+def tracing_link() -> str:
+    """The person's link pattern for a render now: a local console's only; "" otherwise."""
+    r = _RENDERING.get()
+    return r.tracing_link if r is not None and not r.public else ""
 
 
 def rendering_public() -> bool:

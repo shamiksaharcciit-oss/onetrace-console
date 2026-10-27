@@ -38,6 +38,7 @@ import re
 from onetrace_console.bounded_json import load_json_bounded
 import json
 import shutil
+import subprocess
 import sys
 import tempfile
 from dataclasses import dataclass, replace
@@ -286,7 +287,7 @@ def stored_trust_record(run: StoredRun, store: Store) -> str | None:
 
 
 def check(run_dir: Path, *, ran_at: str | None = None, trust_file: str | None = None,
-          tsa_cert: str | None = None, tsa_roots=()) -> CheckResult:
+          tsa_cert: str | None = None, tsa_roots=(), extra: tuple[str, ...] = ()) -> CheckResult:
     """Run the verifier over a run folder and read its own summary. No opinions added.
     `trust_file`: the console's configured trust file, passed as `--trust`; `tsa_cert` and
     `tsa_roots`: the time-stamp authority's certificate and roots, as `--tsa-cert`/`--tsa-root`."""
@@ -308,8 +309,10 @@ def check(run_dir: Path, *, ran_at: str | None = None, trust_file: str | None = 
     complete = _manifest(manifest_path).get("format") in COMPLETENESS_FORMATS
     envelope = capture_cli(run_dir, outputs=(run_dir / "artifacts").is_dir(), complete=complete,
                            timeout=CHECK_TIMEOUT_SECONDS,
-                           trust=Path(trust_file) if trust_file else None,
-                           tsa=(Path(tsa_cert), [Path(r) for r in tsa_roots]) if tsa_cert else None)
+                           trust=_relative_to(trust_file, run_dir) if trust_file else None,
+                           tsa=(_relative_to(tsa_cert, run_dir), [_relative_to(r, run_dir) for r in tsa_roots])
+                           if tsa_cert else None,
+                           extra=extra)
     envelope["trust_file"] = trust_record(trust_file)
     envelope["tsa"] = tsa_record(tsa_cert, tsa_roots)
     if ran_at is not None:
@@ -593,8 +596,14 @@ def run_and_record(run: StoredRun, store: Store, *, ran_at: str | None = None,
             derived["list_row"] = json.dumps({"refused": f"{type(e).__name__}: {e}",
                                               "from_viewer": False})
         if folder is not None:
+            extra = _beside_options(run, store, folder, Path(tmp))
+            #: The reader's trust and time-stamp files, copied beside the laid-out run and named
+            #: from it: the stored check records no path of this machine.
+            trust_file, tsa_cert, tsa_roots = _evidence_copies(Path(tmp) / "evidence", trust_file,
+                                                               tsa_cert, tsa_roots)
             result = check(folder, ran_at=ran_at, trust_file=trust_file, tsa_cert=tsa_cert,
-                           tsa_roots=tsa_roots)
+                           tsa_roots=tsa_roots, extra=extra)
+            _keep_export(run, store, folder)
             derived = derived_from(folder, result.envelope)
             shutil.rmtree(folder, ignore_errors=True)
             report_key = store.put(json.dumps(result.envelope, indent=1, sort_keys=True,
@@ -614,6 +623,90 @@ def run_and_record(run: StoredRun, store: Store, *, ran_at: str | None = None,
                       **derived)
     store.put_run(updated)
     return updated
+
+
+def _evidence_copies(dest: Path, trust_file, tsa_cert, tsa_roots):
+    """Each of the reader's files that exists, copied into `dest`; one that cannot be read is
+    passed as given, so the verifier says why in its own row."""
+    def copy(path, name):
+        if not path:
+            return path
+        try:
+            dest.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(path, dest / name)
+            return str(dest / name)
+        except OSError:
+            return path
+    roots = tuple(copy(r, f"tsa-root-{n}{Path(r).suffix}") for n, r in enumerate(tsa_roots or ()))
+    return (copy(trust_file, "trust" + Path(trust_file).suffix if trust_file else ""),
+            copy(tsa_cert, "tsa-cert" + Path(tsa_cert).suffix if tsa_cert else ""), roots)
+
+
+def _relative_to(path, run_dir: Path):
+    """`path` named from the run's folder where both are in the check's own temporary folder, with
+    `/` on every platform: the stored command is read on other machines."""
+    import os
+    if not path:
+        return path
+    p = Path(path)
+    if p.is_absolute() and p.is_relative_to(run_dir.parent):
+        return os.path.relpath(p, run_dir).replace(os.sep, "/")
+    return p
+
+
+def _beside_options(run: StoredRun, store: Store, folder: Path, tmp: Path) -> tuple[str, ...]:
+    """onetrace-verify 0.5's options for files beside the run: the decision export and the permit
+    issuers kept with it (`beside`), and `--nested-run` for each run it records calling (a `run:<id>`
+    input) that the console holds, laid out next to it. A run whose inner run is not held gets the
+    verifier's NOT-RUN row and its reason."""
+    from onetrace_console import beside
+    from onetrace_console.nesting_view import nested_inputs
+    import os
+    from onetrace_console.onedoor_panel import decisions, gated_stages
+    receipts = []
+    for p in sorted((folder / "receipts").glob("*.json")):
+        try:
+            receipts.append(load_json_bounded(p.read_text(encoding="utf-8"), p.name))
+        except (OSError, ValueError, UnicodeDecodeError, RecursionError):
+            continue
+    #: The decision files only for a run that declares gated stages or cites a decision: the
+    #: verifier's onedoor rows are about such runs, and given for any other they read NOT-RUN.
+    gated = gated_stages(_manifest(folder / "MANIFEST.json")) or any(
+        decisions(r) for r in receipts if isinstance(r, dict))
+    opts = beside.verifier_files(store, run.key, tmp / "beside", folder) if gated else ()
+    ids = set()
+    for r in receipts:
+        if isinstance(r, dict):
+            ids.update(i for i, _ in nested_inputs(r))
+    if ids:
+        held = {r.run_id: r for r in store.runs() if r.run_id in ids}
+        for n, rid in enumerate(sorted(held), start=1):
+            try:
+                inner = materialise(held[rid], store, tmp / "nested" / str(n))
+            except (SameFileError, StoreError):
+                continue
+            #: Relative to the run's folder, where the verifier runs: no path of this machine kept.
+            opts += ("--nested-run", Path(os.path.relpath(inner, folder)).as_posix())
+    return opts
+
+
+#: The SDK's own export of a run as one OpenTelemetry trace, kept for the trace panel where the
+#: person gave no trace file. A view of the record, never evidence: the panel says so.
+EXPORT_TIMEOUT_SECONDS = 60
+
+
+def _keep_export(run: StoredRun, store: Store, folder: Path) -> None:
+    from onetrace_console import beside
+    from onetrace_console.child import utf8_env
+    if beside.read(store, run.key).get("trace_source") == beside.GIVEN:
+        return
+    try:
+        proc = subprocess.run([sys.executable, "-m", "onetrace", "export", "otel", "MANIFEST.json"],
+                              cwd=folder, capture_output=True, timeout=EXPORT_TIMEOUT_SECONDS, env=utf8_env())
+    except (OSError, subprocess.SubprocessError):
+        return
+    if proc.returncode == 0 and proc.stdout.strip():
+        beside.keep(store, run.key, trace=proc.stdout, trace_source=beside.EXPORT)
 
 
 def _manifest(path: Path) -> dict:

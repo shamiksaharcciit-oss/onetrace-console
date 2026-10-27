@@ -144,8 +144,8 @@ def test_delivered_counts_only_the_receipts_the_chain_names(files, store):
 # ------------------------------------------------------------------------ the temp paths
 
 def test_the_diff_page_prints_no_path_of_this_host(tmp_path, store):
-    """The SDK's own text names the folders it was given, which were this host's temp
-    folders. A page must not print the host's paths."""
+    """The SDK's own text names the folders it was given. The console gives them relative to the
+    folder it runs the SDK from, so a page prints no path of this host."""
     from onetrace_console.compare import compare
     from onetrace_console.render import render_diff
     from tests.test_checks import FIXED_RAN_AT
@@ -156,7 +156,8 @@ def test_the_diff_page_prints_no_path_of_this_host(tmp_path, store):
     temp = str(Path(tempfile.gettempdir()).resolve())
     for shown in (temp, temp.replace("\\", "\\\\"), "onetrace-compare-"):
         assert shown not in page, shown
-    assert "the baseline run&#x27;s folder" in page or "the baseline run's folder" in page
+    from html import unescape
+    assert "baseline   a  " in unescape(page) and "candidate  b  " in unescape(page)
 
 
 def test_any_folder_of_this_hosts_temp_folder_is_left_out_of_the_sdk_text(tmp_path, store):

@@ -47,6 +47,7 @@ Anchoring is not part of the demo: every run reads "not anchored", as the SDK re
 from __future__ import annotations
 
 import hashlib
+import os
 import json
 import shutil
 from dataclasses import dataclass, field
@@ -58,6 +59,9 @@ BUILD_RECORD = "BUILD_RECORD.json"
 BUILD_FORMAT = "onetrace-console-demo-build/0.1"
 TRUST_NAME = "trust.json"
 RUNS_DIRNAME = "runs"
+#: What the builder writes beside the run folders, in `runs/`: P8's decision export, its sidecar and
+#: the issuer's public key (`onedoor_demo`), and every run's trace (`write_traces`).
+BESIDE_RUNS = ("decisions.jsonl", "decisions.jsonl.sha256", "permit-issuers.json", "traces")
 
 
 @dataclass(frozen=True)
@@ -130,6 +134,19 @@ def runs() -> list[RunSpec]:
         RunSpec("p9-46-torque-baseline", "p9", {"firmware": "4.2", "low_bolt": False}),
         RunSpec("p9-47-torque-tool-firmware-changed", "p9", {"firmware": "4.3", "low_bolt": False}),
         RunSpec("p9-48-torque-one-bolt-low", "p9", {"firmware": "4.2", "low_bolt": True}),
+        #: P8's gated step broken on purpose (onetrace 0.5): paid on a denied decision; and a
+        #: permit for another amount than the payment the step records.
+        RunSpec("p8-49-invoice-paid-on-deny", "p8", {"invoice": "base", "tolerance_bp": "500",
+                                                     "plant": "pay-on-deny"}),
+        RunSpec("p8-50-invoice-permit-other-amount", "p8", {"invoice": "base", "tolerance_bp": "500",
+                                                            "plant": "permit-other-amount"}),
+        #: P10, an agent whose step calls a sub-agent run, and P11, the sub-agent's runs, which each
+        #: agent run records (`agent_settle`); named so each agent run arrives before its sub-agent's.
+        RunSpec("pz-51-agent-baseline", "p10", {"inner": "pz-52-agent-baseline-subagent", "amount": "10"}),
+        RunSpec("pz-52-agent-baseline-subagent", "p11", {"of": "pz-51-agent-baseline"}),
+        RunSpec("pz-53-agent-amount-changed", "p10", {"inner": "pz-54-agent-amount-changed-subagent",
+                                                      "amount": "20"}),
+        RunSpec("pz-54-agent-amount-changed-subagent", "p11", {"of": "pz-53-agent-amount-changed"}),
     ]
     return out
 
@@ -146,7 +163,8 @@ EXAMPLE_DATA = ("p4", "p7", "p8")
 #: console's label; a local console shows the label only.
 PIPELINE_NAMES = {"p1": "refund-policy Q&A", "p2": "reference demo pipeline", "p3": "ticket triage",
                   "p4": "support reply", "p5": "pump maintenance", "p6": "fill-level inspection",
-                  "p7": "cold-chain release", "p8": "invoice match", "p9": "wheel-bolt torque check"}
+                  "p7": "cold-chain release", "p8": "invoice match", "p9": "wheel-bolt torque check",
+                  "p10": "agent with a sub-agent", "p11": "sub-agent (called by the agent)"}
 
 
 def name_of(run_ids) -> str | None:
@@ -235,10 +253,13 @@ COMPARISONS = [
     ("p9-46-torque-baseline", "p9-47-torque-tool-firmware-changed"),
     #: One bolt reads below the window: the wheel goes to rework.
     ("p9-46-torque-baseline", "p9-48-torque-one-bolt-low"),
+    #: The amount the sub-agent's step records changed, two levels down: the comparison descends
+    #: into the sub-agent's run and names `settle`.
+    ("pz-51-agent-baseline", "pz-53-agent-amount-changed"),
 ]
 
 
-def _record(spec: RunSpec, run_dir: Path) -> None:
+def _record(spec: RunSpec, run_dir: Path, issuer=None) -> None:
     run_id = spec.run_id or spec.folder
     if spec.pipeline == "p1":
         from onetrace_console.demo_store import refund_policy
@@ -265,7 +286,12 @@ def _record(spec: RunSpec, run_dir: Path) -> None:
         cold_chain.main(run_dir, run_id, **spec.args)
     elif spec.pipeline == "p8":
         from onetrace_console.demo_store import invoice_match
-        invoice_match.main(run_dir, run_id, **spec.args)
+        invoice_match.main(run_dir, run_id, issuer=issuer, **spec.args)
+    elif spec.pipeline == "p10":
+        from onetrace_console.demo_store import agent_settle
+        agent_settle.main(run_dir.parent, run_id, spec.args["inner"], spec.args["amount"])
+    elif spec.pipeline == "p11":
+        return                  # recorded by its agent run, `p10`
     elif spec.pipeline == "p9":
         from onetrace_console.demo_store import torque_check
         torque_check.main(run_dir, run_id, **spec.args)
@@ -293,13 +319,17 @@ PLANTED = {
     "p3-28-t-3-rules1-lookup-retried": "Its account lookup made to fail once, then run again.",
     "p7-41-cold-chain-decision-tampered": "One byte of its recorded release decision changed after "
                                           "the run closed.",
+    "p8-49-invoice-paid-on-deny": "Its gated step paid on a decision that denied it.",
+    "p8-50-invoice-permit-other-amount": "Its gated step carried a permit for another amount than the "
+                                         "payment it recorded.",
 }
 
 
 def planted(spec: RunSpec) -> bool:
     """Whether the builder breaks the run on purpose: acts on it after it closed, signs it
     otherwise than with the trusted key, or makes one of its stages fail."""
-    return bool(spec.after) or spec.sign != "trusted" or bool(spec.args.get("fault"))
+    return (bool(spec.after) or spec.sign != "trusted" or bool(spec.args.get("fault"))
+            or bool(spec.args.get("plant")))
 
 
 def about_signing(spec: RunSpec) -> bool:
@@ -327,6 +357,29 @@ def _after(spec: RunSpec, run_dir: Path) -> None:
         raise ValueError(f"no action {spec.after!r}")
 
 
+def traceparent_for(folder: str) -> str:
+    """A run's W3C traceparent, made from its folder's name: the same on every build."""
+    h = hashlib.sha256(("onetrace-console demo span: " + folder).encode("utf-8")).hexdigest()
+    return f"00-{h[:32]}-{h[32:48]}-01"
+
+
+def write_traces(runs: Path, folders) -> None:
+    """Each run's OpenTelemetry trace, as onetrace exports it (`onetrace export otel`), under
+    `traces/<run folder>.json` beside the runs: what the trace panel shows on the public demo. A
+    run the export refuses has no file, and the panel says so."""
+    import subprocess
+    import sys
+    from onetrace_console.child import utf8_env
+    out = runs / "traces"
+    out.mkdir(parents=True, exist_ok=True)
+    for name in folders:
+        if not (runs / name / "MANIFEST.json").is_file():
+            continue
+        subprocess.run([sys.executable, "-m", "onetrace", "export", "otel", name, "--out",
+                        str(Path("traces") / f"{name}.json")], cwd=runs, capture_output=True, timeout=120,
+                       env=utf8_env())
+
+
 def build(folder: Path) -> list[RunSpec]:
     """Record, sign and act on every run into `folder`/runs, and write the trust file and the
     build record. `folder` must be new or empty."""
@@ -334,12 +387,27 @@ def build(folder: Path) -> list[RunSpec]:
     if folder.exists() and (not folder.is_dir() or any(folder.iterdir())):
         raise FileExistsError(f"{folder} is not a new, empty folder")
     specs = runs()
-    for spec in specs:
-        run_dir = folder / RUNS_DIRNAME / spec.folder
-        _record(spec, run_dir)
-        if spec.sign:
-            keys.sign(run_dir, keys.TRUSTED_SEED if spec.sign == "trusted" else keys.UNTRUSTED_SEED)
-        _after(spec, run_dir)
+    #: onetrace 0.5: the build's onedoor issuer (P8's gated step), and a span per run.
+    from onetrace_console.demo_store.onedoor_demo import Issuer
+    issuer = Issuer()
+    before = os.environ.get("TRACEPARENT")
+    try:
+        for spec in specs:
+            run_dir = folder / RUNS_DIRNAME / spec.folder
+            #: Every run recorded inside a span of its own: a W3C traceparent made from its folder,
+            #: the same on every build.
+            os.environ["TRACEPARENT"] = traceparent_for(spec.folder)
+            _record(spec, run_dir, issuer)
+            if spec.sign:
+                keys.sign(run_dir, keys.TRUSTED_SEED if spec.sign == "trusted" else keys.UNTRUSTED_SEED)
+            _after(spec, run_dir)
+    finally:
+        if before is None:
+            os.environ.pop("TRACEPARENT", None)
+        else:
+            os.environ["TRACEPARENT"] = before
+    issuer.write_beside(folder / RUNS_DIRNAME)
+    write_traces(folder / RUNS_DIRNAME, [s.folder for s in specs])
     (folder / TRUST_NAME).write_bytes(keys.trust_file_bytes())
     write_build_record(folder, (RUNS_DIRNAME, TRUST_NAME))
     return specs
@@ -347,12 +415,14 @@ def build(folder: Path) -> list[RunSpec]:
 
 def build_from(folder: Path, earlier: Path) -> None:
     """An earlier build's runs and trust file into `folder`, byte for byte, with a build record over
-    them, as `build` writes one: only where the earlier build's record vouches for every byte. A
-    builder explains one build's runs; a later build from them keeps those explanations."""
+    them, as `build` writes one: only where the earlier build's record vouches for every byte of
+    `runs/` and `trust.json`. The record's entries for anything else (a built store) are not read,
+    and no store is needed: an earlier build's runs/, trust.json and BUILD_RECORD.json are
+    enough. A builder explains one build's runs; a later build from them keeps those explanations."""
     folder, earlier = Path(folder), Path(earlier)
     if folder.exists() and (not folder.is_dir() or any(folder.iterdir())):
         raise FileExistsError(f"{folder} is not a new, empty folder")
-    problems = check_build_record(earlier)
+    problems = check_build_record(earlier, only=(RUNS_DIRNAME, TRUST_NAME))
     if problems:
         raise ValueError(f"{earlier} is not the demo as its builder made it: {'; '.join(problems[:5])}"
                          f"{' and more' if len(problems) > 5 else ''}")
@@ -386,9 +456,12 @@ def write_build_record(folder: Path, covers) -> None:
                                        encoding="utf-8")
 
 
-def check_build_record(folder: Path) -> list[str]:
+def check_build_record(folder: Path, only: tuple[str, ...] | None = None) -> list[str]:
     """What in `folder` the build record does not vouch for: every file changed, added or removed
-    since the builder wrote it, in words. Empty when every byte is the builder's."""
+    since the builder wrote it, in words. Empty when every byte is the builder's. `only`: read the
+    record's entries under these paths alone (`build_from`'s runs/ and trust.json), each required
+    present and equal and nothing added under them; entries for any other path are not read, and
+    need not be there."""
     folder = Path(folder)
     path = folder / BUILD_RECORD
     from onetrace_console.bounded_json import load_json_bounded
@@ -402,6 +475,13 @@ def check_build_record(folder: Path) -> list[str]:
         return [f"{BUILD_RECORD} is missing, so nothing in {folder} is vouched for"]
     except (OSError, ValueError, KeyError, TypeError):
         return [f"{BUILD_RECORD} is not a build record this console reads"]
+    if only is not None:
+        missing = [root for root in only if root not in covers]
+        if missing:
+            return [f"{BUILD_RECORD} does not cover {', '.join(missing)}"]
+        covers = list(only)
+        files = {rel: d for rel, d in files.items()
+                 if any(rel == root or rel.startswith(root + "/") for root in only)}
     have = _covered(folder, covers)
     problems = [f"{rel} was removed" for rel in sorted(set(files) - set(have))]
     problems += [f"{rel} was added" for rel in sorted(set(have) - set(files))]
@@ -418,7 +498,10 @@ def deliver(folder: Path, store, config):
     from onetrace_console.folder_load import _compare, load_folder
     loaded = load_folder(Path(folder) / RUNS_DIRNAME, store, config)
     first, note = None, ""
-    for i, pair in enumerate(COMPARISONS):
+    #: The comparisons whose two runs are there: a build from an earlier build's runs
+    #: (`--runs-from`) holds that build's pipelines only.
+    names = {r.name for r in loaded.runs}
+    for i, pair in enumerate(p for p in COMPARISONS if set(p) <= names):
         comparison, why = _compare(list(loaded.runs), pair, store)
         if i == 0:
             first, note = comparison, why

@@ -173,7 +173,9 @@ def explained_problems(page: str) -> list[str]:
     if [c for _, c in checks][:2] != ["onetrace diff baseline candidate --text --stage score#1".replace(
             "baseline", "a").replace("candidate", "b"), "onetrace localize a b --for decide#1"]:
         out.append(f"checks {checks}")
-    if "1 says what caused a difference" not in _text(a) or "1 cites an item the packet doesn't hold" not in _text(a):
+    #: Read without the footer count's "i" note, which names the same reasons (console 0.4.0).
+    shown = _text(re.sub(r'<span class="info".*?</span></span>', "", a, flags=re.S))
+    if "1 says what caused a difference" not in shown or "1 cites an item the packet doesn't hold" not in shown:
         out.append("the drops by reason are not shown")
     return out
 

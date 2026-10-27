@@ -23,6 +23,8 @@ nothing here knows.
 """
 from __future__ import annotations
 
+import re
+
 from onetrace_console.viewer.page import fingerprint_html, fingerprints_in_text
 from onetrace_console.words import escape, verbatim, verbatim_rows, generated_footer
 
@@ -121,6 +123,13 @@ def _incident_table(incidents: tuple[Incident, ...], store: Store, up: str = "")
                          f"</thead><tbody>{''.join(rows)}</tbody></table>", "The incidents", "incidents")
 
 
+#: A word no page of the console shows: the decisions extension's name, except in onetrace's own
+#: format names, which a record and the verifier write and a page shows as written.
+WITHHELD = re.compile(r"onedoor(?!-(?:decision-ref|issuer-trust)/1)", re.IGNORECASE)
+#: Said in place of a fix line that holds it: the line itself is kept whole in the stored report.
+FIX_KEPT = "the verifier's fix line for this check is kept whole in the check's report, not shown here"
+
+
 def _found(envelope: dict, incident: Incident) -> str:
     """"What the verifier found": the summary, the fix lines and the rows, each its own block,
     each as the verifier wrote it and drawn by the run page's rule for the verifier's rows: control
@@ -139,8 +148,14 @@ def _found(envelope: dict, incident: Incident) -> str:
     def linked(line: str) -> str:
         """The line by the rows' rule; its closing errors-page address kept whole, as the verifier
         wrote it, and linked to the published page a reader can read, errors.html, at the same
-        section."""
+        section. A line holding a word no page shows (`WITHHELD`) is not rewritten: its check's
+        name and its errors-page link are shown, and the line is said to be in the report."""
         found = _re.match(r"(.*; see )https://oneproof\.dev/onetrace/errors\.md#([A-Za-z0-9_-]+)$", line, _re.S)
+        if WITHHELD.search(line):
+            check = _re.match(r"(fix \([^)]*\))", line)
+            link = (f' <a href="{ERRORS_PAGE}#{found.group(2)}">{escape(ERRORS_SOURCE)}#{escape(found.group(2))}</a>'
+                    if found else "")
+            return (_escape_rows(check.group(1)) if check else "fix") + f": {escape(FIX_KEPT)};" + link
         if found is None:
             return _escape_rows(line)
         code = found.group(2)

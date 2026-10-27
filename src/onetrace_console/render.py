@@ -270,7 +270,111 @@ def _short_answer(report, annotations: list[dict], comparison, store: Store) -> 
         answer = short_answer.for_graph(report, annotations, edges, inputs_at, notes)
     else:
         answer = short_answer.for_line(report, annotations, inputs_at, notes)
-    return short_answer.render(answer)
+    #: onetrace 0.5: the SDK's descent into a step's children or a nested run, in its words; and a
+    #: gated step whose recorded decision or permit differs, as a plain fact.
+    answer = short_answer.with_descent(answer, nested_at(comparison, store))
+    answer = short_answer.with_authorization(answer, authorization_differs(a, b))
+    from onetrace_console.nesting_view import descent_section
+    return short_answer.render(answer) + descent_section(nested_at(comparison, store))
+
+
+def trace_panel_for(report, comparison, store: Store) -> str:
+    """The side-by-side trace panel at the first difference (`trace_panel`): each run's kept trace
+    (the person's file, or the SDK's export of the run, `beside`), and each run's receipt digest at
+    that step. Empty where the comparison found no first difference."""
+    import hashlib
+    from onetrace_console import beside, trace_panel
+    from onetrace_console.stage_pages import _files, _read, _steps
+    first = next((getattr(r, "node", None) or getattr(r, "stage", None) for r in getattr(report, "ladder", ())
+                  if r.verdict == "FIRST DIFFERENCE"), None)
+    if first is None:
+        return ""
+    stage = str(first).split("#", 1)[0]
+    docs, sources, digests = [], [], []
+    for key in (comparison.run_a, comparison.run_b):
+        raw, source = beside.trace(store, key)
+        try:
+            docs.append(load_json_bounded(raw.decode("utf-8"), "the trace file") if raw else None)
+        except (ValueError, UnicodeDecodeError, RecursionError):
+            docs.append({"unreadable": True})
+        sources.append(source)
+        run = _held(store, key)
+        digest = ""
+        if run is not None:
+            files = _files(run, store)
+            for s in _steps(run, store):
+                if _stage_of(s["receipt"]) == stage:
+                    stored = _read(files, store, s["file"])
+                    digest = "sha256:" + hashlib.sha256(stored).hexdigest() if stored is not None else ""
+                    break
+        digests.append(digest)
+    if not any(docs):
+        return ""
+    return trace_panel.panel(stage, tuple(docs), tuple(sources), tuple(digests))
+
+
+def short_headline(comparison, store: Store) -> str:
+    """A comparison's short answer headline, as plain text with each name in backticks, read as its
+    page reads it (the stored diff report, strictly); "" where the report cannot be read."""
+    import tempfile
+
+    from onetrace_console import short_answer
+    from onetrace_console.viewer.verbs import TwoRun, TwoRunDag, read_report
+    run = comparison.verb(DIFF)
+    if run is None or not any(name == "diff.json" for name, _ in run.reports):
+        return ""
+    try:
+        with tempfile.TemporaryDirectory(prefix="onetrace-headline-") as tmp:
+            folder = Path(tmp)
+            for name, key in run.reports:
+                (folder / name).parent.mkdir(parents=True, exist_ok=True)
+                create_exclusively(folder / name, store.get(key), named=name)
+            report = read_report(folder, two_run_dag=True)
+            if not isinstance(report, (TwoRun, TwoRunDag)) or not getattr(report, "ladder", None):
+                return ""
+            annotations = _annotations(folder, DIFF)
+            if isinstance(report, TwoRunDag) and not annotations:
+                annotations = dag_annotations(report, comparison, store)
+    except Exception:  # noqa: BLE001 - a report this can't read gives no headline
+        return ""
+    html = _short_answer(report, annotations, comparison, store)
+    import re as _re
+    m = _re.search(r'<p class="headline" data-short="headline">(.*?)</p>', html, _re.S)
+    if m is None:
+        return ""
+    from html import unescape
+    return unescape(_re.sub(r"</?code>", "`", m.group(1)))
+
+
+def nested_at(comparison, store: Store) -> str:
+    """The SDK's own line where diff descended (`nested_at` in diff.json), or ""."""
+    run = comparison.verb(DIFF) if comparison is not None else None
+    key = dict(run.reports).get("diff.json") if run is not None else None
+    if key is None:
+        return ""
+    try:
+        report = load_json_bounded(store.get(key).decode("utf-8"), "diff.json")
+    except Exception:  # noqa: BLE001 - a report this can't read says nothing of a descent
+        return ""
+    got = report.get("nested_at") if isinstance(report, dict) else None
+    return got if isinstance(got, str) else ""
+
+
+def authorization_differs(a: list[dict], b: list[dict]) -> list[tuple[str, str]]:
+    """[(step, "decision" or "permit")] for each step either run records decisions at, where the
+    two runs' recorded decisions (or, those equal, their permits or action digests) differ."""
+    from onetrace_console.onedoor_panel import decisions, differs
+    by_a = {_stage_of(r): r for r in a}
+    by_b = {_stage_of(r): r for r in b}
+    out = []
+    for stage in dict.fromkeys([*by_a, *by_b]):
+        ra, rb = by_a.get(stage), by_b.get(stage)
+        if decisions(ra or {}) is None and decisions(rb or {}) is None:
+            continue
+        what = differs(ra, rb)
+        if what:
+            out.append((stage, what))
+    return out
 
 
 def _first_difference_summary(report, annotations: list[dict], identical: int,
@@ -745,8 +849,15 @@ def setting_name(field: str) -> str:
             f"{escape(short_setting(field))}</span>")
 
 
+def _authorization_note(stage: str, authorization: dict[str, str] | None) -> str:
+    """A step's row on a comparison, where the two runs' recorded decision or permit differs."""
+    what = (authorization or {}).get(str(stage).split("#", 1)[0])
+    return (f' · <span data-authorization-differs="{_tag(what)}">the {escape(what)} differs</span>'
+            if what else "")
+
+
 def _ladder_table(report, verb: str, *, annotations: list[dict], anchors: bool = False,
-                  inputs: dict[str, str] | None = None) -> str:
+                  inputs: dict[str, str] | None = None, authorization: dict[str, str] | None = None) -> str:
     """The changes table, one row per ladder row, in the SDK's order. Nothing re-sorted.
 
     `data-verdict` carries the SDK's verdict verbatim, and the first difference is marked on
@@ -771,6 +882,7 @@ def _ladder_table(report, verb: str, *, annotations: list[dict], anchors: bool =
             + (f" · {escape(row.reason)}" if row.reason else "")
             + (f' · <span data-inputs-differ="true">{escape(inputs[row.stage])}</span>'
                if inputs and row.verdict == "same" and row.stage in inputs else "")
+            + _authorization_note(row.stage, authorization)
             + "</td></tr>")
     #: Every stage's whole digests are the detail behind the page's sentence and graph: folded,
     #: under Details, and opened by a link into it (a graph box's `#step-N`).
@@ -951,7 +1063,7 @@ def _text_diff_section(comparison, store) -> str:
             f"{render_textdiff(doc)}{command}</section>")
 
 
-def _dag_table(report, verb: str) -> str:
+def _dag_table(report, verb: str, authorization: dict[str, str] | None = None) -> str:
     """The changes table for two graph-shaped runs: one row per node, in the SDK's order,
     each node's position in either run as the report gives it (empty where it is not in that
     run), the SDK's annotations verbatim -- each fingerprint in them short, its whole value one
@@ -974,7 +1086,8 @@ def _dag_table(report, verb: str) -> str:
             f'<td class="mono">{escape(row.index_candidate or "")}</td>'
             f'<td data-section="annotations">{cell}</td>'
             f'<td data-result="{_tag(row.verdict)}">'
-            f'{escape(_RESULT_WORDS.get(row.verdict, row.verdict))}</td></tr>')
+            f'{escape(_RESULT_WORDS.get(row.verdict, row.verdict))}'
+            f'{_authorization_note(instance_label(row.node), authorization)}</td></tr>')
     return _scrolls(
         f'<table data-section="changes" data-verb="{_tag(verb)}" data-shape="dag"><thead><tr>'
         "<th>#</th><th>node</th><th>baseline</th><th>candidate</th>"
@@ -1358,6 +1471,9 @@ def render_diff(comparison: StoredComparison, store: Store, *, generated_at: str
     blocks.append(_different_pipelines(pair))
     #: The short answer goes here, first: drawn once diff's report is read below (`short_answer`).
     top, short, chip_facts = len(blocks), "", {}
+    #: onetrace 0.5: each step whose two runs' recorded decision or permit differs, for its row.
+    authorization = dict(authorization_differs(_receipts_in_order(comparison.run_a, store),
+                                               _receipts_in_order(comparison.run_b, store)))
     #: A graph-shaped pair: what its pages cannot draw is one closed line at the end, not
     #: sections that say so (`_not_shown`).
     dag, hidden = False, []
@@ -1459,7 +1575,11 @@ def render_diff(comparison: StoredComparison, store: Store, *, generated_at: str
                     blocks[0] = '<h1>Diff</h1>' + ab
                 graph = _compare_graph(report, comparison, store)
                 blocks.append(graph)
-                blocks.append(_dag_table(report, verb))
+                from onetrace_console.nesting_ladder import diff_ladder
+                from onetrace_console.run_panels import held_runs
+                blocks.append(diff_ladder(_dag_table(report, verb, authorization),
+                                          _receipts_in_order(comparison.run_a, store),
+                                          _receipts_in_order(comparison.run_b, store), held_runs(store, "../runs/")))
                 blocks.append(_graph_caveat(report, comparison, store))
             #: One summary per page, from diff's report: localize's ladder is the same walk,
             #: and its own contribution is the localized set below.
@@ -1482,6 +1602,9 @@ def render_diff(comparison: StoredComparison, store: Store, *, generated_at: str
                                                         _card_inputs(report, comparison, store,
                                                                      text_block)))
             if verb == DIFF and getattr(report, "ladder", None):
+                #: The app's spans at the first difference, from each run's kept trace (onetrace 0.5).
+                blocks.append(trace_panel_for(report, comparison, store))
+            if verb == DIFF and getattr(report, "ladder", None):
                 if not isinstance(report, TwoRunDag):
                     #: The line drawn as the stage table is: the same stages, joined where the
                     #: candidate's receipts record their reads.
@@ -1490,9 +1613,15 @@ def render_diff(comparison: StoredComparison, store: Store, *, generated_at: str
                                                 recorded_change=later))
                 blocks.append(_settings_changed(annotations, first=later))
             if getattr(report, "ladder", None) and not isinstance(report, TwoRunDag):
-                blocks.append(_ladder_table(report, verb, annotations=annotations,
-                                            anchors=verb == DIFF,
-                                            inputs=input_notes(comparison, store)))
+                #: Steps inside steps: each child under its calling step, each nested run a row
+                #: under it, for each run (`nesting_ladder`); a table with neither as it was.
+                from onetrace_console.nesting_ladder import diff_ladder
+                from onetrace_console.run_panels import held_runs
+                blocks.append(diff_ladder(_ladder_table(report, verb, annotations=annotations,
+                                                        authorization=authorization, anchors=verb == DIFF,
+                                                        inputs=input_notes(comparison, store)),
+                                          _receipts_in_order(comparison.run_a, store),
+                                          _receipts_in_order(comparison.run_b, store), held_runs(store, "../runs/")))
             if not isinstance(report, TwoRunDag):
                 blocks.append(_localized(report))
             if verb == DIFF:
@@ -1525,7 +1654,8 @@ def render_diff(comparison: StoredComparison, store: Store, *, generated_at: str
                                         and "report-refused" not in b]))
 
     if short:
-        blocks.insert(top, short)
+        from onetrace_console.what_changed import chosen_line
+        blocks.insert(top, chosen_line(comparison, store) + short)
     same = "" if unchecked else _same_change(comparison, store)
     if dag and 'data-state="graph"' in same:
         hidden.append(("same-change", []))

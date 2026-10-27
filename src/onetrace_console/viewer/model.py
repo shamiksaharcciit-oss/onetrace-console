@@ -300,8 +300,10 @@ def count_findings(report: Report, outcome: str, subject: str | None = None,
 RUN_SUBJECT = "run"
 #: Rows about the run as a whole: `run:` rows, and rows that name no subject at all -- 0.2.0's two
 #: graph rows, read from `--json`. Neither is a step's; the second kind is
-#: drawn in the "Ran as approved" rung, not beside the strip.
-WHOLE_RUN = frozenset({RUN_SUBJECT, ""})
+#: drawn in the "Ran as approved" rung, not beside the strip. And onetrace-verify 0.5.0's
+#: `decisions:` and `nesting:` rows, about the run's gated steps and the runs inside its steps:
+#: drawn in the run page's own sections for them, never as a step.
+WHOLE_RUN = frozenset({RUN_SUBJECT, "", "decisions", "nesting"})
 #: A record beside the chain, at run level like `run:` -- exactly
 #: `anchors/<name>.json` or `signatures/<name>.json` (one segment after the folder, no backslash,
 #: nothing after `.json`), whose file is in the run, compared by code point. Anything else under

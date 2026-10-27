@@ -116,7 +116,8 @@ def test_a_comparison_stores_the_reports_the_sdk_wrote(pair, store, examined):
     total_reports = 0
     for v in c.verbs:
         assert v.exit_status != "", f"{v.verb} recorded no exit status: {v.note}"
-        assert v.command[0] == sys.executable, "the verb was not run through this interpreter"
+        #: Run through this interpreter, and recorded as `python`: no path of this machine is kept.
+        assert v.command[0] == "python", "the verb's interpreter is recorded by a path"
         total_reports += len(v.reports)
         for name, key in v.reports:
             assert store.has(key), f"{v.verb}/{name} is not in the store"
@@ -145,10 +146,12 @@ def test_the_stored_report_is_byte_identical_to_running_diff_by_hand(pair, store
     #: never written a second time over the same folder.
     folder_a, folder_b = work / "a", work / "b"
     assert (folder_a / "MANIFEST.json").is_file() and (folder_b / "MANIFEST.json").is_file()
-    out = tmp_path / "byhand"
-    proc = subprocess.run([sys.executable, "-m", "onetrace", DIFF,
-                           str(folder_a), str(folder_b), "--out", str(out)],
-                          capture_output=True)
+    #: As the runner runs it: from the work folder, every folder named relative to it, the
+    #: verifier its copy beside the runs.
+    out = work / "byhand"
+    proc = subprocess.run([sys.executable, "-m", "onetrace", DIFF, "a", "b", "--verifier", "verifier",
+                           "--out", "byhand"], capture_output=True, cwd=work)
+    assert c.verb(DIFF).command[4:] == ("a", "b", "--verifier", "verifier", "--out", "out-diff")
     assert out.is_dir(), f"diff wrote nothing by hand: {proc.stderr[-400:]!r}"
 
     by_hand = {p.relative_to(out).as_posix(): p.read_bytes()

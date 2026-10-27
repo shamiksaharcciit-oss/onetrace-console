@@ -150,6 +150,10 @@ def deliver_one(run_dir: Path, store: Store, config: Config, *,
     if isinstance(accepted, Rejection):
         return LoadedRun(run_dir.name, None,
                          "refused: " + "; ".join(r.strip() for r in accepted.rows))
+    #: The files the worked examples keep beside a run (the decision export, the permit issuers,
+    #: a trace under traces/), kept with it for its check and its pages (`beside`).
+    from onetrace_console import beside
+    beside.from_folder(store, accepted.run.key, run_dir)
     return LoadedRun(run_dir.name, run_and_record(accepted.run, store, **check_options(config)))
 
 
@@ -180,10 +184,35 @@ def load_folder(folder: Path, store: Store, config: Config, *,
                               f"(there: {', '.join(names)}).")
     shared = shared_heads(found)
     loaded = [deliver_one(run_dir, store, config, shared=shared) for run_dir in found]
+    loaded = recheck_nested(loaded, store, config)
     comparison, note = None, ""
     if compare is not None:
         comparison, note = _compare(loaded, compare, store)
     return Loaded(tuple(loaded), comparison, note)
+
+
+def recheck_nested(loaded: list[LoadedRun], store: Store, config: Config) -> list[LoadedRun]:
+    """Each run that records calling another (a `run:<id>` input, onetrace 0.5's nesting) whose
+    inner run arrived after it: checked again now the console holds it, so the verifier's nested-runs
+    row reads the inner run's folder. A run whose check already named every held inner run is left."""
+    from onetrace_console.checks import check_options, run_and_record
+    from onetrace_console.home import _envelope
+    from onetrace_console.nesting_view import nested_inputs
+    from onetrace_console.render import _receipts_in_order
+    held = {r.run_id for r in store.runs()}
+    out = []
+    for item in loaded:
+        run = item.run
+        if run is None:
+            out.append(item)
+            continue
+        inner = {i for r in _receipts_in_order(run.key, store) for i, _ in nested_inputs(r)} & held
+        given = str((_envelope(run, store) or {}).get("command", "")).count("--nested-run")
+        if inner and given < len(inner):
+            run = run_and_record(store.get_run(run.key) or run, store, **check_options(config))
+            item = LoadedRun(item.name, run, item.refused)
+        out.append(item)
+    return out
 
 
 def _compare(loaded: list[LoadedRun], pair: tuple[str, str], store: Store):

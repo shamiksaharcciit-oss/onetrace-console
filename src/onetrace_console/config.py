@@ -162,6 +162,12 @@ class Config:
     #: explicit switch, never a default.
     public: bool = False
 
+    #: A local console's link to the person's own tracing tool: {"link": "<http(s) address with
+    #: {trace_id} and, optionally, {span_id}>"}. Each recorded trace id becomes "Open in your
+    #: tracing tool"; the console builds the link and never calls it. A public console shows no
+    #: link. Empty: no link.
+    tracing: dict = field(default_factory=dict)
+
 
 _KEYS = {f.name for f in fields(Config)}
 
@@ -217,6 +223,22 @@ def _validate_top(data: dict, *, source: str) -> None:
                 f"{source}: {f.name} must be {want}, got {data[f.name]!r}",
                 fix=f"give {f.name} {want} in {source} (its default is {f.default!r}), or "
                     f"remove the key to use that default.")
+
+
+def _validate_tracing(value: object, *, source: str) -> dict:
+    """`tracing`: an object with one key, `link`, an http(s) address holding `{trace_id}`."""
+    import re
+    fix = (f'give tracing as {{"link": "https://your-tool.example/trace/{{trace_id}}?span={{span_id}}"}} '
+           f"in {source}, or remove it.")
+    if not isinstance(value, dict) or set(value) - {"link"}:
+        raise ConfigError(f"{source}: tracing must be an object with one key, link, got {value!r}", fix=fix)
+    link = value.get("link")
+    if link is None:
+        return {}
+    if not (isinstance(link, str) and _text(link) and re.match(r"https?://", link) and "{trace_id}" in link):
+        raise ConfigError(f"{source}: tracing.link must be an http(s) address holding {{trace_id}}, "
+                          f"got {link!r}", fix=fix)
+    return {"link": link}
 
 
 def _validate_extensions(value: object, *, source: str) -> dict:
@@ -324,6 +346,8 @@ def _from_mapping(data: dict, *, source: str) -> Config:
             f"{source}: tsa_cert and tsa_roots go together: the verifier checks a time-stamp "
             f"authority's certificate against the root it chains to.",
             fix=f"set both tsa_cert and tsa_roots in {source}, or neither.")
+    if "tracing" in data:
+        data = {**data, "tracing": _validate_tracing(data["tracing"], source=source)}
     if "extensions" in data or "sign_in" in data:
         data = dict(data)
         if "extensions" in data:

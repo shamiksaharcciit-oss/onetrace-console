@@ -85,12 +85,14 @@ def test_a_long_reading_is_drawn_whole_inside_its_box(examined):
 
 
 def _demo_words(drawing: str) -> dict[str, str]:
-    """Each box's own words after its chip, from its title: `name · chip · words`."""
+    """Each box's own words after its chip, from its title: `name · chip · words`, each of its lines
+    after the chip in order (a step with steps inside has two: its fact, and how many it holds), as
+    the drawing reads them, line after line."""
     out = {}
     for title, _, _, _ in _boxes(drawing):
         parts = title.split(" · ")
         if len(parts) >= 3:
-            out[title] = " · ".join(parts[2:])
+            out[title] = " ".join(parts[2:])
     return out
 
 

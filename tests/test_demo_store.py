@@ -58,8 +58,24 @@ def _without_time(rel: str, data: bytes):
     """A file's content with what the clock decides removed, and nothing else: a receipt's
     `time`, and the digests the chain builds over receipts that hold it -- `prev`, an input that
     is an upstream receipt, the manifest's chain digests and head, a signature over that head.
-    Every other byte, and every other file (each output, each input file), is compared as is."""
-    name = rel.split("/")[2] if rel.count("/") >= 2 else rel
+    Every other byte, and every other file (each output, each input file), is compared as is.
+
+    And since onetrace 0.5.0, what the build's throwaway issuer key decides, or a run inside a step
+    whose chain holds the clock: a gated step's permit (signed with that key, its expiry from the
+    clock) and the issuers file naming the key; an input that is an inner run (`run:<id>`, its
+    digest that run's chain head); and a trace file, compared by its spans' names, kinds, attribute
+    names and status in order (its ids and times come from the chain head and the clock)."""
+    parts = rel.split("/")
+    name = parts[2] if len(parts) > 2 else parts[-1]
+    if parts[1:2] == ["traces"]:
+        doc = json.loads(data)
+        return [(s["name"], s["kind"], [a["key"] for a in s["attributes"]], s.get("status"))
+                for r in doc["resourceSpans"] for sc in r["scopeSpans"] for s in sc["spans"]]
+    if name == "permit-issuers.json":
+        doc = json.loads(data)
+        for issuer in doc["issuers"]:
+            issuer.pop("public_key")
+        return doc
     if name not in ("MANIFEST.json", "receipts", "signatures"):
         return data
     doc = json.loads(data)
@@ -67,8 +83,10 @@ def _without_time(rel: str, data: bytes):
         doc.pop("time")
         doc.pop("prev")
         for item in doc["inputs"]:
-            if item["name"].startswith("receipt:"):
+            if item["name"].startswith(("receipt:", "run:")):
                 item.pop("digest")
+        for decision in (doc.get("authorization") or {}).get("decisions", []):
+            decision.pop("permit", None)
     elif name == "MANIFEST.json":
         doc.pop("chain_head")
         for entry in doc["chain"]:
@@ -84,7 +102,8 @@ def test_two_builds_are_the_same_apart_from_time(two_builds, examined):
     files = _files(a / "runs")
     assert files == _files(b / "runs")
     examined(len(files), "files compared across two builds")
-    as_is = [rel for rel in files if rel.split("/")[1] not in ("MANIFEST.json", "receipts", "signatures")]
+    as_is = [rel for rel in files if rel.split("/")[1:2] not in (["MANIFEST.json"], ["receipts"], ["signatures"])
+             and not rel.startswith("traces/") and rel != "permit-issuers.json"]
     assert as_is, "outputs and inputs are compared byte for byte"
     for rel in files:
         x, y = (a / "runs" / rel).read_bytes(), (b / "runs" / rel).read_bytes()
@@ -244,6 +263,16 @@ EXPECTED = {
     "p9-46-torque-baseline": ("holds", "yes", TRUSTED, None, "not-compared"),
     "p9-47-torque-tool-firmware-changed": ("holds", "yes", TRUSTED, None, "same"),
     "p9-48-torque-one-bolt-low": ("holds", "yes", TRUSTED, "changed", "changed"),
+    #: P8's two runs broken on purpose (onetrace 0.5.0): paid on a deny; a permit for another amount.
+    #: Each contradicts its record on the verifier's own `decisions:` row.
+    "p8-49-invoice-paid-on-deny": ("contradicts", "no", TRUSTED, "contradicts", "not-compared"),
+    "p8-50-invoice-permit-other-amount": ("contradicts", "no", TRUSTED, "contradicts", "not-compared"),
+    #: P10, an agent whose one step calls a sub-agent's run, and P11, the sub-agent's runs: the
+    #: amount the sub-agent records changed, two levels down.
+    "pz-51-agent-baseline": ("holds", "yes", TRUSTED, None, "not-compared"),
+    "pz-52-agent-baseline-subagent": ("holds", "yes", TRUSTED, None, "not-compared"),
+    "pz-53-agent-amount-changed": ("holds", "yes", TRUSTED, "changed", "changed"),
+    "pz-54-agent-amount-changed-subagent": ("holds", "yes", TRUSTED, None, "not-compared"),
 }
 
 
@@ -270,16 +299,16 @@ def test_every_run_reads_as_the_stores_table_says(built, examined):
                            vs_baseline(run, store)[0])
         assert rungs["Committed by a known time"] == "not-anchored", (run.run_id, "every run")
     assert got == EXPECTED
-    #: Nine pipelines, labelled P1-P9 in order of first arrival. That order is read from
+    #: 11 pipelines, labelled P1-P11 in order of first arrival. That order is read from
     #: `received_at`, kept to the second, so two pipelines whose first runs arrive in the same
     #: second take their labels in key order -- which varies from build to build. The demo's
     #: pipelines are held by their stages and runs here, not by the label each one gets.
     found = {(p.stages[0], len(p.runs)) for p in pipelines(store)}
-    assert sorted(p.label for p in pipelines(store)) == [f"P{n}" for n in range(1, 10)]
+    assert sorted(p.label for p in pipelines(store)) == sorted(f"P{n}" for n in range(1, 12))
     assert found == {("load_docs", 20), ("request", 2), ("intake", 6), ("question", 3),
-                     ("readings", 4), ("measure", 3), ("fill_gaps", 3), ("read_invoice", 4),
-                     ("read_tool_log", 3)}
-    assert len(store.comparisons()) == 14
+                     ("readings", 4), ("measure", 3), ("fill_gaps", 3), ("read_invoice", 6),
+                     ("read_tool_log", 3), ("agent_step", 2), ("intake", 2)}
+    assert len(store.comparisons()) == 15
 
 
 def test_the_headline_comparison_moves_an_answer_at_split(built, examined):

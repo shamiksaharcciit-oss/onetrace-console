@@ -129,7 +129,8 @@ def _rendering(config: Config | None):
     if config is None:
         return contextlib.nullcontext()
     return rendering(onedoor=bool(config.extensions.get("onedoor")),
-                     sign_in=bool(config.sign_in.get("enabled")), public=config.public)
+                     sign_in=bool(config.sign_in.get("enabled")), public=config.public,
+                     tracing_link=(config.tracing or {}).get("link", ""))
 
 
 def _render_run_pages(run, store: Store, root: Path, config: Config | None = None) -> None:

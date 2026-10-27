@@ -14,6 +14,7 @@ import json
 import re
 import shutil
 import subprocess
+import sys
 from collections import Counter
 from dataclasses import replace
 from html import unescape
@@ -107,7 +108,10 @@ def test_the_golden_fixture_renders_the_warranty_trace(golden, examined):
     assert re.findall(r'<li data-node="([^"]+)" data-verdict="([^"]+)"', chain) == [
         ("load", "FIRST DIFFERENCE"), ("split", "downstream"), ("index", "downstream")]
     assert chain.count('data-first-difference="true"') == 1
-    assert '<p data-documents>1 of 3 documents changed</p>' in chain
+    #: With its note, what the count is (an "i" since console 0.4.0).
+    assert re.search(r'<p data-documents>1 of 3 documents changed<span class="info"[^>]*'
+                     r'aria-label="The SDK&#x27;s own count, from the two runs&#x27; corpus manifests: 1 of the 3 '
+                     r'documents it lists differ between them\."', chain)
     #: Point 4: twelve -> six at load, ingest rows first, then the query rows, each verified.
     table = re.search(r'data-section="where-started-text">(.*?)</section>', board, re.S).group(1)
     stages = re.findall(r"<td><code>([^<]+)</code></td><td><code>[^<]*</code></td>", table)
@@ -128,10 +132,12 @@ def test_the_trace_is_its_own_run_its_json_the_sdks_bytes_and_the_text_diff_unch
     run = comparison.verb(TRACE)
     assert run.shown_command == SHOWN_COMMAND and "--no-follow" not in run.command
     assert "--out" in run.command and "--runs-root" in run.command
-    #: The recorded command, by hand over the same folders, prints the same bytes.
-    argv = list(run.command)
+    #: The recorded command, by hand over the same folders, prints the same bytes: run from the
+    #: work folder its names are relative to, `python` this interpreter.
+    argv = [sys.executable, *run.command[1:]]
     argv[argv.index("--out") + 1] = str(tmp_path / "by-hand")
-    assert subprocess.run(argv, capture_output=True, env=utf8_env()).stdout == store.get(run.stdout_key)
+    assert subprocess.run(argv, capture_output=True, env=utf8_env(), cwd=tmp_path / "work").stdout == \
+        store.get(run.stdout_key)
     #: The text diff's own run is still `--no-follow`, its trace "not followed".
     plain = comparison.verb(TEXT_DIFF)
     assert "--no-follow" in plain.command
@@ -272,10 +278,10 @@ def test_runs_the_trace_cannot_reach_change_nothing(store, tmp_path):
     keys = runs_root(store, {r.chain_head for r in store.runs()}, tmp_path / "every")
     assert len(keys) == 4
     run = comparison.verb(TRACE)
-    argv = list(run.command)
+    argv = [sys.executable, *run.command[1:]]
     argv[argv.index("--runs-root") + 1] = str(tmp_path / "every")
     argv[argv.index("--out") + 1] = str(tmp_path / "out-every")
-    every = subprocess.run(argv, capture_output=True, env=utf8_env()).stdout
+    every = subprocess.run(argv, capture_output=True, env=utf8_env(), cwd=tmp_path / "work").stdout
     assert json.loads(every) == json.loads(store.get(run.stdout_key))
 
 
@@ -381,7 +387,10 @@ BOARD7_NEW = {
     "load · FIRST DIFFERENCE": _SDK,
     "split · downstream": _SDK,
     "index · downstream": _SDK,
-    "1 of 3 documents changed": "the one count the SDK gives, documents changed",
+    #: The one count the SDK gives, documents changed, with its "i" note, read as text: the mark's
+    #: letter and its note after the count.
+    "1 of 3 documents changediThe SDK's own count, from the two runs' corpus manifests: 1 of the 3 documents it "
+    "lists differ between them.": "the one count the SDK gives, documents changed, and its note",
 }
 
 

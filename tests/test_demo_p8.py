@@ -234,7 +234,7 @@ def test_each_pipeline_page_on_the_public_demo_names_its_pipeline(demo, examined
     from onetrace_console.demo_store import PIPELINE_NAMES
     folder, store, _runs = demo
     examined(len(PIPELINE_NAMES), "pipeline pages")
-    assert len(PIPELINE_NAMES) == 9 and PIPELINE_NAMES["p8"] == "invoice match"
+    assert len(PIPELINE_NAMES) == 11 and PIPELINE_NAMES["p8"] == "invoice match"
     assert PIPELINE_NAMES["p9"] == "wheel-bolt torque check"
     assert name_problems(folder, store) == []
 

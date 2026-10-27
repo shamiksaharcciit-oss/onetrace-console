@@ -338,7 +338,8 @@ def test_the_demo_reads_as_its_table_says(demo, examined):
     by_id = {r.run_id: r.key for r in demo.runs}
     counts = {s: _count(demo, s) for s in COUNTED}
     examined(len(demo.runs), "runs read")
-    assert counts == {"yes": 44, "no": 3, "couldnt-check": 0, "not-checked": 1, "no-verdict": 0}
+    #: Since onetrace 0.5.0: P8 49 and 50 contradict their records; P10's and P11's four agree.
+    assert counts == {"yes": 48, "no": 5, "couldnt-check": 0, "not-checked": 1, "no-verdict": 0}
     key = by_id["p1-16-candidate-set5-no-artifacts"]
     assert (demo.state[key], demo.why[key]) == ("not-checked", "held without its output files required")
 
@@ -449,7 +450,8 @@ def outputs_differ(demo, tmp_path_factory) -> Demo:
     runs = folder / demo_store.RUNS_DIRNAME
     for other in list(runs.iterdir()):
         if other.name not in ("p1-02-baseline-set2", "p1-16-candidate-set5-no-artifacts"):
-            shutil.rmtree(other)
+            #: The other runs' folders, and what the builder wrote beside them (files and `traces/`).
+            shutil.rmtree(other) if other.is_dir() else other.unlink()
     #: Its output files one folder down, in a layout the verifier doesn't recognise: the plain
     #: check leaves them not run and holds; the run with the output files required fails.
     artifacts = runs / "p1-02-baseline-set2" / "artifacts"

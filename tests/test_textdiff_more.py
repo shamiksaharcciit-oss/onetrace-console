@@ -12,6 +12,7 @@ from __future__ import annotations
 import json
 from html import escape
 import subprocess
+import sys
 from dataclasses import replace
 
 import pytest
@@ -47,9 +48,10 @@ def test_the_text_diff_is_a_run_of_its_own_and_its_json_is_the_sdks_bytes(pq, ex
         "python -m onetrace diff RUN_A RUN_B --text --json --no-follow")
     assert "--no-follow" in run.command and "--max-lines" not in run.command
     #: The recorded command, run by hand over the same two folders, prints the same bytes.
-    argv = list(run.command)
+    #: Run from the work folder its names are relative to, `python` this interpreter.
+    argv = [sys.executable, *run.command[1:]]
     argv[argv.index("--out") + 1] = str(tmp_path / "by-hand")
-    again = subprocess.run(argv, capture_output=True, env=utf8_env()).stdout
+    again = subprocess.run(argv, capture_output=True, env=utf8_env(), cwd=tmp_path / "work").stdout
     assert store.get(run.stdout_key) == again
     doc = read_textdiff(again)
     assert doc.get("corpus_traces") in (None, []) or all(

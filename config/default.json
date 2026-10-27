@@ -28,5 +28,6 @@
   "trust_file": null,
   "tsa_cert": null,
   "tsa_roots": [],
-  "public": false
+  "public": false,
+  "tracing": {}
 }

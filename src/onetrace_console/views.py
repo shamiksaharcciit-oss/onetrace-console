@@ -40,7 +40,7 @@ RUN_STEPS = {"ladder", "graph", "timeline", "changed"}
 #: Read from the record's contents, so withheld with the steps where they are: the answer trail,
 #: the case (its times and its steps) and a declined step. "What could be re-checked" stays: it
 #: says how to check the record again.
-RUN_READ_FROM = {"strip", "case", "declined"}
+RUN_READ_FROM = {"strip", "case", "declined", "onedoor", "span-context", "nesting", "parent-run"}
 #: The answer trail's command to repeat the check is the one line of the trail a red run's "What
 #: changed" keeps, with "What could be re-checked": it says nothing read from the record's
 #: contents. The copy is marked, so it is told apart from the trail, which stays whole on "Proof".

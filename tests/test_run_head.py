@@ -290,8 +290,10 @@ def test_each_node_carries_a_fact_from_the_record_and_its_check(demo, examined):
 def test_sabotage_a_node_fact_the_record_does_not_hold_is_named(demo, examined):
     from onetrace_console.stage_pages import _steps
     store, pages = demo
-    run = store.runs()[0]
-    page = _graph_view(pages / "runs" / run.key)
+    #: A run with a box whose fact is "1 output file", to plant on: the store's order of runs varies
+    #: from build to build, and an agent's step writes three files.
+    run, page = next((r, p) for r in store.runs() for p in [_graph_view(pages / "runs" / r.key)]
+                     if re.search(r"<title>[^<]*?\b1 output file\b", p))
     receipts = [s["receipt"] for s in _steps(run, store)]
     planted = re.sub(r"(<title>[^<]*?)\b1 output file\b", r"\g<1>318 chunks", page, count=1)
     examined(1, "planted page")

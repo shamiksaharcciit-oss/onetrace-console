@@ -72,7 +72,7 @@ _SLOT = re.compile(r"(<!--fingerprint-->)[0-9a-f]{64}(<!--/fingerprint-->)")
 #: `drift`: the drift reports, each copied where every run it covers is listed; `x`, the
 #: explanations (`explain.FOLDER`): never copied, and the panel drawn as its place only
 #: (`explain.no_presses`).
-_STORE_PARTS = {"objects", "runs", "comparisons", "drift", "x"}
+_STORE_PARTS = {"objects", "runs", "comparisons", "drift", "x", "beside"}
 _FINGERPRINT = re.compile(r"<!--fingerprint-->([0-9a-f]{64})<!--/fingerprint-->")
 SEALS = "SEALS.txt"
 _SEALS_HEAD = ("# Each sealed page of this export: its path, the fingerprint the console serves it "
@@ -161,6 +161,11 @@ def _scratch(source: Path, keys: list[str], into: Path):
     (into / "store" / "runs").mkdir(parents=True)
     for key in keys:
         shutil.copy2(store_dir / "runs" / f"{key}.json", into / "store" / "runs" / f"{key}.json")
+        #: What was kept beside a listed run (`beside`): its objects are in `objects/` already.
+        kept = store_dir / "beside" / f"{key}.json"
+        if kept.is_file():
+            (into / "store" / "beside").mkdir(exist_ok=True)
+            shutil.copy2(kept, into / "store" / "beside" / kept.name)
     listed = set(keys)
     for comparison in source_store.comparisons():
         if comparison.run_a in listed and comparison.run_b in listed:

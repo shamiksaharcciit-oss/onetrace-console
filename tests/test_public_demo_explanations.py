@@ -84,7 +84,9 @@ def test_runs_from_a_folder_its_build_record_does_not_vouch_for_is_refused(first
     from onetrace_console.folder_load import LoadRefused, build_public
     earlier = tmp_path / "earlier"
     shutil.copytree(first_build, earlier)
-    run = next((earlier / "runs").iterdir())
+    #: A run folder, by name: `runs/` also holds what the builder writes beside the runs, and a
+    #: folder's listing order is the filesystem's (Windows lists `decisions.jsonl` first).
+    run = next(p for p in sorted((earlier / "runs").iterdir()) if (p / "MANIFEST.json").is_file())
     (run / "MANIFEST.json").write_bytes((run / "MANIFEST.json").read_bytes() + b" ")
     examined(1, "earlier build, one byte changed")
     with pytest.raises(LoadRefused, match="not the demo as its builder made it"):

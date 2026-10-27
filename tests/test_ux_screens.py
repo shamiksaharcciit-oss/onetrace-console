@@ -34,7 +34,9 @@ MONTHS = re.compile(r"\b(" + "|".join(calendar.month_name[1:]) + r")\b")
 #: Words no page may show: internal vocabulary, process ids and places, and personal names.
 NOT_ON_A_PAGE = {
     "AADP": re.compile(r"\bAADP\b"),
-    "onedoor": re.compile(r"onedoor", re.I),
+    #: Except onetrace's own format names, which a record and the verifier write and a page shows as
+    #: written: `onedoor-decision-ref/1` and `onedoor-issuer-trust/1` (onetrace 0.5.0).
+    "onedoor": re.compile(r"onedoor(?!-(?:decision-ref|issuer-trust)/1)", re.I),
     "canary": re.compile(r"\bcanary\b", re.I),
     "core": re.compile(r"\bcore\b"),
     "pod": re.compile(r"\bpod\b"),

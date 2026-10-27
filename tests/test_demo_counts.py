@@ -108,7 +108,7 @@ def test_sabotage_an_image_from_an_older_demo_without_its_description_or_broken_
     older = _with_description(png, "The Overview of onetrace-console's demo: 41 runs stored, in 7 pipelines")
     broken = png[:40] + bytes([png[40] ^ 1]) + png[41:]
     examined(3, "planted images")
-    assert image_problems(older) == ["the image shows ('41', '7'), the builder makes ('48', '9')"]
+    assert image_problems(older) == ["the image shows ('41', '7'), the builder makes ('54', '11')"]
     assert image_problems(_with_description(png, None)) == ["the image says None"]
     assert image_problems(broken) != []
 
@@ -140,8 +140,8 @@ def test_sabotage_each_check_catches_its_fault(served, monkeypatch, examined):  
     page = container_check.fetch(served[0], "/home.html")[2].decode("utf-8")
     caught = 0
     #: The count typed into the banner's words, as it was: three.
-    typed = page.replace("from nine small", "from three small")
-    assert typed != page and "the banner says three" in banner_problems(typed, 9)[0]
+    typed = page.replace("from 11 small", "from three small")
+    assert typed != page and "the banner says three" in banner_problems(typed, 11)[0]
     caught += 1
     #: The builder's list read wrong: one pipeline left out of it.
     names = demo_store.pipeline_names()
@@ -149,10 +149,10 @@ def test_sabotage_each_check_catches_its_fault(served, monkeypatch, examined):  
     assert banner_problems(banner(), len(names)) != []
     monkeypatch.undo()
     caught += 1
-    for name, old, new in [("README.md", "from nine small", "from eight small"),
-                           ("PYPI_DESCRIPTION.md", "stores 14 comparisons", "stores 13 comparisons"),
-                           ("README.md", "the demo's 48 runs", "the demo's 47 runs"),
-                           ("CHANGELOG.md", "records 48 runs", "records 47 runs")]:
+    for name, old, new in [("README.md", "from 11 small", "from ten small"),
+                           ("PYPI_DESCRIPTION.md", "stores 15 comparisons", "stores 14 comparisons"),
+                           ("README.md", "the demo's 54 runs", "the demo's 48 runs"),
+                           ("CHANGELOG.md", "records 54 runs", "records 48 runs")]:
         text = (REPO / name).read_text(encoding="utf-8")
         assert old in text, name
         assert doc_problems(name, text.replace(old, new)) != [], name

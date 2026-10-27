@@ -19,6 +19,12 @@ The demo's runs of it: an invoice held at a 2% price tolerance; the same invoice
 comparison shows the setting that changed at `match` and the decision it changes; the same invoice
 with one line's quantity changed, from 40 to 400, held at 5%; and a larger invoice that matches,
 declined by `approve_payment` as over the approver's limit.
+
+With onetrace 0.5, where the builder gives an `issuer` (`onedoor_demo`), `approve_payment` is a gated
+step: before it pays or holds, it cites the onedoor decision that allowed that action, with a permit
+bound to it; the over-limit invoice cites a denial and is not paid. Two more runs are broken on purpose
+(`plant`): one pays on a denied decision, and one carries a permit for another amount than the payment
+it records. The decisions are made by the builder, never by onedoor: invented example data.
 """
 from __future__ import annotations
 
@@ -86,12 +92,22 @@ def _cents(text: str) -> int:
     return int(whole) * 100 + int((cents + "00")[:2])
 
 
-def main(out_dir, run_id: str, invoice: str, tolerance_bp: str) -> None:
-    """Record one run: which invoice, and `match`'s price tolerance in basis points (200 is 2%)."""
+#: The two ways the builder breaks a gated run on purpose.
+PLANTS = ("pay-on-deny", "permit-other-amount")
+
+
+def main(out_dir, run_id: str, invoice: str, tolerance_bp: str, plant: str = "", issuer=None) -> None:
+    """Record one run: which invoice, and `match`'s price tolerance in basis points (200 is 2%).
+    `issuer` (`onedoor_demo.Issuer`): `approve_payment` is gated, and cites its decision; `plant`
+    breaks that on purpose (`PLANTS`)."""
+    if plant and plant not in PLANTS:
+        raise ValueError(f"no plant {plant!r}")
     out = Path(out_dir)
     out.mkdir(parents=True, exist_ok=True)
+    gated = {"gated_stages": ["approve_payment"]} if issuer is not None else {}
     rec = Recorder(out_dir, run_id=run_id, declared_stages=STAGES, manifest=Path(__file__),
-                   policy="fail-closed", anchor_reason="a demo record; anchoring is not part of this demo")
+                   policy="fail-closed", anchor_reason="a demo record; anchoring is not part of this demo",
+                   **gated)
     data = invoice_bytes(invoice)
     tolerance = int(tolerance_bp)
 
@@ -132,7 +148,21 @@ def main(out_dir, run_id: str, invoice: str, tolerance_bp: str) -> None:
         ctx.read_receipt("match")
         m = ctx.read_json(matched)
         amount = _cents(m["amount"])
-        if m["matched"] and amount > APPROVER_LIMIT_CENTS:
+        over = m["matched"] and amount > APPROVER_LIMIT_CENTS
+        if issuer is not None:
+            #: The decision that allowed what the step does, cited before it does it. Numbers in an
+            #: action are decimal strings, as onedoor's are.
+            request = f"{run_id}/approve_payment"
+            action = {"action": "pay" if m["matched"] else "hold", "order": m["order"],
+                      "amount_eur": m["amount"]}
+            if over or plant == "pay-on-deny":
+                ctx.decision(issuer.decide(request, "deny"))
+            elif plant == "permit-other-amount":
+                ctx.decision(issuer.decide(request, "permit"),
+                             permit=issuer.permit({**action, "amount_eur": _money(amount + 100000)}), action=action)
+            else:
+                ctx.decision(issuer.decide(request, "permit"), permit=issuer.permit(action), action=action)
+        if over:
             raise Refusal(f"an invoice of {m['amount']} is over the approver's limit of "
                           f"{_money(APPROVER_LIMIT_CENTS)}")
         return ctx.write_json("payment.json", {"decision": "pay" if m["matched"] else "hold",

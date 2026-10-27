@@ -182,7 +182,11 @@ def _titles(page: str) -> dict[str, str]:
 #: Measured by rendering it with the version alone set back to 0.3.0: the old digest.
 #: Moved by the version, 0.3.1 to 0.3.2, from e12450fa1001a7b56d0cd7b00206dd5218eb5299272b26555f600c5b750595a9.
 #: Measured by rendering it with the version alone set back to 0.3.1: the old digest.
-UNMARKED_R_CASE_SHA256 = "7c7949c271ba97390b6ae999f3e9e97783f428e426856364e66ca6b07d74d016"
+#: Moved by the run page's "What changed?" section (console 0.4.0), from 7c7949c271ba97390b6ae999f3e9e97783f428e426856364e66ca6b07d74d016: the one
+#: difference, measured by rendering it with the pin commit's code (the old digest) and this one.
+#: Moved by the version, 0.3.2 to 0.4.0, from 2bcbe4c7581ae30d0ee9a1d6f30dfeda2faa482b75832540c9dca356f9329ed7.
+#: Measured by rendering it with the version alone set back to 0.3.2: the old digest.
+UNMARKED_R_CASE_SHA256 = "629afc005e4df4e69fcb256b7ec69f49d41e1033919eab4563ec8bb7659c1f92"
 _VERIFIER_PATH = re.compile(r"\S*onetrace_verify[/\\]verify\.py")
 _FINGERPRINT = re.compile(r"<!--fingerprint-->[0-9a-f]{64}<!--/fingerprint-->")
 _VERIFIER_BLOCK = re.compile(r'(<pre data-layer="3">)(\[[A-Z][A-Z-]* *\] .*?)(</pre>)', re.S)

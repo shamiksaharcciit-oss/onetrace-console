@@ -512,9 +512,9 @@ def test_the_built_store_is_the_builders_demo_compared_and_drawn(built, examined
     """0.1.1: the image's store is the demo store's builder's -- its runs,
     its trust file (the packaged one), its comparisons -- under a build record that holds
     every byte of it."""
-    from onetrace_console.demo_store import COMPARISONS, check_build_record, runs
+    from onetrace_console.demo_store import BESIDE_RUNS, COMPARISONS, check_build_record, runs
     from onetrace_console.store import Store
-    assert sorted(p.name for p in (built / "runs").iterdir()) == sorted(r.folder for r in runs())
+    assert sorted(p.name for p in (built / "runs").iterdir()) == sorted([r.folder for r in runs()] + list(BESIDE_RUNS))
     assert (built / "trust.json").read_bytes() == (PACKAGE_DEMO / "trust.json").read_bytes()
     assert check_build_record(built) == []
     record = json.loads((built / "BUILD_RECORD.json").read_text(encoding="utf-8"))

@@ -103,7 +103,8 @@ def test_the_black_box_is_what_the_verifier_printed(tmp_path, examined):
     run, page = _receipt(pages, store, "signed-run")
     envelope = _envelope(run, store)
     examined(1, "receipt")
-    assert any(is_absolute(a) for a in envelope["command"]), "the stored command holds a path"
+    #: The check runs from the run's folder with the trust file copied beside it, named relative.
+    assert not any(is_absolute(a) for a in envelope["command"]), "the stored command holds a path of this host"
     assert printed_problems(page, envelope["stdout"]) == []
     assert "onetrace-verify --trust trust.json MANIFEST.json" in _text(page)
 

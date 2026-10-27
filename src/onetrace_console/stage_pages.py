@@ -503,6 +503,12 @@ def render_stage_pages(run: StoredRun, store: Store, *, generated_at: str,
     upstream: dict[str, tuple[str, str, bytes | None]] = {}
     receipts: dict[str, tuple[str, str, bytes]] = {}
     version = kept_inputs.recorded_with(steps)
+    #: onetrace 0.5's records, per step (`run_panels`).
+    from onetrace_console.run_panels import held_runs, manifest_of, step_blocks
+    from onetrace_console.trace_panel import trace_of, traceparent
+    manifest = manifest_of(run, store)
+    has_spans = bool(traceparent(manifest)) or any(trace_of(s["receipt"]) for s in steps)
+    held = held_runs(store)
     unlisted = kept_inputs.unlisted_count(files, steps)
     for step in steps:
         receipt, stage = step["receipt"], _stage_name(step["receipt"])
@@ -535,7 +541,9 @@ def render_stage_pages(run: StoredRun, store: Store, *, generated_at: str,
             + f'<p data-section="banner" class="notice"><strong>{escape(SHOWN)}</strong> '
             f"{escape(banner)}</p>"
             f"{verdict}"
-            '<div class="io">'
+            + step_blocks(manifest, receipt, has_spans, held, step["file"],
+                          lambda path: _read(files, store, path))
+            + '<div class="io">'
             + _inputs(inputs, upstream, href, receipts, kept, unlisted, inputs_note)
             + _outputs(step, outputs, files, store, href)
             + "</div>"

@@ -341,6 +341,7 @@ started from, in local mode. As `serve.py` lays it out:
 | `store/runs/` | one record per stored run: its folder listing (path to object), its verdict and the report it came from |
 | `store/comparisons/` | one record per comparison |
 | `store/drift/` | one record per drift report: what `onetrace drift` wrote over a pipeline's runs (`drift.json`, `drift.txt`, kept as objects) and its exit |
+| `store/beside/` | what was kept beside a run, one record per run that has any: the decision export (`decisions.jsonl`, with its `.sha256`) and the permit issuers (`permit-issuers.json`) found beside its folder, and its trace (OTLP/JSON: `traces/<run folder>.json` given beside it, or `onetrace export otel` of the run), each kept as an object |
 | `store/x/` | the explanations, one folder per comparison, `x/<first 16 hex of its key>/`: its full key (`key`), the two runs laid out (`a/`, `b/`), the report `onetrace-explain` reads (`r/`), and each explanation, check and verdict of its record that a person asked for on the comparison's page (local mode) |
 | `store/decision_exports/` | one record per decision export, when the decisions extension (configuration key `extensions.onedoor`) is on |
 | `pages/` | the rendered HTML, derived from `store/` and redrawn on every start, upload and compare: `pages/runs/<run key>/` for each run's pages, `pages/diff/` for each comparison's, `pages/incidents/` for each incident's own page |

@@ -149,8 +149,9 @@ def test_the_sdk_s_refusal_to_compare_names_no_folder_of_this_host(uploaded, exa
     page = (root / "pages" / json.loads(body)["pages"]["diff"].lstrip("/")).read_text(encoding="utf-8")
     examined(1, "diff page")
     assert '<p data-section="diff-envelope" data-verdict="refused">' in page, "the SDK did not refuse"
-    assert "(the candidate run&#x27;s folder)" in page or "(the candidate run's folder)" in page \
-        or "(a temporary folder of this host&#x27;s)" in page, "the refusal's folder is not named"
+    #: The folders are given relative to where the SDK runs: its refusal names them as given.
+    assert re.search(r'data-verdict="refused">[^<]*\bb\b', page) or "(the candidate run" in page, \
+        "the refusal's folder is not named"
     temp = str(Path(tempfile.gettempdir()).resolve())
     for shown in (temp, temp.replace("\\", "\\\\"), "onetrace-compare-"):
         assert shown not in page and shown not in unescape(page), shown

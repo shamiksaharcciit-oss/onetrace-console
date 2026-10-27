@@ -209,9 +209,9 @@ def test_a_report_the_sdk_wrote_in_its_own_order_agrees_once_its_keys_are_in_tha
     note, layer = _layer(render_diff(comparison, store, generated_at=GENERATED_AT))
     assert note == "", "a real report's layer is rebuilt, its layout kept"
     from html import escape
-    #: The folders it was given, this host's temporary ones, named for what they held.
-    for side, given in rep["inputs"].items():
-        stored = stored.replace(given["path"], f"(the {side} run's folder)")
+    #: The folders it was given, relative to where the console ran it: no folder of this host, so
+    #: the SDK's words are shown as written.
+    assert {side: given["path"] for side, given in rep["inputs"].items()} == {"baseline": "a", "candidate": "b"}
     assert layer == escape(stored, quote=True), "no record word to escape: the text itself"
 
 

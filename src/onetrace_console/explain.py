@@ -120,7 +120,7 @@ FOLDER, KEY_HEX, REPORT, KEY_FILE = "x", 16, "r", "key"
 #: there is `/explain/<run id>/artifacts/_staging/post_check/checked.json.<8>.tmp`, the run id
 #: onetrace-explain's (27 characters), the staging folder and temporary name the SDK's
 #: (tests/test_explain_paths.py measures them, and refuses other versions).
-MEASURED = {"onetrace-explain": "0.1.0", "onetrace": "0.4.0"}
+MEASURED = {"onetrace-explain": "0.1.0", "onetrace": "0.5.0"}
 #: onetrace-explain's run id, as measured with those versions.
 RUN_ID = 27
 MEASURED_BELOW = len("/explain/") + RUN_ID + len("/artifacts/_staging/post_check/checked.json") + len(".12345678.tmp")
@@ -925,8 +925,10 @@ def _one(e: dict, comparison, store, steps: dict, read_only: bool = False, facts
     said = escape(FOOTER.format(n=len(claims) + left, m=left))
     reasons = [f"<li>{escape(str(n))} {escape(why)}</li>" for why, n in sorted(drops.items())]
     reasons += [f"<li>checks: {escape(str(n))} {escape(why)}</li>" for why, n in sorted(cdrops.items())]
-    foot = (f'<details data-explain="left-out"><summary>{said}</summary><ul class="plain">{"".join(reasons)}</ul></details>'
-            if reasons else f'<p data-explain="left-out">{said}</p>')
+    from onetrace_console.info_mark import claims_note, mark
+    count = mark(claims_note(len(claims), {why: n for why, n in drops.items()}))
+    foot = (f'<details data-explain="left-out"><summary>{said}</summary><ul class="plain">{"".join(reasons)}</ul></details>{count}'
+            if reasons else f'<p data-explain="left-out">{said}{count}</p>')
     meta = [f'<p data-explain="record">Its record: <span class="mono">explain/{escape(rec)}/</span>, '
             f'onetrace-verify: <span class="mono" data-verified>{escape(verified(store, comparison.key, rec))}</span></p>',
             "" if read_only else _steps_line(store, comparison.key, rec)]

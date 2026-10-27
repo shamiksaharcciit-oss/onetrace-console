@@ -420,7 +420,8 @@ def _cli_run(run_dir: Path, module: str, shown_as: str, args: tuple[str, ...],
 def capture_cli(run_dir: Path, *, outputs: bool, module: str = "onetrace_verify.cli",
                 shown_as: str = "onetrace-verify", manifest_name: str = "MANIFEST.json",
                 timeout: int = 120, trust: Path | None = None,
-                tsa: tuple[Path, list[Path]] | None = None, complete: bool = False) -> dict:
+                tsa: tuple[Path, list[Path]] | None = None, complete: bool = False,
+                extra: tuple[str, ...] = ()) -> dict:
     """The check as the installed CLI, three ways.
 
     1. `onetrace-verify MANIFEST.json`: the verdict and the check's own words (the envelope).
@@ -439,12 +440,15 @@ def capture_cli(run_dir: Path, *, outputs: bool, module: str = "onetrace_verify.
     `--trust <file>` and kept in each command as it was run; None runs them without it.
     `tsa`: the time-stamp authority's certificate and roots, passed to all three as
     `--tsa-cert <file>` and a `--tsa-root <file>` for each root; None runs them without.
+    `extra`: more of the verifier's options naming files beside the run (onetrace-verify 0.5's
+    `--decisions`, `--permit-issuers`, `--nested-run`), passed to every call as `trust` is.
     """
     run_dir = Path(run_dir).resolve()
     trusted = ("--trust", str(trust)) if trust is not None else ()
     if tsa is not None:
         cert, roots = tsa
         trusted += ("--tsa-cert", str(cert)) + tuple(a for r in roots for a in ("--tsa-root", str(r)))
+    trusted += tuple(extra)
     envelope = capture(run_dir, None, manifest_name, timeout, module=module, shown_as=shown_as,
                        args=trusted)
     if envelope.get("unfinished"):

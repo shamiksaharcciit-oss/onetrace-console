@@ -49,13 +49,16 @@ class TooDeep(json.JSONDecodeError):
         return (TooDeep, (self.what, self.role))
 
 
-def load_json_bounded(text: str | bytes, what: str, role: str = "read"):
+def load_json_bounded(text: str | bytes, what: str, role: str = "read", *, object_pairs_hook=None,
+                      parse_constant=None):
     """`json.loads(text)`, refused with `TooDeep` when it nests past `MAX_JSON_DEPTH`.
-    `what` names the value in the refusal; `role` is "read" or "show", as the site's role is."""
+    `what` names the value in the refusal; `role` is "read" or "show", as the site's role is.
+    `object_pairs_hook` and `parse_constant` are json.loads' own, for a reader stricter than JSON
+    (one that refuses a repeated key, say)."""
     if role not in ROLES:
         raise ValueError(f"role must be one of {ROLES}, not {role!r}")
     try:
-        value = json.loads(text)
+        value = json.loads(text, object_pairs_hook=object_pairs_hook, parse_constant=parse_constant)
     except RecursionError:
         #: Past what the parser reads, so past the limit: json.loads gives out thousands of
         #: levels after MAX_JSON_DEPTH on every interpreter the console runs on.

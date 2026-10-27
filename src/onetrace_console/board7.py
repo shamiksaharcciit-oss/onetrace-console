@@ -204,10 +204,12 @@ def trace_run(store, folder_a: Path, folder_b: Path, work: Path, timeout: int, n
     runs_root(store, heads, root)
     out = work / "out-trace"
     out.mkdir(parents=True, exist_ok=True)
-    command = (sys.executable, "-m", "onetrace", "diff", str(folder_a), str(folder_b),
-               "--text", "--json", "--runs-root", str(root), "--out", str(out))
+    from onetrace_console.compare import portable
+    from onetrace_console.compare import verifier_copy
+    run_command, command = portable(("diff", folder_a, folder_b, "--text", "--json", "--runs-root", root,
+                                     "--verifier", verifier_copy(Path(work)), "--out", out), Path(work))
     try:
-        proc = subprocess.run(command, capture_output=True, timeout=timeout, env=utf8_env())
+        proc = subprocess.run(run_command, capture_output=True, timeout=timeout, cwd=Path(work), env=utf8_env())
     except subprocess.TimeoutExpired:
         return VerbRun(verb=TRACE, command=command, shown_command=SHOWN_COMMAND, exit_status="",
                        stdout_key=store.put(b""), note=f"{TIMED_OUT} after {timeout}s")
@@ -260,8 +262,11 @@ def _chain(entry: dict) -> str:
     count = ""
     documents = entry["documents"]
     if documents is not None:
+        from onetrace_console.info_mark import mark
+        note = (f"The SDK's own count, from the two runs' corpus manifests: {documents['changed']} of the "
+                f"{documents['total']} documents it lists differ between them.")
         count = (f'<p data-documents>{_html(documents["changed"])} of '
-                 f'{_html(documents["total"])} documents changed</p>')
+                 f'{_html(documents["total"])} documents changed{mark(note)}</p>')
     return (f'<section data-section="where-started-chain"><h3>{_html(CHAIN_HEADING)}</h3>'
             f'<ol>{"".join(items)}</ol>{count}</section>')
 

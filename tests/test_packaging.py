@@ -27,18 +27,18 @@ META = tomllib.loads((REPO / "pyproject.toml").read_text(encoding="utf-8"))["pro
 def test_the_version_is_0_2_0_everywhere(examined):
     import onetrace_console
     examined(3, "places the version is stated")
-    assert META["version"] == "0.3.2"
-    assert onetrace_console.__version__ == "0.3.2"
+    assert META["version"] == "0.4.0"
+    assert onetrace_console.__version__ == "0.4.0"
     out = subprocess.run([sys.executable, "-m", "onetrace_console", "--version"], capture_output=True,
                          text=True, env={**os.environ, "PYTHONPATH": str(REPO / "src")})
-    assert out.stdout.strip() == "0.3.2", out
+    assert out.stdout.strip() == "0.4.0", out
 
 
 def test_the_metadata_names_the_sdk_it_was_tested_with(examined):
     deps = META["dependencies"]
     examined(len(deps), "declared dependencies")
-    assert "onetrace==0.4.0" in deps
-    assert "onetrace-verify[crypto]==0.4.0" in deps
+    assert "onetrace==0.5.0" in deps
+    assert "onetrace-verify[crypto]==0.5.0" in deps
     assert META["requires-python"] == ">=3.12"
     assert len(META["authors"]) == 1 and META["authors"][0].get("name", "").strip(), META["authors"]
 
@@ -66,15 +66,15 @@ def test_the_pins_command_reads_the_lock_shipped_in_the_package(examined):
     assert out.stdout.replace(b"\r\n", b"\n") == shipped.read_bytes().replace(b"\r\n", b"\n")
 
 
-def test_the_shipped_lock_pins_the_published_0_4_0_wheels(examined):
+def test_the_shipped_lock_pins_the_0_5_0_wheels(examined):
     """The lock the installed package carries pins the SDK's two wheels as PyPI serves them."""
-    from tests.test_pin_012 import RELEASE_0_4_0
+    from tests.test_pin_012 import RELEASE_0_5_0
     from tests.test_pins import _REQ
     text = (REPO / "src" / "onetrace_console" / "requirements.lock").read_text(encoding="utf-8")
     entries = {m.group("req"): m.group("sha") for m in _REQ.finditer(text)}
     examined(2, "SDK pins in the shipped lock")
-    assert entries["onetrace==0.4.0"] == RELEASE_0_4_0["onetrace-0.4.0-py3-none-any.whl"]
-    assert entries["onetrace-verify==0.4.0"] == RELEASE_0_4_0["onetrace_verify-0.4.0-py3-none-any.whl"]
+    assert entries["onetrace==0.5.0"] == RELEASE_0_5_0["onetrace-0.5.0-py3-none-any.whl"]
+    assert entries["onetrace-verify==0.5.0"] == RELEASE_0_5_0["onetrace_verify-0.5.0-py3-none-any.whl"]
 
 
 #: onetrace-explain is never a dependency: the console runs it as a command where it is installed.
@@ -222,8 +222,8 @@ def test_a_plain_pip_install_compares_with_the_same_report_as_the_pinned_install
         subprocess.run([sys.executable, "-c", f"import sys; from setuptools import build_meta as b; "
                         f"print(b.{build}(sys.argv[1]))", str(dist)], cwd=tree, check=True,
                        capture_output=True, env=clean)
-    console_whl = next(dist.glob("onetrace_console-0.3.2-*.whl"))
-    _check_the_viewer_ships_without_its_tests(console_whl, next(dist.glob("onetrace_console-0.3.2.tar.gz")))
+    console_whl = next(dist.glob("onetrace_console-0.4.0-*.whl"))
+    _check_the_viewer_ships_without_its_tests(console_whl, next(dist.glob("onetrace_console-0.4.0.tar.gz")))
     #: The wheel carries the demo store's builder and trust file, so `onetrace-console demo` works
     #: installed: it builds the demo's runs where it is started (0.1.1).
     import zipfile
@@ -261,14 +261,12 @@ def test_a_plain_pip_install_compares_with_the_same_report_as_the_pinned_install
     examined(2, "comparisons of the same two runs: the pinned install and a plain one")
     assert there["status"] == 200, there
     assert here["status"] == 200, here
-    #: Every comparison lays the two runs out in a fresh temporary folder, and the report names it
-    #: (two comparisons on the same install differ there and nowhere else). That one field is
-    #: masked, in both reports exactly twice (the baseline's and the candidate's); the rest must be
-    #: the same bytes.
-    masked_there, n_there = _mask_compare_folders(there["diff"])
-    masked_here, n_here = _mask_compare_folders(here["diff"])
-    assert (n_there, n_here) == (2, 2), f"the mask matched {n_there} and {n_here} fields, not 2 and 2"
-    assert masked_there == masked_here, "the plain install's comparison report differs"
+    #: Every comparison lays the two runs out in a fresh temporary folder, and since console 0.4.0
+    #: the SDK is given them relative to it, as `a` and `b`: the report names no temporary folder, so
+    #: the two reports are the same bytes with nothing masked.
+    assert _mask_compare_folders(there["diff"])[1] == _mask_compare_folders(here["diff"])[1] == 0
+    assert re.search(r'"path": ?"a"', there["diff"]) and re.search(r'"path": ?"b"', there["diff"])
+    assert there["diff"] == here["diff"], "the plain install's comparison report differs"
 
 
 #: A comparison folder's path in a report, as JSON writes it: on Windows each backslash is escaped,

@@ -25,10 +25,13 @@ WANT = {
         "Every stage before it is the same. All 4 stages after it differ."),
     ("p8-42-invoice-tolerance-2pct", "p8-43-invoice-tolerance-5pct"): (
         "The runs first differ at `match`, where `price_tolerance` went from 2.00% to 5.00%.",
-        "Every stage before it is the same. The stage after it differs."),
+        #: Since console 0.4.0, P8's gated step cites its own decision in each run.
+        "Every stage before it is the same. The stage after it differs. "
+        "The decision at `approve_payment` also differs."),
     ("p8-43-invoice-tolerance-5pct", "p8-44-invoice-quantity-changed"): (
         "The runs first differ at `read_invoice`, where input `invoice` changed.",
-        "No stage comes before it. Both stages after it differ."),
+        "No stage comes before it. Both stages after it differ. "
+        "The decision at `approve_payment` also differs."),
     ("p9-46-torque-baseline", "p9-48-torque-one-bolt-low"): (
         "The runs first differ at `read_tool_log`, where input `tool_log.csv` changed.",
         "No stage comes before it. Both stages after it differ."),
@@ -67,14 +70,20 @@ def short(page: str) -> str | None:
     return found.group(0) if found else None
 
 
+#: The "i" beside a count (console 0.4.0): a note, read apart from the line's words.
+_NOTE = re.compile(r'<span class="info"[^>]*><span class="i"[^>]*>i</span><span class="tip"[^>]*>([^<]*)</span></span>')
+
+
 def parts(section: str) -> dict:
+    notes = [html.unescape(n) for n in _NOTE.findall(section)]
+    section = _NOTE.sub("", section)
     head = re.search(r'<p class="headline" data-short="headline">(.*?)</p>', section, re.S)
     second = re.search(r'<p data-short="second">(.*?)</p>', section, re.S)
     strip = re.findall(r'<li data-verdict="([^"]*)"( data-mark="first")? class="[^"]*">'
                        r'<span class="name">(.*?)</span><span class="word">(.*?)</span></li>', section, re.S)
     return {"headline": said(head.group(1)) if head else None, "second": said(second.group(1)) if second else None,
             "strip": [(html.unescape(n), v, bool(m), html.unescape(w)) for v, m, n, w in strip],
-            "checked": CHECKED in html.unescape(section)}
+            "checked": CHECKED in html.unescape(section), "notes": notes}
 
 
 @pytest.fixture(scope="module")
@@ -116,6 +125,11 @@ def answer_problems(store, pages: dict, want: dict) -> list[str]:
             out.append(f"{pair}: second line {got['second']!r}")
         if not got["checked"]:
             out.append(f"{pair}: no line saying it is checked from the records")
+        for note in got["notes"]:
+            total = re.search(r"= (\d+)\.$", note)
+            if total is None or int(total.group(1)) != len(got["strip"]):
+                out.append(f"{pair}: a note adding up to {total.group(1) if total else None}, beside "
+                           f"{len(got['strip'])} stages")
     return out
 
 

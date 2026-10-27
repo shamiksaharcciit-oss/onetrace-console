@@ -11,7 +11,8 @@ same way.
 What a call asks for is listed by its arguments, and the list is checked to hold each form the
 console builds: the check three ways (its words, `--json`, `--json --require-artifacts`), and for a
 run recorded in format 0.3 a fourth (`--json --require-complete`), each with the evidence options; the two verbs; the text diff with and without a line limit; and the
-trace with its runs root.
+trace with its runs root; and since onetrace 0.5.0, the decision files for a gated run, an inner run
+for an agent's, and the verifier named for the verbs.
 """
 from __future__ import annotations
 
@@ -57,7 +58,7 @@ def _recorded(monkeypatch) -> list[tuple[list[str], int, str, str]]:
 def _form(argv: list[str]) -> tuple[str, ...]:
     """A call's options, its values and folders left out: what it asks for."""
     takes_value = {"--trust", "--tsa-cert", "--tsa-root", "--headers", "--out", "--runs-root",
-                   "--max-lines"}
+                   "--max-lines", "--verifier", "--decisions", "--permit-issuers", "--nested-run"}
     out, skip = [argv[2]] + ([argv[3]] if argv[2] == SDK else []), False
     for a in argv[4 if argv[2] == SDK else 3:]:
         if skip:
@@ -114,9 +115,15 @@ def test_the_calls_hold_each_form_the_console_builds(demo_calls, warranty_calls,
         (VERIFIER, "--trust"), (VERIFIER, "--json", "--trust"),
         (VERIFIER, "--json", "--require-artifacts", "--trust"),
         (VERIFIER, "--json", "--require-complete", "--trust"),
-        (SDK, "diff", "--out"), (SDK, "localize", "--out"),
-        (SDK, "diff", "--text", "--json", "--no-follow", "--out"),
-        (SDK, "diff", "--text", "--json", "--runs-root", "--out"),
+        #: Since onetrace 0.5.0: the verifier's copy beside the runs, named for the verbs; the
+        #: decision files for a gated run's check; an inner run beside an agent's check and its
+        #: comparison.
+        (SDK, "diff", "--verifier", "--out"), (SDK, "localize", "--verifier", "--out"),
+        (SDK, "diff", "--text", "--json", "--no-follow", "--verifier", "--out"),
+        (SDK, "diff", "--text", "--json", "--runs-root", "--verifier", "--out"),
+        (VERIFIER, "--json", "--require-artifacts", "--trust", "--decisions", "--permit-issuers"),
+        (VERIFIER, "--json", "--require-artifacts", "--trust", "--nested-run"),
+        (SDK, "diff", "--nested-run", "--nested-run", "--verifier", "--out"),
     }
     assert want <= forms, sorted(want - forms)
 

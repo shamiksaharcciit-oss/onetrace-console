@@ -87,7 +87,7 @@ def _envelope(run: StoredRun, store: Store, *, required: bool = True) -> dict | 
 
 
 #: The verifier's options that name a file of the reader's: shown by the file's name alone.
-EVIDENCE_OPTIONS = ("--trust", "--tsa-cert", "--tsa-root")
+EVIDENCE_OPTIONS = ("--trust", "--tsa-cert", "--tsa-root", "--decisions", "--permit-issuers", "--nested-run")
 
 
 def shown_command(command: tuple[str, ...]) -> tuple[str, ...]:
@@ -183,6 +183,8 @@ def _strict_diff_report(comparison, store: Store):
 #: attempt, its attempts (the store's retry rule, `ingest.delivered_and_retries`).
 NODE_OUTPUTS = ("{n} output file", "{n} output files")
 NODE_ATTEMPTS = "{n} attempts"
+#: A step with steps inside it (onetrace 0.5's `children`), on its box.
+NODE_INSIDE = ("{n} step inside", "{n} steps inside")
 
 
 def _with_node_facts(model):
@@ -220,6 +222,15 @@ def _with_node_facts(model):
         check = (" ".join(unescape(_re.sub(r"<[^>]+>", " ", _line(step.check[0]))).split())
                  if step.check else "")
         tags = (n.tags + (fact,)) if n.tags else ((fact, check) if check else (fact,))
+        #: A step with steps inside it says how many, after the record's fact (a box's first line
+        #: after its chip); its box opens its step's page, which lists them (onetrace 0.5's `children`).
+        try:
+            kids = load_json_bounded(step.raw, "a receipt", "show").get("children")
+        except (ValueError, AttributeError, RecursionError):
+            kids = None
+        if isinstance(kids, list) and kids:
+            at = tags.index(fact) + 1
+            tags = (tags[:at] + (NODE_INSIDE[len(kids) != 1].format(n=len(kids)),) + tags[at:])[:3]
         nodes.append(replace(n, tags=tags))
     return replace(model, graph_nodes=tuple(nodes), graph_tag_lines=3)
 
@@ -373,8 +384,31 @@ def render_execution(run: StoredRun, store: Store, *, generated_at: str) -> Rend
         #: The run page as its two views, split before the seal so each view's fingerprint covers
         #: that view: "What changed" at the page's address, "Proof" its sibling.
         from onetrace_console import views
+        #: onetrace 0.5's records, where the run holds them: gated steps and their decisions, the
+        #: span context, steps inside steps (`run_panels`), before the seal like every block here.
+        from onetrace_console.run_panels import with_sections
         whole = receipt_link(authorization_link(incidents_block(
-            topology_note_block(label(case, [run]), run), raised, len(every), store, up="../../")))
+            topology_note_block(with_sections(label(case, [run]), run, store), run), raised, len(every),
+            store, up="../../")))
+        #: A mark beside each count of checks, its note read from the verifier's own rows.
+        from onetrace_console import info_mark
+        from onetrace_console.home import _envelope as _stored
+        from onetrace_console.run_panels import manifest_of
+        chain = [e.get("file", "") for e in manifest_of(run, store).get("chain") or [] if isinstance(e, dict)]
+        whole = info_mark.splice(whole, info_mark.rows_of(_stored(run, store)), chain)
+        #: Steps inside steps in the table of steps: each child under its calling step, each nested
+        #: run a row of its own (`nesting_ladder`); a run with neither is left as it is.
+        from onetrace_console.nesting_ladder import run_ladder
+        from onetrace_console.run_panels import held_runs
+        from onetrace_console.stage_pages import _steps
+        whole = run_ladder(whole, _steps(run, store), held_runs(store))
+        #: "What changed?": the comparison a stated rule picks for this run (`what_changed`).
+        from onetrace_console import what_changed
+        from onetrace_console.frame import rendering_public
+        from onetrace_console.run_panels import BEFORE
+        at = whole.find(BEFORE)
+        if at >= 0:
+            whole = whole[:at] + what_changed.section(run, store, public=rendering_public()) + whole[at:]
         said, state = views.run_said(run, store)
         what, proof = views.split(whole, "run", CASE, views.RUN_PROOF, said, state)
         #: The answer and authorization pages' tabs into the run page, at the view that holds them.
@@ -552,6 +586,22 @@ def run_answers(run: StoredRun, store: Store) -> dict[str, str]:
             "approved": _APPROVED_STATE.get(run.approved, "couldnt-check")}
 
 
+def _short_line(run: StoredRun, store: Store) -> str:
+    """The run's "What changed" line for the runs list: a row of its own under the run's, across the
+    table, holding the short answer against the run the stated rule picks; "" where that comparison
+    is not held (the run's page says why). A row, not a column: the table fills its frame at desktop
+    width already."""
+    from onetrace_console.what_changed import NOT_COMPARED, runs_line
+    from onetrace_console.words import escape
+    import re as _re
+    said = runs_line(run, store)
+    if said == NOT_COMPARED:
+        return ""
+    line = _re.sub(r"`([^`]+)`", r"<code>\1</code>", escape(said))
+    return (f'<tr class="what-changed-row" data-what-changed-of="{run.key}"><td colspan="{len(RUN_COLUMNS)}" '
+            f'data-answer="what-changed">What changed: {line}</td></tr>')
+
+
 def runs_table(runs: list[StoredRun], store: Store) -> str:
     """The runs list's table: one row per run, in the order given, each linked to its page."""
     from onetrace_console import tones
@@ -567,8 +617,9 @@ def runs_table(runs: list[StoredRun], store: Store) -> str:
         return (f'<span class="pill {tones.tone(tones.RUNG, state)}" data-state="{state}">'
                 f'{viewer_escape(template("rung.state." + state.replace("-", "_")))}</span>')
 
-    rows = []
+    rows, lines = [], {}
     for run in runs:
+        lines[run.key] = _short_line(run, store)
         answers = run_answers(run, store)
         ran = ran_at(run)
         got = (f"{run.delivered_stages} of {run.stage_count} declared stages"
@@ -585,10 +636,17 @@ def runs_table(runs: list[StoredRun], store: Store) -> str:
             f"<td>{viewer_escape(got)}{(' ' + stopped) if (stopped := declined_chip(run)) else ''}</td>"
             + "".join(f'<td data-answer="{k}">{chip(answers[k])}</td>'
                       for k in ("records-agree", "signed", "anchored", "approved"))
-            + "</tr>")
+            + "</tr>"
+            #: "What changed?": a row of its own where the rule's comparison is held, put in after
+            #: the cells are labelled by column (it is under none), at its empty placeholder.
+            + (f'<tr data-what-changed-slot="{run.key}"></tr>' if lines[run.key] else ""))
     head = "".join(f"<th>{c}</th>" for c in RUN_COLUMNS)
-    return scroll_region(f'<table class="timeline" data-section="runs-table"><thead><tr>{head}</tr>'
-                         f"</thead><tbody>{''.join(rows)}</tbody></table>", "The runs", "runs")
+    table = scroll_region(f'<table class="timeline" data-section="runs-table"><thead><tr>{head}</tr>'
+                          f"</thead><tbody>{''.join(rows)}</tbody></table>", "The runs", "runs")
+    for key, line in lines.items():
+        if line:
+            table = table.replace(f'<tr data-what-changed-slot="{key}"></tr>', line)
+    return table
 
 
 _VIEWER_RUNS = re.compile(r'(<section data-section="executions"><h2>[^<]*</h2>.*?)<table class="timeline">.*?</table>',

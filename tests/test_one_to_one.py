@@ -98,9 +98,10 @@ def test_the_measured_pages_change_only_where_a_word_holds_a_backslash(corpus, m
                 assert tag == "insert" and set(line_now[j1:j2]) == {BACKSLASH} \
                     and (line_was[i1 - 1:i1] == BACKSLASH or line_was[i1:i1 + 1] == BACKSLASH), \
                     (name, tag, line_was[max(0, i1 - 30):i2 + 30], line_now[max(0, j1 - 30):j2 + 30])
+    #: The folders the SDK names: given relative to where it runs since console 0.4.0, as written.
+    from html import unescape
     diffs = [p for n, p in now.items() if n.startswith("diff/")]
-    assert diffs and all("the baseline run&#x27;s folder" in p or "the baseline run's folder" in p
-                         for p in diffs), "the folder labels are unchanged"
+    assert diffs and all(re.search(r"baseline +a +", unescape(p)) for p in diffs), "the folders are not named as given"
 
 
 def test_a_record_word_with_a_backslash_is_drawn_doubled_on_home(files, store):

@@ -393,9 +393,10 @@ def test_the_sdks_own_report_is_on_the_page_whole(compared, examined):
     from html import escape
 
     from onetrace_console.compare import report_json
-    #: The folders it was given, this host's temporary ones, named for what they held.
-    for side, given in report_json(comparison, DIFF, store)["inputs"].items():
-        text = text.replace(given["path"], f"(the {side} run's folder)")
+    #: The folders it was given: named relative to the folder the console ran it from, so the
+    #: SDK's words hold no folder of this host and are shown as written.
+    inputs = report_json(comparison, DIFF, store)["inputs"]
+    assert {side: given["path"] for side, given in inputs.items()} == {"baseline": "a", "candidate": "b"}
     assert escape(text) in page, "the SDK's report is not on the page verbatim"
 
 

@@ -31,14 +31,15 @@ def test_each_evidence_file_is_shown_by_its_name(given, shown, examined):
 
 
 def test_no_page_of_the_demo_names_where_it_was_built(demo, examined):
-    """The demo's checks ran with its trust file at an absolute path; its pages show the name."""
+    """The demo's checks ran with its trust file copied beside the run and named relative to it;
+    its pages show the name."""
     from onetrace_console.pages import _envelope
     store, pages = demo
     folder = str(pages.parent.parent)
     runs = store.runs()
     for run in runs:
         command = _envelope(run, store, required=False)["command"]
-        assert command[command.index("--trust") + 1] == str(pages.parent.parent / "trust.json"), \
+        assert command[command.index("--trust") + 1] == "../evidence/trust.json", \
             "the stored report keeps the command as it ran"
     shown = 0
     for page in sorted(pages.rglob("*.html")):

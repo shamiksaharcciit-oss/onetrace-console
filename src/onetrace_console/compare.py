@@ -368,18 +368,70 @@ def comparison_key(bundle_sha_a: str, bundle_sha_b: str,
                              build_digest)).encode("utf-8"))
 
 
+#: How a verb's interpreter is recorded: by name, never this machine's path to it.
+RECORDED_PYTHON = "python"
+
+
+def portable(args, root: Path) -> tuple[tuple[str, ...], tuple[str, ...]]:
+    """(the command to run from `root`, the command to record): every path under `root` named
+    relative to it, and the interpreter as `python` in the record, so a stored comparison holds no
+    path of the machine that made it."""
+    import os
+    rel = []
+    for a in args:
+        p = Path(a)
+        rel.append(Path(os.path.relpath(p, root)).as_posix() if p.is_absolute() and p.is_relative_to(root) else str(a))
+    run = (sys.executable, "-m", "onetrace", *rel)
+    return run, (RECORDED_PYTHON, "-m", "onetrace", *rel)
+
+
+def verifier_copy(root: Path) -> Path:
+    """The installed verifier's package, copied into the work folder, for `diff --text --verifier`:
+    the SDK records the verifier's folder in its text diff, so it is named there as `verifier`, a
+    folder beside the runs, never this machine's install path."""
+    from onetrace_console.checks import shipped_verifier
+    dest = root / "verifier"
+    if not dest.is_dir():
+        shutil.copytree(shipped_verifier().parent, dest, ignore=shutil.ignore_patterns("__pycache__"))
+    return dest
+
+
+def nested_options(runs, store: Store, root: Path) -> tuple[str, ...]:
+    """`--nested-run` for each run either run records calling (a `run:<id>` input) that the console
+    holds, laid out under `root`; the SDK then descends into it ("into run <id> at <child>")."""
+    from onetrace_console.nesting_view import nested_inputs
+    from onetrace_console.render import _receipts_in_order
+    ids = []
+    for run in runs:
+        for r in _receipts_in_order(run.key, store):
+            ids += [i for i, _ in nested_inputs(r) if i not in ids]
+    if not ids:
+        return ()
+    held = {r.run_id: r for r in store.runs() if r.run_id in ids}
+    opts = ()
+    for n, rid in enumerate(i for i in ids if i in held):
+        try:
+            inner = materialise(held[rid], store, root / f"nested-{n}")
+        except Exception:  # noqa: BLE001 - an inner run not laid out is not given; the SDK says so
+            continue
+        opts += ("--nested-run", str(inner))
+    return opts
+
+
 def _run_verb(verb: str, folder_a: Path, folder_b: Path, out: Path, timeout: int,
-              store: Store) -> VerbRun:
+              store: Store, nested: tuple[str, ...] = ()) -> VerbRun:
     """Invoke one verb as a subprocess and keep what it wrote.
 
     Through `sys.executable -m onetrace`, never the name `python3`, and the exit
     status is the process's own rather than a shell pipeline's (R29).
     """
-    command = (sys.executable, "-m", "onetrace", verb,
-               str(folder_a), str(folder_b), "--out", str(out))
-    shown = f"python -m onetrace {verb} RUN_A RUN_B --out OUT"
+    root = Path(folder_a).parent
+    run_command, command = portable((verb, folder_a, folder_b, *nested, "--verifier", verifier_copy(root),
+                                     "--out", out), root)
+    shown = f"python -m onetrace {verb} RUN_A RUN_B --out OUT" + "".join(
+        " --nested-run INNER" for a in nested if a == "--nested-run")
     try:
-        proc = subprocess.run(command, capture_output=True, timeout=timeout, env=utf8_env())
+        proc = subprocess.run(run_command, capture_output=True, timeout=timeout, env=utf8_env(), cwd=root)
     except subprocess.TimeoutExpired:
         # A timeout is not a verdict and is not a refusal by the SDK. It is this runner
         # failing to obtain an answer, and it says so in its own name.
@@ -402,13 +454,14 @@ def _run_text_diff(folder_a: Path, folder_b: Path, out: Path, timeout: int, stor
     """`onetrace diff A B --text --json --no-follow`, its stdout kept byte for byte. `--out` goes
     to the scratch folder: without it the SDK writes `onetrace-report/` where it runs."""
     limit = ("--max-lines", str(max_lines)) if max_lines is not None else ()
-    command = (sys.executable, "-m", "onetrace", "diff", str(folder_a), str(folder_b),
-               "--text", "--json", "--no-follow", *limit, "--out", str(out))
+    root = Path(folder_a).parent
+    run_command, command = portable(("diff", folder_a, folder_b, "--text", "--json", "--no-follow", *limit,
+                                     "--verifier", verifier_copy(root), "--out", out), root)
     shown = ("python -m onetrace diff RUN_A RUN_B --text --json --no-follow"
              + (f" --max-lines {max_lines}" if max_lines is not None else ""))
     verb = TEXT_DIFF if max_lines is None else f"{TEXT_DIFF} --max-lines {max_lines}"
     try:
-        proc = subprocess.run(command, capture_output=True, timeout=timeout, env=utf8_env())
+        proc = subprocess.run(run_command, capture_output=True, timeout=timeout, env=utf8_env(), cwd=root)
     except subprocess.TimeoutExpired:
         return VerbRun(verb=verb, command=command, shown_command=shown, exit_status="",
                        stdout_key=store.put(b""), note=f"{TIMED_OUT} after {timeout}s")
@@ -511,10 +564,13 @@ def compare(run_a: StoredRun, run_b: StoredRun, store: Store, *,
         folder_a = materialise(run_a, store, root / "a")
         folder_b = materialise(run_b, store, root / "b")
         runs = []
+        #: The runs either one records calling, where the console holds them: the SDK descends.
+        nested = nested_options((run_a, run_b), store, root)
         for verb in verbs:
             out = root / f"out-{verb}"
             out.mkdir(parents=True, exist_ok=True)
-            runs.append(_run_verb(verb, folder_a, folder_b, out, timeout, store))
+            runs.append(_run_verb(verb, folder_a, folder_b, out, timeout, store,
+                                  nested if verb in (DIFF, LOCALIZE) else ()))
         if text_diff:
             out = root / "out-text"
             out.mkdir(parents=True, exist_ok=True)
