@@ -5,13 +5,13 @@ there: its runs are taken from here, not recorded anew, and four comparisons sho
 kept for them. Without this folder the image builds as before, its runs recorded at build time and
 no explanation shown.
 
-These files were made once, on the maintainer's machine, with onetrace-console 0.3.1 and
-onetrace-explain 0.1.0, and are served as files. Nothing here is computed again when the image is
-built, and no model is called: a public console presses nothing.
+These files were made once, on the maintainer's machine, with the onetrace-console 0.4.0 candidate
+and onetrace-explain 0.1.0, on records of onetrace 0.5.0, and are served as files. Nothing here is
+computed again when the image is built, and no model is called: a public console presses nothing.
 
 ## What is here
 
-- `runs/`: the demo's 48 runs, as the demo's builder recorded them, byte for byte.
+- `runs/`: the demo's 54 runs of 11 pipelines, as the demo's builder recorded them, byte for byte.
 - `trust.json`: the demo's trust file, the one its runs are checked against.
 - `BUILD_RECORD.original.json`: the build record the demo's builder wrote when it built those runs,
   unchanged. It vouches for `runs/`, `trust.json` and the built store; the store is not kept here.
@@ -26,10 +26,10 @@ built, and no model is called: a public console presses nothing.
 
 | record | comparison |
 |---|---|
-| `2026-10-25T13-45-05.744195Z` | P1 `p1-02-baseline-set2` → `p1-08-candidate-set2` |
-| `2026-10-25T13-39-09.069959Z` | P5 `p5-32-pump-baseline` → `p5-33-pump-offset-changed` |
-| `2026-10-25T13-50-49.727866Z` | P8 `p8-42-invoice-tolerance-2pct` → `p8-43-invoice-tolerance-5pct` |
-| `2026-10-25T13-42-26.188702Z` | P9 `p9-46-torque-baseline` → `p9-48-torque-one-bolt-low` |
+| `2026-10-27T22-36-57.339892Z` | P1 `p1-02-baseline-set2` → `p1-08-candidate-set2` |
+| `2026-10-27T22-39-02.564172Z` | P5 `p5-32-pump-baseline` → `p5-33-pump-offset-changed` |
+| `2026-10-27T22-40-04.547696Z` | P8 `p8-42-invoice-tolerance-2pct` → `p8-43-invoice-tolerance-5pct` |
+| `2026-10-27T22-40-59.861386Z` | P9 `p9-46-torque-baseline` → `p9-48-torque-one-bolt-low` |
 
 ## How a changed byte is refused
 
@@ -41,6 +41,14 @@ built, and no model is called: a public console presses nothing.
   sha256 of its `MANIFEST.json`, which names the run's chain head, and of each of its receipts; so an
   explanation is kept only beside the very runs it explains. Anything else is refused with its reason,
   in the built store's `x/kept.json`, and never shown.
+
+## The one scan exception
+
+The export's strict scan finds one match in this folder, and only one: an extra term of four
+characters inside the base64 `signature` value of `runs/p3-26-t-4-rules1/signatures/1.json`. A
+signature is not text, and four characters of base64 match a short term by chance; the runs are not
+signed again to remove it, since that would change every signature and the build record. That file,
+that field and that term are the exception, and nothing else.
 
 A suggested explanation is a suggestion about a record, never a reading of it: each is shown with
 its label, its model, its claims and their cites, and nothing the console draws as a verdict, a

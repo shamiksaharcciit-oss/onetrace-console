@@ -1,0 +1,62 @@
+```json
+{
+  "claims": [
+    {
+      "text": "The first difference originates at the `calibrate` node, where the candidate's `sensor-calibration` transform has a different config digest than the baseline, making it the most likely culprit for all downstream divergence.",
+      "kind": "lead",
+      "cites": ["comparison/verdict", "node/calibrate/instrument"]
+    },
+    {
+      "text": "The `calibrate` node's config digest changed between runs: baseline is `sha256:2ab67ce494b5a7f019cd1d1673f16547a7402d351fb101b36b5a27b2a6310d2d` and candidate is `sha256:dbe4d3ff497ce986a15f036767b8fecd6e695fe72a7940c9f087517c4a1c44f1`, while all other nodes have identical config digests.",
+      "kind": "lead",
+      "cites": ["node/calibrate/instrument", "node/readings/instrument", "node/features/instrument", "node/anomaly_check/instrument", "node/decision/instrument", "node/work_order/instrument"]
+    },
+    {
+      "text": "The input to `calibrate` (`readings.json`) is identical between runs (same digest `sha256:9789629fd7912416eaa3ab6f0dda4447d15df9cc6c24e4f93fbf6ec5a30d1a9c`), so the changed output of `calibrate` is not due to upstream data change.",
+      "kind": "note",
+      "cites": ["node/calibrate/input/readings.json"]
+    },
+    {
+      "text": "The output `calibrated.json` from `calibrate` differs in both size (baseline `314` bytes vs candidate `326` bytes) and digest, and this difference propagates through all downstream nodes: `features`, `anomaly_check`, `decision`, and `work_order`.",
+      "kind": "note",
+      "cites": ["node/calibrate/output/calibrated.json", "node/features/input/calibrated.json", "node/features/output/features.json", "node/anomaly_check/output/anomaly.json", "node/decision/output/decision.json", "node/work_order/output/work_order.json"]
+    },
+    {
+      "text": "The `readings` node is ruled out as a source of difference: same instrument config, same input, same output in both runs.",
+      "kind": "ruled out",
+      "cites": ["node/readings", "node/readings/instrument", "node/readings/input/readings.csv", "node/readings/output/readings.json"]
+    },
+    {
+      "text": "The candidate run id is `p5-33-pump-offset-changed`, suggesting an intentional calibration offset change was introduced in the candidate, consistent with the changed `sensor-calibration` config digest.",
+      "kind": "note",
+      "cites": ["node/calibrate/instrument"]
+    }
+  ],
+  "checks": [
+    {
+      "check": "match",
+      "node": "calibrate",
+      "setting": "config_digest",
+      "run": "candidate"
+    },
+    {
+      "check": "text",
+      "node": "calibrate",
+      "setting": "calibrated.json",
+      "run": "candidate"
+    },
+    {
+      "check": "text",
+      "node": "calibrate",
+      "setting": "calibrated.json",
+      "run": "baseline"
+    },
+    {
+      "check": "reproduce",
+      "node": "calibrate",
+      "setting": "sensor-calibration",
+      "run": "candidate"
+    }
+  ]
+}
+```

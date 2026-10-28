@@ -1,0 +1,43 @@
+{
+ "checks": [
+  {
+   "check": "for",
+   "node": "split"
+  },
+  {
+   "check": "match",
+   "run": "candidate"
+  },
+  {
+   "check": "reproduce",
+   "node": "split",
+   "run": "candidate"
+  }
+ ],
+ "checks_dropped": {},
+ "claims": [
+  {
+   "cites": [
+    "comparison/verdict",
+    "node/split",
+    "node/split/constant/chunk_size",
+    "node/split/output/chunks.json"
+   ],
+   "kind": "lead",
+   "text": "The first difference originates in the `split` node, where the `chunk_size` constant changed from `1024` in the baseline to `512` in the candidate, producing different chunk outputs."
+  },
+  {
+   "cites": [
+    "node/retrieve/input/questions"
+   ],
+   "kind": "ruled out",
+   "text": "The retrieval questions input is identical between runs, so query differences are not a factor."
+  }
+ ],
+ "dropped": {
+  "quotes a value its cites don't hold": "3"
+ },
+ "label": "Suggested explanation \u2014 AI-generated, may be wrong",
+ "model": "anthropic:claude-sonnet-4-6",
+ "record": "2026-10-27T22-36-57.339892Z"
+}

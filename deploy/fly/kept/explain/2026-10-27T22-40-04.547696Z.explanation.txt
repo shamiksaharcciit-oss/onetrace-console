@@ -1,0 +1,15 @@
+Suggested explanation — AI-generated, may be wrong
+model: anthropic:claude-sonnet-4-6
+
+- possible culprit: The `match` node is identified as the first difference; its output `match.json` differs in both size and digest between baseline and candidate.
+  shown by: node/match, node/match/output/match.json
+- ruled out: The `read_invoice` node is identical between runs: same instrument, same input, same output.
+  shown by: node/read_invoice, node/read_invoice/instrument, node/read_invoice/input/invoice, node/read_invoice/output/invoice.json
+
+dropped: 2 quotes a value its cites don't hold; 1 says what caused a difference
+
+checks onetrace can run (a lead is confirmed or ruled out only by what these report):
+  onetrace localize a b --for match
+  onetrace match a
+  onetrace diff a b --text --stage match
+  onetrace reproduce a match --runner <your runner>

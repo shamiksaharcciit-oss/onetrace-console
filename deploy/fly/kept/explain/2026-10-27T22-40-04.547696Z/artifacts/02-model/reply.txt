@@ -1,0 +1,57 @@
+```json
+{
+  "claims": [
+    {
+      "text": "The `price_tolerance` constant in the `match` node differs between runs: baseline uses `2.00%` and candidate uses `5.00%`, and this is the only configuration difference at that node.",
+      "kind": "lead",
+      "cites": ["node/match/constant/price_tolerance", "node/match/instrument"]
+    },
+    {
+      "text": "The `match` node is identified as the first difference; its output `match.json` differs in both size and digest between baseline and candidate.",
+      "kind": "lead",
+      "cites": ["node/match", "node/match/output/match.json"]
+    },
+    {
+      "text": "The `match` node instruments differ between runs: baseline config digest is `sha256:3e1015e3c7bae9e3fb83fd2c50b8bea9bea38f7103e5ac22e0a3e8b502b6586b` and candidate is `sha256:824a2366fff3ce418a48864bb0501ff02b8396b0cfede1f37935ae87b389a060`, consistent with a configuration change (likely the `price_tolerance` constant).",
+      "kind": "lead",
+      "cites": ["node/match/instrument", "node/match/constant/price_tolerance"]
+    },
+    {
+      "text": "The `read_invoice` node is identical between runs: same instrument, same input, same output.",
+      "kind": "ruled out",
+      "cites": ["node/read_invoice", "node/read_invoice/instrument", "node/read_invoice/input/invoice", "node/read_invoice/output/invoice.json"]
+    },
+    {
+      "text": "The `approve_payment` node differs only because it receives the differing `match.json` as input; its own instrument configuration is identical between runs.",
+      "kind": "note",
+      "cites": ["node/approve_payment", "node/approve_payment/instrument", "node/approve_payment/input/match.json", "node/approve_payment/output/payment.json"]
+    }
+  ],
+  "checks": [
+    {
+      "check": "for",
+      "node": "match",
+      "setting": "price_tolerance",
+      "run": "candidate"
+    },
+    {
+      "check": "match",
+      "node": "match",
+      "setting": "match.json",
+      "run": "baseline"
+    },
+    {
+      "check": "text",
+      "node": "match",
+      "setting": "match.json",
+      "run": "candidate"
+    },
+    {
+      "check": "reproduce",
+      "node": "match",
+      "setting": "price_tolerance",
+      "run": "baseline"
+    }
+  ]
+}
+```

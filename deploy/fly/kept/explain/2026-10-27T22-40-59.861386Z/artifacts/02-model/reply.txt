@@ -1,0 +1,62 @@
+```json
+{
+  "claims": [
+    {
+      "text": "The input file `tool_log.csv` differs between runs and is the first difference identified by the pipeline; everything downstream is a consequence of this changed input.",
+      "kind": "lead",
+      "cites": ["comparison/verdict", "node/read_tool_log/input/tool_log.csv"]
+    },
+    {
+      "text": "The `tool_log.csv` files have the same byte count (`61`) but different digests (`sha256:8313fc7e9e282650eb19512df0a25195e4d8b7f7db59e4cc9e6f1d130e186222` vs `sha256:b0453a3fe0c86e73e4d16897f1a78a1caf85cbde410860ee5cbe8e4138c4878e`), suggesting a content change rather than a size change — possibly a different torque value recorded for one bolt.",
+      "kind": "lead",
+      "cites": ["node/read_tool_log/input/tool_log.csv"]
+    },
+    {
+      "text": "The candidate run is named `p9-48-torque-one-bolt-low`, which is consistent with a single bolt torque reading being lower than in the baseline run `p9-46-torque-baseline`.",
+      "kind": "note",
+      "cites": ["comparison/verdict"]
+    },
+    {
+      "text": "All node instruments (`read_tool_log`, `torque_check`, `station_decision`) share identical config digests between runs, so no code or configuration change is involved.",
+      "kind": "ruled out",
+      "cites": ["node/read_tool_log/instrument", "node/torque_check/instrument", "node/station_decision/instrument"]
+    },
+    {
+      "text": "The `torque_check` output `check.json` grew from `43` bytes to `75` bytes in the candidate, suggesting the check result now contains additional content (e.g. a failure detail or out-of-window annotation) driven by the changed torque value.",
+      "kind": "lead",
+      "cites": ["node/torque_check/output/check.json"]
+    },
+    {
+      "text": "The final `decision.json` also differs (baseline `39` bytes, candidate `41` bytes), confirming the changed torque propagated to a different station decision outcome.",
+      "kind": "note",
+      "cites": ["node/station_decision/output/decision.json"]
+    }
+  ],
+  "checks": [
+    {
+      "check": "text",
+      "node": "read_tool_log",
+      "setting": "tool_log.csv",
+      "run": "candidate"
+    },
+    {
+      "check": "text",
+      "node": "read_tool_log",
+      "setting": "tool_log.csv",
+      "run": "baseline"
+    },
+    {
+      "check": "text",
+      "node": "torque_check",
+      "setting": "check.json",
+      "run": "candidate"
+    },
+    {
+      "check": "text",
+      "node": "station_decision",
+      "setting": "decision.json",
+      "run": "candidate"
+    }
+  ]
+}
+```

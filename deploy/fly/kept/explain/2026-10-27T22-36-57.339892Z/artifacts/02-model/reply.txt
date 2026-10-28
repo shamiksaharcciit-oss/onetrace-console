@@ -1,0 +1,51 @@
+```json
+{
+  "claims": [
+    {
+      "text": "The first difference originates in the `split` node, where the `chunk_size` constant changed from `1024` in the baseline to `512` in the candidate, producing different chunk outputs.",
+      "kind": "lead",
+      "cites": ["comparison/verdict", "node/split", "node/split/constant/chunk_size", "node/split/output/chunks.json"]
+    },
+    {
+      "text": "The `split` node's instrument config digest differs between runs (`sha256:aaa2d6fad5864b8cba214fa5faa00631cb0095a469199a7082748a2a98eaea7e` vs `sha256:a034738a4cba13157b75e97e84345b2eef08cb70ed9bf6464ee524c044d22df4`), consistent with a configuration change to `chunk_size`.",
+      "kind": "note",
+      "cites": ["node/split/instrument", "node/split/constant/chunk_size"]
+    },
+    {
+      "text": "All differences in `embed`, `retrieve`, and `answer` nodes are downstream consequences of the changed `chunks.json` output from `split`; those nodes' own instruments and configurations are identical between runs.",
+      "kind": "ruled out",
+      "cites": ["node/embed/instrument", "node/retrieve/instrument", "node/answer/instrument", "node/embed/input/chunks.json", "node/retrieve/input/chunks.json", "node/answer/input/chunks.json"]
+    },
+    {
+      "text": "The `load_docs` node and its inputs/outputs are identical between runs, so document loading is not a factor.",
+      "kind": "ruled out",
+      "cites": ["node/load_docs", "node/load_docs/input/documents", "node/load_docs/output/documents.json"]
+    },
+    {
+      "text": "The retrieval questions input is identical between runs, so query differences are not a factor.",
+      "kind": "ruled out",
+      "cites": ["node/retrieve/input/questions"]
+    }
+  ],
+  "checks": [
+    {
+      "check": "for",
+      "node": "split",
+      "setting": "chunk_size",
+      "run": "candidate"
+    },
+    {
+      "check": "match",
+      "node": "split",
+      "setting": "config_digest",
+      "run": "candidate"
+    },
+    {
+      "check": "reproduce",
+      "node": "split",
+      "setting": "chunks.json",
+      "run": "candidate"
+    }
+  ]
+}
+```

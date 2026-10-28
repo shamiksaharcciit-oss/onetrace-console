@@ -33,10 +33,10 @@ KEPT = REPO / "deploy" / "fly" / "kept"
 MODEL = "anthropic:claude-sonnet-4-6"
 #: Each kept record, and the comparison it explains (baseline, candidate), as kept/README.md lists them.
 RECORDS = {
-    "2026-10-25T13-45-05.744195Z": ("p1-02-baseline-set2", "p1-08-candidate-set2"),
-    "2026-10-25T13-39-09.069959Z": ("p5-32-pump-baseline", "p5-33-pump-offset-changed"),
-    "2026-10-25T13-50-49.727866Z": ("p8-42-invoice-tolerance-2pct", "p8-43-invoice-tolerance-5pct"),
-    "2026-10-25T13-42-26.188702Z": ("p9-46-torque-baseline", "p9-48-torque-one-bolt-low"),
+    "2026-10-27T22-36-57.339892Z": ("p1-02-baseline-set2", "p1-08-candidate-set2"),
+    "2026-10-27T22-39-02.564172Z": ("p5-32-pump-baseline", "p5-33-pump-offset-changed"),
+    "2026-10-27T22-40-04.547696Z": ("p8-42-invoice-tolerance-2pct", "p8-43-invoice-tolerance-5pct"),
+    "2026-10-27T22-40-59.861386Z": ("p9-46-torque-baseline", "p9-48-torque-one-bolt-low"),
 }
 
 
@@ -162,7 +162,7 @@ def test_the_build_keeps_the_four_explanations_each_on_its_page_read_only(built,
 
 def test_sabotage_an_explanation_shown_on_another_page_is_named(built, examined):
     folder, store, pairs = built
-    p1, p5 = RECORDS["2026-10-25T13-45-05.744195Z"], RECORDS["2026-10-25T13-39-09.069959Z"]
+    p1, p5 = RECORDS["2026-10-27T22-36-57.339892Z"], RECORDS["2026-10-27T22-39-02.564172Z"]
     swapped = {**pairs, p1: pairs[p5], p5: pairs[p1]}
     examined(1, "planted pairing")
     assert kept_problems(folder, store, swapped) != []
@@ -211,7 +211,7 @@ def test_sabotage_a_kept_explanation_drawn_unmerged_is_named(built, monkeypatch,
              for rid, pair in RECORDS.items()}
     examined(len(pages), "kept explanations drawn unmerged")
     assert sorted(p.split(":")[0] for p in kept_checks_problems(pages)) == sorted(
-        ["2026-10-25T13-39-09.069959Z", "2026-10-25T13-42-26.188702Z"])
+        ["2026-10-27T22-39-02.564172Z", "2026-10-27T22-40-59.861386Z"])
 
 
 def test_the_build_s_copy_of_each_kept_file_is_byte_identical_to_deploy_fly_kept(built, examined):
@@ -277,7 +277,7 @@ def local_p1(tmp_path_factory):
     runs = {r.key: r.run_id for r in store.runs()}
     pairs = {(runs[c.run_a], runs[c.run_b]): c for c in store.comparisons()}
     assert len(record["kept"]) == len(RECORDS)
-    return store, pairs[RECORDS["2026-10-25T13-45-05.744195Z"]]
+    return store, pairs[RECORDS["2026-10-27T22-36-57.339892Z"]]
 
 
 def _local_page(store, comparison) -> str:
@@ -353,7 +353,7 @@ def test_a_changed_byte_in_a_kept_record_is_refused_with_its_reason(built, tmp_p
     folder, _store, pairs = built
     copy = tmp_path / "kept"
     shutil.copytree(KEPT / "explain", copy / "explain")
-    rid = "2026-10-25T13-50-49.727866Z"
+    rid = "2026-10-27T22-40-04.547696Z"
     _changed(copy / "explain" / rid / "receipts" / "02-model.json")
     store_copy = tmp_path / "store"
     shutil.copytree(folder / "store" / "store", store_copy)

@@ -14,6 +14,7 @@
 - **Two more demo pipelines: the demo records 54 runs of 11 small example pipelines,** and stores 15 comparisons. P8's `approve_payment` is a gated step: each run cites the decision that allowed what it did, signed with a throwaway key made for the build, and two runs are broken on purpose (paid after a deny; a permit for another amount). P10 is an agent whose one step calls a sub-agent's run (P11); its two runs differ in an amount the sub-agent records, two levels down. Every demo run is recorded inside a span, with its trace beside it.
 - **No path of the building machine in a built store.** The verifier's commands run from the run's own folder with relative names, and the interpreter is recorded as `python`.
 - **A build from an earlier one reads only its runs and trust file** (`--runs-from`): the earlier build record's entries for anything else are not read, and need not be there.
+- **The hosted demo's kept set is remade on onetrace 0.5.0 records:** its 54 runs and the four kept explanations, made once and served as files.
 
 ## [0.3.2]
 

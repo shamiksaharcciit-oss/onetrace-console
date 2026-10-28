@@ -1,0 +1,6 @@
+{"action_type":"pay","decision":"executed","request_id":"p8-42-invoice-tolerance-2pct/approve_payment"}
+{"action_type":"pay","decision":"executed","request_id":"p8-43-invoice-tolerance-5pct/approve_payment"}
+{"action_type":"pay","decision":"executed","request_id":"p8-44-invoice-quantity-changed/approve_payment"}
+{"action_type":"pay","decision":"denied","request_id":"p8-45-invoice-over-limit-declined/approve_payment"}
+{"action_type":"pay","decision":"denied","request_id":"p8-49-invoice-paid-on-deny/approve_payment"}
+{"action_type":"pay","decision":"executed","request_id":"p8-50-invoice-permit-other-amount/approve_payment"}

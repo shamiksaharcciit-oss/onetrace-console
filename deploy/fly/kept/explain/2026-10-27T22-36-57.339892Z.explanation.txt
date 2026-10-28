@@ -1,0 +1,15 @@
+Suggested explanation — AI-generated, may be wrong
+model: anthropic:claude-sonnet-4-6
+
+- possible culprit: The first difference originates in the `split` node, where the `chunk_size` constant changed from `1024` in the baseline to `512` in the candidate, producing different chunk outputs.
+  shown by: comparison/verdict, node/split, node/split/constant/chunk_size, node/split/output/chunks.json
+  to check: `chunk_size` changed from `1024` to `512` at `split`; set it back and run again to check
+- ruled out: The retrieval questions input is identical between runs, so query differences are not a factor.
+  shown by: node/retrieve/input/questions
+
+dropped: 3 quotes a value its cites don't hold
+
+checks onetrace can run (a lead is confirmed or ruled out only by what these report):
+  onetrace localize a b --for split
+  onetrace match b
+  onetrace reproduce b split --runner <your runner>

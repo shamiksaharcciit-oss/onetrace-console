@@ -1,0 +1,10 @@
+{
+ "format": "onedoor-issuer-trust/1",
+ "issuers": [
+  {
+   "issuer": "https://payments-approver.example/issuer",
+   "alg": "ed25519",
+   "public_key": "9cbcea15fb1b1a6f534d1801cfdf77a89062b17bd88b63178b76939bef9f4ebc"
+  }
+ ]
+}

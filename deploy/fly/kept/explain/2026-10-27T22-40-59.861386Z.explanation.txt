@@ -1,0 +1,17 @@
+Suggested explanation — AI-generated, may be wrong
+model: anthropic:claude-sonnet-4-6
+
+- possible culprit: The input file `tool_log.csv` differs between runs and is the first difference identified by the pipeline; everything downstream is a consequence of this changed input.
+  shown by: comparison/verdict, node/read_tool_log/input/tool_log.csv
+- possible culprit: The `tool_log.csv` files have the same byte count (`61`) but different digests (`sha256:8313fc7e9e282650eb19512df0a25195e4d8b7f7db59e4cc9e6f1d130e186222` vs `sha256:b0453a3fe0c86e73e4d16897f1a78a1caf85cbde410860ee5cbe8e4138c4878e`), suggesting a content change rather than a size change — possibly a different torque value recorded for one bolt.
+  shown by: node/read_tool_log/input/tool_log.csv
+- note: The final `decision.json` also differs (baseline `39` bytes, candidate `41` bytes), confirming the changed torque propagated to a different station decision outcome.
+  shown by: node/station_decision/output/decision.json
+
+dropped: 3 quotes a value its cites don't hold
+
+checks onetrace can run (a lead is confirmed or ruled out only by what these report):
+  onetrace diff a b --text --stage read_tool_log
+  onetrace diff a b --text --stage read_tool_log
+  onetrace diff a b --text --stage torque_check
+  onetrace diff a b --text --stage station_decision
