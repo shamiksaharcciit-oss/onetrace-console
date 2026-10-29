@@ -2,12 +2,16 @@
 
 A live onetrace-console that anyone can open and nobody can change. It serves the demo store's
 runs and their comparisons, recorded when the image is built, with a banner on every page. Every
-write is refused before its body is read, and the access log goes to the machine's output.
+write is refused before its body is read, and the access log goes to the machine's output. The one
+thing it does on request is Compare: two runs of one pipeline, compared on the machine and kept in
+`/srv/onetrace-demo-compared`, within the bounds `public.json` names (each can be lowered there, not
+raised).
 
 The files here:
 
 - `Dockerfile`: the image, built from the repository root.
-- `public.json`: the console's configuration inside the image (`"public": true`, port 8080).
+- `public.json`: the console's configuration inside the image (`"public": true`, port 8080, Compare's
+  cache folder and bounds, and `Fly-Client-IP` as the header that names a visitor's address).
 - `fly.toml`: the Fly.io service: port 8080, HTTPS only, the `/health` check, and machines that
   stop when idle.
 
@@ -62,3 +66,6 @@ fly deploy --config deploy/fly/fly.toml --dockerfile deploy/fly/Dockerfile -a <a
 
 A custom domain is added with `fly certs add <your-domain> -a <app-name>`, plus the DNS record
 Fly.io names. To keep one machine always on, change the two lines `fly.toml` marks.
+
+The machine's size is yours to choose when you deploy. One comparison measured a peak of about
+71 MB for the console and the commands it runs, and two run at once at most.

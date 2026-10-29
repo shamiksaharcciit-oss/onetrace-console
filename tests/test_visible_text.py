@@ -1217,6 +1217,34 @@ EXPLAINED.setdefault("diff[held-a,held-b]", {}).setdefault("new", {}).update(dic
 _SDK_050 = "the comparison names the installed SDK, 0.5.0"
 EXPLAINED.setdefault("diff[held-a,held-b]", {}).setdefault("new", {}).update(dict.fromkeys(
     ["Compared with onetrace 0.5.0, build wheel:<hex>, at <time>."], _SDK_050))
+#: 0.6.0 since the pins moved to its wheels (console 0.5.0). Measured, not typed.
+_SDK_060 = "the comparison names the installed SDK, 0.6.0"
+EXPLAINED.setdefault("diff[held-a,held-b]", {}).setdefault("new", {}).update(dict.fromkeys(
+    ["Compared with onetrace 0.6.0, build wheel:<hex>, at <time>."], _SDK_060))
+#: The monitoring view, on a local console (console 0.5.0): its page, and its link on the Runs page.
+#: Measured from the pages as drawn, not typed.
+_MONITOR = "the monitoring view of each run's verdict against its pipeline's reference, on a local console (console 0.5.0)"
+NEW_PAGES.update({"monitor.html": _MONITOR})
+EXPLAINED.setdefault("executions-all.html", {}).setdefault("new", {}).update(dict.fromkeys(
+    ['Verdicts as runs arrive'], _MONITOR))
+#: A benchmark's sentence, on a local console's run pages: its pipeline's runs are read against a
+#: reference made from it (console 0.5.0). The pages measured from the run, the words the constant's.
+_BENCHMARK_REFERENCE = "a benchmark's sentence says its pipeline's runs are read against a reference made from it (console 0.5.0)"
+for _page in ['run[forged]/case.html + run[forged]/proof.html', 'run[held-a]/case.html + run[held-a]/proof.html', 'run[held-b]/case.html + run[held-b]/proof.html', 'run[preview]/case.html + run[preview]/proof.html', 'run[r11]/case.html + run[r11]/proof.html']:
+    from onetrace_console.benchmarks import NOT_CORRECT as _NOT_CORRECT
+    EXPLAINED.setdefault(_page, {}).setdefault("new", {}).update(dict.fromkeys([_NOT_CORRECT], _BENCHMARK_REFERENCE))
+    EXPLAINED.setdefault(_page, {}).setdefault("gone", {}).update(dict.fromkeys(
+        ["A benchmark is the run to compare against, not a statement that it is correct: no verdict reads "
+         "differently for a marked run."], _BENCHMARK_REFERENCE))
+#: Beside the local mark: what pressing it does to the pipeline's reference (console 0.5.0). Measured
+#: from the pages as drawn, not typed.
+_MARK_MOVES = "the local mark says it moves the pipeline's reference and every verdict in it (console 0.5.0)"
+for _page, _texts in {'run[forged]/case.html + run[forged]/proof.html': ["Marking this run moves P2's reference: onetrace makes a new one from this run, and every verdict in P2 is then read against the new one."], 'run[held-a]/case.html + run[held-a]/proof.html': ["Marking this run moves P2's reference: onetrace makes a new one from this run, and every verdict in P2 is then read against the new one."], 'run[held-b]/case.html + run[held-b]/proof.html': ["Marking this run moves P2's reference: onetrace makes a new one from this run, and every verdict in P2 is then read against the new one."], 'run[preview]/case.html + run[preview]/proof.html': ["Marking this run moves P1's reference: onetrace makes a new one from this run, and every verdict in P1 is then read against the new one."], 'run[r11]/case.html + run[r11]/proof.html': ["Marking this run moves P1's reference: onetrace makes a new one from this run, and every verdict in P1 is then read against the new one."]}.items():
+    EXPLAINED.setdefault(_page, {}).setdefault("new", {}).update(dict.fromkeys(_texts, _MARK_MOVES))
+#: The Overview's authorization row: where each run's page reads it (console 0.5.0). Measured, not typed.
+_AUTHORIZED_ROW = "the Overview's authorization row says where each run's page reads it (console 0.5.0)"
+EXPLAINED.setdefault("home.html + counts.html", {}).setdefault("new", {}).update(dict.fromkeys(
+    ["Read on each run's page from onetrace-verify's decisions rows, where the run declares a gated step or cites a decision; no records where it does neither."], _AUTHORIZED_ROW))
 #: Console 0.4.0's new lines, measured from the pages as drawn (not typed), each group with its reason.
 _WHAT_CHANGED_SECTION = "a run page's What changed? section: the comparison the stated rule picks, or no earlier run (console 0.4.0)"
 _WHAT_CHANGED_SECTION_PAGES: dict[str, dict[str, list[str]]] = {"run[forged]/case.html + run[forged]/proof.html": {"new": ["Compared with nb2-cand, the most recent earlier run of this pipeline.", "What changed?"]}, "run[held-a]/case.html + run[held-a]/proof.html": {"new": ["No earlier run of this pipeline, so there is nothing to compare it with.", "What changed?"]}, "run[held-b]/case.html + run[held-b]/proof.html": {"new": ["Compared with nb2-base, the most recent earlier run of this pipeline.", "What changed?"]}, "run[preview]/case.html + run[preview]/proof.html": {"new": ["No earlier run of this pipeline, so there is nothing to compare it with.", "What changed?"]}, "run[r11]/case.html + run[r11]/proof.html": {"new": ["No earlier run of this pipeline, so there is nothing to compare it with.", "What changed?"]}}
@@ -1241,6 +1269,12 @@ _FORMAT_03_PAGES: dict[str, dict[str, list[str]]] = {"run[forged]/answer.html": 
 for _page, _kinds in _FORMAT_03_PAGES.items():
     for _kind, _texts in _kinds.items():
         EXPLAINED.setdefault(_page, {}).setdefault(_kind, {}).update(dict.fromkeys(_texts, _FORMAT_03))
+
+_RUN_TOOLS = ("the index's search box, on the Runs page and each run's page; a run's benchmark section, its mark and note; and \"Other runs with the same inputs\" under What changed? (console 0.5.0)")
+_RUN_TOOLS_PAGES: dict[str, dict[str, list[str]]] = {"executions-all.html": {"new": ["Search", "Search the runs by recorded field"]}, "run[forged]/case.html + run[forged]/proof.html": {"new": ["A benchmark is the run to compare against, not a statement that it is correct: no verdict reads differently for a marked run.", "Benchmark", "Mark as benchmark", "Note (optional)", "Search", "Search the runs by recorded field"]}, "run[held-a]/case.html + run[held-a]/proof.html": {"new": ["A benchmark is the run to compare against, not a statement that it is correct: no verdict reads differently for a marked run.", "Benchmark", "Mark as benchmark", "Note (optional)", "Search", "Search the runs by recorded field"]}, "run[held-b]/case.html + run[held-b]/proof.html": {"new": ["A benchmark is the run to compare against, not a statement that it is correct: no verdict reads differently for a marked run.", "Benchmark", "Mark as benchmark", "Note (optional)", "Search", "Search the runs by recorded field"]}, "run[preview]/case.html + run[preview]/proof.html": {"new": ["A benchmark is the run to compare against, not a statement that it is correct: no verdict reads differently for a marked run.", "Benchmark", "Mark as benchmark", "Note (optional)", "Other runs with the same inputs: 0", "Search", "Search the runs by recorded field"]}, "run[r11]/case.html + run[r11]/proof.html": {"new": ["A benchmark is the run to compare against, not a statement that it is correct: no verdict reads differently for a marked run.", "Benchmark", "Mark as benchmark", "Note (optional)", "Search", "Search the runs by recorded field"]}}
+for _page, _kinds in _RUN_TOOLS_PAGES.items():
+    for _kind, _texts in _kinds.items():
+        EXPLAINED.setdefault(_page, {}).setdefault(_kind, {}).update(dict.fromkeys(_texts, _RUN_TOOLS))
 
 #: Each pipeline's drift page, against the first run and against each run's previous: what
 #: `onetrace drift` reports over its stored runs.

@@ -252,14 +252,49 @@ def _wheel_hash_from_install_report(name: str) -> str:
     return ""
 
 
+#: The `.dist-info` files pip writes at install time, not taken from the wheel: `RECORD` itself,
+#: `INSTALLER` (the installer's name), `REQUESTED` (present only when the package was asked for by
+#: name) and `direct_url.json` (only for a direct-reference install, and naming its source).
+_INSTALL_TIME_FILES = {"RECORD", "INSTALLER", "REQUESTED", "direct_url.json"}
+
+
+def _own_file(path: str) -> bool:
+    """Whether a RECORD path is one of the distribution's own files, as the wheel lists them."""
+    parts = path.split("/")
+    if path.startswith("/") or ".." in parts or (len(parts[0]) == 2 and parts[0][1] == ":"):
+        return False    # outside the install root: the console-script launchers pip writes per venv
+    if "__pycache__" in parts or path.endswith(".pyc"):
+        return False    # compiled at install time, by the installing Python
+    if len(parts) == 2 and parts[0].endswith(".dist-info") and parts[1] in _INSTALL_TIME_FILES:
+        return False
+    return True
+
+
 def record_digest(version: str, record_lines: list[str]) -> str:
-    """`record:<version>:<sha256>` for an installed distribution: the sha256 of the hashed lines
-    of its RECORD, sorted. Those lines are the files the wheel itself lists, so the same wheel
-    gives the same identity on any Python and any machine; the lines pip adds for compiled
-    files and its own bookkeeping carry no hash and are left out."""
-    hashed = sorted(line.strip() for line in record_lines
-                    if line.strip() and line.split(",")[1:2] and line.split(",")[1].startswith("sha256="))
-    return f"record:{version}:" + hashlib.sha256("\n".join(hashed).encode("utf-8")).hexdigest()
+    """`record:<version>:<sha256>` for an installed distribution: the sha256 of the RECORD lines
+    for the distribution's own files, each with its sha256, sorted.
+
+    Kept: every line with a `sha256=` hash whose path is inside the install root and is not one
+    of the files below. Those are the files the wheel carries, with the hashes the wheel's own
+    RECORD gives them, so the same wheel gives the same identity in any venv.
+
+    Left out, as each varies between installs of the same wheel:
+    - a path that leaves the install root (`../`, an absolute path or a drive): the console-script
+      launchers pip writes into the venv's `bin/` or `Scripts/`, whose bytes hold that venv's own
+      interpreter path (`../../../bin/onetrace` on Linux, `../../Scripts/onetrace.exe` on Windows);
+    - `__pycache__` and `.pyc` lines: compiled by the installing Python, its version in the name;
+    - `RECORD`, `INSTALLER`, `REQUESTED` and `direct_url.json` under `.dist-info`: written by the
+      installer, and present or not by how it was asked;
+    - a line with no hash.
+
+    A `wheel:` identity is the sha256 of the wheel file itself, and a `record:` one is this, so the
+    two forms never name the same build alike."""
+    import csv
+    kept = []
+    for row in csv.reader(line for line in record_lines if line.strip()):
+        if len(row) >= 2 and row[1].startswith("sha256=") and _own_file(row[0]):
+            kept.append(",".join(row[:3]))
+    return f"record:{version}:" + hashlib.sha256("\n".join(sorted(kept)).encode("utf-8")).hexdigest()
 
 
 def sdk_build_digest() -> str:

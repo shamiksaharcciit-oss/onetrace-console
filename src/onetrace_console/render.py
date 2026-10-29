@@ -38,7 +38,7 @@ from onetrace_console.bounded_json import load_json_bounded
 
 from onetrace_console.viewer.graph import instance_label
 from onetrace_console.viewer.page import fingerprint_html
-from onetrace_console.words import (NO_AUTHORIZATION, RELATIVE_TIME_SCRIPT, generated_footer,
+from onetrace_console.words import (AUTHORIZED_OVERVIEW, NO_AUTHORIZATION, RELATIVE_TIME_SCRIPT, generated_footer,
                                      scroll_region, short_time, time_html)
 from onetrace_console.words import (escape, named, record_href, rest, run_named, shown_name,
                                       verbatim)
@@ -313,16 +313,15 @@ def trace_panel_for(report, comparison, store: Store) -> str:
     return trace_panel.panel(stage, tuple(docs), tuple(sources), tuple(digests))
 
 
-def short_headline(comparison, store: Store) -> str:
-    """A comparison's short answer headline, as plain text with each name in backticks, read as its
-    page reads it (the stored diff report, strictly); "" where the report cannot be read."""
+def read_diff(comparison, store: Store):
+    """A comparison's stored diff report and its annotations, read as its page reads them
+    (strictly), or None where there is none or it cannot be read."""
     import tempfile
 
-    from onetrace_console import short_answer
     from onetrace_console.viewer.verbs import TwoRun, TwoRunDag, read_report
     run = comparison.verb(DIFF)
     if run is None or not any(name == "diff.json" for name, _ in run.reports):
-        return ""
+        return None
     try:
         with tempfile.TemporaryDirectory(prefix="onetrace-headline-") as tmp:
             folder = Path(tmp)
@@ -331,12 +330,22 @@ def short_headline(comparison, store: Store) -> str:
                 create_exclusively(folder / name, store.get(key), named=name)
             report = read_report(folder, two_run_dag=True)
             if not isinstance(report, (TwoRun, TwoRunDag)) or not getattr(report, "ladder", None):
-                return ""
+                return None
             annotations = _annotations(folder, DIFF)
             if isinstance(report, TwoRunDag) and not annotations:
                 annotations = dag_annotations(report, comparison, store)
-    except Exception:  # noqa: BLE001 - a report this can't read gives no headline
+    except Exception:  # noqa: BLE001 - a report this can't read is no report
+        return None
+    return report, annotations
+
+
+def short_headline(comparison, store: Store) -> str:
+    """A comparison's short answer headline, as plain text with each name in backticks, read as its
+    page reads it (the stored diff report, strictly); "" where the report cannot be read."""
+    got = read_diff(comparison, store)
+    if got is None:
         return ""
+    report, annotations = got
     html = _short_answer(report, annotations, comparison, store)
     import re as _re
     m = _re.search(r'<p class="headline" data-short="headline">(.*?)</p>', html, _re.S)
@@ -1546,6 +1555,9 @@ def render_diff(comparison: StoredComparison, store: Store, *, generated_at: str
 
         if report is not None and verb == DIFF and getattr(report, "ladder", None):
             short = _short_answer(report, annotations, comparison, store)
+            #: onetrace 0.6: each step's model-call records compared by the SDK's comparator, in its words.
+            from onetrace_console import model_call_compare
+            short += model_call_compare.section(comparison, store)
             #: What the explanation's chips say of a node and of the comparison, in this page's words.
             chip_facts = {"envelope": report.envelope,
                           "verdicts": {getattr(row, "node", None) or row.stage: _RESULT_WORDS.get(row.verdict, row.verdict)
@@ -1580,6 +1592,11 @@ def render_diff(comparison: StoredComparison, store: Store, *, generated_at: str
                 blocks.append(diff_ladder(_dag_table(report, verb, authorization),
                                           _receipts_in_order(comparison.run_a, store),
                                           _receipts_in_order(comparison.run_b, store), held_runs(store, "../runs/")))
+                if verb == DIFF:
+                    #: The nearness ladder beside the exact one (`neighbours`): "" unless the extra
+                    #: is installed on a local console, neighbours are on, and the runs are neighbours.
+                    from onetrace_console.neighbours.pages import ladder_section
+                    blocks += [x for x in (ladder_section(comparison, store),) if x]
                 blocks.append(_graph_caveat(report, comparison, store))
             #: One summary per page, from diff's report: localize's ladder is the same walk,
             #: and its own contribution is the localized set below.
@@ -1622,6 +1639,9 @@ def render_diff(comparison: StoredComparison, store: Store, *, generated_at: str
                                                         inputs=input_notes(comparison, store)),
                                           _receipts_in_order(comparison.run_a, store),
                                           _receipts_in_order(comparison.run_b, store), held_runs(store, "../runs/")))
+                if verb == DIFF:
+                    from onetrace_console.neighbours.pages import ladder_section
+                    blocks += [x for x in (ladder_section(comparison, store),) if x]
             if not isinstance(report, TwoRunDag):
                 blocks.append(_localized(report))
             if verb == DIFF:
@@ -1815,7 +1835,7 @@ def _cards(store: Store, by_slug: dict) -> str:
               attention.href, _attention_parts(listed), [escape(ATTENTION_RULE)]),
     ]
     from onetrace_console.pipeline_pages import cards_section
-    return f'<section data-section="cards">{"".join(cards)}</section>' + cards_section(store)
+    return f'<section data-section="cards">{"".join(cards)}</section>'
 
 
 def _run_link(run) -> str:
@@ -2092,8 +2112,9 @@ def _evidence(store: Store, by_slug: dict) -> str:
          + f'<a href="{_tag(unknown.href)}">{unknown.count} not established</a>'),
         ("reproduced", "Re-runnable stages re-run and matched",
          "not checked · this console runs no re-check"),
-        ("authorized", "Action authorized, effect confirmed",
-         f"No records · {NO_AUTHORIZATION}"),
+        #: Read on each run's own page, from the verifier's decisions rows where the run declares a
+        #: gated step or cites a decision (`pages.authorization_rung`); counted nowhere here.
+        ("authorized", "Action authorized, effect confirmed", escape(AUTHORIZED_OVERVIEW)),
         #: In the fixed words, as corrected: each form over the runs with this console's check
         #: (any at 0 left out), then the runs without one, inline, in the words "Records agree"
         #: uses for them.
@@ -2172,21 +2193,27 @@ def watched_section() -> str:
 SUBTITLE = "The runs delivered to this console, and what the evidence for each one establishes."
 
 
+def _pipeline_cards(store: Store) -> str:
+    """Each pipeline's card, under the four counts and a public demo's way in."""
+    from onetrace_console.pipeline_pages import cards_section
+    return cards_section(store)
+
+
 def _way_in(store: Store) -> str:
-    """A public demo's way in, first on its Overview (`pipeline_pages.way_in`)."""
+    """A public demo's way in (`pipeline_pages.way_in`), on its Overview after the four count cards."""
     from onetrace_console.pipeline_pages import way_in
     return way_in(store)
 
 
 def render_home(store: Store, *, generated_at: str) -> str:
-    """Board 1: the cards, what the evidence establishes beside what needs attention first, then
-    the recent runs, the pipelines and the verdicts by day. Every count carries its denominator
+    """Board 1: the cards, with how the counts work, first; then a public demo's way in (its two guide
+    blocks); then what the evidence establishes beside what needs attention, the recent runs, the
+    pipelines and the verdicts by day. Every count carries its denominator
     and links to exactly what it counted; the full list of counts is the All counts page."""
     run_tallies = tallies(store)
     body = [
         "<h1>Overview</h1>",
         _unread(store),
-        _way_in(store),
         f'<p data-section="subtitle">{escape(SUBTITLE)}</p>',
         '<details data-section="how"><summary>How these counts work</summary>'
         '<p data-section="what">Every count below carries the number it was taken from. '
@@ -2195,6 +2222,10 @@ def render_home(store: Store, *, generated_at: str) -> str:
         _banner({t.slug: t for t in run_tallies}),
         watched_section(),
         _cards(store, {t.slug: t for t in run_tallies}),
+        #: The four counts open the page; the guide blocks follow them, as they were; then each
+        #: pipeline's card (`cards_section`).
+        _way_in(store),
+        _pipeline_cards(store),
         '<div class="panels">',
         _evidence(store, {t.slug: t for t in run_tallies}),
         _needs_attention(store),
@@ -2375,6 +2406,11 @@ def render_all(store: Store, *, generated_at: str) -> dict[str, str]:
         for r in p.runs:
             pages[pair_href(p.label, r.key)] = drawn(lambda p=p, r=r: render_pair(
                 p, r, store, generated_at=generated_at, held=held))
+    #: The monitoring view: each run's verdict against its pipeline's reference, on a local console only.
+    from onetrace_console.frame import rendering_public
+    if not rendering_public():
+        from onetrace_console.verdicts import MONITOR, render_monitor
+        pages[MONITOR] = drawn(lambda: render_monitor(store, generated_at=generated_at))
     #: The Incidents page and one list per rule, so every count on Home opens.
     pages[INCIDENTS] = drawn(lambda: render_incidents(store, generated_at=generated_at))
     for rule in RULES:

@@ -112,8 +112,9 @@ def test_the_stored_report_is_byte_identical_to_running_the_command_by_hand(stor
     stored_stdout = json.loads(store.get(run.check_report).decode("utf-8"))["stdout"]
 
     folder = materialise(run, store, tmp_path / "byhand")
-    script = Path(sys.executable).parent / "onetrace-verify.exe"
-    if script.is_file():
+    from tests.console_scripts import console_script
+    script = console_script("onetrace-verify")
+    if script is not None:
         argv = [str(script), "."]
     else:                                  # the same entry point, without relying on PATH
         argv = [sys.executable, "-m", "onetrace_verify.cli", "."]

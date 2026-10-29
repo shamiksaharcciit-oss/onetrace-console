@@ -39,6 +39,8 @@ _VIEWER_GET_PATTERNS = tuple(re.compile(p) for p in (
     r"^counts\.html$",
     r"^executions-[\w-]+\.html$",
     r"^incidents\.html$",
+    #: The monitoring view (`verdicts`), a local console's: each run's verdict against its reference.
+    r"^monitor\.html$",
     r"^incidents-[\w.-]+\.html$",
     r"^runs/[^/]+/answer\.html$",
     r"^runs/[^/]+/case\.html$",
@@ -65,6 +67,11 @@ _VIEWER_GET_PATTERNS = tuple(re.compile(p) for p in (
     r"^explain/state$",
     #: The setup page, read-only (`explain_setup`).
     r"^explain/setup$",
+    #: The index's search results (`search_page`): a read of the index, drawn as asked.
+    r"^search$",
+    #: Neighbours by input's setup page (`neighbours`), where the extra is installed on a local
+    #: console; anywhere else the server has no such page.
+    r"^neighbours/setup$",
     r"^choose-p[0-9]+-[0-9a-f]{64}\.html$",
     r"^policy\.html$",
     r"^policy/[^/]+\.html$",
@@ -85,6 +92,14 @@ _POST_ROLES = {
     "/explain": VIEWER,
     "/explain/packet": VIEWER,
     "/explain/check": VIEWER,
+    #: "Mark as benchmark" and its undo (`benchmarks`): a mark in the console's store, never in a
+    #: record; who can compare runs can say which run to compare against.
+    "/benchmark": VIEWER,
+    #: Turning neighbours by input on or off (`neighbours`): a setting of the whole store that decides
+    #: which model reads its kept inputs, so an admin's. Only where the extra is installed on a local
+    #: console; anywhere else the server has no such route.
+    "/neighbours/on": ADMIN,
+    "/neighbours/off": ADMIN,
 }
 
 

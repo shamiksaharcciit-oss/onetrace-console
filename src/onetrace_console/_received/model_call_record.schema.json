@@ -1,8 +1,8 @@
 {
  "$schema": "https://json-schema.org/draft/2020-12/schema",
- "$id": "model-call-record/0.1-draft",
- "title": "model-call-record/0.1-draft",
- "description": "DRAFT, for review. The model-call record as written today: one model call, one canonical JSON document, an output artifact of the calling stage. Its prose is docs/model_call_design.md §1; this schema is built by docs/build_model_call_record_schema.py. Every scalar is a string. Every field that describes the call is a value object in one of five states ($defs/state). A field the writer cannot fill is not observed or not applicable, with its reason in source: never left out, never given a default. x-reasons gives, per field, state and kind of call, the reason the prose states. allOf holds the prose's per-engine tables. x-batch-gate marks the batch gate of the comparator's mode 1. Where the prose and the code disagree, see docs/model_call_record_prose_vs_code.md.",
+ "$id": "model-call-record/1.0",
+ "title": "model-call-record/1.0",
+ "description": "The model-call record, version 1.0: one model call, one canonical JSON document, an output artifact of the calling stage. Specified in docs/model-call-record.md. Every scalar is a string. Every field that describes the call is a value object in one of five states ($defs/state); a field the writer cannot fill is not observed or not applicable, with its reason in source, never left out and never given a default. The optional `steps` member is the digest of a separate model-generated per-step capture output; the record itself holds no token id and no text. x-groups groups the fields for a reader; x-most-bytes bounds the record's size. The validation keywords are the reader's applied set only.",
  "type": "object",
  "required": [
   "format",
@@ -39,8 +39,8 @@
  ],
  "properties": {
   "format": {
-   "const": "model-call-record/0.1-draft",
-   "description": "Written by the writer: the draft's constant."
+   "const": "model-call-record/1.0",
+   "description": "Written by the writer: this version's constant."
   },
   "call.kind": {
    "enum": [
@@ -320,6 +320,10 @@
      "hosted": "the response carries fewer than 16 first-token log-probabilities"
     }
    }
+  },
+  "steps": {
+   "$ref": "#/$defs/vo-digest",
+   "description": "Optional: the digest of the per-step capture output model_call.<n>.steps.json, classed model-generated, when a capture level is taken. Absent otherwise. The record never holds a token id or any text; the per-step token ids live in that separate output."
   }
  },
  "patternProperties": {
@@ -768,7 +772,8 @@
    ]
   },
   "string": {
-   "type": "string"
+   "type": "string",
+   "minLength": 1
   },
   "vo-digest": {
    "oneOf": [
@@ -1358,5 +1363,53 @@
    ],
    "description": "The five states of a value object (design §1.1). observed: read at call time; source says from where. declared, not observed: declared by the caller and not read back; source says what was tried. declared, contradicted: declared, and a different value read; both kept (observed_value). not observed: the writer cannot see it; no value, never a default. not applicable: the field has no meaning for this engine; no value; source says why."
   }
+ },
+ "x-groups": {
+  "The call": [
+   "format",
+   "call.kind",
+   "call.api",
+   "credential",
+   "model.requested",
+   "model.reported",
+   "model.files_digest",
+   "tokenizer.digest",
+   "provider.fingerprint",
+   "engine.name",
+   "engine.version"
+  ],
+  "The runtime": [
+   "runtime.torch",
+   "runtime.cuda",
+   "runtime.gpu_name",
+   "runtime.driver",
+   "runtime.compute_capability",
+   "dtype",
+   "attention_backend"
+  ],
+  "The batch": [
+   "batch.size",
+   "batch.executed_size",
+   "batch.padded_width",
+   "batch.position",
+   "batch.members",
+   "batch.fillers",
+   "batch.batch_invariant"
+  ],
+  "The input and output": [
+   "input.token_ids_digest",
+   "input.request_digest",
+   "output.token_ids_digest",
+   "output.text_digest",
+   "output.finish",
+   "fingerprints"
+  ],
+  "The capture": [
+   "steps"
+  ]
+ },
+ "x-most-bytes": {
+  "value": "1048576",
+  "reason": "1 MiB. The record holds digests and short value objects -- a few kilobytes -- and the per-step capture lives in a separate output (model_call.<n>.steps.json), so the record does not grow with capture depth; 1 MiB is far above any record this writer produces."
  }
 }

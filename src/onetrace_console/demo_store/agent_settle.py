@@ -10,8 +10,8 @@ own folder and chain: the sub-agent's runs are runs of their own, a pipeline of 
 
 The demo's runs of it: a baseline, and one with the amount the sub-agent's step records changed, two
 levels down. Comparing the two agent runs, onetrace descends into the sub-agent's run and names
-`settle`. The agent's step also writes two model-call records (`model_call.json`, `model_call.1.json`,
-the draft format `model-call-record/0.1-draft`), the same in both runs. Everything here is invented
+`settle`. The agent's step also writes two model-call records (`model_call.json`, `model_call.2.json`,
+in `model-call-record/1.0`), the same in both runs. Everything here is invented
 example data; nothing is paid or settled anywhere, and no model is called.
 """
 from __future__ import annotations
@@ -47,13 +47,13 @@ def main(runs_dir, run_id: str, inner_id: str, amount: str) -> None:
 
     @ot.stage("agent_step", instrument=planner)
     def agent_step(total):
-        #: The planner's two model calls, as model-call records: invented example data in the
-        #: draft format (`model_call_example`); no model is called.
+        #: The planner's two model calls, as model-call records: invented example data in
+        #: `model-call-record/1.0` (`model_call_example`); no model is called.
         from onetrace.emit import current_stage
         from onetrace_console.demo_store import model_call_example as mc
         step = current_stage()
-        step.write("model_call.json", mc.record_bytes(mc.self_hosted()), "application/json")
-        step.write("model_call.1.json", mc.record_bytes(mc.hosted()), "application/json")
+        for name, make in zip(mc.NAMES, (mc.self_hosted, mc.hosted)):
+            step.write(name, mc.record_bytes(make()), "application/json")
         #: The sub-agent's run id, read by its decorator as it starts.
         os.environ["ONETRACE_RUN_ID"] = inner_id
         try:

@@ -19,6 +19,9 @@ import re
 #: The authorization rung's evidence on every page: this console records no authorization, and
 #: says so plainly.
 NO_AUTHORIZATION = "This console does not record authorization."
+#: The Overview's row for "Action authorized, effect confirmed": where each run's own page reads it.
+AUTHORIZED_OVERVIEW = ("Read on each run's page from onetrace-verify's decisions rows, where the run "
+                       "declares a gated step or cites a decision; no records where it does neither.")
 
 
 #: A check's verdict as a reader reads it. The stored values (`checks.HOLDS` and the rest) stay as

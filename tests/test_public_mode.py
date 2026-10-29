@@ -7,7 +7,10 @@ served by a real console started with a configuration file that says `"public": 
    extension, another trust file, a store with accounts or tokens, or a store with no pages,
    the console refuses to start, in words with the fix;
 2. every write route, and a route that does not exist, answers 403 with the refusal before a byte
-   of the body is read, and the store does not change;
+   of the body is read, and the store does not change: no control sends, runs or saves anything,
+   with two exceptions, Compare on a pipeline's own runs (`POST /compare`, held in
+   tests/test_visitor_compare.py) and the search over the built index (`GET /search`, which reads,
+   held in tests/test_run_index.py); each of those holds every other page unchanged by it;
 3. the access log is standard output, one line per request, and nothing is written under the store;
 4. the account and token commands refuse a public configuration;
 5. every page answers 200 with the banner and every security header, and its one inline script

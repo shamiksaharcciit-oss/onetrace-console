@@ -26,7 +26,7 @@ import os
 import sys
 import tarfile
 from dataclasses import dataclass
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 from onetrace_console.config import Config
 from onetrace_console.oserror import shown
@@ -72,9 +72,14 @@ def run_folders(folder: Path) -> list[Path]:
 
 def delivery(run_dir: Path) -> bytes:
     """The run folder as `POST /v1/runs` takes it: every file, and a SHA256SUMS covering them.
-    A SHA256SUMS the folder holds is delivered as it is, so the console checks it."""
+    A SHA256SUMS the folder holds is delivered as it is, so the console checks it.
+
+    The files go in the order of their names as POSIX paths, on every platform: the delivery's bytes
+    make the run's bundle, whose digest names its comparisons (`compare.comparison_key`). Sorted as
+    this host's paths, Windows' case-folding put `MANIFEST.json` after `artifacts/`, and the same run
+    was named otherwise there."""
     files: dict[str, bytes] = {}
-    for path in sorted(run_dir.rglob("*")):
+    for path in sorted(run_dir.rglob("*"), key=lambda p: PurePosixPath(p.relative_to(run_dir).as_posix())):
         rel = path.relative_to(run_dir).as_posix()
         if path.is_symlink():
             raise _Undeliverable(f"it holds a link ({rel}), and a run folder holds files only")
@@ -276,8 +281,8 @@ def demo_folder(cwd: Path) -> Path:
     return target
 
 
-def build_public(folder: Path, *, runs_from: Path | None = None,
-                 explanations: Path | None = None) -> tuple[list[tuple[str, str | None]], str]:
+def build_public(folder: Path, *, runs_from: Path | None = None, explanations: Path | None = None,
+                 site_links: Path | None = None) -> tuple[list[tuple[str, str | None]], str]:
     """Build the public demo into `folder`, which must not exist yet or be empty: the demo store's
     runs and trust file, the runs delivered, checked and compared, every page drawn as a public
     console serves it, and a build record over all of it, which a public console checks before it
@@ -286,7 +291,9 @@ def build_public(folder: Path, *, runs_from: Path | None = None,
     `runs_from`: an earlier build's runs and trust file, where its build record vouches for every
     byte, in place of runs recorded now. `explanations`: the folder onetrace-explain wrote
     `explain/` under; the explanations of comparisons this build holds are kept, read-only
-    (`explain.keep`), and every other file is refused with its reason, printed."""
+    (`explain.keep`), and every other file is refused with its reason, printed. `site_links`: the
+    public site's links into the demo (`deploy/fly/site_links.txt`); a listed comparison page this
+    build names anew gets a page at its old name that sends a reader on (`site_links`)."""
     from onetrace_console import demo_store
     from onetrace_console.config import Config
     from onetrace_console.serve import _render_startup_pages
@@ -310,6 +317,15 @@ def build_public(folder: Path, *, runs_from: Path | None = None,
         #: Each pipeline's two drift reports, kept now: a public console never runs the command.
         from onetrace_console.drift import ensure_all
         ensure_all(store)
+        #: Each pipeline's baseline marked as its benchmark, read-only from now on (`benchmarks`).
+        from datetime import datetime, timezone
+        from onetrace_console.benchmarks import mark_build
+        mark_build(store, [r.name for r in loaded.runs],
+                   datetime.now(timezone.utc).isoformat(timespec="seconds"))
+        #: Each pipeline's reference, its profile and every run's verdict, kept now: a public
+        #: console never runs the command (`verdicts`).
+        from onetrace_console.verdicts import ensure_all as ensure_verdicts
+        ensure_verdicts(store)
         said = []
         if explanations is not None:
             #: The explanations the builder names, kept before any page is drawn.
@@ -323,6 +339,14 @@ def build_public(folder: Path, *, runs_from: Path | None = None,
                          f"refused {len(kept['refused'])}", None))
             said += [(shown(f"  refused {r['file']}: {r['reason']}"), None) for r in kept["refused"]]
         _render_startup_pages(store, store_root, config)
+        if site_links is not None:
+            from onetrace_console import site_links as links
+            from onetrace_console.serve import PAGES_DIRNAME
+            try:
+                moved = links.write_redirects(store, store_root / PAGES_DIRNAME, links.read(site_links))
+            except (links.Unplaced, ValueError) as e:
+                raise LoadRefused(f"{site_links}: {e}") from None
+            said += [(f"{old} has moved to {new}", None) for old, new in moved.items()]
     demo_store.write_build_record(folder, (demo_store.RUNS_DIRNAME, demo_store.TRUST_NAME, "store"))
     lines, opened = announce(folder / demo_store.RUNS_DIRNAME, loaded, store)
     return said + lines, opened
@@ -365,6 +389,9 @@ def main(argv: list[str], *, demo: bool) -> int:
         parser.add_argument("--runs-from", type=Path, metavar="FOLDER", default=None,
                             help="with --public --build: take an earlier build's runs and trust "
                                  "file, where its build record vouches for every byte")
+        parser.add_argument("--site-links", type=Path, metavar="FILE", default=None,
+                            help="with --public --build: the public site's links into the demo, one per "
+                                 "line; a listed comparison page named anew gets a page at its old name")
         parser.add_argument("--explanations", type=Path, metavar="FOLDER", default=None,
                             help="with --public --build: keep the explanations onetrace-explain "
                                  "wrote under FOLDER/explain/ of comparisons this build holds, "
@@ -377,8 +404,9 @@ def main(argv: list[str], *, demo: bool) -> int:
         parser.error("--port takes a TCP port, 1 to 65535")
     if demo and args.build is not None and not args.public:
         parser.error("--build builds the public demo: give --public with it")
-    if demo and (args.runs_from is not None or args.explanations is not None) and args.build is None:
-        parser.error("--runs-from and --explanations go into a build: give --public --build with them")
+    if demo and (args.runs_from is not None or args.explanations is not None or args.site_links is not None) \
+            and args.build is None:
+        parser.error("--runs-from, --explanations and --site-links go into a build: give --public --build with them")
     if demo and args.public:
         return _public_demo(args)
 
@@ -453,7 +481,14 @@ class _Watching:
                 print(shown(f"onetrace-console: {run_dir.name}: {got.refused}"), file=sys.stderr, flush=True)
                 return False
             if self.serving:
-                _render_run_pages(got.run, self.store, self.root, self.config)
+                #: Where neighbours by input are on, the new run's kept texts are embedded first and its
+                #: group's pages drawn with them (`neighbours`); otherwise its own pages, as before.
+                from onetrace_console.serve import _neighbours_on, _neighbours_refresh, _render_neighbour_pages
+                if _neighbours_on(self.store, self.config):
+                    _neighbours_refresh(self.store, self.config)
+                    _render_neighbour_pages(self.store, self.root, self.config)
+                else:
+                    _render_run_pages(got.run, self.store, self.root, self.config)
                 print(f"onetrace-console: took in {run_dir.name}", file=sys.stderr, flush=True)
             return True
 
@@ -562,7 +597,8 @@ def _public_demo(args) -> int:
                   "takes no --open or --port.", file=sys.stderr)
             return 2
         try:
-            lines, _ = build_public(args.build, runs_from=args.runs_from, explanations=args.explanations)
+            lines, _ = build_public(args.build, runs_from=args.runs_from, explanations=args.explanations,
+                                    site_links=args.site_links)
         except LoadRefused as e:
             print(f"refusing to build the public demo: {e}", file=sys.stderr)
             return 1

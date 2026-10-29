@@ -226,6 +226,11 @@ def _output(step: dict, out: dict, files, store, href: str, n: int = 1) -> str:
     media = str(out.get("media_type", ""))
     blob = _read(files, store, _artifact_path(step["file"], name))
     head = f'<span class="mono">{named(name)}</span> · {_fingerprint(out)}'
+    #: A model-call record's output links to the record as this page's panel reads it (board 7).
+    from onetrace_console import model_call
+    if model_call.NAME.fullmatch(name):
+        head += (f' · <a href="#{model_call.anchor(name)}" data-model-call-link>'
+                 f"{escape(model_call.RECORD_LINK)}</a>")
     if blob is None:
         said = f"<p>{escape(FINGERPRINT_ONLY)}</p>"
     elif not _verified(blob, digest):
@@ -509,6 +514,14 @@ def render_stage_pages(run: StoredRun, store: Store, *, generated_at: str,
     manifest = manifest_of(run, store)
     has_spans = bool(traceparent(manifest)) or any(trace_of(s["receipt"]) for s in steps)
     held = held_runs(store)
+    #: The other runs naming a record's model files, looked up once per value for this run's pages.
+    from onetrace_console import model_call as _mc
+    found: dict[str, list] = {}
+
+    def same_files(value: str) -> list:
+        if value not in found:
+            found[value] = _mc.same_files(store, run.key, value)
+        return found[value]
     unlisted = kept_inputs.unlisted_count(files, steps)
     for step in steps:
         receipt, stage = step["receipt"], _stage_name(step["receipt"])
@@ -542,7 +555,7 @@ def render_stage_pages(run: StoredRun, store: Store, *, generated_at: str,
             f"{escape(banner)}</p>"
             f"{verdict}"
             + step_blocks(manifest, receipt, has_spans, held, step["file"],
-                          lambda path: _read(files, store, path))
+                          lambda path: _read(files, store, path), same_files)
             + '<div class="io">'
             + _inputs(inputs, upstream, href, receipts, kept, unlisted, inputs_note)
             + _outputs(step, outputs, files, store, href)

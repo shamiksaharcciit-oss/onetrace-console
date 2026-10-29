@@ -29,5 +29,12 @@
   "tsa_cert": null,
   "tsa_roots": [],
   "public": false,
+  "compare_cache": null,
+  "compare_client_header": null,
+  "compare_per_minute": 20,
+  "compare_running": 2,
+  "compare_queue": 2,
+  "compare_wait_seconds": 20.0,
+  "compare_verb_seconds": 30,
   "tracing": {}
 }

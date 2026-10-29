@@ -5,6 +5,13 @@
   "store_root": "/srv/onetrace-demo/store",
   "trust_file": "/srv/onetrace-demo/trust.json",
   "request_timeout_seconds": 30.0,
+  "compare_cache": "/srv/onetrace-demo-compared",
+  "compare_client_header": "Fly-Client-IP",
+  "compare_per_minute": 20,
+  "compare_running": 2,
+  "compare_queue": 2,
+  "compare_wait_seconds": 20.0,
+  "compare_verb_seconds": 30,
   "sign_in": {
     "enabled": false
   }

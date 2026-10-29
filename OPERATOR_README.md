@@ -53,6 +53,42 @@ host or port, and with sign-in on it must also pass the plain-HTTP refusal
 below. The container image always names one (`/etc/onetrace-console/config.json`), so it
 never runs in local mode.
 
+## Neighbours by input: an optional extra, local only
+
+`onetrace-console[neighbours]` adds neighbours by input to a **local** console: other runs of the same
+configuration whose kept inputs are near a run's own, and, on a comparison of two such runs, a nearness
+ladder beside the exact one. An embedding model reads the runs' kept inputs and kept outputs to do it;
+each embedding batch is recorded as a onetrace run of its own.
+
+Install it beside the console's own pins:
+
+```
+python tools/install_pinned.py
+python -m pip install --require-hashes -r requirements-neighbours.lock
+```
+
+- **Local only.** A public console has none of it: no page, no route and no word of it, and it refuses to
+  start beside a store that holds neighbours' files. The container image installs no extra.
+- **Off by default.** Installed and off, every page is drawn exactly as without the extra. It is turned on
+  at `/neighbours/setup` on the console, by naming the embedder and confirming the words that name it;
+  turning it on and off is an admin's where sign-in is on.
+- **What turning it on fetches.** With one of the two local models, that model's pinned files, once, from
+  huggingface.co at the pinned revision, each checked against its pinned sha256 before it is kept. Nothing else
+  is fetched, and no text leaves the machine. With an embedding endpoint you name instead, the kept inputs and
+  outputs are sent to that endpoint, and nothing is fetched.
+- **What the ladder's two fixed readings mean.** "1.00 by the record": the two runs' digests for that file are
+  equal, so nothing is embedded there. "≥ 0.9995, digests differ": the digests are not equal and the
+  embedder's number rounds to 1.000. Neither is a judgement that two runs did the same thing.
+
+What it is not, word for word as the setup page says it:
+
+- Similarity of inputs is a suggestion for which runs to compare, and a drop in the nearness ladder is a suggestion of where to look; neither is evidence of anything and neither is a verdict.
+- The embedder reads kept inputs; the console says so, and the feature is off by default.
+- Nothing about hosted embedders: none is offered.
+- No fitted threshold: the similarity is shown as a number, ordered, with no cut-off claimed to mean "the same".
+
+The setup page, `/neighbours/setup`, names the models, their pinned revisions and what is fetched.
+
 ## Building the image
 
 ```

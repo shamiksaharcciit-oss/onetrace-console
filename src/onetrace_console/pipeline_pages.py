@@ -182,13 +182,23 @@ def runs_of(pipeline, store: Store, which: str) -> list:
 
 def _tile(i: int, run, store: Store) -> str:
     state = records.state(run, store)
+    from onetrace_console.benchmarks import badge
     from onetrace_console.viewer.model import NAME_CAP
     return (f'<li data-run="{_tag(run.key)}" data-state="{_tag(state)}">'
             f'<a href="runs/{_tag(run.key)}/case.html"><span class="n">{i}</span> '
             f'<span class="mono" data-words="record">{escape(run.run_id[:NAME_CAP])}</span></a>'
-            + rest(run.run_id, record_href(run)) +
+            + rest(run.run_id, record_href(run)) + badge(store, run.key) +
             f'<p data-line="state">{mark(state)} {escape(records.said(run, store))}</p>'
             f'<p data-line="vs">{escape(run_line(run, store))}</p></li>')
+
+
+def _picker(pipeline) -> str:
+    """On a public console's pipeline page: Compare's picker of two of its runs (`visitor_compare`)."""
+    from onetrace_console.frame import rendering_public
+    if not rendering_public():
+        return ""
+    from onetrace_console.visitor_compare import picker
+    return picker(pipeline)
 
 
 def render_pipeline(pipeline, store: Store, *, generated_at: str, which: str = "all") -> str:
@@ -221,6 +231,7 @@ def render_pipeline(pipeline, store: Store, *, generated_at: str, which: str = "
         f'<a href="{_tag(drift_href(pipeline.label))}" data-link="drift">Drift across its runs</a></p>',
         chain(pipeline, counts),
         f'<p data-section="first-differences">{escape(said)}</p>',
+        _picker(pipeline),
         f'<p data-section="filters">Show: {filters}</p>',
         f'<p data-section="shown">{len(shown)} of {n} run{"" if n == 1 else "s"} shown.</p>',
         legend(),
@@ -243,6 +254,14 @@ NOT_FLAGGED_HEAD = "Also planted, and not flagged by any check:"
 #: The planted runs' tables' columns.
 PLANTED_COLUMNS = ("Run", "What was done to it", "What its page reads")
 ALL_PIPELINES = "See all pipelines"
+#: The way in's line on Compare (`visitor_compare`): what it does, and its limits.
+COMPARE_HEAD = "Compare two runs yourself"
+COMPARE_LEAD = ("Each pipeline's page can compare two of its runs on this demo's server: the SDK's "
+                "verbs on the two runs as recorded, as the demo compared its own pairs when it was "
+                "built. No model, no network and no explanation; a pair compared before opens at once. "
+                "At most {per_minute} new comparisons a minute for everyone, one at a time from each "
+                "visitor; over that the page says busy, and nothing is queued. Your choice of pair is "
+                "logged with the time it took; nothing else you send is read or kept.")
 
 
 def first_pipeline(store: Store):
@@ -290,7 +309,7 @@ def _planted_table(group: str, label: str, rows: str) -> str:
 
 
 def way_in(store: Store) -> str:
-    """The public demo's Overview opens here: the pipeline whose every run's records agree, then
+    """The public demo's Overview, after its four count cards: the pipeline whose every run's records agree, then
     every run the demo builder broke on purpose, then a link to all pipelines. Nothing on a local
     console, nor on a public one whose runs are not the builder's."""
     from onetrace_console.frame import rendering_public
@@ -321,5 +340,10 @@ def way_in(store: Store) -> str:
                   f'{_planted_table("not-flagged", "The planted runs no check flags", quiet)}</div>'
                   if quiet else "")
                + "</section>")
+    from onetrace_console.visitor_compare import PER_MINUTE
+    to = (f' <a href="{_tag(page_href(first.label))}#visitor-compare">Compare two runs of {escape(first.label)}</a>'
+          if first is not None else "")
+    out.append(f'<section data-section="visitor-compare-lead"><h2>{escape(COMPARE_HEAD)}</h2>'
+               f"<p>{escape(COMPARE_LEAD.format(per_minute=PER_MINUTE))}{to}</p></section>")
     out.append(f'<p data-section="all-pipelines"><a href="#pipeline-cards">{escape(ALL_PIPELINES)}</a></p>')
     return "".join(out)

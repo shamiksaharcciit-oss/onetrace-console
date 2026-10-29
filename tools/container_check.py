@@ -12,9 +12,12 @@ Every check, and what it expects:
 - one POST to each route that writes, and to a route that does not exist, declaring a body far
   larger than anything the console accepts and sending none of it: each answers 403 with the
   refusal at once -- a console that waited to read the body would answer late, or otherwise;
+- one POST to Compare, the public console's one route that runs something, declaring the same
+  body: it answers 413 at once, unread;
 - with --log, the console's whole output (its access log): after its two start lines, every line
-  is one JSON object with exactly the access log's five fields. Any other line -- the standard
-  library's own request line, which carries the client's address, or anything else -- is named.
+  is one JSON object with exactly the access log's five fields, or Compare's line with exactly its
+  four (the pair, the outcome, the time taken, and when). Any other line -- the standard library's
+  own request line, which carries the client's address, or anything else -- is named.
 
 Usage:
   python3 tools/container_check.py BASE_URL --pages FILE
@@ -38,8 +41,11 @@ import urllib.request
 from urllib.parse import urlsplit
 
 #: The routes that write, and one that does not exist: every one is refused the same way.
-ROUTES = ("/v1/runs", "/compare?a=0&b=1", "/text-diff/more?c=0", "/v1/decisions", "/signin",
+ROUTES = ("/v1/runs", "/text-diff/more?c=0", "/benchmark?run=0&mark=yes", "/v1/decisions", "/signin",
           "/signout", "/no-such-route")
+#: The public console's one route that runs something (Compare on a pipeline's own runs): a body
+#: declared past its limit is refused at once, unread.
+COMPARE_ROUTE = "/compare"
 #: The headers every response carries in public mode.
 HEADERS = ("X-Frame-Options", "X-Content-Type-Options", "Cross-Origin-Resource-Policy",
            "Referrer-Policy", "Strict-Transport-Security", "Content-Security-Policy")
@@ -53,6 +59,8 @@ DECLARED = 10 ** 9
 
 #: The access log's fields, all of them and no others: no client address among them.
 LOG_FIELDS = frozenset({"at", "principal", "method", "path", "status"})
+#: Compare's line: the pair, the outcome and the time taken; no client address.
+COMPARE_FIELDS = frozenset({"at", "compare", "outcome", "ms"})
 #: A public console's two start lines, which come before its access log.
 START_LINES = ("onetrace-console serving on ", "onetrace-console public mode: ")
 
@@ -107,6 +115,14 @@ def raw_post(base: str, path: str, declared: int = DECLARED,
     return (int(match.group(1)) if match else 0), body, seconds
 
 
+def compare_problems(status: int, body: bytes, seconds: float) -> list[str]:
+    """Compare, sent a body declared past its limit: refused at once with 413, unread."""
+    out = [] if status == 413 else [f"status {status}, not 413"]
+    if seconds > PROMPT_SECONDS:
+        out.append(f"answered after {seconds:.1f} s: it waited for the body")
+    return out
+
+
 def refusal_problems(status: int, body: bytes, seconds: float) -> list[str]:
     out = []
     if status != 403:
@@ -134,7 +150,9 @@ def log_problems(lines: list[str]) -> list[str]:
             entry = json.loads(line)
         except ValueError:
             entry = None
-        if not isinstance(entry, dict) or set(entry) != LOG_FIELDS:
+        if not isinstance(entry, dict) or set(entry) not in (LOG_FIELDS, COMPARE_FIELDS) or (
+                set(entry) == COMPARE_FIELDS and (not isinstance(entry["compare"], dict)
+                                                  or set(entry["compare"]) != {"a", "b"})):
             out.append(f"line {number} is not an access-log entry: {line[:120]}")
     return out
 
@@ -154,6 +172,7 @@ def run(base: str, pages: list[str], say=print) -> bool:
         report(f"/{rel}", page_problems(*fetch(base, "/" + rel)))
     for route in ROUTES:
         report(f"POST {route}", refusal_problems(*raw_post(base, route)))
+    report(f"POST {COMPARE_ROUTE}", compare_problems(*raw_post(base, COMPARE_ROUTE)))
     say(f"RESULT: {'all hold' if ok else 'a check failed'} ({len(pages)} pages, {len(ROUTES)} routes)")
     return ok
 

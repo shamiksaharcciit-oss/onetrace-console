@@ -55,3 +55,31 @@ def test_a_straight_line_run_s_rung_is_its_line_alone(store):
     state, said = _rung(page)
     assert state == "not-a-graph-run", (state, said)
     assert said == "Ran as approved a straight-line run: there is no plan to compare", said
+
+
+def test_a_graph_run_that_recorded_no_plan_reads_no_plan_recorded(examined):
+    """onetrace-verify 0.5.0 leaves the plan row out for a graph run whose manifest declares no
+    plan (an agent's run with a step inside it): the rung reads what the record holds, no approved
+    plan recorded, never that the check couldn't say. A manifest that declares a plan, checked
+    without a plan row, still reads can't check."""
+    from onetrace_console.viewer.model import EDGES_ROW, CheckRows, ran_as_approved
+    rows = CheckRows(((EDGES_ROW, "pass", ""),), "0", "pass")
+    examined(2, "graph runs, one without a declared plan")
+    edges = [{"from": "a", "to": "b"}]
+    assert ran_as_approved({"edges": edges}, rows, own_check=True, verifier="onetrace-verify 0.5.0").state == "no-plan"
+    assert ran_as_approved({"edges": edges, "declared_edges": edges}, rows, own_check=True,
+                           verifier="onetrace-verify 0.5.0").state == "cant-check"
+
+
+def test_the_demo_s_agent_runs_read_no_approved_plan_recorded(shared_demo, examined):
+    import re
+    from onetrace_console.store import Store
+    folder = shared_demo["folder"]
+    store = Store(folder / "store" / "store")
+    agents = [r for r in store.runs() if r.run_id.startswith("pz-")]
+    examined(len(agents), "agent and sub-agent runs")
+    assert agents
+    for run in agents:
+        case = (folder / "store" / "pages" / "runs" / run.key / "case.html").read_text(encoding="utf-8")
+        row = re.search(r'<tr data-rung="approved" data-state="([^"]+)">(.*?)</tr>', case, re.S)
+        assert row and row.group(1) == "not-declared" and "no approved plan recorded" in row.group(2), run.run_id

@@ -210,8 +210,11 @@ def test_a_watched_console_has_no_form_and_no_read_now_route(tmp_path, examined)
     examined(len(pages) + 1, "pages and the route")
     for name, page in pages.items():
         assert 'data-section="watched"' in page, name
+        from tests.run_tools import without_run_tools
         from tests.test_theme_switch import without_the_console_s_own
-        assert not re.search(r"<(form|button)\b", without_the_console_s_own(page), re.I), name
+        #: The index's search box (console 0.5.0) reads; it is no "read now", and is taken out by its
+        #: exact markup.
+        assert not re.search(r"<(form|button)\b", without_the_console_s_own(without_run_tools(page)), re.I), name
     assert answered == (404, b"no such route\n"), answered
 
 

@@ -505,7 +505,9 @@ def test_the_overview_carries_the_evidence_ladder_across_runs(ten_runs, examined
         assert f"{stopped} stopped at a step" in by["nothing-missing"]
     assert (t["nothing-missing"].count + missing + stopped + t["missing-not-established"].count == total)
     assert "not checked" in by["reproduced"]
-    assert "No records · This console does not record authorization." in by["authorized"]
+    from onetrace_console.words import AUTHORIZED_OVERVIEW
+    assert by["authorized"] == "Action authorized, effect confirmed " + AUTHORIZED_OVERVIEW, by["authorized"]
+    assert "does not record authorization" not in by["authorized"]
     assert not re.search(r"\d+ of \d+", by["authorized"]), "authorization is never counted"
     #: Each form as each run's own page reads it, zeros left out, then the runs without the
     #: check inline (tests/test_overview_anchoring.py holds each rule).

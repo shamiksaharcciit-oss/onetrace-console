@@ -1,0 +1,11 @@
+# The public site's links into the hosted demo: each one's path on the demo, in the site's order.
+# Never grows by itself: a link the site adds is added here by hand, with the site's change.
+/
+/pipeline-p1.html
+/pipeline-p4.html
+/pipeline-p5.html
+/pipeline-p6.html
+/pipeline-p7.html
+/pipeline-p8.html
+/pipeline-p9.html
+/diff/b56e0b73e5e3324556fbdbcfc2a5561a1389322ba405c2184f2fdb620f8284da.html

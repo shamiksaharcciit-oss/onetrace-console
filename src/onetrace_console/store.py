@@ -593,6 +593,38 @@ class Store:
             raise StoreError(f"the stored drift report {path.name} is not an object")
         return record
 
+    # --------------------------------------------------------- references, verdicts, profiles
+
+    #: What `onetrace reference make`, `onetrace verdict` and `onetrace profile` wrote over stored runs
+    #: (`verdicts`), each kind in its own directory, as drift reports are: `runs()` never counts them.
+    KEPT_KINDS = ("references", "verdicts", "profiles")
+
+    def _kept_path(self, kind: str, key: str) -> Path:
+        if kind not in self.KEPT_KINDS:
+            raise StoreError(f"not a kind of kept report: {kind!r}")
+        if not _SHA256.match(key):
+            raise StoreError(f"not a {kind} key: {key!r}")
+        d = self.root / kind
+        d.mkdir(parents=True, exist_ok=True)
+        return d / f"{key}.json"
+
+    def put_kept(self, kind: str, key: str, record: dict) -> None:
+        _atomic_write(self._kept_path(kind, key),
+                      json.dumps(record, sort_keys=True, separators=(",", ":")).encode("utf-8"))
+
+    def get_kept(self, kind: str, key: str) -> dict | None:
+        path = self._kept_path(kind, key)
+        if not path.exists():
+            return None
+        from onetrace_console.bounded_json import load_json_bounded
+        try:
+            record = load_json_bounded(path.read_bytes().decode("utf-8"), path.name)
+        except _UNREADABLE as e:
+            raise StoreError(f"the stored {kind} record {path.name} cannot be read: {_why(e)}") from None
+        if not isinstance(record, dict):
+            raise StoreError(f"the stored {kind} record {path.name} is not an object")
+        return record
+
     # --------------------------------------------------------- decision exports
 
     def _decision_export_path(self, key: str) -> Path:

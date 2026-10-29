@@ -4,7 +4,8 @@ Switched on by one configuration key, `"public": true`, or by `onetrace-console 
 which sets the same key; never a default. A public console:
 
 - refuses every write before it reads a byte of the body: one check at the top of `do_POST`,
-  ahead of the routing, so a route added later is refused too (`REFUSAL`, status 403);
+  ahead of the routing, so a route added later is refused too (`REFUSAL`, status 403), with one
+  exception, Compare on a pipeline's own runs (`visitor_compare`), bounded on every side;
 - serves the pages its store already holds and never draws one again -- they are drawn once,
   when the store is built (`onetrace-console demo --public --build <folder>`), and nothing is
   checked, compared or rendered while it serves;
@@ -37,6 +38,10 @@ BANNER_COMMAND = "pip install onetrace-console"
 #: builder's own pipeline list, never a typed word (`banner_runs`).
 BANNER_RUNS = ("Its runs come from {count} small example pipelines, recorded when this demo "
                "was built, with no network calls and no hosted model.")
+#: What the demo runs on request, and its limits: said on every page beside the runs' sentence.
+BANNER_COMPARE = ("It runs one thing on request: Compare, on a pipeline's page, compares two of that "
+                  "pipeline's runs here with the SDK's verbs, with no model and no network, at most "
+                  "{per_minute} new comparisons a minute for everyone.")
 #: A count as the page's words say it.
 COUNT_WORDS = ("no", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten")
 
@@ -52,6 +57,11 @@ def banner_runs() -> str:
     """The banner's sentence on the demo's runs, its count read from the demo's builder."""
     from onetrace_console.demo_store import pipeline_names
     return BANNER_RUNS.format(count=count_word(len(pipeline_names())))
+
+
+def banner_compare() -> str:
+    from onetrace_console.visitor_compare import PER_MINUTE
+    return BANNER_COMPARE.format(per_minute=PER_MINUTE)
 
 
 def _script_hash(script: str) -> str:
@@ -71,21 +81,23 @@ def inline_scripts() -> tuple[str, ...]:
 
 def content_security_policy(*, local: bool = False) -> str:
     """Nothing loads but the console's own stylesheet and fonts, the pages' own `<style>`, inline
-    images, and the scripts whose hashes are named. No form may post, no page may frame it. A
-    script runs only by its exact hash: never `'unsafe-inline'`, never another host.
+    images, and the scripts whose hashes are named. A form goes to the console itself only (the
+    index's search, and on a public console Compare's picker); no page can frame it. A script runs
+    only by its exact hash: never `'unsafe-inline'`, never another host.
 
     `local`: the console on this machine, which also lets the watched folder's notice ask the
     console itself what it has taken in (`connect-src 'self'`). Nothing else differs."""
+    from onetrace_console.benchmark_script import BENCHMARK_SCRIPT
     from onetrace_console.compare_script import COMPARE_SCRIPT
     from onetrace_console.explain_script import EXPLAIN_SCRIPT
-    #: The explanation panel's and the Compare buttons are a local console's only: a public one has
-    #: no button and refuses every POST, so its policy does not name their scripts.
+    #: The explanation panel's, the Compare buttons' and the benchmark mark's are a local console's
+    #: only: a public one has no such button, so its policy does not name their scripts.
     hashes = " ".join(_script_hash(s) for s in inline_scripts()
-                      + ((EXPLAIN_SCRIPT, COMPARE_SCRIPT) if local else ()))
+                      + ((EXPLAIN_SCRIPT, COMPARE_SCRIPT, BENCHMARK_SCRIPT) if local else ()))
     return ("default-src 'none'; style-src 'self' 'unsafe-inline'; font-src 'self'; "
             f"img-src 'self' data:; script-src {hashes}; "
             + ("connect-src 'self'; " if local else "")
-            + "base-uri 'none'; form-action 'none'; frame-ancestors 'none'")
+            + "base-uri 'none'; form-action 'self'; frame-ancestors 'none'")
 
 
 def security_headers() -> tuple[tuple[str, str], ...]:
@@ -158,6 +170,13 @@ def _start_refusal(config, store_root: Path) -> Refusal | None:
                        f"for sign-in or delivery.",
                        "serve a store built for the demo with onetrace-console demo --public "
                        "--build <folder>.")
+    from onetrace_console.neighbours import FOLDER as NEIGHBOURS
+    if (store_root / "store" / NEIGHBOURS).exists():
+        #: A public build has no embedder: no model's files, no embedding runs, no vectors.
+        return Refusal(f"public is true and the store at {store_root} holds an embedder's folder "
+                       f"(store/{NEIGHBOURS}). A public console has no embedder and embeds nothing.",
+                       "serve a store built for the demo with onetrace-console demo --public "
+                       "--build <folder>, which holds none.")
     if not (store_root / PAGES_DIRNAME / "home.html").is_file():
         return Refusal(f"public is true and the store at {store_root} has no pages drawn. A "
                        f"public console serves the pages its store was built with and draws "
@@ -187,6 +206,15 @@ class StdoutAccessLog:
         line = json.dumps({"at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
                            "principal": principal, "method": method, "path": path,
                            "status": status}, ensure_ascii=False)
+        stream = self._stream or sys.stdout
+        with self._lock:
+            stream.write(line + "\n")
+            stream.flush()
+
+    def compare(self, *, a: str, b: str, outcome: str, ms: int) -> None:
+        """Compare's line: the pair, what came of it and the time taken; never the address."""
+        line = json.dumps({"at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+                           "compare": {"a": a, "b": b}, "outcome": outcome, "ms": ms}, ensure_ascii=False)
         stream = self._stream or sys.stdout
         with self._lock:
             stream.write(line + "\n")

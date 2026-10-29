@@ -1624,6 +1624,7 @@ def ran_as_approved(manifest: dict, check: CheckRows | None, *, own_check: bool,
     - the plan row FAILs: departed from the plan, with its detail;
     - the edges row FAILs: the executed edges don't match the receipts, with its detail;
     - approved paths declared but no path observed: couldn't check, never yes;
+    - `edges` and the edges row, no plan row, and no `declared_edges`: no approved plan recorded;
     - `edges`, but either row missing: this verifier can't check the plan (0.1.2 has neither);
     - the plan row NOT-RUN: no approved plan recorded;
     - exit 0, the summary PASS and both rows PASS: ran as approved -- never the two
@@ -1650,6 +1651,10 @@ def ran_as_approved(manifest: dict, check: CheckRows | None, *, own_check: bool,
         return Approval("edges-mismatch", edges[1])
     if no_paths_observed(manifest):
         return Approval("no-paths")
+    #: A graph run that recorded no plan (no `declared_edges`): the check's plan row is left out
+    #: or NOT-RUN, and the rung says what the record holds, not that the checker can't.
+    if plan is None and edges is not None and not (isinstance(manifest, dict) and "declared_edges" in manifest):
+        return Approval("no-plan")
     if plan is None or edges is None:
         return Approval("cant-check", verifier or "")
     if plan[0] == "not_run":

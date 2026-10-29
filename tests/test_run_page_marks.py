@@ -185,8 +185,9 @@ def _titles(page: str) -> dict[str, str]:
 #: Moved by the run page's "What changed?" section (console 0.4.0), from 7c7949c271ba97390b6ae999f3e9e97783f428e426856364e66ca6b07d74d016: the one
 #: difference, measured by rendering it with the pin commit's code (the old digest) and this one.
 #: Moved by the version, 0.3.2 to 0.4.0, from 2bcbe4c7581ae30d0ee9a1d6f30dfeda2faa482b75832540c9dca356f9329ed7.
-#: Measured by rendering it with the version alone set back to 0.3.2: the old digest.
-UNMARKED_R_CASE_SHA256 = "629afc005e4df4e69fcb256b7ec69f49d41e1033919eab4563ec8bb7659c1f92"
+#: Moved by the version, 0.4.0 to 0.5.0, from 629afc005e4df4e69fcb256b7ec69f49d41e1033919eab4563ec8bb7659c1f92.
+#: Measured by rendering it with the version alone set back to 0.4.0: the old digest.
+UNMARKED_R_CASE_SHA256 = "b79c2acd83478cb2748ddffcafe68c2f9ba0db55ac3a10d626665e0fbac30899"
 _VERIFIER_PATH = re.compile(r"\S*onetrace_verify[/\\]verify\.py")
 _FINGERPRINT = re.compile(r"<!--fingerprint-->[0-9a-f]{64}<!--/fingerprint-->")
 _VERIFIER_BLOCK = re.compile(r'(<pre data-layer="3">)(\[[A-Z][A-Z-]* *\] .*?)(</pre>)', re.S)
@@ -197,6 +198,15 @@ _RECEIVED = re.compile(r'received by this console <time datetime="[^"]*" title="
 #: The run's pipeline label in the head (its crumbs and its title): labels follow the order the
 #: pipelines first arrived in, which differs between deliveries whose arrivals share a second.
 _LABEL = re.compile(r'( / | · )P\d+(</h1>| / )')
+
+
+def _before_050(page: str) -> str:
+    """The page less what console 0.5.0 adds to every run's page and nothing else: the index's search
+    box, "Other runs with the same inputs" and an unmarked run's benchmark section, as the static
+    export leaves them out (`export_static.without_run_tools`). The hash below is then the one pinned
+    before 0.5.0, so the rest of the page is shown unchanged."""
+    from onetrace_console.export_static import without_run_tools
+    return without_run_tools(page)
 
 
 def _machine_free(page: str) -> str:
@@ -242,7 +252,7 @@ def test_1_the_verifier_s_crlf_never_reaches_the_page(windows_runs):
     assert "\r" not in stored["stdout"], "read as \\n where the console reads it"
     page = _case(found["R"], store)
     assert "\r" not in page
-    assert (hashlib.sha256(_machine_free(page).encode("utf-8")).hexdigest()
+    assert (hashlib.sha256(_machine_free(_before_050(page)).encode("utf-8")).hexdigest()
             == UNMARKED_R_CASE_SHA256)
 
 
@@ -270,7 +280,7 @@ def test_1_no_comparison_the_page_is_unmarked_and_unchanged(runs):
     import hashlib
     found, store = runs
     page = _case(found["R"], store)
-    assert (hashlib.sha256(_machine_free(page).encode("utf-8")).hexdigest()
+    assert (hashlib.sha256(_machine_free(_before_050(page)).encode("utf-8")).hexdigest()
             == UNMARKED_R_CASE_SHA256)
     #: Since step 2 the check is the installed CLI and names no verifier path;
     #: `_machine_free` still takes one out of a page from before.

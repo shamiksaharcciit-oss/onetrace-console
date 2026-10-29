@@ -27,6 +27,12 @@ from onetrace_console.words import escape
 SPAN_HEADING = "Span context"
 SPAN_LEAD = "The span context the app reported, as the run recorded it. onetrace does not check it."
 OUTSIDE = "ran outside any span"
+#: What the ids are for, said once under the run page's heading: and where they lead from this console.
+SPAN_FOR = ("The traceparent, trace id and span id are pointers into the app's own tracing tool: they are "
+            "how to find this run's spans there.")
+SPAN_OPENS = "This console has a tracing tool configured: each trace id's link opens it there."
+SPAN_NO_TOOL = "This console has no tracing tool configured, so no id links to one."
+SPAN_PUBLIC = "This is a public console: it links to no tracing tool."
 OPEN = "Open in your tracing tool"
 PANEL_HEADING = "The app's spans at the first difference"
 PANEL_LEAD = "From the app's own traces, as reported. Not checked by onetrace."
@@ -66,8 +72,10 @@ def _id(label: str, value: str, href: str) -> str:
     return f'<li><span class="k">{escape(label)}</span> <code>{escape(value)}</code>{a}</li>'
 
 
-def run_section(manifest: dict, steps: list[dict], pattern: str | None = None) -> str:
-    """The run page's span-context section; empty for a run with no span context."""
+def run_section(manifest: dict, steps: list[dict], pattern: str | None = None, *, public: bool = False) -> str:
+    """The run page's span-context section; empty for a run with no span context. Under its lead, what
+    the ids are for, and where they lead from this console: a configured tracing tool's link (`pattern`),
+    none configured, or a public console, which links to none."""
     tp = traceparent(manifest)
     traces = [(s, trace_of(s.get("receipt") or {})) for s in steps]
     if not tp and not any(t for _, t in traces):
@@ -85,8 +93,10 @@ def run_section(manifest: dict, steps: list[dict], pattern: str | None = None) -
             rows.append(f'<li data-trace-step="{escape(name)}"><code>{escape(name)}</code><ul class="plain">'
                         + _id("trace id", t["trace_id"], link(pattern, t["trace_id"], t["span_id"]))
                         + _id("span id", t["span_id"], "") + "</ul></li>")
+    where = SPAN_PUBLIC if public else (SPAN_OPENS if link(pattern, "0" * 32) else SPAN_NO_TOOL)
     return (f'<section data-section="span-context" class="span-context"><h2>{escape(SPAN_HEADING)}</h2>'
-            f'<p class="reported">{escape(SPAN_LEAD)}</p><ul class="plain">{"".join(rows)}</ul></section>')
+            f'<p class="reported">{escape(SPAN_LEAD)}</p>'
+            f'<p data-span-for>{escape(SPAN_FOR)} {escape(where)}</p><ul class="plain">{"".join(rows)}</ul></section>')
 
 
 # ------------------------------------------------------------------ OTLP/JSON

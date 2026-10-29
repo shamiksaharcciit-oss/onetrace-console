@@ -8,7 +8,7 @@ backend-path = ["tools/build_backend"]
 
 [project]
 name = "onetrace-console"
-version = "0.4.0"
+version = "0.5.0"
 description = "The onetrace console: every run in one place, read from the reports the verifier and the verbs produced."
 readme = "PYPI_DESCRIPTION.md"     # the README with absolute image links: tools/pypi_description.py
 requires-python = ">=3.12"
@@ -25,12 +25,22 @@ authors = [{ name = "Shamik Saha" }]
 # server is `http.server`, the store is files, the index is `sqlite3`, the tar is
 # `tarfile`, the digests are `hashlib`: all standard library. See DESIGN_GAPS.md.
 dependencies = [
-    "onetrace==0.5.0",                 # the SDK this release was tested with: the verbs
-    "onetrace-verify[crypto]==0.5.0",  # the verifier, with what it needs to check signatures
+    "onetrace==0.6.0",                 # the SDK this release was tested with: the verbs
+    "onetrace-verify[crypto]==0.6.0",  # the verifier, with what it needs to check signatures
 ]
+
+# The neighbours extra, `onetrace-console[neighbours]`: the in-process embedder's runtime, with no torch.
+# The base install gains nothing from it; without it the feature does not exist (`neighbours.installed`).
+# Pinned with every dependency's hash in requirements-neighbours.lock.
+[project.optional-dependencies]
+neighbours = ["onnxruntime==1.31.0", "tokenizers==0.23.3", "numpy==2.5.4"]
 
 [project.scripts]
 onetrace-console = "onetrace_console.__main__:main"
+
+# The upgrade notes, in the public repository at this release's tag, as the PyPI description links it.
+[project.urls]
+Changelog = "https://github.com/shamiksaharcciit-oss/onetrace-console/blob/v0.5.0/CHANGELOG.md"
 
 [tool.setuptools.packages.find]
 where = ["src"]
@@ -41,8 +51,8 @@ where = ["src"]
 onetrace_console = ["static/fonts/*.woff2", "static/fonts/OFL.txt", "static/fonts/FONTS.md",
                     "static/favicon.svg",
                     "requirements.lock", "demo_store/trust.json",
-                    "model_call_record_0.1-draft.schema.json",
-                    "viewer/PROVENANCE.md", "viewer/_vendor/*", "viewer/dark_derived.css"]
+                    "viewer/PROVENANCE.md", "viewer/_vendor/*", "viewer/dark_derived.css",
+                    "_received/model_call_record.schema.json"]
 
 # ---------------------------------------------------------------------------------
 # E10 layer 2 of 3: exclusion lists

@@ -8,8 +8,8 @@ runs are compared, and every page it rendered is read as a reader sees it (`tool
 2. "Where it changed" reads the same latest comparison the graph reads, and names its first
    difference; it says there was no comparison only when there was none;
 3. no page promises a later version ("until onetrace ...");
-4. no page names internal or draft vocabulary: the authorization row says plainly that this
-   console does not record authorization;
+4. no page names internal or draft vocabulary: the Overview's authorization row says where the row
+   is read, and a run that declares no gated step and cites no decision says plainly "No records";
 5. no page renders a month by name; dates are ISO 8601 or plain numbers;
 6. user-facing text names no internal process, place or person.
 """
@@ -247,14 +247,16 @@ def test_sabotage_a_month_planted_in_a_rendered_page_is_named(demo, examined):
     assert month_problems(planted) == {name: [month]}
 
 
-def test_the_authorization_row_says_this_console_does_not_record_authorization(demo, examined):
+def test_the_authorization_row_says_where_it_is_read_and_no_records_where_none_is_declared(demo, examined):
     _base, root, keys, _cmp = demo
     home = _text((root / "pages" / "home.html").read_text(encoding="utf-8"))
     case = _text((root / "pages" / "runs" / keys["query-day2"] / "case.html").read_text(encoding="utf-8"))
     examined(2, "pages with the authorization row")
+    from onetrace_console.words import AUTHORIZED_OVERVIEW
     for text in (home, case):
         assert "Action authorized, effect confirmed" in text
-        assert "This console does not record authorization." in text
+    assert AUTHORIZED_OVERVIEW in home and "does not record authorization" not in home
+    assert "No records · This console does not record authorization." in case
 
 
 # ------------------------------------------------------------------ the polish round: no raw values

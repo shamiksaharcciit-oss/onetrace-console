@@ -181,7 +181,7 @@ def run_section(manifest: dict, steps: list[dict]) -> str:
     blocks = [b for b in blocks if b]
     if not blocks:
         return ""
-    return (f'<section data-section="onedoor" class="onedoor"><h2>{escape(HEADING)}</h2>'
+    return (f'<section id="gated-steps" data-section="onedoor" class="onedoor"><h2>{escape(HEADING)}</h2>'
             f'<p class="shown">{escape(SHOWN)}</p>{"".join(blocks)}</section>')
 
 

@@ -34,7 +34,7 @@ def held_runs(store, up: str = "../") -> dict[str, str]:
 def sections(run, store) -> str:
     """The run page's new sections, in order: gated steps and the verifier's decision rows; the span
     context; steps inside steps. Empty for a run with none of them."""
-    from onetrace_console.frame import tracing_link
+    from onetrace_console.frame import rendering_public, tracing_link
     from onetrace_console.home import _envelope
     from onetrace_console.stage_pages import _steps
     manifest, steps = manifest_of(run, store), _steps(run, store)
@@ -46,7 +46,8 @@ def sections(run, store) -> str:
                 f'{onedoor_panel.rows_block(onedoor_panel.decision_rows(_envelope(run, store)))}</section>')
     held = held_runs(store)
     return (nesting_view.parent_section(manifest, held) + gated + rows
-            + trace_panel.run_section(manifest, steps, tracing_link()) + nesting_view.run_section(steps, held))
+            + trace_panel.run_section(manifest, steps, tracing_link(), public=rendering_public())
+            + nesting_view.run_section(steps, held))
 
 
 def with_sections(case_html: str, run, store) -> str:
@@ -63,10 +64,11 @@ def with_sections(case_html: str, run, store) -> str:
 
 
 def step_blocks(manifest: dict, receipt: dict, run_has_spans: bool, held: dict[str, str],
-                receipt_file: str = "", read_file=None) -> str:
+                receipt_file: str = "", read_file=None, same_files=None) -> str:
     """One step's page: its decisions, its span ids (or "ran outside any span", where the run has a
     span context), its children and nested runs, and its model-call records (`read_file(path)`: the
-    run's stored bytes at a path, or None)."""
+    run's stored bytes at a path, or None; `same_files(value)`: the other runs whose records name the
+    same model files)."""
     from onetrace_console.frame import tracing_link
     from onetrace_console.words import escape
     name = nesting_view._name(receipt)
@@ -84,5 +86,5 @@ def step_blocks(manifest: dict, receipt: dict, run_has_spans: bool, held: dict[s
         out += (f'<section data-section="span-context" class="span-context"><p>This step '
                 f'{escape(trace_panel.OUTSIDE)}.</p></section>')
     nest = nesting_view.run_section([{"receipt": receipt}], held)
-    calls = model_call.step_section(receipt, receipt_file, read_file) if read_file is not None else ""
+    calls = model_call.step_section(receipt, receipt_file, read_file, same_files) if read_file is not None else ""
     return out + nest + calls

@@ -699,6 +699,19 @@ def test_the_new_pages_pass_the_five_prohibitions(new_pages, examined):
         assert not compare or name.startswith("choose-"), f"{name} carries a compare button"
         for button in compare:
             rest = rest.replace(button, "")
+        #: And, each by its exact shape: the index's search box (a GET form to /search), a public
+        #: console's Compare picker, and a local run page's benchmark mark and its note.
+        for shape in (r'<form method="get" action="(?:\.\./\.\./)?search" role="search" class="search-box" '
+                      r'data-search-box><label>search the runs by recorded field <input type="search" name="q" '
+                      r'[^>]*></label>(?:<input type="hidden" name="run" value="[0-9a-f]{64}">)? '
+                      r'<button type="submit">search</button></form>',
+                      r'<form method="post" action="/compare" data-visitor-compare>.*?'
+                      r'<button type="submit">compare</button></form>',
+                      r'<label hidden data-benchmark-note>note \(optional\) <input type="text" maxlength="280" '
+                      r'data-benchmark-note-input></label>',
+                      r'<button type="button" hidden data-benchmark-post="/benchmark\?run=[0-9a-f]{64}&amp;'
+                      r'mark=(?:yes|no)">[^<]*</button>'):
+            rest = re.sub(shape, "", rest, flags=re.S)
         for mechanism in ("<button", "<form", "<input", "onclick=", "onsubmit="):
             assert mechanism not in rest, f"{name} carries {mechanism!r}"
         if panel:

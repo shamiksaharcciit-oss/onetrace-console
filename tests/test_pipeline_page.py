@@ -11,7 +11,8 @@ Checked on the demo, as a public console serves it:
    (`overview.vs_baseline`); a run that is only a stored comparison's baseline says that;
 4. the filters hold exactly the pipeline's runs whose records agree, and exactly those the
    Overview says need attention -- the same runs as the console's own counts;
-5. "Compare two runs" leads to the pipeline's existing choice of two runs; no form, no button,
+5. "Compare two runs" leads to the pipeline's existing choice of two runs; no form, no button
+   (but a public console's Compare picker, held in tests/test_visitor_compare.py),
    no script of its own;
 6. a tile's first difference names the stage its run page's own head names.
 A pipeline's name from the demo builder is shown on a public demo only.
@@ -132,6 +133,12 @@ def compare_problems(store, read) -> list[str]:
         if f'<a href="{choose_href(p.label)}" data-link="compare">Compare two runs</a>' not in page:
             out.append(f"{p.label}: no link to compare two runs")
         main = page[page.index("<main>"):page.index("</main>")]
+        #: The one exception, on a public console: Compare's picker of the pipeline's own runs
+        #: (`visitor_compare`), by its exact shape -- two selects and one button, posting to /compare.
+        main = re.sub(r'<form method="post" action="/compare" data-visitor-compare>'
+                      r'<label>Baseline \(run A\) <select name="a">(?:<option [^>]*>[^<]*</option>)+</select></label> '
+                      r'<label>Candidate \(run B\) <select name="b">(?:<option [^>]*>[^<]*</option>)+</select></label> '
+                      r'<button type="submit">Compare</button></form>', "", main)
         for tag in ("<form", "<button", "<input", "<script"):
             if tag in main:
                 out.append(f"{p.label}: a {tag}> on the page")

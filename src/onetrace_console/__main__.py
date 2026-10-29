@@ -26,12 +26,15 @@ onetrace-console {version}
                                the same demo, read-only: every write refused, a banner on
                                every page, built in a temporary folder and served on 127.0.0.1
   onetrace-console demo --public --build <new folder> [--runs-from <earlier build>]
-                   [--explanations <folder>]
+                   [--explanations <folder>] [--site-links <file>]
                                build the read-only demo into a new folder and exit; a
                                configuration with "public": true serves its store as it is.
                                --runs-from: an earlier build's runs, as its build record vouches
                                --explanations: keep onetrace-explain's records under
                                <folder>/explain/ of comparisons this build holds, read-only
+                               --site-links: the public site's links into the demo, one per
+                               line; a listed comparison page named anew gets a page at its
+                               old name
   onetrace-console <runs folder> [--compare A B] [--open] [--port N]
                    [--trust FILE] [--tsa-cert FILE --tsa-root FILE]
                                load every run folder in <runs folder> and serve them on

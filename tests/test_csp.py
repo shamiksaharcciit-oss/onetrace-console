@@ -28,7 +28,9 @@ from tests.test_public_mode import _pages, built, served  # noqa: F401
 ALLOWED = {
     "default-src": {"'none'"}, "style-src": {"'self'", "'unsafe-inline'"}, "font-src": {"'self'"},
     "img-src": {"'self'", "data:"}, "connect-src": {"'self'"}, "base-uri": {"'none'"},
-    "form-action": {"'none'"}, "frame-ancestors": {"'none'"},
+    #: A form goes to the console itself only, never 'none' since console 0.5.0: the index's search
+    #: box (a GET form, on both consoles) and a public console's Compare picker (a POST form) need it.
+    "form-action": {"'self'"}, "frame-ancestors": {"'none'"},
 }
 
 
@@ -44,10 +46,12 @@ def policy_problems(policy: str, *, local: bool) -> list[str]:
         name, *sources = part.split()
         directives[name] = sources
     out = []
+    from onetrace_console.benchmark_script import BENCHMARK_SCRIPT
     from onetrace_console.compare_script import COMPARE_SCRIPT
     from onetrace_console.explain_script import EXPLAIN_SCRIPT
-    #: The explanation panel's and the Compare buttons are the local console's only.
-    shipped = {_hash(s) for s in inline_scripts() + ((EXPLAIN_SCRIPT, COMPARE_SCRIPT) if local else ())}
+    #: The explanation panel's, the Compare buttons' and the benchmark mark's are the local console's only.
+    shipped = {_hash(s) for s in inline_scripts()
+               + ((EXPLAIN_SCRIPT, COMPARE_SCRIPT, BENCHMARK_SCRIPT) if local else ())}
     if set(directives.get("script-src", [])) != shipped:
         out.append(f"script-src is not exactly the shipped scripts' hashes: {directives.get('script-src')}")
     for name, sources in directives.items():
@@ -78,6 +82,8 @@ WIDENED = {
     "styles from another host": (("style-src 'self' 'unsafe-inline'",
                                   "style-src 'self' 'unsafe-inline' https://cdn.example.org"), "style-src names"),
     "images from blob:": (("img-src 'self' data:", "img-src 'self' data: blob:"), "img-src names"),
+    "forms to another host": (("form-action 'self'", "form-action 'self' https://forms.example.org"),
+                              "form-action names"),
 }
 
 

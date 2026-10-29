@@ -5,8 +5,9 @@ demo builder breaks on purpose, each tagged and with its true reading, then all 
    code that breaks it: every planted run has a line, and every line names a planted run. A run is
    planted where the builder acts on it after it closed, signs it otherwise than with its trusted
    key, or makes one of its stages fail.
-2. On a public demo, the Overview opens on the pipeline with the most runs whose every run's
-   records agree (ties by id), with its marks and "n of n records agree", and a link to its page.
+2. On a public demo, the Overview opens on its four count cards and "How these counts work"; the
+   way in follows them: the pipeline with the most runs whose every run's records agree (ties by
+   id), with its marks and "n of n records agree", and a link to its page.
 3. Then "Then see what onetrace catches": each planted run once, in a table of three columns: Run
    (the run's link), What was done to it (the builder's line), and What its page reads: one badge,
    the run's "Records agree" state (`records.state`) with its mark and its words
@@ -80,8 +81,32 @@ def first_problems(page: str, store) -> list[str]:
         out.append("its count line is not said")
     if f'href="{page_href(want.label)}"' not in body:
         out.append("no link to its page")
-    if page.index('data-section="way-in"') > page.index('data-section="cards"'):
-        out.append("the way in is not first")
+    if page.index('data-section="way-in"') < page.index('data-section="cards"'):
+        out.append("the way in comes before the count cards")
+    return out
+
+
+def order_problems(page: str) -> list[str]:
+    """The four count cards and "How these counts work" come first; the two guide blocks follow them,
+    in their order."""
+    at = {k: page.find(f'data-section="{k}"') for k in ("how", "cards", "way-in", "planted")}
+    missing = [k for k, i in at.items() if i < 0]
+    if missing:
+        return [f"no {k}" for k in missing]
+    out = []
+    first_guide = min(at["way-in"], at["planted"])
+    if not at["how"] < first_guide or not at["cards"] < first_guide:
+        out.append("a guide block comes before the counts")
+    if not at["way-in"] < at["planted"]:
+        out.append("the guide blocks are not in their order")
+    #: Directly after the four count cards: no other section between them and the way in.
+    between = page[at["cards"]:at["way-in"]]
+    others = [s for s in re.findall(r'<section data-section="([^"]+)"', between) if s != "cards"]
+    if others:
+        out.append(f"between the count cards and the guide blocks: {others}")
+    tiles = re.findall(r'data-card="([^"]+)"', page[at["cards"]:])
+    if tiles[:4] != ["pipelines", "runs", "records-agree", "need-attention"]:
+        out.append(f"the four count cards are not first: {tiles[:4]}")
     return out
 
 
@@ -278,6 +303,32 @@ def test_sabotage_a_planted_line_dropped_or_an_orphan_line_is_named():
     lines["p7-41-cold-chain-decision-tampered"] = gone
     lines["p6-36-fill-baseline"] = "Nothing was done to it."
     assert any("no planted run" in p for p in planted_problems(demo_store.runs(), lines))
+
+
+def test_the_counts_come_before_the_guide_blocks(demo, examined):
+    examined(1, "Overview")
+    assert order_problems(demo["home"]) == []
+
+
+def test_sabotage_the_guide_blocks_moved_back_above_the_counts_are_named(demo):
+    page = demo["home"]
+    #: Both guide blocks, from the way in's opening to the end of the planted section, cut by position.
+    start = page.index('<section data-section="way-in"')
+    end = page.index("</section>", page.index('<section data-section="planted"')) + len("</section>")
+    blocks = page[start:end]
+    moved = page[:start] + page[end:]
+    moved = moved.replace("<h1>Overview</h1>", "<h1>Overview</h1>" + blocks, 1)
+    assert "a guide block comes before the counts" in order_problems(moved)
+
+
+def test_sabotage_the_pipeline_cards_between_the_counts_and_the_guide_blocks_are_named(demo):
+    page = demo["home"]
+    grid = re.search(r'<section data-section="pipeline-cards".*?(?=<section data-section="way-in")', page, re.S)
+    assert grid is None, "the pipeline cards already sit between the counts and the guide blocks"
+    end = page.index("</section>", page.index('<section data-section="cards"')) + len("</section>")
+    planted = '<section data-section="pipeline-cards"><p>planted</p></section>'
+    assert any(p.startswith("between the count cards and the guide blocks")
+               for p in order_problems(page[:end] + planted + page[end:]))
 
 
 def test_sabotage_the_wrong_pipeline_first_is_named(demo):

@@ -259,6 +259,34 @@ COMPARISONS = [
 ]
 
 
+#: A build from an earlier build's runs (`build_from`, the hosted demo's) records P10's agent pair once
+#: more beside the kept pair, which holds model-call records in the earlier draft format: the same
+#: pipeline, its records in model-call-record/1.0. Their pair is compared, and their baseline marked as
+#: P10's benchmark after the kept one, so P10's reference is made from it.
+RECORDED_BESIDE_KEPT = [
+    RunSpec("pz-55-agent-baseline-1-0", "p10", {"inner": "pz-56-agent-baseline-1-0-subagent", "amount": "10"}),
+    RunSpec("pz-56-agent-baseline-1-0-subagent", "p11", {"of": "pz-55-agent-baseline-1-0"}),
+    RunSpec("pz-57-agent-amount-changed-1-0", "p10", {"inner": "pz-58-agent-amount-changed-1-0-subagent",
+                                                      "amount": "20"}),
+    RunSpec("pz-58-agent-amount-changed-1-0-subagent", "p11", {"of": "pz-57-agent-amount-changed-1-0"}),
+]
+COMPARISONS_BESIDE_KEPT = [("pz-55-agent-baseline-1-0", "pz-57-agent-amount-changed-1-0")]
+BENCHMARK_BESIDE_KEPT = "pz-55-agent-baseline-1-0"
+
+
+def _benchmarks() -> tuple[str, ...]:
+    """Each pipeline's baseline: the first pair's baseline of each pipeline the demo compares."""
+    pipeline = {spec.folder: spec.pipeline for spec in runs()}
+    first: dict[str, str] = {}
+    for a, _b in COMPARISONS:
+        first.setdefault(pipeline[a], a)
+    return tuple(first.values())
+
+
+#: The public demo's benchmarks, by run folder: each compared pipeline's baseline (`benchmarks`).
+BENCHMARKS = _benchmarks()
+
+
 def _record(spec: RunSpec, run_dir: Path, issuer=None) -> None:
     run_id = spec.run_id or spec.folder
     if spec.pipeline == "p1":
@@ -431,6 +459,24 @@ def build_from(folder: Path, earlier: Path) -> None:
             raise ValueError(f"{earlier} holds a link, {p.relative_to(earlier)}; a build copies files only")
     shutil.copytree(earlier / RUNS_DIRNAME, folder / RUNS_DIRNAME)
     shutil.copyfile(earlier / TRUST_NAME, folder / TRUST_NAME)
+    #: P10's pair recorded once more beside the kept one, signed as every demo run is: the kept trust
+    #: file is this builder's own (`keys.trust_file_bytes`).
+    if not any((folder / RUNS_DIRNAME / s.folder).exists() for s in RECORDED_BESIDE_KEPT):
+        if (folder / TRUST_NAME).read_bytes() != keys.trust_file_bytes():
+            raise ValueError(f"{earlier}'s trust file is not this builder's; its runs cannot be recorded beside")
+        before = os.environ.get("TRACEPARENT")
+        try:
+            for spec in RECORDED_BESIDE_KEPT:
+                run_dir = folder / RUNS_DIRNAME / spec.folder
+                os.environ["TRACEPARENT"] = traceparent_for(spec.folder)
+                _record(spec, run_dir)
+                keys.sign(run_dir, keys.TRUSTED_SEED)
+        finally:
+            if before is None:
+                os.environ.pop("TRACEPARENT", None)
+            else:
+                os.environ["TRACEPARENT"] = before
+        write_traces(folder / RUNS_DIRNAME, [s.folder for s in RECORDED_BESIDE_KEPT])
     write_build_record(folder, (RUNS_DIRNAME, TRUST_NAME))
 
 
@@ -446,6 +492,11 @@ def _covered(folder: Path, covers) -> dict[str, Path]:
         for p in paths:
             found[p.relative_to(folder).as_posix()] = p
     return found
+
+
+#: Under a build's store, what is not the build's: the comparisons visitors made on a public
+#: console (`visitor_compare`), kept beside the built store and never vouched for by its record.
+NOT_BUILT = "store/compared/"
 
 
 def write_build_record(folder: Path, covers) -> None:
@@ -482,7 +533,7 @@ def check_build_record(folder: Path, only: tuple[str, ...] | None = None) -> lis
         covers = list(only)
         files = {rel: d for rel, d in files.items()
                  if any(rel == root or rel.startswith(root + "/") for root in only)}
-    have = _covered(folder, covers)
+    have = {rel: p for rel, p in _covered(folder, covers).items() if not rel.startswith(NOT_BUILT)}
     problems = [f"{rel} was removed" for rel in sorted(set(files) - set(have))]
     problems += [f"{rel} was added" for rel in sorted(set(have) - set(files))]
     problems += [f"{rel} was changed" for rel in sorted(set(files) & set(have))
@@ -501,7 +552,7 @@ def deliver(folder: Path, store, config):
     #: The comparisons whose two runs are there: a build from an earlier build's runs
     #: (`--runs-from`) holds that build's pipelines only.
     names = {r.name for r in loaded.runs}
-    for i, pair in enumerate(p for p in COMPARISONS if set(p) <= names):
+    for i, pair in enumerate(p for p in COMPARISONS + COMPARISONS_BESIDE_KEPT if set(p) <= names):
         comparison, why = _compare(list(loaded.runs), pair, store)
         if i == 0:
             first, note = comparison, why

@@ -37,49 +37,56 @@ def _image_permissions(folder: Path) -> None:
     subprocess.run(["chmod", "-R", modes, str(folder)], check=True)
 
 
-def _as_nobody(folder: Path) -> tuple[int, str, str]:
-    """The console's start check over `folder`, run by `nobody`: forked, the child drops to that
-    user with the console already imported (it can't start an interpreter under root's home), runs
-    `start_refusal`, and writes back its result as JSON -- or, had it raised, the traceback."""
+def _check_as_nobody(folder: str, packaged: bytes, conn) -> None:
+    """The child: a fresh interpreter, started as root, imports everything the check imports as it
+    runs (once it is `nobody` it can't read the interpreter's library under root's home), drops to
+    `nobody`, runs `start_refusal`, and sends back its result as JSON -- or, had it raised, the
+    traceback."""
     import json
     import traceback
+    code, out, err = 0, "", ""
+    try:
+        import importlib.readers  # noqa: F401  (the packaged trust file is read through it)
+        import onetrace_console.demo_store  # noqa: F401
+        import onetrace_console.neighbours  # noqa: F401  (the check refuses a store holding its folder)
+        import onetrace_console.serve  # noqa: F401
+        import onetrace_console.public as public
+        from onetrace_console.config import Config
+        from onetrace_console.public import start_refusal
+        public.demo_trust_bytes = lambda: packaged
+        config = Config(public=True, store_root=str(Path(folder) / "store"),
+                        trust_file=str(Path(folder) / "trust.json"), sign_in={"enabled": False})
+        os.setgid(NOBODY)
+        os.setuid(NOBODY)
+        refused = start_refusal(config, Path(folder) / "store")
+        out = json.dumps(None if refused is None else [refused.message, refused.fix])
+    except BaseException:  # noqa: BLE001 - reported to the parent, which fails the test
+        code, err = 1, traceback.format_exc()
+    conn.send(json.dumps([code, out, err]))
+    conn.close()
 
-    from onetrace_console.config import Config
-    from onetrace_console.public import start_refusal
-    #: Everything the check imports as it runs, imported now: once it is `nobody` it can't read
-    #: the interpreter's library under root's home.
-    import importlib.readers  # noqa: F401  (the packaged trust file is read through it)
-    import onetrace_console.demo_store  # noqa: F401
-    import onetrace_console.serve  # noqa: F401
+
+def _as_nobody(folder: Path) -> tuple[int, str, str]:
+    """The console's start check over `folder`, run by `nobody`, in a child started with `spawn`, not
+    `fork()`: in the full suite the test process has other threads by the time this runs, and forking
+    such a process is what Python warns of. The child drops to `nobody` itself (`_check_as_nobody`)."""
+    import json
+    import multiprocessing
     import onetrace_console.public as public
     #: The packaged trust file, read now: the check compares the demo's with it, and this checkout
     #: may sit where `nobody` can't read (under root's home); the image's code is under /app,
     #: readable by every user. Read once here, handed to the child.
     packaged = public.demo_trust_bytes()
-    config = Config(public=True, store_root=str(folder / "store"), trust_file=str(folder / "trust.json"),
-                    sign_in={"enabled": False})
-    read, write = os.pipe()
-    pid = os.fork()
-    if pid == 0:  # the child: nobody, then the check
-        os.close(read)
-        code, out, err = 0, "", ""
-        try:
-            public.demo_trust_bytes = lambda: packaged
-            os.setgid(NOBODY)
-            os.setuid(NOBODY)
-            refused = start_refusal(config, folder / "store")
-            out = json.dumps(None if refused is None else [refused.message, refused.fix])
-        except BaseException:  # noqa: BLE001 - reported to the parent, which fails the test
-            code, err = 1, traceback.format_exc()
-        os.write(write, json.dumps([code, out, err]).encode("utf-8"))
-        os._exit(0)
-    os.close(write)
-    chunks = []
-    while chunk := os.read(read, 65536):
-        chunks.append(chunk)
-    os.close(read)
-    os.waitpid(pid, 0)
-    code, out, err = json.loads(b"".join(chunks))
+    ctx = multiprocessing.get_context("spawn")
+    parent, child = ctx.Pipe(duplex=False)
+    proc = ctx.Process(target=_check_as_nobody, args=(str(folder), packaged, child))
+    proc.start()
+    child.close()
+    try:
+        said = parent.recv()
+    finally:
+        proc.join(timeout=300)
+    code, out, err = json.loads(said)
     return code, out, err
 
 
@@ -118,3 +125,23 @@ def test_a_file_it_cannot_read_is_a_one_line_refusal_never_a_traceback(imaged, e
     message, fix = json.loads(out)
     assert "cannot be read" in message and str(manifest) in message and "\n" not in message
     assert fix == UNREADABLE_FIX
+
+
+def test_the_check_as_nobody_never_forks_a_multi_threaded_process(imaged, examined):
+    """With another thread running, as the full suite's process has by the time this runs, starting
+    the child raises no warning of a fork in a multi-threaded process: it is spawned, never forked."""
+    import threading
+    import warnings
+    stop = threading.Event()
+    other = threading.Thread(target=stop.wait, daemon=True)
+    other.start()
+    try:
+        with warnings.catch_warnings(record=True) as got:
+            warnings.simplefilter("always")
+            code, out, err = _as_nobody(imaged)
+    finally:
+        stop.set()
+        other.join(timeout=10)
+    examined(1, "start check as nobody, beside another thread")
+    assert code == 0 and out.strip() == "null", (out, err)
+    assert not [w for w in got if "use of fork()" in str(w.message)], [str(w.message) for w in got]

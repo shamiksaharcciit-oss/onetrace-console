@@ -371,6 +371,53 @@ def test_deriving_twice_gives_byte_identical_output(base, examined):
     assert first.endswith("\n")
 
 
+def _tampered(files) -> bytes:
+    """The fixture with one receipt changed and honest sums: the verifier finds it contradicts."""
+    import hashlib
+
+    from onetrace_console.ingest import SUMS_NAME
+    receipt = json.loads(files["receipts/01-zeta.json"].decode("utf-8"))
+    receipt["run_id"] = receipt.get("run_id", "") + "-changed"
+    files["receipts/01-zeta.json"] = json.dumps(receipt, separators=(",", ":")).encode()
+    files[SUMS_NAME] = ("\n".join(
+        f"{hashlib.sha256(b).hexdigest()}  {p}"
+        for p, b in files.items() if p != SUMS_NAME) + "\n").encode()
+    return make_tar(files)
+
+
+def _two_with_one_report(files, store):
+    """One contradicting delivery read from two folders and checked at one time: two runs, one
+    stored check report, byte for byte."""
+    data = _tampered(files)
+    a = run_and_record(accept(data, store, run_folder="copy-a").run, store, ran_at=FIXED_RAN_AT)
+    b = run_and_record(accept(data, store, run_folder="copy-b", shared_head=True).run, store,
+                       ran_at=FIXED_RAN_AT)
+    return a, b
+
+
+def test_two_runs_with_one_byte_identical_check_report_raise_two_incidents(files, store, examined):
+    _require_installed()
+    _require_exam()
+    a, b = _two_with_one_report(files, store)
+    examined(2, "contradicting runs sharing one stored check report")
+    assert a.key != b.key and a.check_report == b.check_report
+    assert a.check_verdict == b.check_verdict == CONTRADICTS
+    raised = _only(derive(store), "I-CONTRADICTS")
+    assert {i.subject for i in raised} == {a.key, b.key} and len({i.id for i in raised}) == 2
+
+
+def test_sabotage_a_run_incident_id_without_its_run_merges_the_two(files, store, monkeypatch, examined):
+    from onetrace_console import incidents
+    _require_installed()
+    _require_exam()
+    a, b = _two_with_one_report(files, store)
+    real = incidents.incident_id
+    monkeypatch.setattr(incidents, "incident_id", lambda r, s, f, k="": real(r, s, f))
+    examined(1, "ids without the run's key")
+    raised = _only(derive(store), "I-CONTRADICTS")
+    assert len({i.id for i in raised}) == 1
+
+
 def test_an_incident_id_is_the_rule_the_source_sha_and_the_field_path(examined):
     parts = ("I-CONTRADICTS", "a" * 64, "stdout[FAIL]")
     examined(len(parts), "components of an incident id")
@@ -380,6 +427,8 @@ def test_an_incident_id_is_the_rule_the_source_sha_and_the_field_path(examined):
     assert incident_id(*parts) != incident_id(parts[0], parts[1], "other")
     #: The separator matters: without it, these two would collide.
     assert incident_id("AB", "C", "D") != incident_id("A", "BC", "D")
+    #: A run's incident: the run's key after them, separated the same way.
+    assert incident_id(*parts, "k1") != incident_id(*parts, "k2") != incident_id(*parts)
 
 
 def test_changing_a_rules_condition_changes_exactly_that_rules_incidents(base, examined):

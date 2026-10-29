@@ -54,7 +54,8 @@ def held_comparisons(store: Store) -> dict[tuple[str, str], object]:
 
 
 def _run_link(store: Store, key: str) -> str:
-    return f'<a href="runs/{_tag(key)}/case.html">{run_named(store, key)}</a>'
+    from onetrace_console.benchmarks import badge
+    return f'<a href="runs/{_tag(key)}/case.html">{run_named(store, key)}</a>{badge(store, key)}'
 
 
 def render_choose(pipeline, store: Store, *, generated_at: str) -> str:

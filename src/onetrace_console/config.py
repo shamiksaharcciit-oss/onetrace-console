@@ -162,6 +162,21 @@ class Config:
     #: explicit switch, never a default.
     public: bool = False
 
+    #: A public console's Compare (`visitor_compare`): the folder its comparisons are kept in, where
+    #: not `<store root>/compared`; and the request header that names the client's address, where a
+    #: proxy in front of the console sets one (on Fly.io, `Fly-Client-IP`). Null: the folder under
+    #: the store root, and the connection's own address.
+    compare_cache: str | None = None
+    compare_client_header: str | None = None
+    #: Compare's bounds on a public console (`visitor_compare`), each at most its shipped number so an
+    #: operator can lower it and every page's "at most" stays true: new comparisons started a minute
+    #: for the whole console, running at once, waiting per address, the wait, and each verb's time.
+    compare_per_minute: int = 20
+    compare_running: int = 2
+    compare_queue: int = 2
+    compare_wait_seconds: float = 20.0
+    compare_verb_seconds: int = 30
+
     #: A local console's link to the person's own tracing tool: {"link": "<http(s) address with
     #: {trace_id} and, optionally, {span_id}>"}. Each recorded trace id becomes "Open in your
     #: tracing tool"; the console builds the link and never calls it. A public console shows no
@@ -319,6 +334,25 @@ def _from_mapping(data: dict, *, source: str) -> Config:
             f"{source}: public must be true or false, got {data['public']!r}",
             fix=f"give public true or false in {source} (its default is false), or remove the "
                 f"key to leave the console as it is.")
+    shipped = Config()
+    for name in ("compare_per_minute", "compare_running", "compare_queue", "compare_wait_seconds",
+                 "compare_verb_seconds"):
+        if name in data and _fits(name, type(getattr(shipped, name)).__name__, data[name]) \
+                and data[name] > getattr(shipped, name):
+            raise ConfigError(
+                f"{source}: {name} is {data[name]!r}, above the shipped {getattr(shipped, name)!r}; Compare's "
+                f"bounds can be lowered, not raised, so every page's \"at most\" stays true",
+                fix=f"give {name} a number from 1 to {getattr(shipped, name)!r} in {source}, or remove the key.")
+    if data.get("compare_client_header") is not None and data.get("public") is not True:
+        raise ConfigError(
+            f"{source}: compare_client_header is set and public is not true. Only a public console's "
+            f"Compare reads a client-address header; any other console reads none.",
+            fix=f"remove compare_client_header from {source}, or set public to true.")
+    for name, what in (("compare_cache", "a folder's path"), ("compare_client_header", "a header's name")):
+        if name in data and data[name] is not None and not _fits(name, "str", data[name]):
+            raise ConfigError(
+                f"{source}: {name} must be {what} ({_WANT['str']}) or null, got {data[name]!r}",
+                fix=f"give {name} {what} in {source}, or null, or remove the key.")
     if "trust_file" in data and data["trust_file"] is not None and not _fits(
             "trust_file", "str", data["trust_file"]):
         raise ConfigError(

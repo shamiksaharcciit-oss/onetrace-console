@@ -69,8 +69,14 @@ folder's own check says what its record holds.
 
     id = sha256(rule id ∥ NUL ∥ source sha ∥ NUL ∥ field path)
 
+and, for an incident about a run (every rule above), the run's key after them:
+
+    id = sha256(rule id ∥ NUL ∥ source sha ∥ NUL ∥ field path ∥ NUL ∥ run key)
+
 Deterministic: the same inputs always give the same incident. The NUL separators mean two
-different splits of the same characters cannot produce one id.
+different splits of the same characters cannot produce one id. The run's key is there as two
+runs' stored check reports can be the same bytes (runs checked in the same second whose rows read
+the same): without it, two such runs that contradict their records would share one incident.
 
 **The source sha differs by rule, deliberately.**
 

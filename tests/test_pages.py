@@ -193,7 +193,11 @@ def test_no_check_button(every_page, name):
     it, so it is aimed properly instead: no form, no button, no input, no handler, and no
     script that can reach anything.
     """
-    page = every_page[name].lower()
+    #: Less console 0.5.0's own controls, each by its exact markup (`tests/run_tools.py`): the
+    #: index's search box, which reads, and a local run's benchmark mark, which says which run to
+    #: compare against; neither checks anything.
+    from tests.run_tools import without_run_tools
+    page = without_run_tools(every_page[name]).lower()
     for mechanism in ("<button", "<form", "<input", "onclick=", "onsubmit=", "onchange="):
         assert mechanism not in page, f"{name} carries {mechanism!r}"
 

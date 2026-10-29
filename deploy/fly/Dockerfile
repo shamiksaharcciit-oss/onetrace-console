@@ -43,10 +43,13 @@ RUN printf '#!/bin/sh\nexec python -m onetrace_console "$@"\n' > /usr/local/bin/
 # serving user reads it, and checks it against its build record at start), no write bit anywhere. The
 # configuration file and the code are root's too. Where deploy/fly/kept/ is there, the build takes its
 # runs, as its build record vouches for them, and keeps the explanations under it
-# (deploy/fly/kept/README.md); where it is not, the runs are recorded now and none is kept.
+# (deploy/fly/kept/README.md); where it is not, the runs are recorded now and none is kept. The public
+# site's links into the demo (deploy/fly/site_links.txt): a listed comparison page this build names
+# anew gets a page at its old name that sends a reader on.
 RUN if [ -d deploy/fly/kept ]; then \
         python -m onetrace_console demo --public --build /srv/onetrace-demo \
-            --runs-from /app/deploy/fly/kept --explanations /app/deploy/fly/kept; \
+            --runs-from /app/deploy/fly/kept --explanations /app/deploy/fly/kept \
+            --site-links /app/deploy/fly/site_links.txt; \
     else \
         python -m onetrace_console demo --public --build /srv/onetrace-demo; \
     fi \
@@ -55,6 +58,11 @@ RUN if [ -d deploy/fly/kept ]; then \
 
 # The serving user: not root, no home, no shell, owning nothing it serves.
 RUN useradd --no-create-home --uid 10001 --shell /usr/sbin/nologin demo
+
+# Compare's cache (public.json's `compare_cache`): the one folder the serving user writes, beside the
+# built store and outside its build record; the store itself stays root's and read-only. A machine
+# started from the image starts with it empty.
+RUN mkdir /srv/onetrace-demo-compared && chown demo /srv/onetrace-demo-compared
 USER demo
 
 EXPOSE 8080

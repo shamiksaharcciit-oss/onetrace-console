@@ -90,7 +90,10 @@ def head_problems(page: str) -> list[str]:
 
 def switch_problems(page: str) -> list[str]:
     """The switch once, in the footer, both buttons hidden until the script shows them, and the
-    page's only buttons; no form, no input; nothing in the page sets a theme of its own."""
+    page's only buttons; no form, no input; nothing in the page sets a theme of its own. Console
+    0.5.0's own controls are taken out first, each by its exact markup (`tests/run_tools.py`)."""
+    from tests.run_tools import without_run_tools
+    page = without_run_tools(page)
     out = []
     footer = re.findall(r"<footer>(.*?)</footer>", page, re.S)
     if sum(f.count(frame.THEME_SWITCH) for f in footer) != 1 or page.count(frame.THEME_SWITCH) != 1:

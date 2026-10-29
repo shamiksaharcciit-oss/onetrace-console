@@ -103,11 +103,180 @@ def built(tmp_path_factory):
     from tests.test_checks import _require_installed
     _require_installed()
     folder = tmp_path_factory.mktemp("kept-build") / "demo"
-    build_public(folder, runs_from=KEPT, explanations=KEPT)
+    build_public(folder, runs_from=KEPT, explanations=KEPT, site_links=SITE_LINKS)
     store = Store(folder / "store" / "store")
     runs = {r.key: r.run_id for r in store.runs()}
     pairs = {(runs[c.run_a], runs[c.run_b]): c for c in store.comparisons()}
     return folder, store, pairs
+
+
+SITE_LINKS = KEPT.parent / "site_links.txt"
+
+
+def link_problems(pages: Path, links: list[str]) -> list[str]:
+    """Each listed path that opens no page, or a moved page whose target is not a real page."""
+    import re
+    from onetrace_console import site_links
+    out = []
+    for path in links:
+        f = pages / site_links.page_of(path)
+        if not f.is_file():
+            out.append(f"{path}: no page")
+            continue
+        text = f.read_text(encoding="utf-8")
+        moved = re.search(r'<meta http-equiv="refresh" content="0; url=([^"]+)">', text)
+        if moved is None:
+            continue
+        if "noindex" not in text or f"{site_links.MOVED}: " not in text:
+            out.append(f"{path}: a moved page without its noindex or its line")
+        target = f.parent / moved.group(1)
+        if not target.is_file() or 'http-equiv="refresh"' in target.read_text(encoding="utf-8"):
+            out.append(f"{path}: moved to {moved.group(1)}, which is not a page")
+    return out
+
+
+def test_every_link_the_public_site_makes_into_the_demo_resolves(built, examined):
+    """Built as the Dockerfile builds it, with the site's links: each listed path opens a page, or a page
+    sending a reader on to a real one; the site's comparison link, named by an earlier SDK build, is sent
+    to this build's page between the same two runs; each listed pipeline page is there."""
+    from onetrace_console import site_links
+    folder, store, pairs = built
+    pages = folder / "store" / "pages"
+    links = site_links.read(SITE_LINKS)
+    examined(len(links), "site links")
+    assert len(links) == 9 and links[0] == "/"
+    assert link_problems(pages, links) == []
+    for path in links:
+        if path.startswith("/pipeline-p"):
+            assert (pages / path.lstrip("/")).is_file(), path
+    old = "diff/b56e0b73e5e3324556fbdbcfc2a5561a1389322ba405c2184f2fdb620f8284da.html"
+    new = pairs[("p1-02-baseline-set2", "p1-08-candidate-set2")].key
+    assert not (pages / f"diff/{new}.html").read_text(encoding="utf-8").count('http-equiv="refresh"')
+    assert f'url={new}.html"' in (pages / old).read_text(encoding="utf-8")
+    dockerfile = (KEPT.parent / "Dockerfile").read_text(encoding="utf-8")
+    assert "--site-links /app/deploy/fly/site_links.txt" in dockerfile
+
+
+def test_the_moved_page_is_a_public_page_with_the_banner_once(built, examined):
+    """The page at the site's old comparison name, as a public console serves it (its frame filled):
+    the banner once, by the container check's own rule, the console's stylesheet, noindex, the moved
+    line and its link; no other moved page is there."""
+    import re
+    from onetrace_console import site_links
+    from onetrace_console.frame import STYLESHEET, fill
+    from tools import container_check
+    folder, _store, pairs = built
+    old = "diff/b56e0b73e5e3324556fbdbcfc2a5561a1389322ba405c2184f2fdb620f8284da.html"
+    new = pairs[("p1-02-baseline-set2", "p1-08-candidate-set2")].key
+    raw = (folder / "store" / "pages" / old).read_bytes()
+    served = fill(raw, old, onedoor=False, user=None, public=True).decode("utf-8")
+    examined(1, "moved page")
+    assert served.count(container_check._BANNER_TAG) == 1 and container_check.BANNER in served
+    assert f'href="{STYLESHEET}"' in served and '<nav class="frame" data-frame>' in served
+    assert '<meta name="robots" content="noindex">' in served
+    #: The name in code, which breaks where it must: at 390 it would otherwise run past the window.
+    assert re.search(rf'<p data-moved>{site_links.MOVED}: <a href="{new}.html"><code>{new}.html</code></a></p>', served)
+    moved = [p for p in (folder / "store" / "pages").rglob("*.html") if 'http-equiv="refresh"' in p.read_text(encoding="utf-8")]
+    assert [p.relative_to(folder / "store" / "pages").as_posix() for p in moved] == [old]
+
+
+def test_a_listed_link_the_build_cannot_place_stops_it_naming_the_link(built, tmp_path):
+    """A listed comparison name no held comparison was named by, and a listed page the build draws
+    nowhere: the build stops on each, naming the link and why; nothing is written for either."""
+    from onetrace_console import site_links
+    folder, store, _pairs = built
+    pages = tmp_path / "pages"
+    (pages / "diff").mkdir(parents=True)
+    unknown = "/diff/" + "0" * 64 + ".html"
+    with pytest.raises(site_links.Unplaced) as got:
+        site_links.write_redirects(store, pages, [unknown])
+    assert unknown in str(got.value) and "no comparison it holds was named so" in str(got.value)
+    with pytest.raises(site_links.Unplaced) as got:
+        site_links.write_redirects(store, pages, ["/pipeline-p99.html"])
+    assert "/pipeline-p99.html" in str(got.value) and "draws no page there" in str(got.value)
+    assert not any(pages.rglob("*.html"))
+
+
+def test_a_build_with_a_link_it_cannot_place_is_refused(tmp_path, examined):
+    """Through the build itself: a site links file naming a comparison no held one reproduces."""
+    from onetrace_console.folder_load import LoadRefused, build_public
+    links = tmp_path / "site_links.txt"
+    links.write_text("/\n/diff/" + "0" * 64 + ".html\n", encoding="utf-8")
+    examined(1, "build")
+    with pytest.raises(LoadRefused) as got:
+        build_public(tmp_path / "demo", runs_from=KEPT, site_links=links)
+    assert str(links) in str(got.value) and "0" * 64 in str(got.value)
+
+
+def test_sabotage_a_link_that_resolves_nowhere_and_a_moved_page_with_no_target_are_named(built, tmp_path):
+    folder, _store, _pairs = built
+    pages = folder / "store" / "pages"
+    assert link_problems(pages, ["/diff/" + "0" * 64 + ".html"]) == ["/diff/" + "0" * 64 + ".html: no page"]
+    from onetrace_console import site_links
+    (tmp_path / "diff").mkdir()
+    (tmp_path / "diff" / ("1" * 64 + ".html")).write_text(site_links.page("gone.html"), encoding="utf-8")
+    assert link_problems(tmp_path, ["/diff/" + "1" * 64 + ".html"]) == [
+        "/diff/" + "1" * 64 + ".html: moved to gone.html, which is not a page"]
+
+
+def _said(folder, run) -> tuple[str, str]:
+    import html
+    import re
+    pages = folder / "store" / "pages" / "runs" / run.key
+    both = (pages / "case.html").read_text(encoding="utf-8") + (pages / "proof.html").read_text(encoding="utf-8")
+    return both, " ".join(html.unescape(re.sub(r"<[^>]+>", " ", both)).split())
+
+
+def test_p10_is_recorded_again_in_1_0_beside_the_kept_draft_pair(built, examined):
+    """The build from the kept runs records P10's agent pair once more, its records in
+    model-call-record/1.0, signed by the kept trust file's key, and compares the new pair; the kept
+    runs stay byte for byte (the build record vouches for them, as for every run)."""
+    from onetrace_console import records
+    from onetrace_console.demo_store import COMPARISONS_BESIDE_KEPT, RECORDED_BESIDE_KEPT
+    folder, store, pairs = built
+    runs = {r.run_id: r for r in store.runs()}
+    examined(len(RECORDED_BESIDE_KEPT), "runs recorded beside the kept ones")
+    for spec in RECORDED_BESIDE_KEPT:
+        assert spec.folder in runs, spec.folder
+        assert records.state(runs[spec.folder], store) == records.YES, spec.folder
+    for pair in COMPARISONS_BESIDE_KEPT:
+        assert pair in pairs, pair
+    for name in ("pz-51-agent-baseline", "pz-53-agent-amount-changed"):
+        for f in (KEPT / "runs" / name).rglob("*"):
+            if f.is_file():
+                assert (folder / "runs" / name / f.relative_to(KEPT / "runs" / name)).read_bytes() == f.read_bytes(), f
+
+
+def test_p10_s_reference_is_the_new_baseline_and_the_kept_pair_gets_no_verdict(built, examined):
+    """The new 1.0 baseline is P10's benchmark marked most recently, so the reference is made from it;
+    the kept pair, whose own records could not be checked, gets no verdict word and its one line."""
+    import html
+    import re
+    from onetrace_console import model_call, records, verdicts
+    from onetrace_console.demo_store import BENCHMARK_BESIDE_KEPT
+    folder, store, _pairs = built
+    runs = {r.run_id: r for r in store.runs()}
+    kept = [runs["pz-51-agent-baseline"], runs["pz-53-agent-amount-changed"]]
+    examined(len(kept), "kept P10 runs")
+    assert {records.state(r, store) for r in kept} == {records.COULDNT}
+    ref = verdicts.reference_record(verdicts.pipeline_of(kept[0], store), store, compute=False)
+    seal = ref["reference"]["seal"]
+    assert ref["reference"]["made_from"]["run_ids"][0] == BENCHMARK_BESIDE_KEPT
+    for r in kept:
+        both, said = _said(folder, r)
+        assert verdicts.UNCHECKED in said, r.run_id
+        assert "data-verdict-lines" not in both and verdicts.word_of(r, store) is None, r.run_id
+        assert f"Made by onetrace from this pipeline's benchmark, {BENCHMARK_BESIDE_KEPT}" in said, r.run_id
+        assert "the one marked most recently of its 2 benchmarks" in said and seal in both, r.run_id
+        line = re.search(r'<section data-section="draft-records" class="notice"><p>(.*?)</p></section>', both)
+        assert line is not None, r.run_id
+        assert html.unescape(re.sub(r"</?code>", "", line.group(1))) == model_call.DRAFT_LINE.format(
+            formats="model-call-record/0.1-draft"), r.run_id
+        assert model_call.draft_formats(r, store) == ["model-call-record/0.1-draft"]
+    new = runs["pz-57-agent-amount-changed-1-0"]
+    both, said = _said(folder, new)
+    assert verdicts.word_of(new, store) is not None and "data-verdict-lines" in both
+    assert 'data-section="draft-records"' not in both
 
 
 def _page(folder: Path, comparison) -> str:
@@ -317,14 +486,48 @@ def test_sabotage_the_explanation_back_at_the_foot_is_named(built, local_p1, exp
     assert order_problems(_foot(local), True) == ["order ['short', 'what', 'repeat', 'explain']"]
 
 
+#: How onetrace-verify 0.6 words a model-call record in the earlier draft format: not checked.
+DRAFT_RECORD = "model-call-record/0.1-draft: not implemented"
+
+
+def _holds_draft_records(run, store) -> bool:
+    """The run's own check names a model-call record in the draft format, which it does not check."""
+    from onetrace_console.info_mark import rows_of
+    from onetrace_console.pages import _envelope
+    return any(DRAFT_RECORD in str(r.get("detail", "")) for r in rows_of(_envelope(run, store, required=False)))
+
+
+def _draft_pairs(store, pairs) -> dict:
+    runs = {r.key: r for r in store.runs()}
+    return {pair: c for pair, c in pairs.items()
+            if _holds_draft_records(runs[c.run_a], store) or _holds_draft_records(runs[c.run_b], store)}
+
+
 def test_every_other_comparisons_page_says_none_is_kept(built, examined):
+    """Every comparison with no kept explanation says so, but a pair whose runs hold draft model-call
+    records: those runs' records could not be checked, so the page shows no verdict and no panel
+    (held below), until the kept runs are recorded again in model-call-record/1.0."""
     from onetrace_console import explain
     folder, store, pairs = built
-    others = [c for pair, c in pairs.items() if pair not in RECORDS.values()]
+    drafts = _draft_pairs(store, pairs)
+    others = [c for pair, c in pairs.items() if pair not in RECORDS.values() and pair not in drafts]
     examined(len(others), "comparisons with none kept")
     assert others
     for c in others:
         assert explain.KEPT_NONE in _text(_panel(_page(folder, c))), c.key
+
+
+def test_only_the_agent_pair_s_runs_hold_draft_records_and_its_page_says_they_could_not_be_checked(built, examined):
+    """The kept runs were recorded before model-call-record/1.0: P10's agent runs carry two records in
+    the draft format, which onetrace-verify 0.6 names and does not check. So that pair alone reads as
+    could not be checked, as the verifier reads it; no explanation is kept for it either way."""
+    folder, store, pairs = built
+    drafts = _draft_pairs(store, pairs)
+    examined(len(pairs), "comparisons")
+    assert sorted(drafts) == [("pz-51-agent-baseline", "pz-53-agent-amount-changed")], sorted(drafts)
+    page = _page(folder, drafts[("pz-51-agent-baseline", "pz-53-agent-amount-changed")])
+    assert "Both runs' records couldn't be checked." in _text(page)
+    assert not set(drafts) & set(RECORDS.values())
 
 
 # ------------------------------------------------------------------ 3. a changed byte
@@ -387,7 +590,9 @@ def _argv(dockerfile: str, tmp_path: Path, with_kept: bool) -> list[str]:
 
 
 AS_BEFORE = ["demo", "--public", "--build", "/srv/onetrace-demo"]
-WITH_KEPT = AS_BEFORE + ["--runs-from", "/app/deploy/fly/kept", "--explanations", "/app/deploy/fly/kept"]
+#: With the kept inputs, the public site's links too (`site_links`): the build they go into is the kept one.
+WITH_KEPT = AS_BEFORE + ["--runs-from", "/app/deploy/fly/kept", "--explanations", "/app/deploy/fly/kept",
+                         "--site-links", "/app/deploy/fly/site_links.txt"]
 needs_sh = pytest.mark.skipif(os.name == "nt" or shutil.which("sh") is None,
                               reason="the image's build line is a POSIX shell's; this host has none")
 

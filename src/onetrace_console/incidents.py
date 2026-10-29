@@ -26,8 +26,12 @@ cache, if one is ever added, must be keyed on `RULE_TABLE_DIGEST` as well as the
 state, so that changing a rule re-derives and cannot leave a stale incident behind; the
 digest is computed from the table itself, below, so it cannot drift from the rules it names.
 
-An incident's id is `sha256(rule id + source sha + field path)`, so the same inputs always
-give the same id, and two different field paths under one rule never collide.
+An incident's id is `sha256(rule id + source sha + field path + run key)`: every rule here
+raises incidents about a run, and each passes that run's key. The same inputs always give the
+same id, two different field paths under one rule never collide, and two runs whose stored
+reports are byte-identical never share one. Its page's address is
+`incidents/<rule, in lower case>-<first 16 hex of the id>.html`, so an incident whose id took
+no run key (an earlier console's) is at another address under this one.
 
 I-DIFF-REGRESSION IS NOT BUILT, AND THAT IS NOT A GAP IN THE SDK
 ----------------------------------------------------------------
@@ -113,15 +117,18 @@ class Rule:
         return " | ".join((self.id, self.source, self.field, self.condition, self.words))
 
 
-def incident_id(rule_id: str, source_sha: str, field_path: str) -> str:
-    """`sha256(rule + source sha + field path)`, with separators so parts cannot run together.
+def incident_id(rule_id: str, source_sha: str, field_path: str, run_key: str = "") -> str:
+    """`sha256(rule + source sha + field path + run key)`, with separators so parts cannot run
+    together. Every caller here passes a run's key; with none, the id is the first three alone.
 
     The work order: *"An incident's id is deterministic: the rule id plus the sha of the source
     report plus the field path."* Separated by a NUL so that two different splits of the same
-    characters cannot produce one id.
+    characters cannot produce one id. A run's stored check report can be byte-identical to another
+    run's (runs checked in the same second whose rows read the same), so a run's incident takes the
+    run's key too, and two such runs never share one incident.
     """
-    return hashlib.sha256("\0".join((rule_id, source_sha, field_path))
-                          .encode("utf-8")).hexdigest()
+    parts = (rule_id, source_sha, field_path) + ((run_key,) if run_key else ())
+    return hashlib.sha256("\0".join(parts).encode("utf-8")).hexdigest()
 
 
 def _manifest_sha(run: StoredRun) -> str:
@@ -172,7 +179,7 @@ def _contradicts(run: StoredRun, store: Store) -> list[Incident]:
         rows_readable = True
     if not rows_readable:
         return [Incident(
-            id=incident_id("I-CONTRADICTS", run.check_report, WHOLE_OUTPUT),
+            id=incident_id("I-CONTRADICTS", run.check_report, WHOLE_OUTPUT, run.key),
             rule="I-CONTRADICTS", subject=run.key, subject_kind="run",
             source_sha=run.check_report, field_path=WHOLE_OUTPUT,
             quoted=envelope.get("stdout", ""), evidence=_evidence_for_run(run))]
@@ -187,7 +194,7 @@ def _contradicts(run: StoredRun, store: Store) -> list[Incident]:
             f"[FAIL] row. An incident must quote the report's own field, and there is "
             f"nothing here to quote.")
     return [Incident(
-        id=incident_id("I-CONTRADICTS", run.check_report, "stdout[FAIL]"),
+        id=incident_id("I-CONTRADICTS", run.check_report, "stdout[FAIL]", run.key),
         rule="I-CONTRADICTS", subject=run.key, subject_kind="run",
         source_sha=run.check_report, field_path="stdout[FAIL]",
         quoted="\n".join(failing), evidence=_evidence_for_run(run))]
@@ -202,7 +209,7 @@ def _flagged(flag_test, rule_id: str, field_name: str):
                 continue
             path = f"flags[{field_name}]"
             out.append(Incident(
-                id=incident_id(rule_id, _manifest_sha(run), path),
+                id=incident_id(rule_id, _manifest_sha(run), path, run.key),
                 rule=rule_id, subject=run.key, subject_kind="run",
                 source_sha=_manifest_sha(run), field_path=path,
                 quoted=flag, evidence=_evidence_for_run(run)))
@@ -231,7 +238,7 @@ def _could_not_check(run: StoredRun, store: Store) -> list[Incident]:
             continue
         path = f"{name}"
         out.append(Incident(
-            id=incident_id("I-COULD-NOT-CHECK", source, path),
+            id=incident_id("I-COULD-NOT-CHECK", source, path, run.key),
             rule="I-COULD-NOT-CHECK", subject=run.key, subject_kind="run",
             source_sha=source, field_path=path, quoted=note,
             evidence=_evidence_for_run(run)))
@@ -255,7 +262,7 @@ def _head_shared(run: StoredRun, store: Store) -> list[Incident]:
             continue
         path = f"folder[{folder_named(run)}|{folder_named(other)}]"
         out.append(Incident(
-            id=incident_id("I-HEAD-SHARED", _manifest_sha(run), path),
+            id=incident_id("I-HEAD-SHARED", _manifest_sha(run), path, run.key),
             rule="I-HEAD-SHARED", subject=run.key, subject_kind="run",
             source_sha=_manifest_sha(run), field_path=path,
             quoted=differ_said(run, other), evidence=_evidence_for_run(run)))

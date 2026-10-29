@@ -24,16 +24,16 @@ PINS_DOC = REPO / "PINS.md"
 
 #: The three hashes this channel has independently verified, named once here. If a pin is
 #: moved, this fails and names what disagreed -- the point of writing them out at all.
-#: The SDK's two: onetrace 0.5.0 and onetrace-verify 0.5.0 from PyPI, each wheel's sha256 written
+#: The SDK's two: onetrace 0.6.0 and onetrace-verify 0.6.0 from PyPI, each wheel's sha256 written
 #: here by script from PyPI's JSON.
-ONETRACE_WHL_SHA256 = "02ac0ce2a6b1581571623535c6219b3fec292c97a31fddd62f9dcc71453f0cc6"
-ONETRACE_VERIFY_WHL_SHA256 = "972a9de38b072d4a6f5754bdd05fcf831f87ed71316389f294bbc1b3a85ec313"
+ONETRACE_WHL_SHA256 = "8fd0d691a1225a6c692928bd4e606c814752fb9a22f1dd23cc71d2e09da44ac8"
+ONETRACE_VERIFY_WHL_SHA256 = "7d5907f18fc53ed9c71c5695ef1c63187209a5a20fc6809f436934b04556c9eb"
 #: The pinned SDK's version, as its distribution and `onetrace.__version__` report it; and the
-#: verifier's, the same (the two are released in series: 0.5.x with 0.5.x).
-PINNED_SDK_VERSION = "0.5.0"
-PINNED_VERIFY_VERSION = "0.5.0"
-ONETRACE_LOCK_KEY = "onetrace==0.5.0"
-ONETRACE_VERIFY_LOCK_KEY = "onetrace-verify==0.5.0"
+#: verifier's, the same (the two are released in series: 0.6.x with 0.6.x).
+PINNED_SDK_VERSION = "0.6.0"
+PINNED_VERIFY_VERSION = "0.6.0"
+ONETRACE_LOCK_KEY = "onetrace==0.6.0"
+ONETRACE_VERIFY_LOCK_KEY = "onetrace-verify==0.6.0"
 
 _REQ = re.compile(
     r"^(?P<req>\S+)\s*\\?\s*$\n\s*--hash=sha256:(?P<sha>[0-9a-f]{64})",
@@ -151,17 +151,19 @@ def test_the_pins_document_names_both_hashes(examined):
 @pytest.mark.skipif(not PINS_DOC.is_file(),
                     reason="PINS.md is the repository's own record of its pins and is left out "
                            "of the public tree")
-def test_the_pins_document_names_the_0_5_0_release_s_four_files_and_keeps_the_earlier_releases(examined):
-    """The current section names 0.5.0's four files and says nothing of an index they are not on;
-    the development wheels' section is gone; the sections before still name 0.4.0's and 0.3.0's four."""
-    from tests.test_pin_012 import RELEASE_0_3_0, RELEASE_0_4_0, RELEASE_0_5_0
+def test_the_pins_document_names_the_0_6_0_release_s_four_files_and_keeps_the_earlier_releases(examined):
+    """The current section names 0.6.0's four files and says nothing of an index they are not on;
+    the development wheels' section is gone; the sections before still name 0.5.0's, 0.4.0's and
+    0.3.0's four."""
+    from tests.test_pin_012 import RELEASE_0_3_0, RELEASE_0_4_0, RELEASE_0_5_0, RELEASE_0_6_0
     doc = PINS_DOC.read_text(encoding="utf-8")
     now, before = doc.split("\n## Before", 1)
-    examined(len(RELEASE_0_5_0) + len(RELEASE_0_4_0) + len(RELEASE_0_3_0), "files checked against PINS.md")
-    for name, sha in RELEASE_0_5_0.items():
+    examined(len(RELEASE_0_6_0) + len(RELEASE_0_5_0) + len(RELEASE_0_4_0) + len(RELEASE_0_3_0),
+             "files checked against PINS.md")
+    for name, sha in RELEASE_0_6_0.items():
         assert sha in now, f"PINS.md's current section does not name {name}"
     assert "on no index" not in now and "--find-links" not in now and "development wheel" not in now
-    for name, sha in {**RELEASE_0_4_0, **RELEASE_0_3_0}.items():
+    for name, sha in {**RELEASE_0_5_0, **RELEASE_0_4_0, **RELEASE_0_3_0}.items():
         assert sha in before, f"PINS.md no longer names {name}"
 
 

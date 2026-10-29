@@ -19,6 +19,8 @@ WHAT CHANGES, AND NOTHING ELSE
 - **The banner,** the work order's words, as the first thing in every page's `<main>`.
 - **A comparison's explanation panel** is drawn as its place only, as a public console draws it:
   a file can press nothing, so it carries no button and no script, and no explanation.
+- **The index's search box, "Other runs with the same inputs" and the benchmark mark's press** are
+  left out (`without_run_tools`): a file has no console to ask. A marked run keeps its mark.
 - **A sealed page is sealed again** after both, so the check it prints for its reader still says
   "matches" on the exported copy. Its fingerprint is therefore not the served page's, and
   `SEALS.txt` relates the two: for each sealed page, one line -- the page,
@@ -72,7 +74,10 @@ _SLOT = re.compile(r"(<!--fingerprint-->)[0-9a-f]{64}(<!--/fingerprint-->)")
 #: `drift`: the drift reports, each copied where every run it covers is listed; `x`, the
 #: explanations (`explain.FOLDER`): never copied, and the panel drawn as its place only
 #: (`explain.no_presses`).
-_STORE_PARTS = {"objects", "runs", "comparisons", "drift", "x", "beside"}
+#: `references`, `verdicts`, `profiles`: what onetrace's reference, verdict and profile wrote
+#: (`verdicts`), each copied where every run it covers is listed.
+_STORE_PARTS = {"objects", "runs", "comparisons", "drift", "x", "beside", "benchmarks",
+                "references", "verdicts", "profiles"}
 _FINGERPRINT = re.compile(r"<!--fingerprint-->([0-9a-f]{64})<!--/fingerprint-->")
 SEALS = "SEALS.txt"
 _SEALS_HEAD = ("# Each sealed page of this export: its path, the fingerprint the console serves it "
@@ -126,11 +131,33 @@ def errors_page() -> bytes:
             ).encode("utf-8")
 
 
+_RUN_SEARCH = re.compile(r'<section data-section="(?:runs-search|run-search)"[^>]*>.*?</section>', re.S)
+_SAME_INPUTS = re.compile(r'<p data-what-changed="same-inputs">.*?</p>', re.S)
+_BENCHMARK = re.compile(r'<section data-section="benchmark".*?</section>', re.S)
+_MARK_CONTROL = re.compile(r'<p>(?:<label hidden data-benchmark-note>.*?</label> )?'
+                           r'<button type="button" hidden data-benchmark-post=.*?</p>', re.S)
+
+
+def without_run_tools(page: str) -> str:
+    """A page less what only a console can answer: the index's search box, "Other runs with the
+    same inputs" (which opens it), and the benchmark mark's press -- a marked run keeps its mark,
+    read-only; an unmarked run's page loses the empty section."""
+    from onetrace_console.benchmark_script import BENCHMARK_SCRIPT
+    page = _SAME_INPUTS.sub("", _RUN_SEARCH.sub("", page))
+
+    def mark(m) -> str:
+        sec = m.group(0)
+        if "data-benchmark-mark" not in sec:
+            return ""
+        return _MARK_CONTROL.sub("", sec.replace(BENCHMARK_SCRIPT, ""))
+    return _BENCHMARK.sub(mark, page)
+
+
 def _page(served: bytes, rel: str) -> bytes:
     """A served page as exported: links relative, the banner, and sealed again if it was sealed.
     A link to the published errors page goes to the export's own copy of it, at the same section."""
     from onetrace_console.incident_pages import ERRORS_PAGE
-    page = served.decode("utf-8")
+    page = without_run_tools(served.decode("utf-8"))
     page = page.replace(f'href="{ERRORS_PAGE}#', f'href="/{ERRORS_FILE}#')
     page = _ROOTED.sub(lambda m: f'{m.group(1)}="{_relative(m.group(2), rel)}"', page)
     opened = _MAIN.findall(page)
@@ -166,6 +193,11 @@ def _scratch(source: Path, keys: list[str], into: Path):
         if kept.is_file():
             (into / "store" / "beside").mkdir(exist_ok=True)
             shutil.copy2(kept, into / "store" / "beside" / kept.name)
+        #: A listed run's benchmark mark (`benchmarks`), shown read-only in the export.
+        mark = store_dir / "benchmarks" / f"{key}.json"
+        if mark.is_file():
+            (into / "store" / "benchmarks").mkdir(exist_ok=True)
+            shutil.copy2(mark, into / "store" / "benchmarks" / mark.name)
     listed = set(keys)
     for comparison in source_store.comparisons():
         if comparison.run_a in listed and comparison.run_b in listed:
@@ -181,6 +213,22 @@ def _scratch(source: Path, keys: list[str], into: Path):
             target = into / "store" / "drift"
             target.mkdir(exist_ok=True)
             shutil.copy2(p, target / p.name)
+    #: The references and profiles over listed runs only, and the verdicts of listed runs against them.
+    copied = set()
+    for kind in ("references", "profiles", "verdicts"):
+        for p in sorted((store_dir / kind).glob("*.json")) if (store_dir / kind).is_dir() else ():
+            record = source_store.get_kept(kind, p.stem)
+            if record is None:
+                continue
+            covers = set(record.get("runs") or ()) if kind != "verdicts" else {record.get("run")}
+            if not covers or not covers <= listed:
+                continue
+            if kind == "verdicts" and record.get("reference_key") not in copied:
+                continue
+            target = into / "store" / kind
+            target.mkdir(exist_ok=True)
+            shutil.copy2(p, target / p.name)
+            copied.add(p.stem)
     return Store(into / "store")
 
 

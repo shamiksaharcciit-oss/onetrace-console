@@ -241,6 +241,34 @@ def test_each_run_page_shows_its_span_context_without_a_link_on_a_public_demo(de
     assert (missing, linked, loads) == ([], [], [])
 
 
+def test_the_span_context_says_what_its_ids_are_for_and_where_they_lead(demo, examined):
+    """One sentence under the lead: the ids point into the app's own tracing tool; with a tool
+    configured, its link opens it; without one, none does; a public console links to none, and says so."""
+    import html as _html
+    from onetrace_console import trace_panel
+    tid, sid = "0af7651916cd43dd8448eb211c80319c", "b7ad6b7169203331"
+    manifest = {"traceparent": f"00-{tid}-{sid}-01"}
+    steps = [{"receipt": {"stage": {"name": "a"}, "trace": {"trace_id": tid, "span_id": sid}}}]
+
+    def said(section):
+        return [_html.unescape(x) for x in re.findall(r"<p data-span-for>(.*?)</p>", section)]
+    cases = {
+        "configured": trace_panel.run_section(manifest, steps, "https://tracing.example/t/{trace_id}"),
+        "none": trace_panel.run_section(manifest, steps, ""),
+        "public": trace_panel.run_section(manifest, steps, "https://tracing.example/t/{trace_id}", public=True),
+    }
+    examined(len(cases), "consoles")
+    assert said(cases["configured"]) == [f"{trace_panel.SPAN_FOR} {trace_panel.SPAN_OPENS}"]
+    assert trace_panel.OPEN in cases["configured"]
+    assert said(cases["none"]) == [f"{trace_panel.SPAN_FOR} {trace_panel.SPAN_NO_TOOL}"]
+    assert said(cases["public"]) == [f"{trace_panel.SPAN_FOR} {trace_panel.SPAN_PUBLIC}"]
+    assert "pointers into the app's own tracing tool" in trace_panel.SPAN_FOR
+    #: On the public demo's own pages: every run page with a span context says it links to none.
+    folder, store, runs = demo
+    pages = [p for run in runs.values() for p in _pages(folder, run).values() if 'data-section="span-context" class="span-context"><h2>' in p]
+    assert pages and all(trace_panel.SPAN_PUBLIC in _html.unescape(p) for p in pages)
+
+
 def test_the_link_is_the_configured_pattern_with_the_ids_and_none_without_one(examined):
     from onetrace_console import trace_panel
     tid, sid = "0af7651916cd43dd8448eb211c80319c", "b7ad6b7169203331"
@@ -390,10 +418,12 @@ def test_a_build_from_an_earlier_one_reads_only_its_runs_and_trust_file(demo, tm
 
 # ------------------------------------------------------- 7. What changed?
 
-#: Each run's choice, by the rule's number; None where no earlier run of its pipeline is held.
+#: Each run's choice, by the rule; None where no earlier run of its pipeline is held. A benchmark
+#: comes first at each rule (`benchmarks`): p8-42 is the demo's P8 benchmark, with p8-43's inputs.
 CHOICES = {
-    "p8-43-invoice-tolerance-5pct": ("p8-42-invoice-tolerance-2pct", 2),
-    "pz-53-agent-amount-changed": (AGENT, 3),
+    "p8-43-invoice-tolerance-5pct": ("p8-42-invoice-tolerance-2pct", "benchmark-inputs"),
+    "p8-44-invoice-quantity-changed": ("p8-42-invoice-tolerance-2pct", "benchmark-earlier"),
+    "pz-53-agent-amount-changed": (AGENT, "benchmark-earlier"),
     "p1-01-baseline-set1": None,
 }
 
@@ -467,19 +497,19 @@ def test_every_count_of_checks_has_its_note(demo, examined):
 # ------------------------------------------------------- 8. a public console picks a comparison it holds
 
 def test_what_changed_on_a_public_console_takes_the_first_candidate_it_holds_and_says_so(demo, examined):
-    """On p1-08: a local console's rule picks p1-07 (same inputs), which the demo never compared,
-    and offers to make it; a public console walks on to the first candidate it holds, p1-02, and
-    says it is one the demo compared."""
+    """On p1-13: a local console's rule picks the benchmark p1-02 (same inputs), which the demo never
+    compared with it, and offers to make it; a public console walks on to the first candidate it
+    holds, p1-01, and says it is one the demo compared."""
     from onetrace_console import what_changed
     folder, store, runs = demo
-    run = runs["p1-08-candidate-set2"]
+    run = runs["p1-13-baseline-set1-again"]
     examined(2, "consoles' picks")
     local, public = (what_changed.choose(run, store, public=p) for p in (False, True))
-    assert (local[0].run_id, local[1], local[2]) == ("p1-07-candidate-set1", 2, False)
+    assert (local[0].run_id, local[1], local[2]) == ("p1-02-baseline-set2", "benchmark-inputs", False)
     assert what_changed.held(store, local[0].key, run.key) is None
-    assert (public[0].run_id, public[1], public[2]) == ("p1-02-baseline-set2", 2, True)
+    assert (public[0].run_id, public[1], public[2]) == ("p1-01-baseline-set1", 2, True)
     sec = _section(_pages(folder, run)["case.html"], "what-changed")
-    assert ("Compared with p1-02-baseline-set2, the nearest earlier run with the same inputs that this demo "
+    assert ("Compared with p1-01-baseline-set1, the nearest earlier run with the same inputs that this demo "
             "compared.") in _text(sec)
     assert 'data-what-changed="open"' in sec and "data-held-only" in sec
     assert "data-compare-post" in what_changed.section(run, store, public=False)

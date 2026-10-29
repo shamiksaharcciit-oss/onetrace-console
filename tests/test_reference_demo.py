@@ -148,13 +148,12 @@ def test_there_are_no_authorization_records_anywhere_in_the_demo():
 
 
 def _verifier() -> str:
-    """The pinned `onetrace-verify` beside this interpreter, as `checks.REPEAT_COMMAND` names it."""
-    import shutil
-    here = Path(sys.executable).parent
-    found = shutil.which("onetrace-verify", path=str(here)) or shutil.which("onetrace-verify")
-    if not found:
+    """The pinned `onetrace-verify` this interpreter installed, as `checks.REPEAT_COMMAND` names it."""
+    from tests.console_scripts import console_script
+    found = console_script("onetrace-verify")
+    if found is None:
         pytest.fail("onetrace-verify is not installed; see PINS.md")
-    return found
+    return str(found)
 
 
 def test_both_runs_verify(examined):

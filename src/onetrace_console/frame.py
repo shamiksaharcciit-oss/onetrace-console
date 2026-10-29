@@ -138,6 +138,10 @@ PAGE_CSS = """
 .cp .io .fp,.cp .io .fp .mono{overflow-wrap:anywhere}
 .cp p[data-input]{overflow-wrap:anywhere}
 .cp .onedoor code,.cp .span-context code,.cp .nesting code,.cp [data-section=descent] code,.cp .model-call code{overflow-wrap:anywhere}
+.cp .model-call tr.group th{text-align:left;font-weight:600;padding-top:12px}
+.cp .model-call details.about summary{font-size:var(--fs-small);color:var(--ink-muted)}
+.cp .model-call details.about p{margin:4px 0 0;font-size:var(--fs-small)}
+.cp .model-call-pair ul.comparator li{overflow-wrap:anywhere}
 .cp[data-view=incident] [data-section=which] li{overflow-wrap:anywhere}
 .cp[data-view=incident] [data-scroll=found-rows]{max-height:448px;overflow:auto}
 .cp[data-view=incident] pre[data-found=summary]{white-space:pre-wrap;overflow-wrap:anywhere}
@@ -364,6 +368,8 @@ CHIP_CSS = (
     f".cp .bad,{_ANSWER} .bad,{_states('bad')}{{background:var(--bad-bg);color:var(--bad-ink)}}\n"
     f".cp .neu,{_ANSWER} .neu,.cp>p[data-state=no-records],{_states('neu')}"
     f"{{background:var(--neu-bg);color:var(--neu-ink)}}\n"
+    #: The benchmark badge (`benchmarks.badge`), wherever a run is listed: the chip's shape, neutral.
+    f".shell .page .pill[data-benchmark]{{{CHIP_SHAPE};background:var(--neu-bg);color:var(--neu-ink)}}\n"
     #: Declined by a step's own rule: outlined in the accent on the page's own ground, never red.
     #: An outline, not a border, so the chip keeps the one shape.
     f":is(.cp,.shell .page) .dec{{background:transparent;color:var(--accent);outline:1px solid var(--accent);"
@@ -593,9 +599,9 @@ def sealed_footer(sign_in: bool, *, public: bool = False) -> str:
 def banner() -> str:
     """The public mode's banner, the first thing under the brand on every page. The command ends its
     sentence: a full stop after it, outside its code type, before the sentence on the demo's runs."""
-    from onetrace_console.public import BANNER, BANNER_COMMAND, banner_runs
+    from onetrace_console.public import BANNER, BANNER_COMMAND, banner_compare, banner_runs
     return (f'<p data-frame="banner">{escape(BANNER)} <code>{escape(BANNER_COMMAND)}</code>. '
-            f'{escape(banner_runs())}</p>')
+            f'{escape(banner_runs())} {escape(banner_compare())}</p>')
 
 
 def nav(rel: str, *, onedoor: bool, foot: str, public: bool = False) -> str:

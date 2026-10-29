@@ -120,7 +120,7 @@ FOLDER, KEY_HEX, REPORT, KEY_FILE = "x", 16, "r", "key"
 #: there is `/explain/<run id>/artifacts/_staging/post_check/checked.json.<8>.tmp`, the run id
 #: onetrace-explain's (27 characters), the staging folder and temporary name the SDK's
 #: (tests/test_explain_paths.py measures them, and refuses other versions).
-MEASURED = {"onetrace-explain": "0.1.0", "onetrace": "0.5.0"}
+MEASURED = {"onetrace-explain": "0.1.0", "onetrace": "0.6.0"}
 #: onetrace-explain's run id, as measured with those versions.
 RUN_ID = 27
 MEASURED_BELOW = len("/explain/") + RUN_ID + len("/artifacts/_staging/post_check/checked.json") + len(".12345678.tmp")
@@ -822,7 +822,7 @@ EXPLAIN_CSS = """
 .cp .explain .cards{display:flex;flex-direction:column;gap:10px}
 .cp .explain .claim{background:var(--surface);border:1px solid var(--line);border-radius:var(--r-ctl);
   padding:10px 12px;min-width:0}
-.cp .explain .claim>p{margin:6px 0}
+.cp .explain .claim>p{margin:6px 0;overflow-wrap:anywhere}
 .cp .explain .badge{display:inline-block;font-size:var(--fs-small);font-weight:600;padding:2px 8px;
   border-radius:var(--r-ctl);background:var(--neu-bg);color:var(--neu-ink)}
 .cp .explain .badge[data-kind=lead]{background:var(--cc-bg);color:var(--cc-ink)}
