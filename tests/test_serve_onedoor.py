@@ -7,13 +7,14 @@ import urllib.error
 import urllib.request
 
 from onetrace_console.config import Config
+from tests.http_limits import limit
 from onetrace_console.serve import Handler
 from tests.test_upload_hardening import _member, _tar
 
 
 def _get(base: str, path: str) -> tuple[int, bytes]:
     try:
-        with urllib.request.urlopen(base + path, timeout=10) as resp:
+        with urllib.request.urlopen(base + path, timeout=limit(10)) as resp:
             return resp.status, resp.read()
     except urllib.error.HTTPError as e:
         return e.code, e.read()
@@ -22,7 +23,7 @@ def _get(base: str, path: str) -> tuple[int, bytes]:
 def _post(base: str, path: str, body: bytes) -> tuple[int, bytes]:
     req = urllib.request.Request(base + path, data=body, method="POST")
     try:
-        with urllib.request.urlopen(req, timeout=30) as resp:
+        with urllib.request.urlopen(req, timeout=limit(30)) as resp:
             return resp.status, resp.read()
     except urllib.error.HTTPError as e:
         return e.code, e.read()

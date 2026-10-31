@@ -123,7 +123,7 @@ def _delivery_command() -> str:
 def _bash_candidates() -> list[list[str]]:
     """Where a bash that can run the README's command is looked for. **`shutil.which("bash")` is
     deliberately absent:** on Windows, `bash` on PATH is the WSL launcher, which starts, then
-    cannot open a Windows path (canary's F17; the Windows run of 1727d05 hit it here). So Git
+    cannot open a Windows path (finding F17; the Windows run of 1727d05 hit it here). So Git
     Bash is named by its path -- the default install, then beside the `git` on PATH -- and POSIX
     hosts use /bin/bash."""
     if os.name != "nt":
@@ -200,7 +200,7 @@ def test_the_readme_says_dot_slash_paths_are_refused(examined):
 
 
 # ---------------------------------------------------------------------------------------------
-# Which bash runs the README's command. On Windows, `bash` on PATH is the WSL launcher (canary's
+# Which bash runs the README's command. On Windows, `bash` on PATH is the WSL launcher (finding
 # F17): it answers, then cannot open a Windows path. So the bash is chosen from explicit
 # candidates and qualified by a control that runs a script the way the real test does.
 

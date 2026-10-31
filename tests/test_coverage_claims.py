@@ -33,7 +33,7 @@ viewer's table keep the 0.1.2 list until the viewer's sentences are rewritten fo
 **Its limit, plainly:** it catches the listed phrasings, and only in pages the runs above draw, in
 the viewer's table, and in the documents. A claim worded some other way, or on a page state those
 runs do not reach, is outside it. The list of every coverage sentence, before and after, is in the
-pin report for the reviewer to read.
+pin report for a reader to read.
 """
 from __future__ import annotations
 
@@ -83,7 +83,7 @@ QUALIFIED = re.compile(
 WHOLE_SENTENCE_QUALIFIED = re.compile(r"\bit would read:", re.I)
 
 
-#: The run receipt's "What this receipt does not say" is the work order's fixed
+#: The run receipt's "What this receipt does not say" is the specification's fixed
 #: list of what the receipt does NOT claim, and one line says what an anchor would show ("the record
 #: existed by then") in order to deny more. Under that heading the proof-of-time claim is qualified,
 #: and only that one: every other claim is still read there.

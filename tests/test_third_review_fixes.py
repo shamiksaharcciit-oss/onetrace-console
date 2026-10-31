@@ -1,7 +1,7 @@
 """The third confirmation review's console findings, the 422 set among them.
 
-A third fresh reviewer confirmed the second review's fixes, then found these by running them.
-The viewer's halves are canary 220a38b, re-vendored here.
+A third fresh review confirmed the second review's fixes, then found these by running them.
+The viewer's halves are its commit 220a38b, re-vendored here.
 
 NEW-1  A small upload whose steps named one receipt thousands of times drew pages of hundreds
        of MB; MemoryError answered 500 and the console could not restart.

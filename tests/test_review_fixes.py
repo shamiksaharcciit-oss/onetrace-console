@@ -1,7 +1,7 @@
 """A confirmation review's console findings, each with the probe that found it.
 
-The review (a fresh reviewer, at console 6ad9b0c and viewer 2e8a885) confirmed each of these by
-running it. The viewer's halves are in canary 5f4f06c, re-vendored here.
+The review (a fresh one, at console 6ad9b0c and viewer 2e8a885) confirmed each of these by
+running it. The viewer's halves are in its commit 5f4f06c, re-vendored here.
 
 1. Blocker: a record the viewer cannot show -- nesting deeper than its encoder reaches, or a
    lone surrogate escape -- made ingest answer 500, every later ingest too, and stopped the

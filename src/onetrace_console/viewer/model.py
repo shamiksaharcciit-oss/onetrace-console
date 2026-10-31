@@ -113,6 +113,10 @@ class Item:
     media_type: str
     fingerprint: str
     trust: str
+    #: A link beside the item, and its words: none in the free file; a frame sets them (as it sets
+    #: a graph node's `href`) where it has a page for the item.
+    href: str = ""
+    link: str = ""
 
 
 @dataclass(frozen=True, slots=True)
@@ -147,7 +151,7 @@ class Detail:
     An empty label is not an oversight. 030 §3's frames already carry the verb's reason inside
     the sentence, and several 019 rows are a sentence followed by a quotation with nothing to
     call it — the refusal's reason, the instrument's own words. Inventing a label for those
-    would add a word core did not rule.
+    would add a word nobody decided.
     """
 
     label: str
@@ -709,7 +713,7 @@ def reproduce_said(row: ReproduceRow) -> VerbSaid:
     The five outcomes are kept apart exactly as the report keeps them. `declared` is the record
     telling the truth about itself and gets 019 §4's model-step sentence; `unavailable` is this
     reader's reach and gets the access-problem sentence, whose "what would resolve it" is the
-    report's `reason`; `mismatch` has no ruled row and carries core's proposed wording.
+    report's `reason`; `mismatch` has no decided row and carries proposed wording.
     """
     if row.outcome == "REPRODUCED":
         return VerbSaid(line("reproduce.pass"), step=row.index)
@@ -741,7 +745,7 @@ def mismatch_digests(row: ReproduceRow) -> tuple[Detail, ...]:
     "nothing else".
 
     If the reason does not carry exactly two, the reason is shown unchanged instead — the page
-    will not guess which digest is which — and that report is a finding to send to core rather
+    will not guess which digest is which — and that report is a finding to send upstream rather
     than a shape to accommodate quietly.
     """
     found = _DIGEST.findall(row.reason or "")
@@ -753,7 +757,7 @@ def mismatch_digests(row: ReproduceRow) -> tuple[Detail, ...]:
 
 #: 030 §3: when an envelope requires a reason and the report carries none, the frame renders
 #: with these words. The page does not write the reason the verb should have written — and the
-#: report goes to core as a finding.
+#: report goes upstream as a finding.
 NO_REASON = "(no reason given)"
 
 

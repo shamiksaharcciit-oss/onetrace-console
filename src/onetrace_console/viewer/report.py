@@ -40,7 +40,7 @@ from onetrace_console.child import utf8_env
 
 REPORT_FORMAT = "onetrace-viewer/check-report/0.1"
 
-#: Core's machine-readable report, as `verifier_call.Call.to_json` writes it. **This is
+#: The verifier's machine-readable report, as `verifier_call.Call.to_json` writes it. **This is
 #: the viewer's primary input**, and its rows are read structurally.
 #: That module's own docstring puts the discipline in one line -- *"the call is built
 #: from the rows, never from the text"* -- and this is the same rule at the far end of
@@ -53,9 +53,9 @@ VERIFIER_CALL_FORMAT = "onetrace-verifier-call/0.1"
 SOURCE_ROWS = "verifier-call"
 SOURCE_TEXT = "text-fallback"
 
-#: Every key a verifier call carries. **Measured, not assumed**: across core's 21
+#: Every key a verifier call carries. **Measured, not assumed**: across the 21
 #: delivered samples (`onetrace-report-samples-c325c94`, all 121 files matching its
-#: `SHA256SUMS`) and one live `call_run` over a canary fixture, the key set is exactly
+#: `SHA256SUMS`) and one live `call_run` over a test fixture, the key set is exactly
 #: this, every time. All of them are required and nothing else is accepted.
 #:
 #: A field outside this set makes the report **unreadable**, which is the reader's

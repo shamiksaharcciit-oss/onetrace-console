@@ -60,3 +60,34 @@ def test_the_kept_pair_names_the_site_s_comparison_as_onetrace_0_5_0_did_with_wi
     version, build = site_links.EARLIER_SDKS[0]
     a, b = (digest(bundle(r, store)) for r in runs)
     assert comparison_key(a, b, version, build) == SITE_NAME
+
+
+#: The site's name for the pair under each earlier release's SDK build, in `EARLIER_SDKS`' order.
+SITE_NAMES = ("b56e0b73e5e3324556fbdbcfc2a5561a1389322ba405c2184f2fdb620f8284da",
+              "85dc0852a57737a69d71b9e12c697b77e69ab92d30b5c358ca9f8fb7cfc7dd1b")
+
+
+def test_each_earlier_sdk_is_the_wheel_its_release_pinned(examined):
+    """Each earlier SDK build is named by its release's wheel, as PyPI serves it (tests/test_pin_012.py)."""
+    from onetrace_console import site_links
+    from tests.test_pin_012 import RELEASE_0_5_0, RELEASE_0_6_0
+    examined(len(site_links.EARLIER_SDKS), "earlier SDK builds")
+    assert site_links.EARLIER_SDKS == (
+        ("0.5.0", "wheel:" + RELEASE_0_5_0["onetrace-0.5.0-py3-none-any.whl"]),
+        ("0.6.0", "wheel:" + RELEASE_0_6_0["onetrace-0.6.0-py3-none-any.whl"]))
+
+
+def test_each_earlier_sdk_names_the_kept_pair_as_the_site_links_it(tmp_path, examined):
+    """The kept P1 pair, named by each earlier SDK build: console 0.4.0's name and console 0.5.0's, the
+    two the site links; and this console's own name is neither."""
+    from onetrace_console import site_links
+    from onetrace_console.compare import comparison_key, sdk_build_digest, sdk_distribution_version
+    from onetrace_console.folder_load import delivery
+    from onetrace_console.ingest import accept, bundle
+    from onetrace_console.store import Store, digest
+    store = Store(tmp_path / "store")
+    runs = [accept(delivery(KEPT / name), store).run for name in ("p1-02-baseline-set2", "p1-08-candidate-set2")]
+    a, b = (digest(bundle(r, store)) for r in runs)
+    examined(len(site_links.EARLIER_SDKS), "earlier SDK builds")
+    assert tuple(comparison_key(a, b, v, build) for v, build in site_links.EARLIER_SDKS) == SITE_NAMES
+    assert comparison_key(a, b, sdk_distribution_version(), sdk_build_digest()) not in SITE_NAMES

@@ -111,8 +111,8 @@ def main(argv: list[str] | None = None) -> int:
             models = [list_row(read_record(r)) for r in args.runs]
             args.out.mkdir(parents=True, exist_ok=True)
             # Where each run was read from, relative to where the page is written, so the link
-            # resolves when the page is opened from disk. Generation-time metadata, per core's
-            # ruling on addressing: the directory is how a run is addressed, and the run id —
+            # resolves when the page is opened from disk. Generation-time metadata, per the
+            # decision on addressing: the directory is how a run is addressed, and the run id —
             # which the SDK pair shares between two runs — is not.
             out_dir = args.out.resolve()
             hrefs = [os.path.relpath(r.resolve(), out_dir).replace(os.sep, "/")

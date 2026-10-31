@@ -15,6 +15,7 @@ the command's output, not the console's reading of the file.)
 from __future__ import annotations
 
 import json
+from tests.http_limits import limit
 import time
 import urllib.request
 
@@ -51,10 +52,10 @@ def test_only_provider_and_name_reach_the_page_the_state_the_attempt_and_the_log
     assert explain.configured_model() == f"fake:{REPLIES / 'mixed.json'}"
     seen_states = []
     req = urllib.request.Request(f"{base}/explain?c={comparison.key}", method="POST")
-    with urllib.request.urlopen(req, timeout=30) as r:
+    with urllib.request.urlopen(req, timeout=limit(30)) as r:
         assert r.status == 202
     while True:
-        with urllib.request.urlopen(f"{base}/explain/state?c={comparison.key}", timeout=30) as r:
+        with urllib.request.urlopen(f"{base}/explain/state?c={comparison.key}", timeout=limit(30)) as r:
             s = r.read().decode("utf-8")
         seen_states.append(s)
         if not json.loads(s)["running"]:

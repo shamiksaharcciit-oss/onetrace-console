@@ -27,18 +27,18 @@ META = tomllib.loads((REPO / "pyproject.toml").read_text(encoding="utf-8"))["pro
 def test_the_version_is_0_2_0_everywhere(examined):
     import onetrace_console
     examined(3, "places the version is stated")
-    assert META["version"] == "0.5.0"
-    assert onetrace_console.__version__ == "0.5.0"
+    assert META["version"] == "0.5.1"
+    assert onetrace_console.__version__ == "0.5.1"
     out = subprocess.run([sys.executable, "-m", "onetrace_console", "--version"], capture_output=True,
                          text=True, env={**os.environ, "PYTHONPATH": str(REPO / "src")})
-    assert out.stdout.strip() == "0.5.0", out
+    assert out.stdout.strip() == "0.5.1", out
 
 
 def test_the_metadata_names_the_sdk_it_was_tested_with(examined):
     deps = META["dependencies"]
     examined(len(deps), "declared dependencies")
-    assert "onetrace==0.6.0" in deps
-    assert "onetrace-verify[crypto]==0.6.0" in deps
+    assert "onetrace==0.6.1" in deps
+    assert "onetrace-verify[crypto]==0.6.1" in deps
     assert META["requires-python"] == ">=3.12"
     assert len(META["authors"]) == 1 and META["authors"][0].get("name", "").strip(), META["authors"]
 
@@ -66,15 +66,15 @@ def test_the_pins_command_reads_the_lock_shipped_in_the_package(examined):
     assert out.stdout.replace(b"\r\n", b"\n") == shipped.read_bytes().replace(b"\r\n", b"\n")
 
 
-def test_the_shipped_lock_pins_the_0_5_0_wheels(examined):
+def test_the_shipped_lock_pins_the_0_6_1_wheels(examined):
     """The lock the installed package carries pins the SDK's two wheels as PyPI serves them."""
-    from tests.test_pin_012 import RELEASE_0_6_0
+    from tests.test_pin_012 import RELEASE_0_6_1
     from tests.test_pins import _REQ
     text = (REPO / "src" / "onetrace_console" / "requirements.lock").read_text(encoding="utf-8")
     entries = {m.group("req"): m.group("sha") for m in _REQ.finditer(text)}
     examined(2, "SDK pins in the shipped lock")
-    assert entries["onetrace==0.6.0"] == RELEASE_0_6_0["onetrace-0.6.0-py3-none-any.whl"]
-    assert entries["onetrace-verify==0.6.0"] == RELEASE_0_6_0["onetrace_verify-0.6.0-py3-none-any.whl"]
+    assert entries["onetrace==0.6.1"] == RELEASE_0_6_1["onetrace-0.6.1-py3-none-any.whl"]
+    assert entries["onetrace-verify==0.6.1"] == RELEASE_0_6_1["onetrace_verify-0.6.1-py3-none-any.whl"]
 
 
 #: onetrace-explain is never a dependency: the console runs it as a command where it is installed.
@@ -362,8 +362,8 @@ def test_a_plain_pip_install_compares_with_the_same_report_as_the_pinned_install
         subprocess.run([sys.executable, "-c", f"import sys; from setuptools import build_meta as b; "
                         f"print(b.{build}(sys.argv[1]))", str(dist)], cwd=tree, check=True,
                        capture_output=True, env=clean)
-    console_whl = next(dist.glob("onetrace_console-0.5.0-*.whl"))
-    _check_the_viewer_ships_without_its_tests(console_whl, next(dist.glob("onetrace_console-0.5.0.tar.gz")))
+    console_whl = next(dist.glob("onetrace_console-0.5.1-*.whl"))
+    _check_the_viewer_ships_without_its_tests(console_whl, next(dist.glob("onetrace_console-0.5.1.tar.gz")))
     #: The wheel carries the demo store's builder and trust file, so `onetrace-console demo` works
     #: installed: it builds the demo's runs where it is started (0.1.1).
     import zipfile

@@ -2,11 +2,11 @@
 
     "Sample" isn't true of these runs. Fixed words, in the console's frame: "This record is in a
     preview format ({format})." The format is read from the manifest. The free file's own
-    wording goes to the next work order with the viewer changes.
+    wording goes to the next specification with the viewer changes.
 
 The viewer draws its banner when the manifest's format ends in `-preview`; that says what format
 the record is in, not where it came from. A run the console stores is a run, not a sample.
-The free file was given the same words, so since canary 64c4026 the viewer draws them
+The free file was given the same words, so since viewer commit 64c4026 the viewer draws them
 itself, on every page, and the console no longer replaces its banner.
 """
 from __future__ import annotations

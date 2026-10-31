@@ -19,6 +19,7 @@ from __future__ import annotations
 import json
 
 import pytest
+from tests.http_limits import limit
 
 from tests.test_compare import RUN_C, RUN_C_POPPLER24, _require_exam
 from tests.test_checks import _require_installed
@@ -73,7 +74,7 @@ def test_compare_of_a_run_whose_object_is_missing_is_never_a_500(server):
     from urllib.error import HTTPError
     from urllib.request import urlopen
     try:
-        urlopen(f"{base}/runs/{keys[0]}/record.tar", timeout=30)
+        urlopen(f"{base}/runs/{keys[0]}/record.tar", timeout=limit(30))
         raise AssertionError("the record of a run missing an object was served")
     except HTTPError as e:
         assert e.code == 409 and e.read().decode("utf-8") == (

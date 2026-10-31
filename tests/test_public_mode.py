@@ -32,6 +32,7 @@ import sys
 import tempfile
 import urllib.request
 from pathlib import Path
+from tests.http_limits import limit
 
 import pytest
 
@@ -209,7 +210,7 @@ def test_a_refusal_is_the_same_with_a_body_sent_in_full(served, examined):
     req = urllib.request.Request(base + "/v1/runs", data=b"x" * 100, method="POST")
     examined(1, "POST with a body")
     with pytest.raises(urllib.error.HTTPError) as e:
-        urllib.request.urlopen(req, timeout=30)
+        urllib.request.urlopen(req, timeout=limit(30))
     assert e.value.code == 403
 
 
@@ -334,7 +335,7 @@ def test_a_request_that_raises_is_one_json_error_line_and_the_console_serves_on(
     base = f"http://127.0.0.1:{port}"
     try:
         with pytest.raises((urllib.error.URLError, ConnectionError, OSError)):
-            urllib.request.urlopen(base + "/home.html", timeout=30).read()
+            urllib.request.urlopen(base + "/home.html", timeout=limit(30)).read()
         after = container_check.fetch(base, "/health")[0]
     finally:
         httpd.shutdown()

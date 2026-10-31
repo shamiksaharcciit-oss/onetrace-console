@@ -6,8 +6,9 @@ rebuilding it gives the same file, byte for byte. It is written whenever the con
 console reads the one its build wrote and never writes it.
 
 What it holds, per run, each as the record states it: the run's ids, its chain head, each step's
-name, outcome, instrument, settings (`assertions.constants`, by recorded name and value), inputs and
-outputs (name and digest); the manifest's declarations; the verifier's verdict and the names of its
+name, outcome, instrument (its id, version and configuration digest), settings
+(`assertions.constants`, by recorded name and value), inputs and outputs (name and digest); the
+manifest's declarations; the verifier's verdict and the names of its
 rows that read FAIL or NOT-RUN; the model-call records' fields where a step's output holds one; and
 whether a person marked the run as a benchmark (`benchmarks`). Per held comparison: the first
 differing step and what differed there, from the comparison's own short answer data. No text is
@@ -26,7 +27,8 @@ from pathlib import Path
 
 from onetrace_console.bounded_json import load_json_bounded
 
-FORMAT = "onetrace-console-run-index/0.1"
+#: 0.2 adds each step's `instrument.config_digest` (`store_read` reads runs by it).
+FORMAT = "onetrace-console-run-index/0.2"
 #: The derived file, beside the store's own folder under the store root.
 FILE_NAME = "run_index.json"
 #: The manifest's declarations the index keeps, each as written.
@@ -150,7 +152,8 @@ def _run_entry(run, order: int, label: str, store) -> dict:
         outcome = receipt.get("outcome") if isinstance(receipt.get("outcome"), dict) else {}
         entry = {"name": str(stage.get("name", "")), "index": str(s["index"]),
                  "outcome": str(outcome.get("class", "")),
-                 "instrument": {"id": str(instrument.get("id", "")), "version": str(instrument.get("version", ""))},
+                 "instrument": {"id": str(instrument.get("id", "")), "version": str(instrument.get("version", "")),
+                                "config_digest": str(instrument.get("config_digest", ""))},
                  "settings": _settings(receipt), "inputs": _named(receipt.get("inputs")),
                  "outputs": _named(receipt.get("outputs"))}
         calls = _model_calls(receipt, s["file"], files, store)
@@ -238,6 +241,28 @@ def write(store, store_root: Path) -> Path:
     path = Path(store_root) / FILE_NAME
     _atomic_write(path, encode(build(store)))
     return path
+
+
+def format_of(store_root: Path) -> str | None:
+    """The format the store root's index states, as written; None where it holds no index that reads."""
+    try:
+        index = load_json_bounded((Path(store_root) / FILE_NAME).read_text(encoding="utf-8"), FILE_NAME)
+    except (OSError, ValueError, UnicodeDecodeError, RecursionError):
+        return None
+    said = index.get("format") if isinstance(index, dict) else None
+    return said if isinstance(said, str) else None
+
+
+def earlier(said: str) -> bool:
+    """Whether `said` is this index's format at an earlier version than the one this console writes."""
+    def version(f: str) -> tuple[str, tuple[int, ...]] | None:
+        name, _, v = f.rpartition("/")
+        try:
+            return (name, tuple(int(x) for x in v.split(".")))
+        except ValueError:
+            return None
+    mine, theirs = version(FORMAT), version(said)
+    return theirs is not None and theirs[0] == mine[0] and theirs[1] < mine[1]
 
 
 def read(store_root: Path) -> dict | None:

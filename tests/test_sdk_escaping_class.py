@@ -3,7 +3,7 @@ because the SDK's escaping covers everything the console's own escaping (the vie
 did, and is one-to-one. An SDK that narrowed its class, or stopped doubling a backslash, fails here
 before a record could draw a line of the Diff page.
 
-Measured over every code point, U+0000 to U+10FFFF, as canary's report did (2,123 escaped by
+Measured over every code point, U+0000 to U+10FFFF, as an earlier report did (2,123 escaped by
 `display`; 2,285 by the SDK, 163 of them format characters `display` leaves as they are).
 """
 from __future__ import annotations

@@ -83,8 +83,16 @@ def test_the_schema_copy_is_1_0_and_names_where_it_came_from(examined):
     assert json.loads(raw)["$id"] == "model-call-record/1.0" == mc.FORMAT
     assert mc.SCHEMA_SOURCE == ("docs/model_call_record.schema.json in onetrace-0.6.0.tar.gz (sha256 "
                                 f"{SDIST_SHA256}), copied byte for byte")
-    from tests.test_pins import PINNED_SDK_VERSION
-    assert PINNED_SDK_VERSION == "0.6.0", "the copy is 0.6.0's; a new pin reads the installed schema or recopies"
+
+
+def test_the_copy_is_the_schema_the_installed_onetrace_ships(examined):
+    """Since onetrace 0.6.1 the schema is the SDK's package data; the console's copy is the same bytes. A
+    pin whose packaged schema differs fails here, and the copy is then read again from the new pin."""
+    from importlib.resources import files
+    shipped = files("onetrace.model_call").joinpath("model_call_record.schema.json").read_bytes()
+    copy = files("onetrace_console").joinpath(mc.SCHEMA_FILE).read_bytes()
+    examined(2, "schemas: the installed SDK's and the console's copy")
+    assert shipped == copy and hashlib.sha256(shipped).hexdigest() == SCHEMA_SHA256
 
 
 def test_the_copy_gives_labels_only_and_its_groups_hold_every_field_the_sdk_names(examined):

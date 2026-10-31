@@ -453,3 +453,7 @@ subprocess this console starts (the verifier, the SDK's own `diff`/`localize` ve
 locally against files already on disk; none of them opens a network connection, and
 `--network none` above is the proof that nothing could even if something tried to.
 
+The image includes neither onetrace-explain nor the `[neighbours]` extra: both Dockerfiles
+install `requirements.lock` alone, which pins neither. So Explain and neighbours by input, the
+console's three network calls you choose, are not in the image.
+

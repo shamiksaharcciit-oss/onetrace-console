@@ -1,6 +1,6 @@
 # The console as a container the customer runs.
 #
-# THE CONTAINER RULING, AS BUILT HERE
+# THE CONTAINER DESIGN, AS BUILT HERE
 # ------------------------------------
 # The customer runs it. No shared back end: this image talks to nothing but the one
 # volume mounted into it and the local processes it starts (the verifier, the SDK's

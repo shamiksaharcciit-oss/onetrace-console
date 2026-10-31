@@ -7,13 +7,14 @@ import urllib.error
 import urllib.request
 
 import pytest
+from tests.http_limits import limit
 
 from onetrace_console.access_log import AccessLog, AccessLogExhausted, entry_digest
 
 
 def _get(base: str, path: str) -> tuple[int, bytes]:
     try:
-        with urllib.request.urlopen(base + path, timeout=10) as resp:
+        with urllib.request.urlopen(base + path, timeout=limit(10)) as resp:
             return resp.status, resp.read()
     except urllib.error.HTTPError as e:
         return e.code, e.read()

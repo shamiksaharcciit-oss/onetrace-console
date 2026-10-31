@@ -45,7 +45,7 @@ from onetrace_console.store import _atomic_write
 
 #: OWASP Password Storage Cheat Sheet's first listed scrypt row: "N=2^17 (128 MiB), r=8
 #: (1024 bytes), p=1" -- equivalent security to the other rows it lists, trading memory
-#: for parallelism; this one needs no tuning for a multi-core host.
+#: for parallelism; this one needs no tuning for a host with many processors.
 SCRYPT_N = 2 ** 17
 SCRYPT_R = 8
 SCRYPT_P = 1

@@ -98,7 +98,7 @@ def test_a_runs_list_row_and_digests_are_kept_when_it_is_checked(checked):  # no
 
 
 def test_lists_and_home_read_no_receipt_of_a_checked_run(checked, store, monkeypatch):  # noqa: F811
-    """Every later render read every stored run's receipts again (the round-4 reviewer's
+    """Every later render read every stored run's receipts again (the round-4 review's
     probe_after: one upload of three 14 MB receipts made every later ingest take 40 s)."""
     import onetrace_console.checks as checks
     import onetrace_console.viewer.record as record

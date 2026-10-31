@@ -127,7 +127,7 @@ def main(argv: list[str]) -> int:
 
 
 _NOTE = (
-    "The four onetrace / onetrace-verify release files built by standards at "
+    "The four onetrace / onetrace-verify release files built at "
     "onetrace-sdk-bootstrap HEAD dae64ce, recorded member by member before the rebuild "
     "that removes project ids. The bytes are kept outside every repository; this "
     "manifest is what makes 'list every member that differs' answerable afterwards. Nothing "

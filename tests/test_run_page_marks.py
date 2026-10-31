@@ -62,7 +62,7 @@ def _titles(page: str) -> dict[str, str]:
 #: Measured by tooling, and measured equal to the page drawn by the earlier code
 #: (the vendored viewer 8fdf301 and the console as it was at f8c506a): with no comparison the
 #: page is today's page. It moves only when the page itself does, as any golden pin.
-#: Moved for canary 0fad8d7: the graph panel's scrollbar is drawn, five
+#: Moved for viewer commit 0fad8d7: the graph panel's scrollbar is drawn, five
 #: lines of the viewer's CSS that the page carries; rendered by tooling with the previous
 #: wheel (ed28d32, which gives the previous pin) and the new one, nothing else moves.
 #: Previously `b262a43b…`.
@@ -73,14 +73,14 @@ def _titles(page: str) -> dict[str, str]:
 #: by giving the verifier's stdout CR LF line endings, and nothing else on the page differed. So
 #: inside a verbatim block of the verifier's rows, one or more CRs before an LF go; a CR anywhere
 #: else on the page is kept.
-#: Moved again for canary 35c643b: quoted fields wrap anywhere (two lines of
+#: Moved again for viewer commit 35c643b: quoted fields wrap anywhere (two lines of
 #: CSS) and the boundary section, drawn here outside the console's frame, is headed "Where the
 #: record stops"; rendered by tooling with the previous wheel (0fad8d7, giving the previous pin)
 #: and the new one, nothing else moves. Previously `782d75b0…`.
 #: And for the run names: R's own incident row names it "dag-r37-r · 721042dcd617"
 #: rather than by its key alone; rendered by tooling at 977c80a and now, nothing else moves.
 #: Previously `c3eda474…`.
-#: And for canary 64c4026: the viewer's stylesheet carries the failed-last-
+#: And for viewer commit 64c4026: the viewer's stylesheet carries the failed-last-
 #: attempt line's rule (R has none to state); rendered by tooling with 35c643b's wheel and
 #: 64c4026's, only those two lines of CSS differ. Previously `0d9abcae…`.
 #: And for board 5: the case page links the run receipt in its Policy section;
@@ -89,16 +89,16 @@ def _titles(page: str) -> dict[str, str]:
 #: And for the dead links: the incident's "the report it came from" now links the run's
 #: case page and "all incidents" the Incidents page, each relative to the page; with those two
 #: links put back as they were, the page hashes to the previous pin. Previously `8c93bd6a…`.
-#: And for canary 75f13ac: the ladder gains "Ran as approved", which on R --
+#: And for viewer commit 75f13ac: the ladder gains "Ran as approved", which on R --
 #: a graph run checked by 0.1.2 -- says the check that ran can't say; with exactly that one row
 #: taken out, the page hashes to the previous pin. Previously `1f16c575…`.
-#: And for canary 02c6204, on the 0.2.0 development build: the check is the
+#: And for viewer commit 02c6204, on the 0.2.0 development build: the check is the
 #: installed onetrace-verify, so its command reads `onetrace-verify MANIFEST.json` (twice), the page
 #: regenerates with `generate --cli`, the check's own words gain the CLI's two graph-edge rows (76 to
 #: 78 pass), and "Ran as approved" reads yes from them. Rendered by tooling with 682eb99 (the console
 #: on 0.1.2 and its viewer, which gives the previous pin exactly) and now: nothing else moves.
 #: Previously `691c07fb…`.
-#: And for the Signed half (canary 7a15842, on the third development build): the
+#: And for the Signed half (viewer commit 7a15842, on the third development build): the
 #: signing rung reads Unsigned from the check's own signature rows, which R has none of; with exactly
 #: that row put back to "Not yet available · records are unsigned in this release", the page hashes
 #: to the previous pin (measured with this test's own fixture). Previously `fc15cabb…`.
@@ -187,7 +187,9 @@ def _titles(page: str) -> dict[str, str]:
 #: Moved by the version, 0.3.2 to 0.4.0, from 2bcbe4c7581ae30d0ee9a1d6f30dfeda2faa482b75832540c9dca356f9329ed7.
 #: Moved by the version, 0.4.0 to 0.5.0, from 629afc005e4df4e69fcb256b7ec69f49d41e1033919eab4563ec8bb7659c1f92.
 #: Measured by rendering it with the version alone set back to 0.4.0: the old digest.
-UNMARKED_R_CASE_SHA256 = "b79c2acd83478cb2748ddffcafe68c2f9ba0db55ac3a10d626665e0fbac30899"
+#: Moved by the version, 0.5.0 to 0.5.1, from b79c2acd83478cb2748ddffcafe68c2f9ba0db55ac3a10d626665e0fbac30899.
+#: Measured by rendering it with the version alone set back to 0.5.0: the old digest.
+UNMARKED_R_CASE_SHA256 = "830f3dd8cd70bd43d4526593856711c1ca098f39e7d015e685e85cab8e90d7ab"
 _VERIFIER_PATH = re.compile(r"\S*onetrace_verify[/\\]verify\.py")
 _FINGERPRINT = re.compile(r"<!--fingerprint-->[0-9a-f]{64}<!--/fingerprint-->")
 _VERIFIER_BLOCK = re.compile(r'(<pre data-layer="3">)(\[[A-Z][A-Z-]* *\] .*?)(</pre>)', re.S)

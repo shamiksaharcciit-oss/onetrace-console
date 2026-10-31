@@ -24,6 +24,7 @@ import threading
 import urllib.request
 from html import unescape
 from pathlib import Path
+from tests.http_limits import limit
 
 import pytest
 
@@ -222,7 +223,7 @@ def _url(line: str) -> str:
 
 
 def _get(url: str) -> str:
-    with urllib.request.urlopen(url, timeout=120) as r:
+    with urllib.request.urlopen(url, timeout=limit(120)) as r:
         assert r.status == 200, url
         return r.read().decode("utf-8")
 

@@ -11,7 +11,7 @@ own final state*).
 So the page carries a **slot**: exactly one `<!--fingerprint-->` + 64 hex characters +
 `<!--/fingerprint-->`. The fingerprint is the SHA-256 of the whole file with those 64
 characters set to `0`. Every other byte of the file is covered, including everything after
-the slot. The reading is declared to core as a question in the milestone note, not settled
+the slot. The reading is declared as an open question in the milestone note, not settled
 here.
 
 A reader checks it without us: the page prints a Python standard-library one-liner

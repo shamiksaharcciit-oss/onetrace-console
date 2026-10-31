@@ -7,7 +7,7 @@
     No severity, no score, no ranking, no "risk". No acknowledge, assign, close or comment
     actions. An incident **never** re-states a verdict in its own words. It quotes the
     report's field, and it links to the report.
-                                        -- the work order, and its whole shape
+                                        -- the specification, and its whole shape
 
 WHAT IS ABSENT, LISTED BECAUSE IT IS THE POINT
 ----------------------------------------------
@@ -35,7 +35,7 @@ no run key (an earlier console's) is at another address under this one.
 
 I-DIFF-REGRESSION IS NOT BUILT, AND THAT IS NOT A GAP IN THE SDK
 ----------------------------------------------------------------
-The work order makes it conditional: *"Use the SDK's own label; if the SDK has no such
+The specification makes it conditional: *"Use the SDK's own label; if the SDK has no such
 label, leave this rule out."* The SDK has no such label **by design**. Its own spec
 addendum, on the instrument-change diff:
 
@@ -121,7 +121,7 @@ def incident_id(rule_id: str, source_sha: str, field_path: str, run_key: str = "
     """`sha256(rule + source sha + field path + run key)`, with separators so parts cannot run
     together. Every caller here passes a run's key; with none, the id is the first three alone.
 
-    The work order: *"An incident's id is deterministic: the rule id plus the sha of the source
+    The specification: *"An incident's id is deterministic: the rule id plus the sha of the source
     report plus the field path."* Separated by a NUL so that two different splits of the same
     characters cannot produce one id. A run's stored check report can be byte-identical to another
     run's (runs checked in the same second whose rows read the same), so a run's incident takes the

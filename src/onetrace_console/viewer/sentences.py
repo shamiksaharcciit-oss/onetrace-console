@@ -1,4 +1,4 @@
-"""The translation table: every sentence a reviewer reads, in one place (019 §4).
+"""The translation table: every sentence a reader of the page reads, in one place (019 §4).
 
 The viewer's specification (019 §4) has technical states translated to plain language once,
 centrally, in a checked table, never ad hoc in templates. The table's words are fixed; its
@@ -16,7 +16,7 @@ FOUR KINDS OF ENTRY, KEPT APART
               or worded by 024. Each names the sealed document its exact words are checked
               against, and 024 §1 adopted that practice for every generated page in the
               programme. `LABELS` and `STEP_WORDS` were adopted the same way (023 §4).
-`PROVISIONAL` sentences the page needs that no ruling supplies. **Empty since 024 §3.** The
+`PROVISIONAL` sentences the page needs that no decision supplies. **Empty since 024 §3.** The
               rule stands: anything added later is provisional again until ruled, and the
               tests assert the set exactly, so it cannot fill up quietly.
 
@@ -33,7 +33,7 @@ named, not silently dropped.
 """
 from __future__ import annotations
 
-#: 019 §4, anchor rows. Key: the record or report state. Value: what the reviewer sees.
+#: 019 §4, anchor rows. Key: the record or report state. Value: what the reader sees.
 TABLE: dict[str, str] = {
     "check.pass": "Checked — it holds.",
     "check.fail": "Checked — and the record contradicts itself here: {reason}.",
@@ -65,7 +65,7 @@ TABLE: dict[str, str] = {
         "independent anchor.",
 }
 
-#: Candidate wording this channel proposed and core **declined**, with the reason. Not ruled,
+#: Candidate wording this project proposed and the wording review **declined**, with the reason. Not ruled,
 #: not provisional, not available: a candidate that was considered and refused is a different
 #: state from one nobody has looked at, and conflating them is how a declined sentence comes
 #: back through a path nobody re-read. A test asserts none of these renders.
@@ -73,14 +73,14 @@ DECLINED: dict[str, tuple[str, str]] = {
     "trail.checked_as_they_arrive": (
         "Trails are checked as they arrive; a trail with no verdict yet is shown as such, never "
         "as passing.",
-        "Found in the delivered target-UX canvas and offered to core as candidate wording. "
+        "Found in the delivered target-UX canvas and offered as candidate wording. "
         "Declined for viewer v1: it describes a trail still being checked, which implies "
         "checking over time while the page is viewed. 019 §0's fence is static \u2014 generated "
         "once, no network at view time, nothing arriving. It is the live console's vocabulary, "
         "not this viewer's."),
 }
 
-#: Ruled wording a later ruling withdrew outright, kept with what withdrew it. A test asserts
+#: Ruled wording a later decision withdrew outright, kept with what withdrew it. A test asserts
 #: none of these is rendered, so a withdrawn sentence cannot come back through a path nobody
 #: re-read — the same guard as SUPERSEDED, for the case where nothing replaces the sentence
 #: because the state already had one.
@@ -92,11 +92,11 @@ WITHDRAWN: dict[str, tuple[str, str]] = {
         "review's sentence, unchanged."),
 }
 
-#: Ruled sentences a later ruling replaced for the state they were written for. They are kept
-#: — a ruling is not edited away — and a test asserts none of them is rendered, so a superseded
+#: Ruled sentences a later decision replaced for the state they were written for. They are kept
+#: — a decision is not edited away — and a test asserts none of them is rendered, so a superseded
 #: sentence cannot come back through a code path nobody re-read.
 SUPERSEDED: dict[str, str] = {}
-#: Empty again. `verbs.not_run` was listed here for one day, on C031 §3's premise that no ruling
+#: Empty again. `verbs.not_run` was listed here for one day, on C031 §3's premise that no decision
 #: had made it. C033 §1 corrects that — C023 §4 ruled it, line 70 — so it is the comparison
 #: section's sentence again and nothing supersedes it.
 
@@ -136,17 +136,17 @@ FIXED: dict[str, str] = {
         "ultimately true.",
 }
 
-#: Proposed by this channel and ruled by core. Each entry: (sentence, the sealed source its
+#: Proposed by this project and ruled in the wording review. Each entry: (sentence, the sealed source its
 #: exact words are checked against).
 RULED_023 = "the wording review"
 RULED_024 = "the remaining wording"
 RULED_030 = "the labels decision"
 RULED_031 = "the label-trigger decision"
 RULED_033 = "the duplicate-wording withdrawal"
-RULED_STOPPED = "the declined-runs work order"
+RULED_STOPPED = "the declined-runs specification"
 RULED_STOPPED_AT = "stopped-at-a-step wording"
 RULED_BR047 = "the error-origin decision"
-RULED_RATIONALE = "the relayed ruling of 2026-09-25 adopting the recorded-rationale sentence as fresh wording"
+RULED_RATIONALE = "the relayed decision of 2026-09-25 adopting the recorded-rationale sentence as fresh wording"
 ADOPTED_NOTE_015 = "Note 015 §7, adopted as written in the wording review (023 §4)"
 RULED_28N = "release 1 without authorization"
 RULED_29X = "ladder wording review"
@@ -176,7 +176,7 @@ RULED_29LD = "stage anchoring badge"
 #: The three sentences format 0.3 puts before the check's own row, as ruled.
 RULED_FORMAT_03 = "format 0.3 sentences"
 
-#: Sentences whose ruling is **in force by relay** but whose sealed source has not been
+#: Sentences whose decision is **in force by relay** but whose sealed source has not been
 #: delivered to the archive of sealed sources yet, so no test can look the words up in it. C025 §2 keeps
 #: delivery and force apart, and this keeps the consequence apart too: the sentence is built
 #: and used, and the fact that its pin is missing is counted and named rather than silent.
@@ -281,7 +281,7 @@ RULED: dict[str, tuple[str, str]] = {
     "strip.not_checked_n": (
         "This answer's trail was checked on {date} — {n} steps could not be checked from here.",
         RULED_023 + " §3 Q2"),
-    # 023 §4, reworded by core
+    # 023 §4, reworded in the wording review
     "checks.gaps_none": (
         "Every step that was declared left a receipt; nothing is missing from the trail.",
         RULED_023 + " §4"),
@@ -307,13 +307,13 @@ RULED: dict[str, tuple[str, str]] = {
     # Ruled 2026-09-25 as **fresh wording**, and deliberately **not** cited to C034 §4.
     #
     # R-C007 is why. The sentence was first offered as "C034 §4's own already-ruled sentence,
-    # needing no new ruling". It is not in C034: four probes, zero hits, against a footer
+    # needing no new decision". It is not in C034: four probes, zero hits, against a footer
     # verified first. C034 §4's actual closing paragraph says a recorded rationale "renders
     # verbatim, set as quoted, labelled as recorded. The label is provisional until the reader
-    # rules it" — which is the opposite of already-ruled. Core rechecked the sealed text,
+    # rules it" — which is the opposite of already-ruled. The sealed text was rechecked,
     # recorded the error as its own, and ruled the sentence in on its own terms.
     #
-    # So the citation names the ruling that made it. That is the whole value of the refusal:
+    # So the citation names the decision that made it. That is the whole value of the refusal:
     # a ruled sentence is checkable against the source it claims, or it is not ruled.
     #
     # **It is a sentence, not a short label.** C034 §4 also calls for the block to be "labelled
@@ -365,7 +365,7 @@ RULED: dict[str, tuple[str, str]] = {
     #   - the comparison section already had a ruled sentence (`verbs.not_run`, C023 §4), so
     #     031 §3's second one was a duplicate wording of a ruled state and is WITHDRAWN by
     #     033 §2. A state that has a sentence does not get another.
-    #   - the re-check section had none, so 031 §3's ruling stands — reworded once by 033 §2,
+    #   - the re-check section had none, so 031 §3's decision stands — reworded once by 033 §2,
     #     before any test pinned it, into C023's shape so the two absences read as a pair.
     "absence.no_recheck": (
         "No re-check from the record was run, so this page does not say whether anything comes "
@@ -577,7 +577,7 @@ PROVISIONAL: dict[str, tuple[str, str]] = {
         RULED_29GS + ", the case a plan is declared and no path observed; no words ruled yet"),
     "fingerprint.whole": (
         "Each fingerprint in full",
-        "fingerprints short in text and tables (the visual-quality work order): the fold holding "
+        "fingerprints short in text and tables (the visual-quality specification): the fold holding "
         "the whole values; no words ruled yet"),
     "declined.banner": (
         "The run stopped at {stage}: the step declined by its own rule, and recorded why: {reason}.",
@@ -608,10 +608,10 @@ PROVISIONAL: dict[str, tuple[str, str]] = {
         "store, and nothing is summarised across runs.",
         "C036 item 2, the singular case, kept so the page never reads \"1 runs\"; the noun now "
         "leads, so no count is ever followed by it. The later decision's denominator as above"),
-    # R11's node set, PROPOSED by this channel at Response 064's invitation. Core ruled the
+    # R11's node set, PROPOSED by this project at Response 064's invitation. The decision named the
     # target (060): "the minimal set of unclean nodes `single_run_dag` already returns", and
     # put the presentation of that set outside its own scope. So this is a proposal, not a
-    # ruling, and it renders nowhere -- see
+    # decision, and it renders nowhere -- see
     # `test_red_path.py::test_the_proposed_node_set_sentence_renders_nowhere`.
     #
     # **The singular case needs nothing new.** Where the set has one member, 019 §4's
@@ -625,10 +625,10 @@ PROVISIONAL: dict[str, tuple[str, str]] = {
     "localize.located_set": (
         "It changed — here are the {n} steps where. Nothing in the record makes one of them "
         "first.",
-        "**This channel's wording, by delegation.** The superseding R11 ruling (seal "
-        "`463a37b3...a581`) §3 leaves the rendering vocabulary here: 'that's canary's call "
+        "**This project's wording, by delegation.** The superseding R11 decision (seal "
+        "`463a37b3...a581`) §3 leaves the rendering vocabulary here: 'that's this project's call "
         "under an existing rule' — C034 §3's layer-1 vocabulary rule. So it is not awaiting "
-        "core; it is provisional until the READER rules it, exactly as C034 §4 says of "
+        "review; it is provisional until the READER rules it, exactly as C034 §4 says of "
         "`field.recorded_rationale`. It already does §3's own translation: `single_run_dag` "
         "says 'node', the page says 'step', which is the layer-1 word. Still unrendered and "
         "unfixtured — no delivered receipt declares `edges`"),
@@ -671,7 +671,7 @@ PROVISIONAL: dict[str, tuple[str, str]] = {
     "name.more": (
         "… (+{n} more characters)",
         "long-name cap: a run_id or stage name longer than model.NAME_CAP characters "
-        "is shown as its first NAME_CAP; the ruling's own words"),
+        "is shown as its first NAME_CAP; the decision's own words"),
     "name.whole": (
         "the whole value is in the run's record",
         "long-name cap: the page that shortens a value offers the whole value as the "
@@ -687,7 +687,7 @@ PROVISIONAL: dict[str, tuple[str, str]] = {
         "This page was given the check's report rather than running the check itself, so it "
         "does not say the records agree.",
         "own-check rung: rung 1 when the report was kept or supplied (`render "
-        "--report`). The ruling requires that such a report never sets the rung, and words "
+        "--report`). The design requires that such a report never sets the rung, and words "
         "nothing for the state; this channel's words"),
     "rung.missing.unstated": (
         "The record does not say what was declared and what was left out, so this page does "
@@ -795,7 +795,7 @@ LABELS: dict[str, str] = {
     "unit.bytes": "bytes",
     "section.reproduce": "What could be re-checked",
     # 030 §1's own words for the two digests beneath the eighth sentence, "nothing else".
-    # Core's wording, so ruled — see LABELS_FROM_030.
+    # The wording review's words, so ruled — see LABELS_FROM_030.
     "field.ran": "ran",
     "field.available_here": "available here",
     "field.where": "The step",
@@ -861,8 +861,8 @@ LABELS: dict[str, str] = {
 
 #: Labels added after 023 §4 adopted the rest, so they are **this channel's wording and not
 #: ruled** (024 §4). Each carries why the page needs it, the tests assert this set exactly, and
-#: they go to core for ruling in the next note. Every other key in LABELS is adopted wording.
-#: Labels whose words core wrote in 030 §1. Ruled, not adopted-from-Note-015, so they are
+#: they go to the wording review in the next note. Every other key in LABELS is adopted wording.
+#: Labels whose words the wording review wrote in 030 §1. Ruled, not adopted-from-Note-015, so they are
 #: checked against that memo rather than against the note.
 LABELS_FROM_030 = ("field.ran", "field.available_here")
 
@@ -923,7 +923,7 @@ LABELS_RULED_29GS: dict[str, str] = {
     "rung.state.not_declared": "plan rung wording: the plan rung's no-plan state word, as proposed",
 }
 
-#: Labels this channel added that no ruling covers. 024 §4's standing rule: anything added
+#: Labels this project added that no decision covers. 024 §4's standing rule: anything added
 #: after 023 §4 is provisional until ruled.
 #:
 #: Refilled by the page-additions proposal (034 §5), which proposes five additions to the page
@@ -1011,10 +1011,10 @@ BARE_TOKENS = ("PASS", "FAIL", "NOT RUN", "NOT-RUN")
 _WHY_30BV = ("check coverage wording: a sentence that describes what the check covers says only "
              "what onetrace-verify 0.1.2 checks. ")
 
-#: Sentences of core's that describe what the check covers, reworded to what
-#: `onetrace-verify` 0.1.2 checks. Core's words stay where they are, in the table they were ruled
+#: Ruled sentences that describe what the check covers, reworded to what
+#: `onetrace-verify` 0.1.2 checks. The ruled words stay where they are, in the table they were ruled
 #: into, and each entry here names them; the page draws from here first. Key -> (the proposed
-#: words, the words they replace, why). This channel's words, for core to read before merge.
+#: words, the words they replace, why). This project's words, for review before merge.
 REWORDED: dict[str, tuple[str, str, str]] = {
     "sample.label": (
         "This record is in a preview format ({format}).",
@@ -1062,7 +1062,7 @@ REWORDED: dict[str, tuple[str, str, str]] = {
 
 
 def _ruled(key: str) -> str:
-    """The words a table other than REWORDED holds for `key`: core's, or this channel's."""
+    """The words a table other than REWORDED holds for `key`: the ruled ones, or this project's."""
     if key in TABLE:
         return TABLE[key]
     if key in FIXED:

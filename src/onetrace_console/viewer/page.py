@@ -8,13 +8,13 @@ and neither `viewer.record` nor `viewer.report`: every value on the page arrives
 the model. `viewer/tests/test_structure.py` asserts this, so "never re-derive for display"
 is a property of what this file can reach.
 
-THE FENCE (019 §0, §1.3; 021 §3 ruling 1)
-------------------------------------------
+THE FENCE (019 §0, §1.3; 021 §3 item 1)
+---------------------------------------
 Static HTML, inline CSS, one small inline script, no external asset of any kind: no link,
 no font fetch, no image, no URL. The page opens from disk with the network off.
 
-NO BUTTONS (spec §2.1; 021 §3 ruling 4)
----------------------------------------
+NO BUTTONS (spec §2.1; 021 §3 item 4)
+------------------------------------
 Layers 2–4 are native `<details>` elements: the page is the same page with JavaScript off,
 only less convenient. The one script opens every layer before printing, so a printout
 carries the whole record rather than its summary.
@@ -513,6 +513,8 @@ def _items(items: tuple[Item, ...], none_key: str, with_fingerprints: bool, more
     for i in items:
         text = (f'<q data-words="record">{_named(i.name)}</q>{_rest(i.name)} · '
                 f'<span class="value" data-words="value">{escape(i.size)}</span> {_t("unit.bytes")}')
+        if i.href:
+            text += f' · <a href="{escape(i.href)}" data-output-link>{escape(i.link)}</a>'
         if with_fingerprints:
             text += f'<div class="fp" data-words="record">{fingerprint_html(i.fingerprint)}</div>'
         rows.append(f"<div>{text}</div>")
@@ -721,7 +723,7 @@ def _report_block(m: PageModel) -> str:
 def _also(sibling: str | None, title_key: str) -> str:
     """A relative link to the other view of this same run, generated beside this one.
 
-    Ruled in by core after C036 item 1 flagged it: *relative links between pages generated
+    Decided after C036 item 1 flagged it: *relative links between pages generated
     together, about the same run or the same comparison, are not the fenced application shell*
     — C034 §1 fenced the shell because it needs a backend (search, a signed-in user and
     organisation, navigation between stores), and a link resolved at generation time needs none
@@ -826,14 +828,14 @@ def render_executions(models: list[PageModel], generated_at: str, generator: str
         not pretend otherwise.                         — the list-view decision (036), item 2
 
     **Each row links to the directory it was generated from**, when the caller supplies the
-    paths. Core ruled it: the folder a run's manifest was actually read from is *generation-time
+    paths. As decided: the folder a run's manifest was actually read from is *generation-time
     metadata, not a content claim* — the same category as this file's own name in the footer —
     and a link target is not a rendered assertion, so pointing at it fabricates nothing the
     record does not say. `hrefs=None` renders the rows unlinked, which is what a caller with no
     paths to offer gets.
 
     The paths are the caller's, resolved at generation time. Nothing is queried and no run
-    outside the ones named is reachable from here, which is the constraint core kept when it
+    outside the ones named is reachable from here, which is the constraint kept when the design
     lifted the zero-link rule.
 
     Every row is a fact the record states. There is no count of failures, no rate, no ordering

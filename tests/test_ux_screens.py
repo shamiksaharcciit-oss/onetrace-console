@@ -21,6 +21,7 @@ import json
 import re
 import urllib.request
 from pathlib import Path
+from tests.http_limits import limit
 
 import pytest
 
@@ -56,7 +57,7 @@ def _checked_fixture() -> None:
 def _post(url: str, data: bytes = b"") -> dict:
     req = urllib.request.Request(url, data=data, method="POST",
                                  headers={"Content-Type": "application/x-tar"})
-    with urllib.request.urlopen(req, timeout=300) as r:
+    with urllib.request.urlopen(req, timeout=limit(300)) as r:
         return json.load(r)
 
 

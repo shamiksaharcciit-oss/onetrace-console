@@ -18,6 +18,7 @@ import urllib.error
 import urllib.request
 
 import pytest
+from tests.http_limits import limit
 
 FONT = "/static/fonts/IBMPlexSans-Regular-Latin1.woff2"
 
@@ -82,7 +83,7 @@ def test_concurrent_requests_for_one_font_all_answer_200(server, monkeypatch, ex
 
     def get(i):
         try:
-            with urllib.request.urlopen(f"{base}{FONT}", timeout=30) as r:
+            with urllib.request.urlopen(f"{base}{FONT}", timeout=limit(30)) as r:
                 return r.status
         except urllib.error.HTTPError as e:
             return e.code

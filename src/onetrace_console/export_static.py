@@ -16,7 +16,7 @@ WHAT CHANGES, AND NOTHING ELSE
 - **The link rewrite:** every link, source and stylesheet URL written from the site's root
   (`/`, `/executions-all.html`, `/static/console.css`, `/runs/<key>/record.tar`, the fonts in the
   stylesheet) becomes relative to the file that holds it; `/` is the Overview, `home.html`.
-- **The banner,** the work order's words, as the first thing in every page's `<main>`.
+- **The banner,** in its specified words, as the first thing in every page's `<main>`.
 - **A comparison's explanation panel** is drawn as its place only, as a public console draws it:
   a file can press nothing, so it carries no button and no script, and no explanation.
 - **The index's search box, "Other runs with the same inputs" and the benchmark mark's press** are

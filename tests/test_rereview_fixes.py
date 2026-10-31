@@ -3,8 +3,8 @@
     None may crash a page.  /  Config errors: print a clean message with a `fix:` line, never
     a traceback.
 
-A second fresh reviewer confirmed the first review's ten findings closed, then found these, each
-by running it. The viewer's halves are canary 2491b86 and b7c7f52, re-vendored here.
+A second fresh review confirmed the first review's ten findings closed, then found these, each
+by running it. The viewer's halves are its commits 2491b86 and b7c7f52, re-vendored here.
 
 B1. A lone surrogate reached pages through the Overview's day-change marker, which reads stored
     receipts itself: ingest 500, every later ingest 500, and no restart.

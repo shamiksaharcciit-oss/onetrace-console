@@ -16,8 +16,10 @@ from pathlib import Path
 from onetrace_console.words import escape
 
 #: The SDK builds earlier console releases compared with, whose comparison names the site can hold:
-#: onetrace 0.5.0's wheel, as console 0.4.0 pinned it (its requirements.lock).
-EARLIER_SDKS = (("0.5.0", "wheel:02ac0ce2a6b1581571623535c6219b3fec292c97a31fddd62f9dcc71453f0cc6"),)
+#: onetrace 0.5.0's wheel, as console 0.4.0 pinned it, and onetrace 0.6.0's, as console 0.5.0 pinned it
+#: (their requirements.lock).
+EARLIER_SDKS = (("0.5.0", "wheel:02ac0ce2a6b1581571623535c6219b3fec292c97a31fddd62f9dcc71453f0cc6"),
+                ("0.6.0", "wheel:8fd0d691a1225a6c692928bd4e606c814752fb9a22f1dd23cc71d2e09da44ac8"))
 MOVED = "This comparison has moved"
 _DIFF = re.compile(r"diff/([0-9a-f]{64})\.html")
 

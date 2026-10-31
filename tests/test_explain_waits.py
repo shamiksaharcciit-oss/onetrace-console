@@ -21,6 +21,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from types import SimpleNamespace
 
 import pytest
+from tests.http_limits import limit
 
 from tests.test_explain_panel import REPLIES, _panel, _text, pair, toml_string  # noqa: F401  (pair: a fixture)
 
@@ -278,13 +279,13 @@ def test_the_console_answers_a_press_at_once_and_reports_its_state(held, server,
     def post():
         req = urllib.request.Request(f"{base}/explain?c={comparison.key}&send=yes", method="POST")
         try:
-            with urllib.request.urlopen(req, timeout=30) as r:
+            with urllib.request.urlopen(req, timeout=limit(30)) as r:
                 return r.status, json.loads(r.read())
         except urllib.error.HTTPError as e:
             return e.code, json.loads(e.read())
 
     def now():
-        with urllib.request.urlopen(f"{base}/explain/state?c={comparison.key}", timeout=30) as r:
+        with urllib.request.urlopen(f"{base}/explain/state?c={comparison.key}", timeout=limit(30)) as r:
             return json.loads(r.read())
     t = time.monotonic()
     status, body = post()

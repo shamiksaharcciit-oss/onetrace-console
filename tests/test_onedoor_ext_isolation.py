@@ -17,6 +17,7 @@ import sys
 import urllib.error
 import urllib.request
 from pathlib import Path
+from tests.http_limits import limit
 
 import pytest
 
@@ -29,7 +30,7 @@ _ONEDOOR_IMPORT = re.compile(r"^\s*(import onedoor\b|from onedoor\b)", re.MULTIL
 def _post(base: str, path: str, body: bytes = b"") -> tuple[int, bytes]:
     req = urllib.request.Request(base + path, data=body, method="POST")
     try:
-        with urllib.request.urlopen(req, timeout=30) as resp:
+        with urllib.request.urlopen(req, timeout=limit(30)) as resp:
             return resp.status, resp.read()
     except urllib.error.HTTPError as e:
         return e.code, e.read()
@@ -133,7 +134,7 @@ def test_importing_every_module_under_the_console_never_pulls_in_onedoor(examine
 def _copy_console_tree(tmp_path: Path) -> Path:
     """`src/`, `tests/` and `pyproject.toml` only -- enough to run one test file
     against a broken copy, reusing this interpreter's already-installed pinned
-    packages (`onetrace`, `onetrace-verify`, `canary-viewer`) rather than
+    packages (`onetrace`, `onetrace-verify` and the viewer) rather than
     reinstalling them into a throwaway venv per sabotage, which the standing
     rule does not require and would make this check too slow to keep running.
     """

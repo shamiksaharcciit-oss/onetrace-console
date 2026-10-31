@@ -17,6 +17,7 @@ import urllib.error
 import urllib.request
 
 import pytest
+from tests.http_limits import limit
 
 from onetrace_console.config import Config
 from onetrace_console.ingest import read_tar
@@ -328,7 +329,7 @@ def test_item5_malformed_input_is_a_plain_4xx_with_no_traceback_and_no_partial_s
     for body in cases:
         req = urllib.request.Request(base + "/v1/runs", data=body, method="POST")
         try:
-            with urllib.request.urlopen(req, timeout=10) as resp:
+            with urllib.request.urlopen(req, timeout=limit(10)) as resp:
                 status, response_body = resp.status, resp.read()
         except urllib.error.HTTPError as e:
             status, response_body = e.code, e.read()
@@ -351,7 +352,7 @@ def test_item5_a_truncated_real_tar_is_refused_with_no_partial_store(server, exa
 
     req = urllib.request.Request(base + "/v1/runs", data=truncated, method="POST")
     try:
-        with urllib.request.urlopen(req, timeout=10) as resp:
+        with urllib.request.urlopen(req, timeout=limit(10)) as resp:
             status, body = resp.status, resp.read()
     except urllib.error.HTTPError as e:
         status, body = e.code, e.read()

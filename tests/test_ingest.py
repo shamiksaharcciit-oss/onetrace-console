@@ -63,7 +63,7 @@ def test_the_index_fields_are_recorded_even_though_nothing_reads_them_yet(delive
 
     The stages are asserted exactly, in order. The first version of this test read
     `== () or set(...) == {...}`, which passes when the field is EMPTY -- a guard that
-    cannot fail is not a guard (F15 on the canary channel), and this one would have
+    cannot fail is not a guard (an earlier finding, F15), and this one would have
     reported success for recording nothing at all.
     """
     manifest = json.loads(files[MANIFEST_NAME].decode("utf-8"))

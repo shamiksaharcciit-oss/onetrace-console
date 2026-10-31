@@ -1,6 +1,17 @@
 # Changelog
 
-## [0.5.0] (not released)
+## [0.5.1]
+
+- **onetrace 0.6.1 and onetrace-verify 0.6.1.** The console installs them, pinned by hash from PyPI. onetrace 0.6.1 ships the model-call record's schema as package data, byte for byte the copy the console keeps (a test holds the two equal), and a run refused at its start leaves no run folder, so a retry with the same id is not refused. The record format is unchanged.
+- **An earlier console's comparison page says when its pair was compared again.** Where the same two runs have been compared under the onetrace build this console runs, under a new name, the earlier page says so and links to the newer one; both are kept. The newer page is found by the name the pair has under this build, never by time, and a page whose pair has no new name says nothing of it.
+- **The operator README says what the container image leaves out:** neither onetrace-explain nor the `[neighbours]` extra, so none of the console's three network calls you choose is in it. A test holds the sentence, and that both Dockerfiles install `requirements.lock` alone and the lock pins neither.
+- **A read interface over the console store, `onetrace_console.store_read`.** Three questions for a program outside the console: the runs whose stage records exactly a configuration digest, the runs whose model-call records name the same model files (observed or declared), and a run's neighbours by input where the extra is on (refused with the reason where it is absent or off). Read-only; versioned with the store's run index, and a store whose index is another format is refused with the reason. One page of docs, `docs/store_read.md`.
+- **The run index is `onetrace-console-run-index/0.2`:** each step's instrument now carries its configuration digest. A local console writes the index again when it draws its pages. A public console reads its build's index and never writes one, so a build made before 0.5.1 is made again; until then its search says the build's index is in an earlier format and to build it again with 0.5.1. A local console says it writes the index again itself.
+- **A run's page links each model-call record to its view.** Under "What came out", an output that is a model-call record links to its section on the step's page, as the step page's own list does. Other outputs are listed as they were.
+- **The hosted demo keeps both of the public site's links to P1's split comparison.** Console 0.4.0's name for it and console 0.5.0's are each built as a page that sends a reader to the pair's page under 0.5.1, which names it anew with onetrace 0.6.1.
+- **Shipped comments and docstrings are reworded** to say what the code does; no page text changes. One sentence of the error raised where the staging area could not be deleted changes with them: it now reads "The design requires it gone after every upload".
+
+## [0.5.0]
 
 - **Upgrading from 0.4.0: comparisons keep their pages, and a pair compared again gets a new name.** A comparison's name takes in the SDK build that made it, and 0.5.0 compares with onetrace 0.6.0. Comparisons made by an earlier console keep their pages and links. The same pair compared again under 0.5.0 gets a new name, and both are kept. An incident's page has a new address; the old address no longer answers.
 - **onetrace 0.6.0 and onetrace-verify 0.6.0.** The console installs them, pinned by hash from PyPI.

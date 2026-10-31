@@ -10,17 +10,17 @@ The console never computes a verdict of its own. It keeps each run's files exact
 pip install onetrace-console
 ```
 
-It needs Python 3.12 or later. It installs from PyPI alone: `onetrace` 0.6.0 and `onetrace-verify` 0.6.0, with the `[crypto]` extra so signatures and anchors are checked. The pages' viewer ships inside the package.
+It needs Python 3.12 or later. It installs from PyPI alone: `onetrace` 0.6.1 and `onetrace-verify` 0.6.1, with the `[crypto]` extra so signatures and anchors are checked. The pages' viewer ships inside the package.
 
 `pip install onetrace-explain` makes the Explain button on the local console's comparison page work: the console runs that command, which sends a packet of the comparison to the model you name, and its format is set out at [explain-format.md](https://oneproof.dev/onetrace/explain-format.md).
 
 ## Upgrading from 0.4
 
-- Comparisons made by an earlier console keep their pages and links. The same pair compared again under 0.5.0 gets a new name, and both are kept.
+- Comparisons made by an earlier console keep their pages and links. The same pair compared again under 0.5.0 gets a new name, and both are kept. Since 0.5.1 the earlier page says so, and links to the newer one; a page whose pair has no newer name says nothing of it.
 - An incident's page has a new address; the old address no longer answers.
 - A comparison's name takes in the onetrace build that made it. A plain `pip install` names that build by the files its wheel carries, the same in every venv; an install pinned with `tools/install_pinned.py` names it by the wheel's sha256. So a pinned install and a plain one name the same comparison differently.
 
-Every change is in [CHANGELOG.md](https://github.com/shamiksaharcciit-oss/onetrace-console/blob/v0.5.0/CHANGELOG.md).
+Every change is in [CHANGELOG.md](https://github.com/shamiksaharcciit-oss/onetrace-console/blob/v0.5.1/CHANGELOG.md).
 
 ## See it with the demo's runs
 
@@ -30,7 +30,7 @@ onetrace-console demo
 
 This records the demo's runs into `onetrace-console-demo/` under the folder you start it from, starts the console, loads them, stores 15 comparisons, and prints the pages' addresses. The runs come from 11 small example pipelines that ship with the console: a question-and-answer pipeline over an example shop's refund policy, the reference demo's coding agent, a support-ticket triage, a support reply drafted by a stub whose wording varies from run to run, a supplier's invoice matched against its purchase order and goods receipt to paying or holding it, each payment or hold citing the decision that allowed it, an agent whose one step calls a sub-agent's run (the sub-agent's runs are a pipeline of their own), and four over physical readings: a pump's vibration to a maintenance work order, a camera frame of a bottle to a fill-level reject, a temperature logger to releasing or quarantining a shipment, and a tightening tool's wheel-bolt torques to passing a wheel or sending it to rework. The draft names the refund window in words; a later policy stage puts in the number of days. Every reading, ticket, invoice, decision and name in them is invented example data, and the demo records and compares; it controls no equipment and pays nothing. They make no network calls and use no hosted model: the embedder is a hashed bag of words, the answerer quotes the text it retrieved, and the times in the records are the times you ran it. 11 of its runs are broken on purpose when the demo is built; the read-only demo's Overview lists each one, with what was done to it and what its own page reads. The demo keeps its store and its trust file in that folder too. It runs in local mode, so it refuses to start while `ONETRACE_CONSOLE_CONFIG` is set.
 
-![The Overview, with the demo's 54 runs from 11 pipelines](https://raw.githubusercontent.com/shamiksaharcciit-oss/onetrace-console/v0.5.0/docs/screenshots/overview.png)
+![The Overview, with the demo's 54 runs from 11 pipelines](https://raw.githubusercontent.com/shamiksaharcciit-oss/onetrace-console/v0.5.1/docs/screenshots/overview.png)
 
 A read-only copy of the demo is hosted at https://demo.oneproof.dev. To try the read-only mode yourself, run `onetrace-console demo --public`.
 
@@ -74,9 +74,9 @@ While the console runs, it reads the runs folder again every 2 seconds and takes
 - Every check runs with these files, and a stored check records which ones it ran with. Started again with the same files, nothing is checked again; with different ones, every run is.
 - A file that can't be read is refused at start, with how to fix it.
 
-![One run's page: what was checked, and the verifier's result](https://raw.githubusercontent.com/shamiksaharcciit-oss/onetrace-console/v0.5.0/docs/screenshots/run.png)
+![One run's page: what was checked, and the verifier's result](https://raw.githubusercontent.com/shamiksaharcciit-oss/onetrace-console/v0.5.1/docs/screenshots/run.png)
 
-![A comparison of two runs, with the first stage that changed](https://raw.githubusercontent.com/shamiksaharcciit-oss/onetrace-console/v0.5.0/docs/screenshots/comparison.png)
+![A comparison of two runs, with the first stage that changed](https://raw.githubusercontent.com/shamiksaharcciit-oss/onetrace-console/v0.5.1/docs/screenshots/comparison.png)
 
 ## What it shows
 
@@ -90,6 +90,7 @@ While the console runs, it reads the runs folder again every 2 seconds and takes
 
 A step's model-call records in `model-call-record/1.0` (`model_call.json`, then `model_call.2.json` and on) are read by the installed onetrace, which holds each one to the format; the console keeps no copy of the format.
 
+- On a run's page, each record under "What came out" links to its section on the step's page.
 - Each field is shown as the record states it, in the record's order, under the format's own groups ("The call", "The runtime", "The batch", ...), with the format's description of it one fold away.
 - Where a record names its per-step capture, the steps file is read (its bytes must match its receipt and the digest the record names) and drawn as a token timeline: one row per decode step, each chosen token as an id, never decoded to text.
 - On a comparison page, each step where both runs hold a record of the same name shows onetrace's comparator's report line for line: `same`, `diverged` naming the first field, or `could not compare` naming each condition.
@@ -144,11 +145,15 @@ Turning it on with one of the two local models fetches that model's pinned files
 
 In the ladder, "1.00 by the record" means the two runs' digests for that file are equal, so nothing is embedded there. "≥ 0.9995, digests differ" means the digests are not equal and the embedder's number rounds to 1.000. Every other number is the embedder's, to three places. Neither is a judgement that two runs did the same thing: nearness is the embedder's reading of the kept inputs and outputs, and the exact comparison beside it is the record.
 
+## Reading a store from another program
+
+`onetrace_console.store_read` answers three questions about a console store, for a program outside the console: the runs with a stage's exact configuration, the runs whose model-call records name the same model files, and, where neighbours by input is on, a run's neighbours. It is read-only, and it refuses a store whose run index is a format it does not read, with the reason. See [docs/store_read.md](https://github.com/shamiksaharcciit-oss/onetrace-console/blob/v0.5.1/docs/store_read.md).
+
 ## Where it runs
 
 Started as above, it listens on 127.0.0.1 only; `--open` asks your browser to open the local page. The console makes no network calls but those you choose. The Explain button runs onetrace-explain, if you install it, and that command sends an evidence packet to the model you configure. The first time it would send a kind of item it has never sent to that endpoint, it lists them and asks first. Turning on neighbours by input with a local model fetches that model's pinned files once from huggingface.co, as above. Turning it on with an embedding endpoint of your own sends that endpoint the kept inputs and outputs. A folder load keeps what it stores in a `store` folder under the folder you start it from, and `demo` keeps it in `onetrace-console-demo/`.
 
-To run it for a team, as a container with sign-in, see [OPERATOR_README.md](https://github.com/shamiksaharcciit-oss/onetrace-console/blob/v0.5.0/OPERATOR_README.md).
+To run it for a team, as a container with sign-in, see [OPERATOR_README.md](https://github.com/shamiksaharcciit-oss/onetrace-console/blob/v0.5.1/OPERATOR_README.md).
 
 ## For contributors
 

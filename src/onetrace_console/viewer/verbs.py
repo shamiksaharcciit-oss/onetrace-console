@@ -2,7 +2,7 @@
 
 The format is the report format's draft (029), read from the reports the verbs actually wrote at
 `c325c94` (the samples kept with the viewer's development history). It **binds by addition** when the
-standards channel's item 3 lands, so this reader is built to survive additions:
+upstream item 3 lands, so this reader is built to survive additions:
 
 - **a key it does not know, it ignores** (029 §0's stability promise);
 - **the node id is read from `node`, and `stage` stays the bare name.** C029 §7 said the node

@@ -79,7 +79,7 @@ def test_no_json_load_in_the_console_outside_the_helper():
 
 def test_the_vendored_limit_is_the_ruled_one():
     assert MAX_JSON_DEPTH == RULED, (
-        f"viewer.depth.MAX_JSON_DEPTH is {MAX_JSON_DEPTH}, the ruling's is {RULED}: remeasure on all "
+        f"viewer.depth.MAX_JSON_DEPTH is {MAX_JSON_DEPTH}, the decided one is {RULED}: remeasure on all "
         f"three interpreters before either moves")
 
 

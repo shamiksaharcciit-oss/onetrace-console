@@ -325,7 +325,7 @@ EXPLAINED: dict[str, dict[str, dict[str, str]]] = {
     )}},
 }
 
-#: Canary 35c643b, re-vendored: drawn outside the console's frame, as these pages
+#: Viewer commit 35c643b, re-vendored: drawn outside the console's frame, as these pages
 #: are, the boundary section reads "Where the record stops", and an answer page with no answer step
 #: draws no receipt disclosure. Generated from the measured difference by tooling, not typed.
 _29DZ4 = "the boundary heading, and no empty receipt disclosure"
@@ -375,7 +375,7 @@ _ITEM8_PAGES: dict[str, dict[str, list[str]]] = {
 for _page, _kinds in _ITEM8_PAGES.items():
     for _kind, _blocks in _kinds.items():
         EXPLAINED.setdefault(_page, {}).setdefault(_kind, {}).update(dict.fromkeys(_blocks, _ITEM8))
-#: Canary 75f13ac: the run ladder asks "Ran as approved". A
+#: Viewer commit 75f13ac: the run ladder asks "Ran as approved". A
 #: straight-line run reads its line alone; a graph run checked by 0.1.2 reads that the check that
 #: ran can't say; the forged run's check rows can't be read one by one, so its plan rows
 #: aren't. Generated from the measured difference by tooling, not typed.
@@ -1221,6 +1221,10 @@ EXPLAINED.setdefault("diff[held-a,held-b]", {}).setdefault("new", {}).update(dic
 _SDK_060 = "the comparison names the installed SDK, 0.6.0"
 EXPLAINED.setdefault("diff[held-a,held-b]", {}).setdefault("new", {}).update(dict.fromkeys(
     ["Compared with onetrace 0.6.0, build wheel:<hex>, at <time>."], _SDK_060))
+#: 0.6.1 since the pins moved to its wheels (console 0.5.1). Measured, not typed.
+_SDK_061 = "the comparison names the installed SDK, 0.6.1"
+EXPLAINED.setdefault("diff[held-a,held-b]", {}).setdefault("new", {}).update(dict.fromkeys(
+    ["Compared with onetrace 0.6.1, build wheel:<hex>, at <time>."], _SDK_061))
 #: The monitoring view, on a local console (console 0.5.0): its page, and its link on the Runs page.
 #: Measured from the pages as drawn, not typed.
 _MONITOR = "the monitoring view of each run's verdict against its pipeline's reference, on a local console (console 0.5.0)"
@@ -1574,7 +1578,7 @@ def test_the_fixture_runs_arrive_in_a_fixed_order_whatever_the_clock(tmp_path, m
     """The Overview labels pipelines P1, P2 ... by first arrival, read to the second, ties by run
     key. Left to the clock, a fast host stores every fixture run in one second, the tie falls to
     keys that change from build to build, and P1 and P2 swap: 26 "differences" on the pipeline
-    and Overview pages in some builds and not others (canary's machine: 7 of 10 runs at 85950fd).
+    and Overview pages in some builds and not others (one machine: 7 of 10 runs at 85950fd).
     So the tool gives each run a fixed arrival time, in the order it stores them, and r11 --
     first, as when the baseline was taken -- is P1 on every host. Here the clock is frozen at one
     second, the very case that raced."""

@@ -1,6 +1,6 @@
 """The console's pages are a public surface, so they carry no internal ids --
-no ruling, work order, memo or addendum named on a page. The reason a page says what it says may
-stay in a code comment, citing its ruling.
+no internal decision, specification, memo or addendum named on a page. The reason a page says
+what it says stays in a code comment, citing its source.
 
 Read: every page kind `tools/visible_text.py` renders from the committed fixtures, and the graph
 pages the exam's dag-r37 runs draw (the compare page, and a run page marked from it). Read as the

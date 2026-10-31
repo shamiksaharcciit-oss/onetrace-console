@@ -330,9 +330,10 @@ def pytest_terminal_summary(terminalreporter, exitstatus, config):
     never transcribed (X-11).
     """
     from tests.examined import summary_lines
+    from tests.http_limits import summary_lines as limits_lines
 
     terminalreporter.write_line("")
-    for line in summary_lines():
+    for line in summary_lines() + limits_lines():
         terminalreporter.write_line(line)
 
 

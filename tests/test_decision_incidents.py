@@ -88,7 +88,7 @@ def test_the_incidents_page_shows_the_onedoor_rule_when_merged_in(ingested, exam
 
 def test_a_disabled_console_s_incidents_page_is_unaffected(store, examined):
     """No decisions ingested (as if the extension were off): the merged call with no
-    extra incidents renders identically in substance to the plain, core-only call.
+    extra incidents renders identically in substance to the plain call, with none.
     """
     plain = render_incidents(store, generated_at="now")
     merged = render_incidents(store, generated_at="now", extra_rules=(), extra_incidents=())

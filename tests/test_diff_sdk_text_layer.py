@@ -9,7 +9,7 @@ Since 0.2.0 the SDK does that itself: `text()` escapes every record-derived stri
 before drawing (`onetrace.escaping`), with a class covering everything the console
 escaped and more (`tests/test_sdk_escaping_class.py`). So the console shows the SDK's stored text
 AS IT IS, ONCE -- where `text()` over the stored JSON gives exactly that text -- and its own pass is
-retired. And the 0.2.0 verifier refuses the reviewer's forged digest outright, so the
+retired. And the 0.2.0 verifier refuses a review's forged digest outright, so the
 test that delivered it now shows the check refusing it and the SDK refusing to compare.
 Where the SDK wrote no JSON, or its text is not what its JSON gives, the whole text is shown
 escaped, line breaks included, and the page says so -- unchanged.
@@ -34,7 +34,7 @@ from tests.test_checks import FIXED_RAN_AT
 from tests.test_pages import GENERATED_AT
 from tests.test_unreadable import _stored
 
-#: The reviewer's forged output digest: CR, LF and TAB inside the 12 characters the SDK shows.
+#: A review's forged output digest: CR, LF and TAB inside the 12 characters the SDK shows.
 FORGED = "sha256:ab\r\nFORGED\tROW\r\n" + "0" * 40
 RAW = ("\r", "\t", "\x00", "\x1b", "\x85", "‮", "⁦")
 
@@ -59,7 +59,7 @@ def _sdk_run(out: Path, run_id: str) -> None:
 
 
 def _rechain(out: Path) -> None:
-    """The reviewer's probe_nb2_digest.py: the first receipt's output digest forged, and the run
+    """A review's probe_nb2_digest.py: the first receipt's output digest forged, and the run
     re-chained with the SDK's own canonical form, so the pinned verifier passes it."""
     from onetrace.canonical import canonicalize, digest
     manifest = json.loads((out / "MANIFEST.json").read_text(encoding="utf-8"))
@@ -357,7 +357,7 @@ TWIN_SHOWN = ("assertions.constants.a" + chr(92) + "u000d",
 
 
 def test_a_report_with_two_names_that_escape_alike_drops_no_line(forged, store):
-    """The reviewer's two-key case, in-process (NB2-a): the console's rebuild once merged the two
+    """A review's two-key case, in-process (NB2-a): the console's rebuild once merged the two
     keys. Since 0.2.0 the SDK escapes one-to-one itself, so its text names both, apart, and the
     layer shows that text as it is: both lines, each as the SDK wrote it, once."""
     def twins(rep):

@@ -89,7 +89,7 @@ def staging(root: Path | None = None):
         shutil.rmtree(path, ignore_errors=True)
         if path.exists():                                    # pragma: no cover - defensive
             raise StagingError(
-                f"the staging area could not be deleted: {path}. The ruling requires it "
+                f"the staging area could not be deleted: {path}. The design requires it "
                 f"gone after every upload, and a silent failure here leaves someone "
                 f"else's unverified records on this disk.")
 

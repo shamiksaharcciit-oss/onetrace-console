@@ -62,7 +62,7 @@ def _limit_sentence() -> str:
     Looked up across the registers rather than assumed to be in one, and **refused** if it
     is in none: a page that silently dropped the limit sentence because a register was
     renamed would be the worst kind of quiet change. Measured: it is in `FIXED` at the
-    pinned canary commit.
+    pinned viewer commit.
     """
     import onetrace_console.viewer.sentences as S
 
@@ -1010,13 +1010,13 @@ def _graph_caveat(report, comparison=None, store: Store | None = None) -> str:
 
 #: The frames 0.2.0 fills, each reading its placeholder
 #: until then. They state nothing about the pair: no field, count or state of their own.
-#: Board 7 has no frame before 0.2.0: the work order shows it only where the
+#: Board 7 has no frame before 0.2.0: the specification shows it only where the
 #: first difference sits at a node whose corpus link changed, which only 0.2.0 can say, and a
 #: frame on every diverged pair would suggest a source change that may not exist.
 TEXT_DIFF_HEADING = "The text diff"
 
 
-#: What the text diff's section says of where it came from. Canary's words,
+#: What the text diff's section says of where it came from. This project's words,
 #: fixed as written, marked beside each.
 #: Fixed as written.
 TEXT_DIFF_NOT_KEPT = ("This comparison was made before the text diff was kept. Comparing the pair "
@@ -1158,8 +1158,8 @@ def _localized(report) -> str:
 
 #: The panel's words where nothing is matched. `none` is said only of two identical runs, the
 #: one case where the comparison found no first difference. `graph` and
-#: `undecided` are canary's proposed words, after a form fixed for a cause that turned out
-#: not to be this one; they are not yet fixed.
+#: `undecided` are proposed words, after a form fixed for another case than this one;
+#: they are not yet fixed.
 SAME_CHANGE_WORDS = {
     "none": "The two runs do not differ, so there is no changed value to look for.",
     "graph": ("This console doesn't match a graph comparison's first differences against other "
@@ -1281,7 +1281,7 @@ SDK_TEXT_NOT_REBUILT = ("This text is not what the SDK's own report gives, so it
                         "every line break and control character escaped.")
 #: Where the SDK's text is its report's but holds a character of the SDK's own escaped class raw:
 #: the SDK leaves three fields as given (`path`, `carried`, `text` -- `onetrace.report._NOT_ESCAPED`),
-#: so a report written elsewhere can carry one through. Canary's words, submitted for review.
+#: so a report written elsewhere can carry one through. Proposed words, not yet fixed.
 SDK_TEXT_RAW = ("This text holds a character the SDK left unescaped, so it is shown with every line "
                 "break and control character escaped.")
 
@@ -1454,6 +1454,38 @@ def _not_shown(hidden: list[tuple[str, list[str]]]) -> str:
             f"{body}</details>")
 
 
+#: A comparison page under an earlier console's name, where the same pair has been compared again
+#: under this console's own SDK build: the line that says so, and links to the newer page.
+COMPARED_AGAIN = ("This pair has been compared again with the onetrace build this console runs, "
+                  "under a new name; both are kept")
+
+
+def compared_again(comparison: StoredComparison, store: Store) -> StoredComparison | None:
+    """The same two runs, compared under this console's SDK build, where this page's comparison was
+    made under another build and that comparison is held; otherwise None. A comparison's name takes
+    in the SDK build that made it, so the newer one is found by the key it has here, never by time."""
+    from onetrace_console.compare import (ComparisonError, comparison_key, sdk_build_digest,
+                                          sdk_distribution_version)
+    try:
+        version, build = sdk_distribution_version(), sdk_build_digest()
+    except ComparisonError:
+        return None
+    if (comparison.sdk_distribution_version, comparison.sdk_build_digest) == (version, build):
+        return None
+    newer = store.get_comparison(comparison_key(comparison.bundle_sha_a, comparison.bundle_sha_b,
+                                                version, build))
+    return newer if newer is not None and newer.key != comparison.key else None
+
+
+def _compared_again_line(comparison: StoredComparison, store: Store) -> str:
+    newer = compared_again(comparison, store)
+    if newer is None:
+        return ""
+    href = f"/diff/{newer.key}.html"
+    return (f'<p data-section="compared-again">{escape(COMPARED_AGAIN)}: '
+            f'<a href="{_tag(href)}" data-link="compared-again"><code>{escape(href[1:])}</code></a></p>')
+
+
 def render_diff(comparison: StoredComparison, store: Store, *, generated_at: str,
                 public: bool | None = None) -> str:
     """One pair's Diff page: the SDK's changes table, its localized set, and the command.
@@ -1476,6 +1508,8 @@ def render_diff(comparison: StoredComparison, store: Store, *, generated_at: str
         f'<h1>Diff</h1><p data-section="pair">baseline '
         f"{run_named(store, comparison.run_a)} against candidate "
         f"{run_named(store, comparison.run_b)}</p>"]
+    #: Under the pair's line: this page is an earlier console's, and the pair has a newer one.
+    blocks.append(_compared_again_line(comparison, store))
     #: First, when the two runs come from different pipelines.
     blocks.append(_different_pipelines(pair))
     #: The short answer goes here, first: drawn once diff's report is read below (`short_answer`).

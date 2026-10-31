@@ -15,7 +15,7 @@ tests/test_tones.py holds each table below to the rule, and the pages to the tab
 from __future__ import annotations
 
 HELD, FAILED, NOT_DONE, NOT_MADE = "held", "failed", "not-done", "not-made"
-#: A step's own rule declined and the run stopped there (the declined-runs work order): never red --
+#: A step's own rule declined and the run stopped there (the declined-runs specification): never red --
 #: the check ran, and a rule refused.
 DECLINED = "declined"
 #: A comparison's first difference and a step changed after it: a comparison's findings, never a

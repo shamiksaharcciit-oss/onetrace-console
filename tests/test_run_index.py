@@ -19,6 +19,7 @@ import hashlib
 import json
 import shutil
 from pathlib import Path
+from tests.http_limits import limit
 
 import pytest
 
@@ -94,7 +95,8 @@ def test_a_run_s_entry_is_its_record_s_own(demo, examined):
     for got, s in zip(entry["steps"], steps):
         r = s["receipt"]
         assert got["outcome"] == r["outcome"]["class"]
-        assert got["instrument"] == {"id": r["instrument"]["id"], "version": r["instrument"]["version"]}
+        assert got["instrument"] == {"id": r["instrument"]["id"], "version": r["instrument"]["version"],
+                                     "config_digest": r["instrument"].get("config_digest", "")}
         assert got["settings"] == (r.get("assertions") or {}).get("constants", {})
         assert got["inputs"] == [[i["name"], i["digest"]] for i in r["inputs"]]
         assert got["outputs"] == [[o["name"], o["digest"]] for o in r["outputs"]]
@@ -308,7 +310,7 @@ def test_a_public_console_s_query_writes_nothing_and_answers(shared_cli_demo, tm
     c = _Console(tmp_path, "serve", env={"ONETRACE_CONSOLE_CONFIG": str(config)})
     try:
         c.until("onetrace-console serving on")
-        with urllib.request.urlopen(f"http://127.0.0.1:{port}/search?q=benchmark%3Ayes", timeout=30) as r:
+        with urllib.request.urlopen(f"http://127.0.0.1:{port}/search?q=benchmark%3Ayes", timeout=limit(30)) as r:
             page = r.read().decode("utf-8")
             status = r.status
     finally:

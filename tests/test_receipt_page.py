@@ -5,7 +5,7 @@ a sabotage that states the row without its evidence. The signature row and the g
 approved graph" read "not available until onetrace 0.2.0", never a guessed state, until the third
 build; the anchor row is the run page's own rung since step 3 (tests/test_step3_receipt_anchor.py).
 "Check it yourself" gives the command the run's record needs (tests/test_receipt_look.py holds it for
-unsigned, signed and anchored runs); "What this receipt does not say" is the work order's fixed text.
+unsigned, signed and anchored runs); "What this receipt does not say" is the specification's fixed text.
 """
 from __future__ import annotations
 

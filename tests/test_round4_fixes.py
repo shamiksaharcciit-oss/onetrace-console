@@ -2,7 +2,7 @@
 
 The fourth confirmation review re-ran the third's probes and found these. The viewer's halves
 (resolved names in its duplicate check, a lookup set for declared stages, capped lists, a
-record's words escaped) are canary 9515a20, re-vendored here.
+record's words escaped) are viewer commit 9515a20, re-vendored here.
 
 B1   Names were compared as written: one file spelled another way got past each comparison.
      Here: the tar's own members, and the chain's names when ingest reads a receipt's format.

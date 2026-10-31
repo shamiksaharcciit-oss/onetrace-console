@@ -4,10 +4,10 @@
 table in `src/onetrace_console/incidents.py`; a test fails if the two differ in any rule's id,
 source, field, condition or displayed words.
 
-That direction matters. This file was generated from the code in its first version, and core
-ruled that out: *"Generating the document from the code would make it describe whatever the
+That direction matters. This file was generated from the code in its first version, and that was
+ruled out: *"Generating the document from the code would make it describe whatever the
 code does, rather than what the code was asked to do."* A change to a rule is therefore a
-deliberate change here, which core can review, followed by a change to the code to match.
+deliberate change here, which can be reviewed, followed by a change to the code to match.
 
 **There is no digest written into this file.** Digests are computed into documents by tooling
 and never transcribed (X-11), and a digest typed here by hand would be the one number in the

@@ -1312,8 +1312,9 @@ class Handler(BaseHTTPRequestHandler):
         run_key = (query.get("run") or [""])[0]
         run_key = run_key if re.fullmatch(r"[0-9a-f]{64}", run_key) else ""
         with self.store.reading():
-            html = search_page.page(run_index.read(self.store_root), q, run_key, self.store,
-                                    public=self.config.public)
+            index = run_index.read(self.store_root)
+            html = search_page.page(index, q, run_key, self.store, public=self.config.public,
+                                    found=None if index is not None else run_index.format_of(self.store_root))
         user = self._principal() if getattr(self, "_request_role", None) == roles.VIEWER else None
         self._respond(200, fill(html.encode("utf-8"), "search", onedoor=bool(self.config.extensions.get("onedoor")),
                                 user=user, public=self.config.public, setup_link=not self.config.public),

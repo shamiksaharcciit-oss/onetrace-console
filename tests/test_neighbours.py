@@ -19,6 +19,7 @@ import shutil
 import subprocess
 import sys
 from pathlib import Path
+from tests.http_limits import limit
 
 import pytest
 
@@ -135,7 +136,7 @@ def _absent(monkeypatch):
 def test_the_base_install_gains_no_dependency():
     import tomllib
     project = tomllib.loads((REPO / "pyproject.toml").read_text(encoding="utf-8"))["project"]
-    assert project["dependencies"] == ["onetrace==0.6.0", "onetrace-verify[crypto]==0.6.0"]
+    assert project["dependencies"] == ["onetrace==0.6.1", "onetrace-verify[crypto]==0.6.1"]
     assert project["optional-dependencies"] == {
         "neighbours": ["onnxruntime==1.31.0", "tokenizers==0.23.3", "numpy==2.5.4"]}
     base = (REPO / "requirements.lock").read_text(encoding="utf-8")
@@ -191,7 +192,7 @@ def test_with_the_extra_absent_no_route_answers(server, monkeypatch):
 
     def ask(path, data=None):
         try:
-            r = urllib.request.urlopen(urllib.request.Request(base + path, data=data), timeout=30)
+            r = urllib.request.urlopen(urllib.request.Request(base + path, data=data), timeout=limit(30))
             return r.status, r.read()
         except urllib.error.HTTPError as e:
             return e.code, e.read()
@@ -659,11 +660,11 @@ def test_the_setup_page_turns_it_on_and_off_over_http(server, monkeypatch):
     body = urllib.parse.urlencode({"embedder": "endpoint", "base_url": ENDPOINT["base_url"],
                                    "model": ENDPOINT["model"], "confirmed": words}).encode()
     with pytest.raises(urllib.error.HTTPError) as got:
-        opener.open(urllib.request.Request(base + "/neighbours/on", data=body), timeout=60)
+        opener.open(urllib.request.Request(base + "/neighbours/on", data=body), timeout=limit(60))
     assert got.value.code == 303
     assert settings.read(Handler.store)["embedder"] == ENDPOINT
     with pytest.raises(urllib.error.HTTPError) as got:
-        opener.open(urllib.request.Request(base + "/neighbours/off", data=b""), timeout=60)
+        opener.open(urllib.request.Request(base + "/neighbours/off", data=b""), timeout=limit(60))
     assert got.value.code == 303 and settings.read(Handler.store) is None
 
 

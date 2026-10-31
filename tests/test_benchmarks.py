@@ -23,6 +23,7 @@ import urllib.error
 import urllib.request
 
 import pytest
+from tests.http_limits import limit
 
 from onetrace_console.demo_store import BENCHMARKS
 
@@ -307,7 +308,7 @@ def test_mark_and_undo_on_a_local_console(demo, tmp_path, examined):
         req = urllib.request.Request(f"{base}/benchmark?{query}", data=body, method="POST",
                                      headers={"Content-Type": "application/json"})
         try:
-            with urllib.request.urlopen(req, timeout=120) as r:
+            with urllib.request.urlopen(req, timeout=limit(120)) as r:
                 return r.status, json.loads(r.read())
         except urllib.error.HTTPError as e:
             return e.code, json.loads(e.read())
@@ -316,7 +317,7 @@ def test_mark_and_undo_on_a_local_console(demo, tmp_path, examined):
         c.until("onetrace-console serving on")
         marked = post(f"run={run.key}&mark=yes", json.dumps({"note": "after the firmware change"}).encode())
         mark_file = json.loads((store.root / "benchmarks" / f"{run.key}.json").read_text(encoding="utf-8"))
-        with urllib.request.urlopen(f"{base}/runs/{run.key}/case.html", timeout=60) as r:
+        with urllib.request.urlopen(f"{base}/runs/{run.key}/case.html", timeout=limit(60)) as r:
             page = r.read().decode("utf-8")
         refused = [post(f"run={run.key}&mark=maybe"), post("run=nope&mark=yes"),
                    post(f"run={run.key}&mark=yes", b"[1]")]

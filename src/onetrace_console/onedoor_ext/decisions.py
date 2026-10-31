@@ -4,7 +4,7 @@ already accepts.
 
 WHY AN ARCHIVE, NOT A NEW TWO-PART BODY FORMAT
 -----------------------------------------------
-The work order says: "wrap it in the same kind of archive, or define a two-part body;
+The specification says: "wrap it in the same kind of archive, or define a two-part body;
 choose one and say why." Chosen: the same kind of archive -- a tar, read with
 `onetrace_console.ingest.read_tar`, imported and called here unchanged, never copied.
 That one function already carries every upload-hardening check that applies to an

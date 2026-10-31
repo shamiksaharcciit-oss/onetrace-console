@@ -19,6 +19,13 @@ LABEL = "Search the runs by recorded field"
 BUTTON = "Search"
 NO_INDEX = ("This console holds no index of its runs yet. It is built from the records whenever the "
             "console draws its pages.")
+#: An index in an earlier format: a public console reads its build's and never writes one; a local
+#: console writes its own when it next draws its pages.
+EARLIER_PUBLIC = ("This build's index of its runs is in an earlier format, {found}; build it again with "
+                  "onetrace-console {version}.")
+EARLIER_LOCAL = ("This console's index of its runs is in an earlier format, {found}; the console writes it "
+                 "again in its own format when it next draws its pages.")
+OTHER_FORMAT = "This console's index of its runs is in a format it does not read, {found}."
 NONE_FOUND = "No run matches every term."
 COMPARE = "Compare with this run"
 NOT_HELD = "not compared on this demo"
@@ -80,12 +87,24 @@ def _asked_from(index: dict, run_key: str, terms) -> dict | None:
     return None
 
 
-def body(index: dict | None, q: str, run_key: str, store, *, public: bool) -> str:
+def no_index(found: str | None, *, public: bool) -> str:
+    """Why there is no index to search: none yet, or one in another format, and how to get one."""
+    from onetrace_console import __version__
+    from onetrace_console.run_index import earlier
+    if found is None:
+        return NO_INDEX
+    if earlier(found):
+        return (EARLIER_PUBLIC if public else EARLIER_LOCAL).format(found=found, version=__version__)
+    return OTHER_FORMAT.format(found=found)
+
+
+def body(index: dict | None, q: str, run_key: str, store, *, public: bool, found: str | None = None) -> str:
+    """`found`: where `index` is None, the format the store root's index states, if it states one."""
     from onetrace_console.benchmarks import BADGE
     from onetrace_console.run_index import QueryError, parse, query
     head = f'<h1>{escape(TITLE)}</h1>{box(q=q, run_key=run_key)}{_grammar()}'
     if index is None:
-        return head + f'<p data-search="no-index">{escape(NO_INDEX)}</p>'
+        return head + f'<p data-search="no-index">{escape(no_index(found, public=public))}</p>'
     if not q.strip():
         examples = ", ".join(f'<a href="{PATH}?q={quote(e, safe=":*")}"><code>{escape(e)}</code></a>'
                              for e in EXAMPLES)
@@ -119,7 +138,7 @@ def body(index: dict | None, q: str, run_key: str, store, *, public: bool) -> st
             + scroll_region(table, "The runs that match", "search-results"))
 
 
-def page(index: dict | None, q: str, run_key: str, store, *, public: bool) -> str:
+def page(index: dict | None, q: str, run_key: str, store, *, public: bool, found: str | None = None) -> str:
     """The whole results page, its frame empty for the server to fill as it does every page's."""
     from onetrace_console.render import _document
-    return _document(TITLE, f'<div class="cp">{body(index, q, run_key, store, public=public)}</div>')
+    return _document(TITLE, f'<div class="cp">{body(index, q, run_key, store, public=public, found=found)}</div>')

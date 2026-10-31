@@ -71,6 +71,8 @@ DRAFT_LINE = ("Recorded by an earlier release, before model-call-record/1.0: thi
               "are in the draft format {formats}, and the run is kept as it was recorded, unchanged.")
 #: A step's output that is a model-call record links to its panel on the same page.
 RECORD_LINK = "the model-call record, as read above"
+#: The run page's link from such an output to its record's section on the step's page.
+RUN_RECORD_LINK = "the model-call record, on its step's page"
 #: The schema copy (see above): its file in this package, its sha256, and where it came from.
 SCHEMA_FILE = "_received/model_call_record.schema.json"
 SCHEMA_SHA256 = "877f40cb6fde322adf321b8b0e4860ccc5ec63db24983bb531f31d5bd2d76ab6"
@@ -216,6 +218,16 @@ def grouped(record: dict) -> list[tuple[str, list[str]]]:
 def anchor(name: str) -> str:
     """A record's id on its step's page: `model-call-` and its name, dots as dashes."""
     return "model-call-" + name.replace(".", "-")
+
+
+def linked_steps(steps: tuple, paged: set[str]) -> tuple:
+    """The run page's steps, each output named like a record (`NAME`) linked to its section on its
+    step's page, as that page's own list links it; a step with no page of its own is left as it is."""
+    from dataclasses import replace
+    from onetrace_console.stage_pages import stage_page
+    return tuple(replace(s, outputs=tuple(
+        replace(o, href=f"{stage_page(s.index)}#{anchor(o.name)}", link=RUN_RECORD_LINK)
+        if NAME.fullmatch(o.name) else o for o in s.outputs)) if s.index in paged else s for s in steps)
 
 
 def decode_anchor(name: str, step: int) -> str:

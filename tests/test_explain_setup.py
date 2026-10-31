@@ -21,6 +21,7 @@ import urllib.request
 from html import unescape
 
 import pytest
+from tests.http_limits import limit
 
 from tests.test_explain_config_read import MARKS, leaks
 from tests.test_explain_panel import REPLIES, pair, toml_string  # noqa: F401  (pair: a fixture)
@@ -40,7 +41,7 @@ def _planted(config) -> None:
 
 def _get(url: str) -> tuple[int, str]:
     try:
-        with urllib.request.urlopen(url, timeout=30) as r:
+        with urllib.request.urlopen(url, timeout=limit(30)) as r:
             return r.status, r.read().decode("utf-8")
     except urllib.error.HTTPError as e:
         return e.code, e.read().decode("utf-8", "replace")

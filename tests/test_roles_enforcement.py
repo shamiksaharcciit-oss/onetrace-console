@@ -14,6 +14,7 @@ import shutil
 import subprocess
 import sys
 from pathlib import Path
+from tests.http_limits import limit
 
 import pytest
 
@@ -293,7 +294,7 @@ def test_sabotage_a_new_route_with_no_role_table_entry_is_caught(tmp_path, exami
         '        import urllib.request\n'
         '        req = urllib.request.Request(base + "/unwired-new-route", data=b"", method="POST")\n'
         '        try:\n'
-        '            resp = urllib.request.urlopen(req, timeout=5)\n'
+        f'            resp = urllib.request.urlopen(req, timeout={limit(5)})\n'
         '            status = resp.status\n'
         '        except urllib.error.HTTPError as e:\n'
         '            status = e.code\n'

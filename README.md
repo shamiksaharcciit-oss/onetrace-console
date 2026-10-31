@@ -10,13 +10,13 @@ The console never computes a verdict of its own. It keeps each run's files exact
 pip install onetrace-console
 ```
 
-It needs Python 3.12 or later. It installs from PyPI alone: `onetrace` 0.6.0 and `onetrace-verify` 0.6.0, with the `[crypto]` extra so signatures and anchors are checked. The pages' viewer ships inside the package.
+It needs Python 3.12 or later. It installs from PyPI alone: `onetrace` 0.6.1 and `onetrace-verify` 0.6.1, with the `[crypto]` extra so signatures and anchors are checked. The pages' viewer ships inside the package.
 
 `pip install onetrace-explain` makes the Explain button on the local console's comparison page work: the console runs that command, which sends a packet of the comparison to the model you name, and its format is set out at [explain-format.md](https://oneproof.dev/onetrace/explain-format.md).
 
 ## Upgrading from 0.4
 
-- Comparisons made by an earlier console keep their pages and links. The same pair compared again under 0.5.0 gets a new name, and both are kept.
+- Comparisons made by an earlier console keep their pages and links. The same pair compared again under 0.5.0 gets a new name, and both are kept. Since 0.5.1 the earlier page says so, and links to the newer one; a page whose pair has no newer name says nothing of it.
 - An incident's page has a new address; the old address no longer answers.
 - A comparison's name takes in the onetrace build that made it. A plain `pip install` names that build by the files its wheel carries, the same in every venv; an install pinned with `tools/install_pinned.py` names it by the wheel's sha256. So a pinned install and a plain one name the same comparison differently.
 
@@ -90,6 +90,7 @@ While the console runs, it reads the runs folder again every 2 seconds and takes
 
 A step's model-call records in `model-call-record/1.0` (`model_call.json`, then `model_call.2.json` and on) are read by the installed onetrace, which holds each one to the format; the console keeps no copy of the format.
 
+- On a run's page, each record under "What came out" links to its section on the step's page.
 - Each field is shown as the record states it, in the record's order, under the format's own groups ("The call", "The runtime", "The batch", ...), with the format's description of it one fold away.
 - Where a record names its per-step capture, the steps file is read (its bytes must match its receipt and the digest the record names) and drawn as a token timeline: one row per decode step, each chosen token as an id, never decoded to text.
 - On a comparison page, each step where both runs hold a record of the same name shows onetrace's comparator's report line for line: `same`, `diverged` naming the first field, or `could not compare` naming each condition.
@@ -143,6 +144,10 @@ This optional extra suggests, on a local console, other runs of the same configu
 Turning it on with one of the two local models fetches that model's pinned files once from huggingface.co, at the pinned revision, and checks each file against its pinned sha256 before it is kept. Nothing else is fetched, and no text leaves the machine: the kept inputs and outputs are embedded on it. If you name an embedding endpoint of your own instead, the kept inputs and outputs are sent to that endpoint, and nothing is fetched.
 
 In the ladder, "1.00 by the record" means the two runs' digests for that file are equal, so nothing is embedded there. "≥ 0.9995, digests differ" means the digests are not equal and the embedder's number rounds to 1.000. Every other number is the embedder's, to three places. Neither is a judgement that two runs did the same thing: nearness is the embedder's reading of the kept inputs and outputs, and the exact comparison beside it is the record.
+
+## Reading a store from another program
+
+`onetrace_console.store_read` answers three questions about a console store, for a program outside the console: the runs with a stage's exact configuration, the runs whose model-call records name the same model files, and, where neighbours by input is on, a run's neighbours. It is read-only, and it refuses a store whose run index is a format it does not read, with the reason. See [docs/store_read.md](docs/store_read.md).
 
 ## Where it runs
 

@@ -172,7 +172,7 @@ def chip_problems(css: str) -> list[str]:
         if fg and bg and (fg, bg) not in TONES:
             problems.append(f"{selector}: --{fg} on --{bg} is not one of the four tones")
     #: The fifth kind, a run stopped by a step's own rule: the accent's outline on the page's own
-    #: ground, and only that, as the declined-runs work order asks.
+    #: ground, and only that, as the declined-runs specification asks.
     dec = [body for s, body in rules if re.search(r"\.cp,\.shell \.page\) \.dec\b", s)]
     want = {"background": "transparent", "color": "var(--accent)", "outline": "1px solid var(--accent)"}
     if len(dec) != 1 or any((_declared(dec[0], k) or "").strip() != v for k, v in want.items()):

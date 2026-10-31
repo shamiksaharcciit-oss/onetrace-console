@@ -14,6 +14,7 @@ import urllib.request
 from http.server import ThreadingHTTPServer
 
 import pytest
+from tests.http_limits import limit
 
 from onetrace_console.config import Config
 from onetrace_console.serve import Handler, _render_all_pages
@@ -63,7 +64,7 @@ def test_a_tls_configured_server_actually_serves_https(self_signed_cert, tmp_pat
         client_ctx.check_hostname = False
         client_ctx.verify_mode = ssl.CERT_NONE   # self-signed test cert; not the point here
         examined(1, "a plain HTTPS request against the TLS-wrapped server")
-        with urllib.request.urlopen(f"https://127.0.0.1:{port}/health", timeout=10,
+        with urllib.request.urlopen(f"https://127.0.0.1:{port}/health", timeout=limit(10),
                                     context=client_ctx) as resp:
             assert resp.status == 200
             assert resp.read() == b"ok\n"
@@ -108,7 +109,7 @@ def test_a_tls11_only_client_is_refused(self_signed_cert, tmp_path, examined):
             pytest.skip(f"this OpenSSL build cannot construct a TLS 1.1-only client: {e}")
         examined(1, "a handshake attempt restricted to TLS 1.1 only")
         with pytest.raises((ssl.SSLError, OSError)):
-            with urllib.request.urlopen(f"https://127.0.0.1:{port}/health", timeout=10,
+            with urllib.request.urlopen(f"https://127.0.0.1:{port}/health", timeout=limit(10),
                                         context=client_ctx):
                 pass
     finally:

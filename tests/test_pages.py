@@ -12,7 +12,7 @@ The order's checks:
     tools/offline_check.py, which uses an injected-probe control; its result is recorded in
     the work-order report).
 
-The prohibitions are asserted over the rendered HTML of THIS console's pages. The canary
+The prohibitions are asserted over the rendered HTML of THIS console's pages. The viewer's
 repository has its own versions over its own pages; a rule kept in one repository is not
 kept in the other, and the console is the thing a customer looks at.
 """

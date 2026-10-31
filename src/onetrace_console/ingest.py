@@ -410,7 +410,7 @@ def check_sums(files: dict[str, bytes]) -> list[str]:
 
     A one-directional check is how a hole gets in: covering only the listed files lets an
     extra file ride along unlisted, and covering only the present files lets a listed file
-    go missing. F6 on the canary channel was exactly this, in a coverage scan.
+    go missing. An earlier coverage scan found exactly this.
     """
     if SUMS_NAME not in files:
         return [row("delivery", f"the delivery carries {SUMS_NAME}", "it is not in the archive")]

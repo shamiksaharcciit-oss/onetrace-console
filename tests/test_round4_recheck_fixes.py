@@ -55,7 +55,7 @@ SHORT_NAMES = _makes_short_names()
 
 
 def _altered(files, alias: str | None, run_id: str = "altered") -> dict[str, bytes]:
-    """The reviewer's probe: `receipts/01-zeta.json` altered after the run (its sums honest, since
+    """A review's probe: `receipts/01-zeta.json` altered after the run (its sums honest, since
     whoever altered it wrote them), and, under `alias`, a member holding the original bytes."""
     out = dict(files)
     manifest = json.loads(out["MANIFEST.json"].decode("utf-8"))
@@ -75,7 +75,7 @@ def _altered(files, alias: str | None, run_id: str = "altered") -> dict[str, byt
 @pytest.mark.skipif(not SHORT_NAMES, reason="this host's temp volume makes no 8.3 short names, "
                                             "so the alias cannot be made here")
 def test_the_short_name_upload_is_refused_over_http_and_nothing_is_stored(server, files):
-    """The reviewer's probe_short_member_http.py. On f2a792b: POST 200, verdict holds, while the
+    """A review's probe_short_member_http.py. On f2a792b: POST 200, verdict holds, while the
     stored receipt was the altered one and the exported bundle verified FAIL."""
     from tests.test_serve import _post
     base, root = server

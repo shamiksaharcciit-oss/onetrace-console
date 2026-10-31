@@ -5,7 +5,7 @@ in this module renders HTML. It materialises a stored run, reads its record, han
 stored check report to `viewer.model.build_model`, and calls the viewer's own renderers.
 If a sentence appears on a console page, the viewer put it there and some decision worded it.
 
-That is the whole point of depending on the canary package rather than copying it: there is
+That is the whole point of depending on the viewer package rather than copying it: there is
 one renderer for the free file and the hosted console, so a reader who has seen one has
 seen the other, and a decision about wording lands in both at once.
 
@@ -415,6 +415,11 @@ def render_execution(run: StoredRun, store: Store, *, generated_at: str) -> Rend
                 #: A line wraps at four boxes a row, as the comparison's does, read row by row.
                 graph_wrap=4)
             model = _with_node_facts(model)
+            #: Each model-call record among a step's outputs links to its section on the step's page.
+            from onetrace_console import model_call
+            from onetrace_console.stage_pages import _steps
+            paged = {s["index"] for s in _steps(run, store) if s["index"].isdigit()}
+            model = replace(model, steps=model_call.linked_steps(model.steps, paged))
         #: Labelled BEFORE sealing, so the fingerprint covers the label. Sealing first and
         #: splicing after would leave a page whose own seal did not describe it.
         from onetrace_console.incident_pages import incidents_block

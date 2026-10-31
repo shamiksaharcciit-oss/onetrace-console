@@ -29,7 +29,7 @@ PAGE_BOUND = 400_000
 
 
 def _long_names(files) -> bytes:
-    """The reviewer's probe_longnames_all.py: 97 names of 50,000 characters added to every
+    """A review's probe_longnames_all.py: 97 names of 50,000 characters added to every
     receipt's declared stages -- 100 declared -- as a gzip upload of about 19 KB."""
     out = _renamed(files)
     manifest = json.loads(out["MANIFEST.json"].decode("utf-8"))

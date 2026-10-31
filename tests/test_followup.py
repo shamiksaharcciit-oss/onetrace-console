@@ -56,7 +56,7 @@ def test_a_re_delivery_over_a_record_that_cannot_be_read_is_said_not_a_500(serve
         "listing-object-key"])
 def test_a_stored_record_naming_a_place_outside_the_store_is_unreadable(checked, store,  # noqa: F811
                                                                         tmp_path, change):
-    """The reviewer's probe_store_types2.py: such a record wrote a file outside the store root at
+    """A review's probe_store_types2.py: such a record wrote a file outside the store root at
     check time, and pages outside the pages folder at start-up. It is left out and named."""
     from onetrace_console.serve import _render_startup_pages
     path = store.root / "runs" / f"{checked.key}.json"

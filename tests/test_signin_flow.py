@@ -8,6 +8,7 @@ import urllib.error
 import urllib.request
 
 import pytest
+from tests.http_limits import limit
 
 from onetrace_console.accounts import AccountStore
 from onetrace_console.config import Config
@@ -45,14 +46,14 @@ def _headers_dict(message) -> dict:
 
 def _get(base, path, headers=None):
     req = urllib.request.Request(base + path, headers=headers or {})
-    resp = _no_redirect_opener.open(req, timeout=10)
+    resp = _no_redirect_opener.open(req, timeout=limit(10))
     return resp.status, resp.read(), _headers_dict(resp.headers), resp
 
 
 def _post(base, path, body, headers=None):
     req = urllib.request.Request(base + path, data=body, method="POST",
                                  headers=headers or {})
-    resp = _no_redirect_opener.open(req, timeout=10)
+    resp = _no_redirect_opener.open(req, timeout=limit(10))
     return resp.status, resp.read(), _headers_dict(resp.headers), resp
 
 

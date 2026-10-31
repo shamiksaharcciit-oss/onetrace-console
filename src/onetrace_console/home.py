@@ -279,7 +279,7 @@ def incident_tallies(store: Store) -> tuple[Tally, ...]:
         subjects = {i.subject for i in mine}
         touched = tuple(r for r in runs if r.key in subjects)
         #: The incident count carries a denominator in its own unit, every
-        #: incident the rules raised from the stored runs (all core incidents are per run).
+        #: incident the rules raised from the stored runs (every built-in incident is per run).
         word = "incident" if len(mine) == 1 else "incidents"
         out.append(Tally(slug=rule.id.lower(), label=f"runs raising {rule.id}",
                          runs=touched, denominator=len(runs),

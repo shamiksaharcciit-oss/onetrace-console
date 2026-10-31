@@ -111,6 +111,9 @@ def built(tmp_path_factory):
 
 
 SITE_LINKS = KEPT.parent / "site_links.txt"
+#: The site's links to the P1 pair's comparison: console 0.4.0's name for it, then console 0.5.0's.
+SITE_COMPARISONS = ("diff/b56e0b73e5e3324556fbdbcfc2a5561a1389322ba405c2184f2fdb620f8284da.html",
+                    "diff/85dc0852a57737a69d71b9e12c697b77e69ab92d30b5c358ca9f8fb7cfc7dd1b.html")
 
 
 def link_problems(pages: Path, links: list[str]) -> list[str]:
@@ -144,40 +147,44 @@ def test_every_link_the_public_site_makes_into_the_demo_resolves(built, examined
     pages = folder / "store" / "pages"
     links = site_links.read(SITE_LINKS)
     examined(len(links), "site links")
-    assert len(links) == 9 and links[0] == "/"
+    assert len(links) == 10 and links[0] == "/"
     assert link_problems(pages, links) == []
     for path in links:
         if path.startswith("/pipeline-p"):
             assert (pages / path.lstrip("/")).is_file(), path
-    old = "diff/b56e0b73e5e3324556fbdbcfc2a5561a1389322ba405c2184f2fdb620f8284da.html"
+    #: The site's two comparison links, console 0.4.0's name and console 0.5.0's for the same pair: each
+    #: sends a reader straight to this build's page between the two runs, a real page, never another
+    #: moved one. Under console 0.5.0 the second was the page itself.
     new = pairs[("p1-02-baseline-set2", "p1-08-candidate-set2")].key
     assert not (pages / f"diff/{new}.html").read_text(encoding="utf-8").count('http-equiv="refresh"')
-    assert f'url={new}.html"' in (pages / old).read_text(encoding="utf-8")
+    for old in SITE_COMPARISONS:
+        assert f"/{old}" in links and old != f"diff/{new}.html", old
+        assert f'url={new}.html"' in (pages / old).read_text(encoding="utf-8"), old
     dockerfile = (KEPT.parent / "Dockerfile").read_text(encoding="utf-8")
     assert "--site-links /app/deploy/fly/site_links.txt" in dockerfile
 
 
 def test_the_moved_page_is_a_public_page_with_the_banner_once(built, examined):
-    """The page at the site's old comparison name, as a public console serves it (its frame filled):
-    the banner once, by the container check's own rule, the console's stylesheet, noindex, the moved
-    line and its link; no other moved page is there."""
+    """Each page at one of the site's old comparison names, as a public console serves it (its frame
+    filled): the banner once, by the container check's own rule, the console's stylesheet, noindex, the
+    moved line and its link; no other moved page is there."""
     import re
     from onetrace_console import site_links
     from onetrace_console.frame import STYLESHEET, fill
     from tools import container_check
     folder, _store, pairs = built
-    old = "diff/b56e0b73e5e3324556fbdbcfc2a5561a1389322ba405c2184f2fdb620f8284da.html"
     new = pairs[("p1-02-baseline-set2", "p1-08-candidate-set2")].key
-    raw = (folder / "store" / "pages" / old).read_bytes()
-    served = fill(raw, old, onedoor=False, user=None, public=True).decode("utf-8")
-    examined(1, "moved page")
-    assert served.count(container_check._BANNER_TAG) == 1 and container_check.BANNER in served
-    assert f'href="{STYLESHEET}"' in served and '<nav class="frame" data-frame>' in served
-    assert '<meta name="robots" content="noindex">' in served
-    #: The name in code, which breaks where it must: at 390 it would otherwise run past the window.
-    assert re.search(rf'<p data-moved>{site_links.MOVED}: <a href="{new}.html"><code>{new}.html</code></a></p>', served)
+    examined(len(SITE_COMPARISONS), "moved pages")
+    for old in SITE_COMPARISONS:
+        raw = (folder / "store" / "pages" / old).read_bytes()
+        served = fill(raw, old, onedoor=False, user=None, public=True).decode("utf-8")
+        assert served.count(container_check._BANNER_TAG) == 1 and container_check.BANNER in served, old
+        assert f'href="{STYLESHEET}"' in served and '<nav class="frame" data-frame>' in served, old
+        assert '<meta name="robots" content="noindex">' in served, old
+        #: The name in code, which breaks where it must: at 390 it would otherwise run past the window.
+        assert re.search(rf'<p data-moved>{site_links.MOVED}: <a href="{new}.html"><code>{new}.html</code></a></p>', served), old
     moved = [p for p in (folder / "store" / "pages").rglob("*.html") if 'http-equiv="refresh"' in p.read_text(encoding="utf-8")]
-    assert [p.relative_to(folder / "store" / "pages").as_posix() for p in moved] == [old]
+    assert sorted(p.relative_to(folder / "store" / "pages").as_posix() for p in moved) == sorted(SITE_COMPARISONS)
 
 
 def test_a_listed_link_the_build_cannot_place_stops_it_naming_the_link(built, tmp_path):
@@ -277,6 +284,62 @@ def test_p10_s_reference_is_the_new_baseline_and_the_kept_pair_gets_no_verdict(b
     both, said = _said(folder, new)
     assert verdicts.word_of(new, store) is not None and "data-verdict-lines" in both
     assert 'data-section="draft-records"' not in both
+
+
+def record_link_problems(folder: Path, run_key: str) -> list[str]:
+    """Where the run's page does not link each model-call record under "What came out" to a section
+    that is on the step's page, or links any other output."""
+    import html
+    from onetrace_console import model_call
+    pages = folder / "store" / "pages" / "runs" / run_key
+    case = (pages / "case.html").read_text(encoding="utf-8")
+    links = re.findall(r'<q data-words="record">([^<]*)</q> · <span class="value" data-words="value">'
+                       r'[^<]*</span> bytes(?: · <a href="([^"]*)" data-output-link>([^<]*)</a>)?', case)
+    out = [] if links else ["the run's page lists no outputs"]
+    for name, href, words in links:
+        if not model_call.NAME.fullmatch(name):
+            out += [f"{name}: linked to {href}"] if href else []
+            continue
+        if not href or html.unescape(words) != model_call.RUN_RECORD_LINK:
+            out.append(f"{name}: not linked")
+            continue
+        page, _, fragment = href.partition("#")
+        target = pages / page
+        if not re.fullmatch(r"stage-[0-9]+\.html", page) or not target.is_file():
+            out.append(f"{name}: {href} opens no step page")
+        elif fragment != model_call.anchor(name) or f'id="{fragment}" data-model-call=' not in target.read_text(
+                encoding="utf-8"):
+            out.append(f"{name}: {href} is no section of its record")
+    #: The page lists a step's outputs twice, in its card and in its receipt: each problem once.
+    return list(dict.fromkeys(out))
+
+
+def test_the_run_page_links_each_model_call_record_to_its_section_on_the_step_page(built, examined):
+    """On P10's 1.0 run, each of the step's two records under "What came out" links to its section on
+    the step's page, and that section is there; the step's other output is not linked."""
+    folder, store, _pairs = built
+    run = {r.run_id: r for r in store.runs()}["pz-57-agent-amount-changed-1-0"]
+    case = (folder / "store" / "pages" / "runs" / run.key / "case.html").read_text(encoding="utf-8")
+    hrefs = re.findall(r'<a href="([^"]*)" data-output-link>', case)
+    examined(len(hrefs), "record links on pz-57's run page")
+    assert sorted(set(hrefs)) == ["stage-1.html#model-call-model_call-2-json", "stage-1.html#model-call-model_call-json"]
+    assert record_link_problems(folder, run.key) == []
+
+
+def test_sabotage_a_record_link_to_no_section_and_an_unlinked_record_are_named(built, tmp_path, examined):
+    folder, store, _pairs = built
+    run = {r.run_id: r for r in store.runs()}["pz-57-agent-amount-changed-1-0"]
+    pages = tmp_path / "store" / "pages" / "runs" / run.key
+    shutil.copytree(folder / "store" / "pages" / "runs" / run.key, pages)
+    case = (pages / "case.html").read_text(encoding="utf-8")
+    examined(2, "sabotaged record links")
+    (pages / "case.html").write_text(case.replace("#model-call-model_call-2-json", "#model-call-model_call-9-json"),
+                                     encoding="utf-8")
+    assert record_link_problems(tmp_path, run.key) == [
+        "model_call.2.json: stage-1.html#model-call-model_call-9-json is no section of its record"]
+    unlinked = re.sub(r' · <a href="stage-1\.html#model-call-model_call-json" data-output-link>[^<]*</a>', "", case)
+    (pages / "case.html").write_text(unlinked, encoding="utf-8")
+    assert record_link_problems(tmp_path, run.key) == ["model_call.json: not linked"]
 
 
 def _page(folder: Path, comparison) -> str:

@@ -18,6 +18,7 @@ import urllib.request
 from dataclasses import replace
 
 import pytest
+from tests.http_limits import limit
 
 from onetrace_console.config import ENV_VAR, Config
 
@@ -202,7 +203,7 @@ def _call(base, path, *, method="GET", body=None, headers=None):
     request = urllib.request.Request(base + path, data=body, method=method,
                                      headers=headers or {})
     try:
-        with urllib.request.urlopen(request, timeout=10) as r:
+        with urllib.request.urlopen(request, timeout=limit(10)) as r:
             return r.status, r.read(), dict(r.headers)
     except urllib.error.HTTPError as e:
         return e.code, e.read(), dict(e.headers)

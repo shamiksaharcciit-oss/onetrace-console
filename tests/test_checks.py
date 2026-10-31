@@ -121,7 +121,7 @@ def test_the_stored_report_is_byte_identical_to_running_the_command_by_hand(stor
 
     # The child runs with `cwd=folder`, so a RELATIVE PYTHONPATH entry resolves against the
     # temp folder and finds nothing there. Measured against the earlier gate, whose
-    # PYTHONPATH carried `.pins/canary` and `.pins/onetrace/src`: the `-m` branch produced
+    # PYTHONPATH carried the pinned viewer and `.pins/onetrace/src`: the `-m` branch produced
     # empty stdout and `No module named onetrace_verify` on stderr, while the in-process run
     # was fine. Now `onetrace-verify` is a real pip-installed distribution and this
     # specific failure can no longer happen for IT -- but the gate's `PYTHONPATH=src` is

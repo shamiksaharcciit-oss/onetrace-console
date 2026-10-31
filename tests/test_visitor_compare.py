@@ -22,6 +22,7 @@ import time
 import urllib.error
 import urllib.request
 from pathlib import Path
+from tests.http_limits import limit
 
 import pytest
 
@@ -182,7 +183,7 @@ def _post(base: str, body: bytes, *, path: str = "/compare", headers: dict | Non
             return None
     opener = urllib.request.build_opener(NoRedirect)
     try:
-        with opener.open(req, timeout=120) as r:
+        with opener.open(req, timeout=limit(120)) as r:
             return r.status, dict(r.headers), r.read().decode("utf-8")
     except urllib.error.HTTPError as e:
         return e.code, dict(e.headers), e.read().decode("utf-8")
@@ -234,7 +235,7 @@ def test_a_new_pair_is_compared_into_the_cache_and_served(served, examined):
     assert status == 303, (status, headers)
     location = headers["Location"]
     assert location.startswith("/diff/") and (cache / "pages" / location.lstrip("/")).is_file()
-    with urllib.request.urlopen(base + location, timeout=30) as r:
+    with urllib.request.urlopen(base + location, timeout=limit(30)) as r:
         page = r.read().decode("utf-8")
     assert 'data-visitor-made' in page and "No explanation is kept for it." in page
     assert 'data-frame="banner"' in page

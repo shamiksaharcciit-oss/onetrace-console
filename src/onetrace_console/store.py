@@ -262,7 +262,7 @@ def _check_fields(d: dict) -> None:
             raise ValueError(f"`{name}` is {_shown(value)}, not {want}")
     #: Every name a record gives that this console later joins into a path: its own key (the
     #: folder its pages are written under), each listing path (where the run is laid out) and
-    #: each object key. The reviewer's probe_store_types2.py: `..\\..\\..\\escaped_key` wrote pages
+    #: each object key. A review's probe_store_types2.py: `..\\..\\..\\escaped_key` wrote pages
     #: outside the pages folder, and `../../escaped.txt` a file outside the store.
     if "key" in d and not _SHA256.match(d["key"]):
         raise ValueError(f"`key` is {_shown(d['key'])}, not a sha256 run key")
