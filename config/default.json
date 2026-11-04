@@ -36,5 +36,6 @@
   "compare_queue": 2,
   "compare_wait_seconds": 20.0,
   "compare_verb_seconds": 30,
-  "tracing": {}
+  "tracing": {},
+  "tokenizers": []
 }

@@ -29,6 +29,9 @@ AUTHORIZED_OVERVIEW = ("Read on each run's page from onetrace-verify's decisions
 VERDICT_WORDS = {"holds": "Verified", "contradicts": "Contradicts its record",
                  "could_not_check": "Couldn't check"}
 NO_VERDICT = "No verdict recorded"
+#: A pipeline with no reference: the one line each page that reads against a reference says, each
+#: page then saying how one is made.
+NO_REFERENCE_YET = "This pipeline has no reference yet."
 
 
 def _instant(value):

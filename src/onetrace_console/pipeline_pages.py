@@ -204,6 +204,7 @@ def _picker(pipeline) -> str:
 def render_pipeline(pipeline, store: Store, *, generated_at: str, which: str = "all") -> str:
     """The pipeline's page, or one of its filters."""
     from onetrace_console.choose_pages import choose_href
+    from onetrace_console.bisect_page import TITLE as BISECT, page_href as bisect_href
     from onetrace_console.drift import page_href as drift_href
     counts, n_held, same, unread = stage_counts(pipeline, store)
     if n_held:
@@ -228,7 +229,8 @@ def render_pipeline(pipeline, store: Store, *, generated_at: str, which: str = "
         "as this console received them.</p>",
         f'<p data-section="compare"><a href="{_tag(choose_href(pipeline.label))}" '
         'data-link="compare">Compare two runs</a> · '
-        f'<a href="{_tag(drift_href(pipeline.label))}" data-link="drift">Drift across its runs</a></p>',
+        f'<a href="{_tag(drift_href(pipeline.label))}" data-link="drift">Drift across its runs</a> · '
+        f'<a href="{_tag(bisect_href(pipeline.label))}" data-link="bisect">{escape(BISECT)}</a></p>',
         chain(pipeline, counts),
         f'<p data-section="first-differences">{escape(said)}</p>',
         _picker(pipeline),

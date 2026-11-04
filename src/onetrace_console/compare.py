@@ -10,8 +10,10 @@ NO COMPARISON LOGIC, STATED AS WHAT IS ABSENT
 ---------------------------------------------
 There is no stage alignment here, no scoring, no sorting, no merging of the two verbs'
 findings, and no interpretation of a verdict. The runner materialises two stored runs,
-invokes the verb, and stores the bytes it wrote. Every sentence a reader will see about a
-comparison was written by the SDK.
+invokes the verb, and stores the bytes it wrote. The sentences a reader sees about a
+comparison are the SDK's, but for two the console writes from the records itself: the short
+answer (`short_answer`) and the line naming what kind of thing differs at the first
+difference (`first_kind`).
 
 The one judgement it makes is about **itself**: whether the subprocess finished, timed out,
 or refused. A refusal is stored and shown in the SDK's own words, never retried and never

@@ -403,7 +403,8 @@ def _public() -> bool:
 
 def for_this_console(doc: dict, comparison=None, store=None) -> dict:
     """The text diff as this console may show it (`diff_lines`), the comparison's two stored runs
-    read for it. The document is read strictly before this, and is not changed."""
+    read for it, with each JSON output's members (`json_diff`). The document is read strictly
+    before this, and is not changed."""
     sides = None
     if comparison is not None:
         sides = (_side(store, getattr(comparison, "run_a", None)),
@@ -411,10 +412,13 @@ def for_this_console(doc: dict, comparison=None, store=None) -> dict:
     nodes = []
     for n in doc.get("nodes", []):
         kept: list = []
+        from onetrace_console.json_diff import for_node
         nodes.append({**n, "inputs": diff_lines(list(n.get("inputs") or []), str(n.get("node", "")), sides, kept),
-                      KEPT_DIFFS: kept})
+                      KEPT_DIFFS: kept, JSON_DIFFS: for_node(n, sides)})
     return {**doc, "nodes": nodes}
 
 
 #: The key `for_this_console` gives each node for its kept texts, drawn as line diffs.
 KEPT_DIFFS = "_kept_diffs"
+#: The key it gives each node for its JSON outputs' members, by output name.
+JSON_DIFFS = "_json_diffs"

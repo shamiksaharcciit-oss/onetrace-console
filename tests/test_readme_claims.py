@@ -20,11 +20,13 @@ import pytest
 from onetrace_console.config import Config
 
 REPO = Path(__file__).resolve().parent.parent
-RELEASE = "0.5.1"
+RELEASE = "0.6.0"
 #: The package's own version: the next release, whose heading says "(not released)" until the release
 #: step drops it. Every other version's heading is plain.
 VERSION = tomllib.loads((REPO / "pyproject.toml").read_text(encoding="utf-8"))["project"]["version"]
 UNRELEASED = " (not released)"
+#: A released heading may give its date: "## [0.6.0] - 2026-11-03".
+DATED = re.compile(r" - \d{4}-\d{2}-\d{2}")
 _HEADING = re.compile(r"^## \[([^\]]+)\](.*)$", re.M)
 READMES = ["README.md", "PYPI_DESCRIPTION.md"]
 #: Kinds whose README words are held; the others are listed and need none.
@@ -32,6 +34,20 @@ HELD = {"feature", "extra", "option"}
 
 #: This release's: (the entry's lead, as it starts, its kind, the README words that cover it).
 CLAIMS = [
+    ("One line at the first difference names what kind of thing differs there", "feature",
+     "- **The kind of difference:**"),
+    ("A JSON output's members that differ, by path", "feature", "- **JSON outputs, by member:**"),
+    ("The first run to leave the reference, by step or after a time", "feature",
+     "- **The first run to leave the reference:**"),
+    ("A step's span tree, from the app's own traces", "feature", "- **A step's spans:**"),
+    ("The app's spans at the first difference, ranked", "feature", "- **Spans at the first difference:**"),
+    ("The demo's app traces, example data", "demo data", None),
+    ("A run's configuration against its pipeline's reference run", "feature",
+     "- **A run's configuration against the reference run:**"),
+    ("A model step's token as text, on a local console", "feature", "- **A model step's token as text:**"),
+]
+#: 0.5.1's, held as they were.
+CLAIMS_051 = [
     ("onetrace 0.6.1 and onetrace-verify 0.6.1", "pins", "`onetrace` 0.6.1 and `onetrace-verify` 0.6.1"),
     ("An earlier console's comparison page says when its pair was compared again", "feature",
      "Since 0.5.1 the earlier page says so, and links to the newer one"),
@@ -77,10 +93,12 @@ CLAIMS_050 = [
     ("A run's incident takes", "fix", "An incident's page has a new address; the old address no longer answers."),
 ]
 #: The earlier releases' tables, by release.
-EARLIER = {"0.5.0": CLAIMS_050}
+EARLIER = {"0.5.1": CLAIMS_051, "0.5.0": CLAIMS_050}
+#: The next release's, under `## [Unreleased]` until its version is set.
+NEXT: list = []
 #: The configuration keys added since 0.5.0, each named in the README.
 NEW_KEYS = ["compare_cache", "compare_client_header", "compare_per_minute", "compare_running", "compare_queue",
-            "compare_wait_seconds", "compare_verb_seconds", "tracing"]
+            "compare_wait_seconds", "compare_verb_seconds", "tracing", "tokenizers"]
 
 
 def leads(changelog: str, release: str = RELEASE) -> list[str]:
@@ -93,7 +111,7 @@ def leads(changelog: str, release: str = RELEASE) -> list[str]:
 
 def tables() -> dict[str, list]:
     """Every release's table, this one's first."""
-    return {RELEASE: CLAIMS, **EARLIER}
+    return {"Unreleased": NEXT, RELEASE: CLAIMS, **EARLIER}
 
 
 def claim_problems(changelog: str, readmes: dict[str, str]) -> list[str]:
@@ -164,11 +182,12 @@ def test_sabotage_a_readme_missing_a_key_is_named(examined):
 
 def heading_problems(changelog: str, version: str) -> list[str]:
     """A released version's heading saying "(not released)", or a heading with another suffix: the
-    package's own version can say it, until the release step drops it; every other heading is plain."""
+    package's own version can say it, until the release step drops it; every other heading is plain or
+    gives its date, " - YYYY-MM-DD"."""
     out = []
     for m in _HEADING.finditer(changelog):
         said, suffix = m.group(1), m.group(2)
-        if suffix not in ("", UNRELEASED):
+        if suffix not in ("", UNRELEASED) and not DATED.fullmatch(suffix):
             out.append(f"## [{said}] has the suffix {suffix!r}")
         elif suffix == UNRELEASED and said != version:
             out.append(f"## [{said}] is released and still says (not released)")
@@ -197,3 +216,12 @@ def test_the_next_release_can_say_it_or_be_plain_after_the_release_step(examined
     examined(2, "the next release's heading, either way")
     plain = changelog.replace(f"## [{VERSION}]{UNRELEASED}", f"## [{VERSION}]", 1)
     assert heading_problems(changelog, VERSION) == heading_problems(plain, VERSION) == []
+
+
+@pytest.mark.parametrize("suffix", [" - 3 Nov 2026", " 2026-11-03", " - 2026-11-03 (not released)"])
+def test_sabotage_a_heading_with_a_date_in_another_form_is_named(suffix, examined):
+    changelog = (REPO / "CHANGELOG.md").read_text(encoding="utf-8")
+    heading = next(m.group(0) for m in _HEADING.finditer(changelog) if m.group(1) == RELEASE)
+    examined(1, "planted heading")
+    bad = changelog.replace(heading, f"## [{RELEASE}]{suffix}", 1)
+    assert heading_problems(bad, VERSION) == [f"## [{RELEASE}] has the suffix {suffix!r}"]

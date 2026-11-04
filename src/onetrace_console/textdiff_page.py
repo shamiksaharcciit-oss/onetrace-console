@@ -79,6 +79,9 @@ def render_text_diff_page(comparison, store: Store, *, generated_at: str) -> str
     if doc is None:
         return None
     listed = _listed(doc)
+    #: Each JSON output's members, as the comparison page draws them under its lines (`json_diff`).
+    from onetrace_console.kept_inputs import JSON_DIFFS
+    members = {(n["node"], name): m for n in doc.get("nodes", []) for name, m in (n.get(JSON_DIFFS) or {}).items()}
     first = next((n for n in doc.get("nodes", []) if n["verdict"] == "FIRST DIFFERENCE"), None)
     #: The first difference's settings a reader can read, in the Diff page's words; its recorded
     #: fingerprints stay on the Diff page, under its Details.
@@ -110,7 +113,7 @@ def render_text_diff_page(comparison, store: Store, *, generated_at: str) -> str
     kept = "".join(f'<div data-pane-output><h3>{escape(n["node"])}</h3>{_render_kept(n["node"], *k[1:])}</div>'
                    for n in doc.get("nodes", []) if n["verdict"] in LISTED for k in n.get(KEPT_DIFFS) or ())
     right = ('<section data-section="outputs" data-textdiff="shown">' + kept
-             + "".join(f'<div id="{a}" data-pane-output><h3>{escape(stage)}</h3>{_render_output(o)}</div>'
+             + "".join(f'<div id="{a}" data-pane-output><h3>{escape(stage)}</h3>{_render_output(o, members.get((stage, o["name"])) if o["verified"] is True else None)}</div>'
                        for a, stage, o in listed)
              + f'<p class="note">{escape(FROM_SDK)}</p><p class="note">{escape(NOT_WHICH)}</p></section>')
     parts.append(f'<div class="io">{left}{right}</div>')

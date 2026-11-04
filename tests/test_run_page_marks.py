@@ -189,7 +189,9 @@ def _titles(page: str) -> dict[str, str]:
 #: Measured by rendering it with the version alone set back to 0.4.0: the old digest.
 #: Moved by the version, 0.5.0 to 0.5.1, from b79c2acd83478cb2748ddffcafe68c2f9ba0db55ac3a10d626665e0fbac30899.
 #: Measured by rendering it with the version alone set back to 0.5.0: the old digest.
-UNMARKED_R_CASE_SHA256 = "830f3dd8cd70bd43d4526593856711c1ca098f39e7d015e685e85cab8e90d7ab"
+#: Moved by the version, 0.5.1 to 0.6.0, from 830f3dd8cd70bd43d4526593856711c1ca098f39e7d015e685e85cab8e90d7ab.
+#: Measured by rendering it with the version alone set back to 0.5.1: the old digest.
+UNMARKED_R_CASE_SHA256 = "47c93f5d9cb62d4281642205d823fdf7ac91bbcdf218b7efc6b80e33a57c4783"
 _VERIFIER_PATH = re.compile(r"\S*onetrace_verify[/\\]verify\.py")
 _FINGERPRINT = re.compile(r"<!--fingerprint-->[0-9a-f]{64}<!--/fingerprint-->")
 _VERIFIER_BLOCK = re.compile(r'(<pre data-layer="3">)(\[[A-Z][A-Z-]* *\] .*?)(</pre>)', re.S)
@@ -205,10 +207,12 @@ _LABEL = re.compile(r'( / | · )P\d+(</h1>| / )')
 def _before_050(page: str) -> str:
     """The page less what console 0.5.0 adds to every run's page and nothing else: the index's search
     box, "Other runs with the same inputs" and an unmarked run's benchmark section, as the static
-    export leaves them out (`export_static.without_run_tools`). The hash below is then the one pinned
+    export leaves them out (`export_static.without_run_tools`); and 0.6.0's configuration against the
+    reference run (`config_compare`), which the export keeps. The hash below is then the one pinned
     before 0.5.0, so the rest of the page is shown unchanged."""
+    import re
     from onetrace_console.export_static import without_run_tools
-    return without_run_tools(page)
+    return re.sub(r'<section data-section="config-compare".*?</section>', "", without_run_tools(page), flags=re.S)
 
 
 def _machine_free(page: str) -> str:

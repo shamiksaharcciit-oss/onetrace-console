@@ -278,6 +278,24 @@ def _short_answer(report, annotations: list[dict], comparison, store: Store) -> 
     return short_answer.render(answer) + descent_section(nested_at(comparison, store))
 
 
+def span_differences_for(report, comparison, store: Store) -> str:
+    """At the first difference, the two runs' spans joined to that step by its recorded trace context
+    (`span_tree`), their differences ranked and side by side. Empty where the comparison found no first
+    difference, or neither run's trace file holds a span of that step's trace."""
+    from onetrace_console import span_tree
+    first = next((getattr(r, "node", None) or getattr(r, "stage", None) for r in getattr(report, "ladder", ())
+                  if r.verdict == "FIRST DIFFERENCE"), None)
+    if first is None:
+        return ""
+    stage, _, nth = str(first).partition("#")
+    found = []
+    for key in (comparison.run_a, comparison.run_b):
+        run = _held(store, key)
+        found.append(span_tree.found_at(run, store, stage, int(nth) if nth.isdigit() else 1)
+                     if run is not None else "no-step")
+    return span_tree.difference_section(tuple(found))
+
+
 def trace_panel_for(report, comparison, store: Store) -> str:
     """The side-by-side trace panel at the first difference (`trace_panel`): each run's kept trace
     (the person's file, or the SDK's export of the run, `beside`), and each run's receipt digest at
@@ -1359,7 +1377,7 @@ def _named_folder(shown: str, path: str, name: str) -> str:
 def _without_host_folders(shown: str, comparison: StoredComparison, verb: str, store: Store) -> str:
     """The SDK's words with this host's folders taken out: the pair's named for what
     they held, any other under this host's temp folder said to be one. For the text layer, and
-    for the envelope's reason, which names a folder when the SDK refuses a pair (30bv §3.3)."""
+    for the envelope's reason, which names a folder when the SDK refuses a pair."""
     import tempfile
 
     from onetrace_console.compare import report_json
@@ -1513,7 +1531,7 @@ def render_diff(comparison: StoredComparison, store: Store, *, generated_at: str
     #: First, when the two runs come from different pipelines.
     blocks.append(_different_pipelines(pair))
     #: The short answer goes here, first: drawn once diff's report is read below (`short_answer`).
-    top, short, chip_facts = len(blocks), "", {}
+    top, short, kind, chip_facts = len(blocks), "", "", {}
     #: onetrace 0.5: each step whose two runs' recorded decision or permit differs, for its row.
     authorization = dict(authorization_differs(_receipts_in_order(comparison.run_a, store),
                                                _receipts_in_order(comparison.run_b, store)))
@@ -1588,6 +1606,9 @@ def render_diff(comparison: StoredComparison, store: Store, *, generated_at: str
                     refused = True
 
         if report is not None and verb == DIFF and getattr(report, "ladder", None):
+            #: First: what kind of thing differs at the first difference, from the records (`first_kind`).
+            from onetrace_console import first_kind
+            kind = first_kind.line(report, comparison, store)
             short = _short_answer(report, annotations, comparison, store)
             #: onetrace 0.6: each step's model-call records compared by the SDK's comparator, in its words.
             from onetrace_console import model_call_compare
@@ -1655,6 +1676,7 @@ def render_diff(comparison: StoredComparison, store: Store, *, generated_at: str
             if verb == DIFF and getattr(report, "ladder", None):
                 #: The app's spans at the first difference, from each run's kept trace (onetrace 0.5).
                 blocks.append(trace_panel_for(report, comparison, store))
+                blocks.append(span_differences_for(report, comparison, store))
             if verb == DIFF and getattr(report, "ladder", None):
                 if not isinstance(report, TwoRunDag):
                     #: The line drawn as the stage table is: the same stages, joined where the
@@ -1709,7 +1731,7 @@ def render_diff(comparison: StoredComparison, store: Store, *, generated_at: str
 
     if short:
         from onetrace_console.what_changed import chosen_line
-        blocks.insert(top, chosen_line(comparison, store) + short)
+        blocks.insert(top, kind + chosen_line(comparison, store) + short)
     same = "" if unchecked else _same_change(comparison, store)
     if dag and 'data-state="graph"' in same:
         hidden.append(("same-change", []))
@@ -2437,6 +2459,9 @@ def render_all(store: Store, *, generated_at: str) -> dict[str, str]:
         for a in AGAINST:
             pages[drift_href(p.label, a)] = drawn(lambda p=p, a=a: render_drift(
                 p, store, generated_at=generated_at, against=a, held=held))
+        #: Its first run to leave the reference, by step; the window form is asked at `/bisect`.
+        from onetrace_console.bisect_page import page_href as bisect_href, render_bisect
+        pages[bisect_href(p.label)] = drawn(lambda p=p: render_bisect(p, store, generated_at=generated_at, held=held))
         for r in p.runs:
             pages[pair_href(p.label, r.key)] = drawn(lambda p=p, r=r: render_pair(
                 p, r, store, generated_at=generated_at, held=held))

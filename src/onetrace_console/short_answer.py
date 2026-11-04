@@ -266,7 +266,7 @@ def with_authorization(answer: Answer, found: list[tuple[str, str]]) -> Answer:
     line: "The permit at `approve_payment` also differs." Unchanged where none differs."""
     if not found:
         return answer
-    #: "The two runs agree." only where nothing recorded differs (30ai): a decision or a permit is
+    #: "The two runs agree." only where nothing recorded differs: a decision or a permit is
     #: recorded, so its difference is named and the outputs said to be the same.
     headline = (["Every recorded output is the same."] if answer.headline == ["The two runs agree."]
                 else answer.headline)

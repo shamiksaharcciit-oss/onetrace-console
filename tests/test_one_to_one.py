@@ -23,7 +23,7 @@ BACKSLASH = chr(92)
 
 
 def _as_it_was(text, *, lines=False):
-    """`viewer.page.display` before 30bj §4: a backslash in a word shown as it is."""
+    """`viewer.page.display` before one-to-one escaping: a backslash in a word shown as it is."""
     import onetrace_console.viewer.page as page
     return page._UNSHOWN.sub(
         lambda m: m.group(0) if lines and m.group(0) in "\n\r\t" else f"\\u{ord(m.group(0)):04x}",

@@ -21,8 +21,10 @@ its value or values, and the reason the record gives (`source`). A field the rec
 group lists (an `engine.settings.` or `sampling.` field) follows, under its own heading. Then whether
 the call's per-step capture was taken (the record's `steps`); where it was, the steps file is read --
 its bytes must match both its receipt and the digest the record names -- and drawn as the token
-timeline: one decode-step row per step, each chosen token as an id, never decoded to text. What else
-the steps file holds is named and not shown. No comparator and no verdict here: two runs' records are
+timeline: one decode-step row per step, each chosen token as an id. On a local console whose named
+tokenizer matches the record's `tokenizer.digest` exactly, each token is also decoded to text, and
+labelled so (`token_text`); a public console never decodes. What else the steps file holds is named
+and not shown. No comparator and no verdict here: two runs' records are
 compared on a comparison's page (`model_call_compare`).
 
 Where the record names its model files (`model.files_digest`, observed or declared), the other runs
@@ -52,7 +54,8 @@ STEPS_NOT_TAKEN = "per-step capture: not taken"
 #: The token timeline's words.
 TIMELINE_HEADING = "Token timeline"
 TIMELINE_LABEL = ("Each decode step's chosen token, as the steps file holds it: token ids, not text. The "
-                  "file is the model's output (classed model-generated); this console never decodes it.")
+                  "file is the model's output (classed model-generated); this console decodes it only on a "
+                  "local console, with a tokenizer whose files match the record's tokenizer.digest.")
 TIMELINE_NOT_SHOWN = "Token timeline not shown: {why}."
 STEPS_HELD_NOT_SHOWN = "Also in the steps file, not shown by this console: {keys}."
 STEPS_LEVEL = "capture level, as the steps file names it: {level}"
@@ -275,19 +278,41 @@ def read_steps(receipt: dict, receipt_file: str, name: str, record: dict, read_f
             "other": sorted(k for k in doc if k not in ("token_ids", "level"))}
 
 
-def timeline(name: str, steps: dict) -> str:
-    """The token timeline: one decode-step row per step, its chosen token as an id."""
+def _as_text(record: dict | None, searched=None) -> tuple:
+    """(the decoder or None, the lines said above the timeline) for a render now: on a public console,
+    or with no record, none and nothing said (`token_text`)."""
+    from onetrace_console import token_text
+    from onetrace_console.frame import rendering_public, tokenizers
+    if record is None or rendering_public():
+        return None, ""
+    dec, why, refused = token_text.decoder(record, tokenizers())
+    if dec is not None:
+        note = token_text.search_note(searched) if searched is not None else ""
+        return dec, f'<p data-token-text="decoded">{dec.label_html()}</p>{note}'
+    return None, (f'<p data-token-text="not-shown">{escape(token_text.CANNOT.format(why=why))}</p>'
+                  + "".join(f'<p data-tokenizer-refused>{r}</p>' for r in refused))
+
+
+def timeline(name: str, steps: dict, record: dict | None = None, searched=None) -> str:
+    """The token timeline: one decode-step row per step, its chosen token as an id, and on a local
+    console whose tokenizer matches the record's `tokenizer.digest`, the token as text and, where
+    `searched` is given, the kept inputs it appears in (`token_text`)."""
+    from onetrace_console import token_text
     from onetrace_console.words import scroll_region
+    dec, said = _as_text(record, searched)
+    ids = steps["token_ids"]
     rows = "".join(f'<tr id="{decode_anchor(name, i)}" data-decode-step="{i}"><td>{i}</td><td><code>{escape(t)}</code>'
-                   f"</td></tr>" for i, t in enumerate(steps["token_ids"]))
+                   f"</td>{token_text.cells(dec, ids, i, searched) if dec is not None else ''}</tr>" for i, t in enumerate(ids))
+    head = (f"<th>{escape(token_text.WORD_HEADING)}</th>"
+            + (f"<th>{escape(token_text.FOUND_HEADING)}</th>" if searched is not None else "")) if dec is not None else ""
     table = scroll_region(f'<table class="board" data-token-timeline><thead><tr><th>decode step</th>'
-                          f"<th>chosen token id</th></tr></thead><tbody>{rows}</tbody></table>",
+                          f"<th>chosen token id</th>{head}</tr></thead><tbody>{rows}</tbody></table>",
                           f"The token timeline of {name}", "token-timeline")
     level = f'<p data-steps-level>{escape(STEPS_LEVEL.format(level=steps["level"]))}</p>' if steps["level"] else ""
     held = (f'<p data-steps-held>{escape(STEPS_HELD_NOT_SHOWN.format(keys=", ".join(steps["other"])))}</p>'
             if steps["other"] else "")
     return (f'<div class="token-timeline" data-token-timeline-of="{escape(name)}"><h4>{escape(TIMELINE_HEADING)}</h4>'
-            f'<p class="label">{escape(TIMELINE_LABEL)}</p>{level}{table}{held}</div>')
+            f'<p class="label">{escape(TIMELINE_LABEL)}</p>{said}{level}{table}{held}</div>')
 
 
 def files_value(record: dict) -> tuple[str, str] | None:
@@ -427,10 +452,11 @@ def read_output(receipt_file: str, output: dict, read_file) -> dict:
     return read(blob)
 
 
-def step_section(receipt: dict, receipt_file: str, read_file, same=None) -> str:
+def step_section(receipt: dict, receipt_file: str, read_file, same=None, searched=None) -> str:
     """A step page's model-call records, or "" where its outputs hold none. `read_file(path)`: the
     stored bytes at a run path, or None. `same(value)`: the other runs naming the same model files
-    (`same_files`), or None where none are looked for."""
+    (`same_files`), or None where none are looked for. `searched`: the inputs a decoded word is
+    searched for in (`token_text.searched_inputs`), or None for no search."""
     outs = outputs(receipt)
     if not outs:
         return ""
@@ -445,7 +471,7 @@ def step_section(receipt: dict, receipt_file: str, read_file, same=None) -> str:
         drawn = ""
         if "steps" in record:
             try:
-                drawn = timeline(name, read_steps(receipt, receipt_file, name, record, read_file))
+                drawn = timeline(name, read_steps(receipt, receipt_file, name, record, read_file), record, searched)
             except Refused as e:
                 drawn = f'<p data-token-timeline-refused>{escape(TIMELINE_NOT_SHOWN.format(why=e))}</p>'
         got = files_value(record)

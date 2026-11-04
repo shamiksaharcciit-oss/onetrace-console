@@ -410,7 +410,7 @@ def test_two_names_that_escape_alike_drop_no_line_end_to_end(server, tmp_path):
     assert status == 200, body[:300]
     page = _both_views(root / "pages" / json.loads(body)["pages"]["diff"].lstrip("/"))
     note, layer = _layer(page)
-    #: One-to-one escaping (30bj §4): the two names stay apart, and the layer is rebuilt.
+    #: One-to-one escaping: the two names stay apart, and the layer is rebuilt.
     assert note == "", note
     assert f"{TWIN_SHOWN[0]}   1  -&gt;  2" in layer and f"{TWIN_SHOWN[1]}   3  -&gt;  4" in layer
     for c in RAW:

@@ -303,7 +303,7 @@ def _settings(lines: list[str]) -> str:
     return plain
 
 
-def _render_output(out: dict) -> str:
+def _render_output(out: dict, members: list | None = None) -> str:
     name = _html(out["name"]) if out["name"] is not None else ""
     head = (f'<p class="output-head"><code>{name}</code> '
             f'<span class="value">{_html(out["media_type"])}</span>')
@@ -332,6 +332,10 @@ def _render_output(out: dict) -> str:
     if "truncated" in out:
         #: The SDK's own words for a cut output (`… n more lines`, the plain form's).
         parts.append(f'<p data-truncated>… {_html(out["truncated"]["more_lines"])} more lines</p>')
+    if members is not None:
+        #: Both sides read as JSON: its members that differ, by path (`json_diff`).
+        from onetrace_console.json_diff import render
+        parts.append(render(members))
     parts.append("</div>")
     return "".join(parts)
 
@@ -410,7 +414,10 @@ def render_textdiff(doc: dict) -> str:
             parts.append(f'<p data-input>{_html(s)}</p>')
             if s in kept:
                 parts.append(_render_kept(node["node"], *kept[s][1:]))
-        parts.extend(_render_output(out) for out in node["outputs"])
+        from onetrace_console.kept_inputs import JSON_DIFFS
+        members = node.get(JSON_DIFFS) or {}
+        parts.extend(_render_output(out, members.get(out["name"]) if out["verified"] is True else None)
+                     for out in node["outputs"])
         parts.append("</article></details>")
     parts.append("</div>")
     return "".join(parts)

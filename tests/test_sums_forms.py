@@ -125,7 +125,7 @@ def test_a_delivery_listing_a_path_twice_is_refused_whole(store, examined):
 
 
 def test_the_onedoor_side_car_fixture_still_parses(examined):
-    """The onedoor side-car shares the parser and so the rule (10-01cc §1); its committed files
+    """The onedoor side-car shares the parser and so the rule; its committed files
     still read: both its SHA256SUMS and the export's own `.sha256`."""
     from onetrace_console.onedoor_ext import decisions
     assert decisions.parse_sums is parse_sums, "the side-car no longer shares the parser"

@@ -182,6 +182,11 @@ class Config:
     #: tracing tool"; the console builds the link and never calls it. A public console shows no
     #: link. Empty: no link.
     tracing: dict = field(default_factory=dict)
+    #: A local console's tokenizers, each a folder the person names and the files in it that make the
+    #: tokenizer: [{"folder": "<path>", "files": ["tokenizer.json", ...]}]. A model step's token ids are
+    #: decoded only where the named files, hashed as named, give the record's `tokenizer.digest`
+    #: exactly (`token_text`). The console never downloads one. A public console reads none. Empty: none.
+    tokenizers: list = field(default_factory=list)
 
 
 _KEYS = {f.name for f in fields(Config)}
@@ -254,6 +259,31 @@ def _validate_tracing(value: object, *, source: str) -> dict:
         raise ConfigError(f"{source}: tracing.link must be an http(s) address holding {{trace_id}}, "
                           f"got {link!r}", fix=fix)
     return {"link": link}
+
+
+def _validate_tokenizers(value: object, *, source: str) -> list:
+    """`tokenizers`: a list of objects, each with `folder`, a path, and `files`, the names in that folder
+    (relative, with no `..`), each named once."""
+    fix = (f'give tokenizers as [{{"folder": "/models/my-model", "files": ["tokenizer.json"]}}] in {source}, '
+           f"or remove it.")
+    if not isinstance(value, list):
+        raise ConfigError(f"{source}: tokenizers must be a list, got {value!r}", fix=fix)
+    out = []
+    for entry in value:
+        if not isinstance(entry, dict) or set(entry) != {"folder", "files"}:
+            raise ConfigError(f"{source}: each of tokenizers must be an object with the keys folder and files, "
+                              f"got {entry!r}", fix=fix)
+        folder, files = entry["folder"], entry["files"]
+        if not (isinstance(folder, str) and _text(folder)):
+            raise ConfigError(f"{source}: tokenizers' folder must be a path ({_WANT['str']}), got {folder!r}",
+                              fix=fix)
+        if not (isinstance(files, list) and files and len(set(map(str, files))) == len(files) and all(
+                isinstance(f, str) and _text(f) and not PurePath(f).anchor and "\\" not in f
+                and ".." not in PurePath(f).parts for f in files)):
+            raise ConfigError(f"{source}: tokenizers' files must be a list of names in its folder, each "
+                              f"relative, without .., and named once, got {files!r}", fix=fix)
+        out.append({"folder": folder, "files": list(files)})
+    return out
 
 
 def _validate_extensions(value: object, *, source: str) -> dict:
@@ -382,6 +412,8 @@ def _from_mapping(data: dict, *, source: str) -> Config:
             fix=f"set both tsa_cert and tsa_roots in {source}, or neither.")
     if "tracing" in data:
         data = {**data, "tracing": _validate_tracing(data["tracing"], source=source)}
+    if "tokenizers" in data:
+        data = {**data, "tokenizers": _validate_tokenizers(data["tokenizers"], source=source)}
     if "extensions" in data or "sign_in" in data:
         data = dict(data)
         if "extensions" in data:
@@ -448,14 +480,16 @@ def from_folder(value: str, base, flavour=PurePath) -> str:
 
 
 def resolve_paths(config: Config, base: Path) -> Config:
-    """`config` with each relative trust file, TSA certificate and TSA root read from `base`."""
+    """`config` with each relative trust file, TSA certificate, TSA root and tokenizer folder read from
+    `base`."""
     from dataclasses import replace
 
     def absolute(value):
         return value if value is None else from_folder(value, base)
     return replace(config, trust_file=absolute(config.trust_file),
                    tsa_cert=absolute(config.tsa_cert),
-                   tsa_roots=[absolute(r) for r in config.tsa_roots])
+                   tsa_roots=[absolute(r) for r in config.tsa_roots],
+                   tokenizers=[{**t, "folder": absolute(t["folder"])} for t in config.tokenizers])
 
 
 def load_from_env() -> Config:

@@ -37,6 +37,10 @@ P5, P6, P7 and P9 are physical-world pipelines over invented data the builder ma
 records and compares them, and controls no equipment. P8 pays nothing: the demo records and compares
 it, and contacts no payment system.
 
+P10's agent runs and P3's triage runs also get an app trace export beside onetrace's own, so the
+public pages show a step's spans: invented example data, labelled as such in the file (`app_traces`).
+The demo's apps are not traced, and nothing in those spans was observed.
+
 A run folder or trust file whose bytes the build record doesn't hold -- edited, added or removed
 after the build -- is refused wherever the built folder is used again (`check_build_record`).
 Its limit: it catches a change made after the build. A hand-made run fed into the builder is
@@ -53,7 +57,7 @@ import shutil
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from onetrace_console.demo_store import keys
+from onetrace_console.demo_store import app_traces, keys
 
 BUILD_RECORD = "BUILD_RECORD.json"
 BUILD_FORMAT = "onetrace-console-demo-build/0.1"
@@ -436,6 +440,8 @@ def build(folder: Path) -> list[RunSpec]:
             os.environ["TRACEPARENT"] = before
     issuer.write_beside(folder / RUNS_DIRNAME)
     write_traces(folder / RUNS_DIRNAME, [s.folder for s in specs])
+    #: P10's and P3's app spans, example data (`app_traces`), beside onetrace's own export.
+    app_traces.write(folder / RUNS_DIRNAME, [s.folder for s in specs])
     (folder / TRUST_NAME).write_bytes(keys.trust_file_bytes())
     write_build_record(folder, (RUNS_DIRNAME, TRUST_NAME))
     return specs
@@ -477,6 +483,7 @@ def build_from(folder: Path, earlier: Path) -> None:
             else:
                 os.environ["TRACEPARENT"] = before
         write_traces(folder / RUNS_DIRNAME, [s.folder for s in RECORDED_BESIDE_KEPT])
+    app_traces.write(folder / RUNS_DIRNAME, sorted(p.name for p in (folder / RUNS_DIRNAME).iterdir() if p.is_dir()))
     write_build_record(folder, (RUNS_DIRNAME, TRUST_NAME))
 
 

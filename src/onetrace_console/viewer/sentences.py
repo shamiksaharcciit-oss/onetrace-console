@@ -238,37 +238,36 @@ RULED: dict[str, tuple[str, str]] = {
     "run_row.pass": (
         "For the run as a whole — {check}: checked, and it holds.",
         RULED_10CD + ", as written in the pin report §5: a run-level row that passed, on its own "
-        "line beside the strip (30bv §3.2)"),
+        "line beside the strip"),
     "run_row.not_run": (
         "For the run as a whole — {check}: not checked. The check says:",
         RULED_10CD + ", as written in the pin report §5: a run-level NOT-RUN, such as 0.1.2's "
-        "`run: artifacts` on a run without artifacts/, followed by the check's own reason "
-        "(30bv §3.2)"),
+        "`run: artifacts` on a run without artifacts/, followed by the check's own reason"),
     "run_row.fail": (
         "For the run as a whole — {check}: checked, and it failed. The check says:",
         RULED_10CD + ", as written in the pin report §5: a run-level FAIL, such as `run: "
         "artifacts` under --require-artifacts on a run without artifacts/, followed by the "
-        "check's own reason (30bv §3.2)"),
+        "check's own reason"),
     "strip.contradicts_run": (
         "This answer's trail was checked on {date} — a check of the run as a whole failed.",
         RULED_10CD + ", as written in the pin report §5: the strip when the only failure is "
-        "run-level, so no step is named (30bv §3.2)"),
+        "run-level, so no step is named"),
     "strip.not_verified": (
         "This answer's trail was checked on {date} — it was not verified: a receipt names a "
         "format the check does not implement, so the check did not read its contents.",
         RULED_10CD + ", as written in the pin report §5: exit 2, the check's NOT VERIFIED; never "
-        "holds, never contradicts (30bz §3)"),
+        "holds, never contradicts"),
     "strip.rows_unread_fail": (
         "This answer's trail was checked on {date} — the check failed. Its rows could not be "
         "read one by one, so no step below is named.",
         RULED_10CD + ", as written in the pin report §5: a FAIL (exit 1) whose rows a record "
-        "broke apart (30bv §3.3)"),
+        "broke apart"),
     "strip.rows_unread_pass": (
         "This answer's trail was checked on {date} — the check passed as a whole. Its rows could "
         "not be read one by one, so no step below is shown as checked.",
         RULED_10CD + ", as written in the pin report §5: a PASS (exit 0) whose rows a record "
-        "broke apart (30bv §3.3)"),
-    # 30bz §1: the note beside a report whose rows a record broke apart. 30bv §3.3 gave its intent
+        "broke apart"),
+    # The note beside a report whose rows a record broke apart. Its intent was given
     # as "the verifier's rows ..."; "verifier" is retired on the page (019 §4), and these words
     # were fixed instead.
     "rows.unreadable": (

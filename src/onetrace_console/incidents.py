@@ -146,7 +146,7 @@ def _manifest_sha(run: StoredRun) -> str:
 
 
 #: The field an I-CONTRADICTS incident quotes when the report's rows cannot be read one by one
-#: (30bv §3.3): the check's whole output, shown escaped rather than row by row.
+#: the check's whole output, shown escaped rather than row by row.
 WHOLE_OUTPUT = "stdout[whole]"
 
 

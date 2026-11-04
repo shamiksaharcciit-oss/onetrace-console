@@ -310,7 +310,7 @@ def test_nothing_shipped_says_uploads_are_checked_for_stage_order(examined):
                     bad.append(f"{rel}: {flat[:160]}")
         else:
             #: A code line may name stage order only if the line itself says it is not checked
-            #: -- the reasons in the viewer's REWORDED table (30bv §3.5) do. No page draws them.
+            #: -- the reasons in the viewer's REWORDED table do. No page draws them.
             bad += [f"{rel}:{n}: {line.strip()}"
                     for n, line in enumerate(text.splitlines(), 1)
                     if _STAGE_ORDER.search(line) and not _NEGATED.search(line)]

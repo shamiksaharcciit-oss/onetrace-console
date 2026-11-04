@@ -199,7 +199,7 @@ _FRAME: contextvars.ContextVar[str | None] = contextvars.ContextVar("frame", def
 
 class framed:
     """`with framed("/static/console.css"):` -- pages drawn inside the block link that stylesheet
-    and sit in the console's frame (10-01cl §3). Outside it, every page is the free file."""
+    and sit in the console's frame. Outside it, every page is the free file."""
 
     def __init__(self, stylesheet: str):
         self.stylesheet = stylesheet
@@ -271,7 +271,7 @@ def _escape_rows(text: str) -> str:
 
 
 def _escape_word_text(text: str) -> str:
-    """A whole output drawn as one word (30bv §3.3): every control character and line break
+    """A whole output drawn as one word: every control character and line break
     escaped one-to-one, a backslash doubled first, at most TEXT_CAP characters of it."""
     text = str(text)
     if len(text) <= TEXT_CAP:
@@ -708,7 +708,7 @@ def _report_block(m: PageModel) -> str:
     note = (f'<p data-source="fallback">{_t("check.source_fallback")}</p>'
             if m.report_is_fallback else "")
     if not m.report_rows_readable:
-        # 30bv §3.3: a record's text broke the rows apart, so no line break in the output can be
+        # A record's text broke the rows apart, so no line break in the output can be
         # trusted to be the verifier's. The whole output, every character escaped one-to-one.
         return _details("disclose.report", "3",
                         f'{note}<p data-section="rows-unreadable">{_t("rows.unreadable")}</p>'

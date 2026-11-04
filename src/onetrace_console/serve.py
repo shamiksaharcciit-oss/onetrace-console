@@ -130,7 +130,8 @@ def _rendering(config: Config | None):
         return contextlib.nullcontext()
     return rendering(onedoor=bool(config.extensions.get("onedoor")),
                      sign_in=bool(config.sign_in.get("enabled")), public=config.public,
-                     tracing_link=(config.tracing or {}).get("link", ""))
+                     tracing_link=(config.tracing or {}).get("link", ""),
+                     tokenizers=tuple((t["folder"], tuple(t["files"])) for t in config.tokenizers or ()))
 
 
 def _render_run_pages(run, store: Store, root: Path, config: Config | None = None) -> None:
@@ -824,6 +825,9 @@ class Handler(BaseHTTPRequestHandler):
         if rel == "search":
             self._handle_search()
             return
+        if rel == "bisect":
+            self._handle_bisect()
+            return
         if rel == "explain/state":
             #: A comparison's press now running, read by its panel's script while it waits.
             from onetrace_console import explain
@@ -1317,6 +1321,28 @@ class Handler(BaseHTTPRequestHandler):
                                     found=None if index is not None else run_index.format_of(self.store_root))
         user = self._principal() if getattr(self, "_request_role", None) == roles.VIEWER else None
         self._respond(200, fill(html.encode("utf-8"), "search", onedoor=bool(self.config.extensions.get("onedoor")),
+                                user=user, public=self.config.public, setup_link=not self.config.public),
+                      "text/html; charset=utf-8")
+
+    def _handle_bisect(self) -> None:
+        """A pipeline's first run to leave the reference after a time (`bisect_page`): what the store
+        keeps, read and never written, and the page drawn as asked. Nothing is run, on either console."""
+        from onetrace_console import bisect_page, roles
+        from onetrace_console.frame import fill
+        query = parse_qs(urlsplit(self.path).query)
+        label = (query.get("p") or [""])[0]
+        after = (query.get("after") or [""])[0][:bisect_page.MOST_CHARS]
+        if not re.fullmatch(r"P[0-9]{1,6}", label):
+            self._respond(404, b"no such pipeline\n", "text/plain")
+            return
+        with self.store.reading(), _rendering(self.config):
+            html = bisect_page.page_for(self.store, label, after,
+                                        generated_at=datetime.now(timezone.utc).isoformat(timespec="seconds"))
+        if html is None:
+            self._respond(404, b"no such pipeline\n", "text/plain")
+            return
+        user = self._principal() if getattr(self, "_request_role", None) == roles.VIEWER else None
+        self._respond(200, fill(html.encode("utf-8"), "bisect", onedoor=bool(self.config.extensions.get("onedoor")),
                                 user=user, public=self.config.public, setup_link=not self.config.public),
                       "text/html; charset=utf-8")
 

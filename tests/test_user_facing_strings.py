@@ -16,8 +16,8 @@ from pathlib import Path
 
 SRC = Path(__file__).resolve().parent.parent / "src" / "onetrace_console"
 INTERNAL = {
-    "ruling id": r"\bR-20\d\d-\d\d-\d\d",
-    "short ruling id": r"\b2\d(?!px)[a-z]{2}\b",
+    "dated id": r"\bR-20\d\d-\d\d-\d\d",
+    "short id": r"\b\d{2}(?!(?:px|ms|em|pt|kb|mb|gb|th|st|nd|rd|hz|ch|vw|vh|dp)\b)[a-z]{2}\b",
     "work order": r"\bWO-C\d+",
     "note id": r"\bN-C0\d\d",
     "to_core / from_core": r"\b(?:to|from)_core\b",
@@ -81,12 +81,13 @@ def test_each_allowance_still_holds_an_id():
 
 
 def test_the_patterns_find_what_they_name():
-    planted = {"ruling id": "R-2099-01-01zz", "short ruling id": "see 29zz", "work order": "WO-C99",
+    planted = {"dated id": "R-2099-01-01zz", "short id": "see 29zz", "work order": "WO-C99",
                "note id": "N-C099", "to_core / from_core": "from_core", "core as an agent": "core ruled it",
                "pod": "the pod", "a ruling by number": "ruling 99z"}
     for name, text in planted.items():
         assert PATTERNS[name].search(text), name
-    assert not PATTERNS["short ruling id"].search("padding:28px 20px"), "a CSS length is not an id"
+    assert not PATTERNS["short id"].search("padding:28px 20px"), "a CSS length is not an id"
+    assert not PATTERNS["short id"].search("within 10ms"), "a unit is not an id"
 
 
 def test_no_text_file_the_package_ships_carries_an_internal_id(examined):

@@ -128,8 +128,10 @@ def test_no_verdict_rung_or_count_reads_differently_for_a_marked_run(demo, exami
         _render_all_pages(store, folder / "store", config)
         case = (pages / "runs" / run.key / "case.html").read_text(encoding="utf-8")
         #: The benchmark's own sections, its mark and its profile, are what a mark adds; the verdict
-        #: section reads against the reference the marks choose, so it follows them too.
-        case = re.sub(r'<section data-section="(?:benchmark|profile|verdict)".*?</section>', "", case, flags=re.S)
+        #: section reads against the reference the marks choose, so it follows them too, and so does the
+        #: configuration against the reference run the marks choose (`config_compare`).
+        case = re.sub(r'<section data-section="(?:benchmark|profile|verdict|config-compare)".*?</section>', "", case,
+                      flags=re.S)
         case = re.sub(r"<!--fingerprint-->[0-9a-f]{64}<!--/fingerprint-->", "", case)
         home = (pages / "home.html").read_text(encoding="utf-8")
         return (_text(re.sub(r'<span class="pill neu" data-benchmark.*?</span>', "", case)),

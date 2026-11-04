@@ -314,7 +314,7 @@ def _incident_item(incident: Incident, store: Store | None = None, up: str = "")
 
 def _quoted(incident: Incident) -> str:
     """The quoted field: the report's rows, one per line -- or, where a record broke the rows
-    apart (30bv §3.3), the whole output, every character escaped, with the viewer's note."""
+    apart, the whole output, every character escaped, with the viewer's note."""
     from onetrace_console.incidents import WHOLE_OUTPUT
     if incident.field_path != WHOLE_OUTPUT:
         return f'<pre data-quoted="report">{verbatim_rows(incident.quoted)}</pre>'

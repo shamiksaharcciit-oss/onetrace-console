@@ -513,6 +513,8 @@ def render_stage_pages(run: StoredRun, store: Store, *, generated_at: str,
     from onetrace_console.trace_panel import trace_of, traceparent
     manifest = manifest_of(run, store)
     has_spans = bool(traceparent(manifest)) or any(trace_of(s["receipt"]) for s in steps)
+    from onetrace_console import span_tree
+    spans = span_tree.for_run(run, store) if has_spans else None
     held = held_runs(store)
     #: The other runs naming a record's model files, looked up once per value for this run's pages.
     from onetrace_console import model_call as _mc
@@ -523,7 +525,13 @@ def render_stage_pages(run: StoredRun, store: Store, *, generated_at: str,
             found[value] = _mc.same_files(store, run.key, value)
         return found[value]
     unlisted = kept_inputs.unlisted_count(files, steps)
-    for step in steps:
+    #: The inputs each step's decoded words are searched for in (`token_text`).
+    #: Read only where a local console names a tokenizer: elsewhere no word is decoded to search for.
+    from onetrace_console import token_text
+    from onetrace_console.frame import tokenizers
+    searched = (token_text.searched_inputs(steps, lambda path: _read(files, store, path), version)
+                if tokenizers() else {})
+    for position, step in enumerate(steps):
         receipt, stage = step["receipt"], _stage_name(step["receipt"])
         inputs = [i for i in receipt.get("inputs") or [] if isinstance(i, dict)]
         listed = kept_inputs.listed(receipt) if kept_inputs.honoured(version) else []
@@ -555,7 +563,7 @@ def render_stage_pages(run: StoredRun, store: Store, *, generated_at: str,
             f"{escape(banner)}</p>"
             f"{verdict}"
             + step_blocks(manifest, receipt, has_spans, held, step["file"],
-                          lambda path: _read(files, store, path), same_files)
+                          lambda path: _read(files, store, path), same_files, spans, searched.get(position))
             + '<div class="io">'
             + _inputs(inputs, upstream, href, receipts, kept, unlisted, inputs_note)
             + _outputs(step, outputs, files, store, href)

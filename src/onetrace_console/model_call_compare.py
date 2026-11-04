@@ -108,6 +108,36 @@ def _pair(name: str, sa: dict, sb: dict, run_a, run_b, states) -> str:
             f'{head}<ul class="plain comparator">{"".join(lines)}</ul>{note}</div>')
 
 
+def compared(comparison, store, stage: str) -> list:
+    """The comparator's result for each record name both runs hold at `stage`, in the baseline's
+    order, as `section` compares them; a pair either record of which cannot be read is left out."""
+    from onetrace import model_call as sdk
+    from onetrace_console.render import _held
+    run_a, run_b = _held(store, comparison.run_a), _held(store, comparison.run_b)
+    if run_a is None or run_b is None:
+        return []
+    try:
+        sa = next((s for s in _steps_by_name(run_a, store) if s["name"] == stage), None)
+        sb = next((s for s in _steps_by_name(run_b, store) if s["name"] == stage), None)
+    except Exception:  # noqa: BLE001 - runs that can't be read compare nothing here
+        return []
+    if sa is None or sb is None:
+        return []
+    states = (_receipt_state(run_a, store), _receipt_state(run_b, store))
+    names_b = {str(o["name"]) for o in mc.outputs(sb["receipt"])}
+    out = []
+    for name in (str(o["name"]) for o in mc.outputs(sa["receipt"])):
+        if name not in names_b:
+            continue
+        try:
+            got = [mc.read_output(s["file"], next(o for o in mc.outputs(s["receipt"]) if o["name"] == name),
+                                  s["read"]) for s in (sa, sb)]
+        except mc.Refused:
+            continue
+        out.append(sdk.compare(got[0], got[1], receipts=states))
+    return out
+
+
 def section(comparison, store) -> str:
     """The section, or "" where no step both runs hold has a record on either side."""
     from onetrace_console.render import _held

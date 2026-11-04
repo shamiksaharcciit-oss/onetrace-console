@@ -61,6 +61,9 @@ _VIEWER_GET_PATTERNS = tuple(re.compile(p) for p in (
     r"^pipeline-p[0-9]+(-agree|-attention)?\.html$",
     #: A pipeline's drift page, against the first run or each run's previous.
     r"^drift-p[0-9]+(-previous)?\.html$",
+    #: A pipeline's first run to leave the reference (`bisect_page`), and its window form, drawn as asked.
+    r"^bisect-p[0-9]+\.html$",
+    r"^bisect$",
     #: Choose two runs: a pipeline's runs as run A, and run A's page of the others as run B.
     r"^choose-p[0-9]+\.html$",
     #: A comparison's explanation press now running, as its panel's script reads it.

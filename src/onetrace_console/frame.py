@@ -634,6 +634,8 @@ class Rendering:
     public: bool = False
     #: A local console's link pattern to the person's tracing tool (`config.tracing`); "" for none.
     tracing_link: str = ""
+    #: A local console's tokenizers (`config.tokenizers`), each (folder, (file, ...)); () for none.
+    tokenizers: tuple = ()
 
 
 _RENDERING: contextvars.ContextVar[Rendering | None] = contextvars.ContextVar("rendering",
@@ -641,12 +643,14 @@ _RENDERING: contextvars.ContextVar[Rendering | None] = contextvars.ContextVar("r
 
 
 @contextlib.contextmanager
-def rendering(*, onedoor: bool, sign_in: bool, public: bool = False, tracing_link: str = ""):
+def rendering(*, onedoor: bool, sign_in: bool, public: bool = False, tracing_link: str = "",
+              tokenizers: tuple = ()):
     """`with rendering(...)`: sealed pages drawn inside are framed, under this configuration.
     The server renders every page inside one; outside it -- a caller with no console around it --
     a sealed page is drawn as the viewer draws it, with no frame."""
     token = _RENDERING.set(Rendering(onedoor=onedoor, sign_in=sign_in, public=public,
-                                     tracing_link="" if public else tracing_link))
+                                     tracing_link="" if public else tracing_link,
+                                     tokenizers=() if public else tuple(tokenizers)))
     try:
         yield
     finally:
@@ -657,6 +661,12 @@ def tracing_link() -> str:
     """The person's link pattern for a render now: a local console's only; "" otherwise."""
     r = _RENDERING.get()
     return r.tracing_link if r is not None and not r.public else ""
+
+
+def tokenizers() -> tuple:
+    """The person's tokenizers for a render now, each (folder, (file, ...)): a local console's only."""
+    r = _RENDERING.get()
+    return r.tokenizers if r is not None and not r.public else ()
 
 
 def rendering_public() -> bool:

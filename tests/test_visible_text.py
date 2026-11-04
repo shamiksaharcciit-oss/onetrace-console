@@ -1382,6 +1382,8 @@ EXPLAINED.setdefault("incidents.html", {}).setdefault("new", {}).update(dict.fro
      "the same run and chain head, and their files differ. this rule's list"], _HEAD_SHARED))
 NEW_PAGES.update({"incidents-i-head-shared.html": "the list of runs the new incident rule raised, "
                   "two run folders sharing a chain head whose files differ"})
+NEW_PAGES.update({f"bisect-p{n}.html": "a pipeline's first run to leave its reference, by step and after a time"
+                  for n in (1, 2)})
 #: Each run page in two linked views, "What changed" (the page's own address) and "Proof" (a page
 #: beside it): the checks behind it -- what was checked and what was not, the check's own words,
 #: and the authorization policy -- move whole to "Proof", so the two views are compared as one, and
@@ -1496,6 +1498,15 @@ EXPLAINED.setdefault("incidents.html", {}).setdefault("new", {}).update(dict.fro
     ["Rules not built: I-DIFF-REGRESSION."],
     "the rules not built, one sentence on a line of its own"))
 
+
+#: A run page's configuration against its pipeline's reference run, beside "What changed?": on these
+#: pages' runs, whose pipelines have no reference, the section says so and compares nothing. Generated
+#: from the measured difference.
+_CONFIG_SECTION = "a run page's configuration against the reference run, with no reference yet (console 0.6.0)"
+_CONFIG_SECTION_PAGES: dict[str, dict[str, list[str]]] = {"run[forged]/case.html + run[forged]/proof.html": {"new": ["A reference is made by python -m onetrace reference make from the pipeline's benchmark; on a local console, marking a run as a benchmark makes one.", "Configuration against the reference", "Runs are compared within their pipeline, as this console groups them by their declared stages.", "This pipeline has no reference yet."]}, "run[held-a]/case.html + run[held-a]/proof.html": {"new": ["A reference is made by python -m onetrace reference make from the pipeline's benchmark; on a local console, marking a run as a benchmark makes one.", "Configuration against the reference", "Runs are compared within their pipeline, as this console groups them by their declared stages.", "This pipeline has no reference yet."]}, "run[held-b]/case.html + run[held-b]/proof.html": {"new": ["A reference is made by python -m onetrace reference make from the pipeline's benchmark; on a local console, marking a run as a benchmark makes one.", "Configuration against the reference", "Runs are compared within their pipeline, as this console groups them by their declared stages.", "This pipeline has no reference yet."]}, "run[preview]/case.html + run[preview]/proof.html": {"new": ["A reference is made by python -m onetrace reference make from the pipeline's benchmark; on a local console, marking a run as a benchmark makes one.", "Configuration against the reference", "Runs are compared within their pipeline, as this console groups them by their declared stages.", "This pipeline has no reference yet."]}, "run[r11]/case.html + run[r11]/proof.html": {"new": ["A reference is made by python -m onetrace reference make from the pipeline's benchmark; on a local console, marking a run as a benchmark makes one.", "Configuration against the reference", "Runs are compared within their pipeline, as this console groups them by their declared stages.", "This pipeline has no reference yet."]}}
+for _page, _kinds in _CONFIG_SECTION_PAGES.items():
+    for _kind, _texts in _kinds.items():
+        EXPLAINED.setdefault(_page, {}).setdefault(_kind, {}).update(dict.fromkeys(_texts, _CONFIG_SECTION))
 
 def test_no_page_is_lost_and_every_new_page_is_declared(now, before, examined):
     examined(len(before), "pages in the baseline")

@@ -486,7 +486,10 @@ def render_execution(run: StoredRun, store: Store, *, generated_at: str) -> Rend
             #: console; "" anywhere else.
             from onetrace_console.neighbours.pages import run_section
             from onetrace_console.model_call import draft_line
+            #: Beside it, the run's configuration against its pipeline's reference run (`config_compare`).
+            from onetrace_console import config_compare
             whole = (whole[:at] + draft_line(run, store) + what_changed.section(run, store, public=rendering_public())
+                     + config_compare.section(run, store)
                      + run_section(run, store)
                      + verdicts.section(run, store)
                      + benchmarks.mark_section(run, store, public=rendering_public())

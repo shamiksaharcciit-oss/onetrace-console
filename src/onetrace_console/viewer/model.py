@@ -242,7 +242,7 @@ class PageModel:
     #: Where the run's own record can be downloaded, for a page that shortens its words
     #: -- the caller's to give; None where it has none to offer.
     record_href: str | None = None
-    #: False when the check's rows cannot be read one by one (30bv §3.3): its output is then
+    #: False when the check's rows cannot be read one by one: its output is then
     #: drawn whole, every character escaped, and no row is shown as a row.
     report_rows_readable: bool = True
     #: The execution graph's inputs: one node per step, and the manifest's
@@ -546,15 +546,15 @@ def _strip(record: Record, report: Report | None, problem: str | None) -> Strip:
         return Strip("none", line("strip.not_performed"), beside, "neutral")
     #: Run-level rows are read here, beside the strip, and nowhere below as a step: the strip's
     #: own state is decided from the steps and the manifest, except that a run-level FAIL is a
-    #: FAIL the verifier reported, so the strip says the check failed (30bv §3.2).
+    #: FAIL the verifier reported, so the strip says the check failed.
     beside += tuple(_run_line(f) for f in _run_rows(report))
     #: A time in a headline: drawn short, the full value kept (page.py, source "time").
     date = (report.ran_at, "time")
-    #: 30bz §3: the check's NOT VERIFIED (exit 2): a receipt names a format it does not implement,
+    #: The check's NOT VERIFIED (exit 2): a receipt names a format it does not implement,
     #: so its content was not read. Never "holds", never "contradicts".
     if report.overall == "not_verified":
         return Strip("not_checked", line("strip.not_verified", date=date), beside, "neutral")
-    #: 30bv §3.3: rows a record broke apart. The verdict is the exit status and the summary's;
+    #: Rows a record broke apart. The verdict is the exit status and the summary's;
     #: no row is trusted, so no step is named and none is shown as checked.
     if not report.rows_readable:
         beside += (line("rows.unreadable"),)
@@ -700,7 +700,7 @@ def _unchecked(record: Record, report: Report | None) -> tuple[tuple[Line, ...],
         rows.append((line("unchecked.unanchored"), line("anchoring.would_add")))
     if report is not None:
         for f in report.findings:
-            #: A run-level row is on its own line beside the strip, not in this list (30bv §3.2).
+            #: A run-level row is on its own line beside the strip, not in this list.
             if (f.outcome == "not_run" and f.property != "originality"
                     and f.subject not in _whole_run(record, report)):
                 rows.append((line("not_run.other") + (Text(" "), Text(f.detail, "check")),))
@@ -1033,7 +1033,7 @@ def _records_agree(record: Record, report: Report | None, strip: Strip,
     if report is None:
         return _rung("records-agree", _NOT_CHECKED, strip.sentence)
     if not report.rows_readable:
-        # 30bv §3.3: a FAIL is a no; a PASS whose rows cannot be read cannot be tied to every step.
+        # A FAIL is a no; a PASS whose rows cannot be read cannot be tied to every step.
         return _rung("records-agree", _NO if report.overall == "fail" else _COULDNT, strip.sentence)
     if strip.state == "holds":
         subjects = [s.file for s in record.steps] + ["manifest"]

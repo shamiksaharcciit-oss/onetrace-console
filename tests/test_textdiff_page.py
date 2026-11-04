@@ -34,7 +34,10 @@ def page_problems(page: str, diff_page: str, comparison, store) -> list[str]:
         out.append("the title does not name the first difference")
     if f'href="{escape(comparison.key)}.html"' not in page:
         out.append("no way back to the Diff page")
+    from onetrace_console.kept_inputs import JSON_DIFFS
     listed = [(n["node"], o) for n in doc["nodes"] if n["verdict"] in LISTED for o in n["outputs"]]
+    #: Each JSON output's members, drawn under it as the Diff page draws them.
+    members = {(n["node"], k): m for n in doc["nodes"] for k, m in (n.get(JSON_DIFFS) or {}).items()}
     items = re.findall(r'<li data-listed="(output-\d+)"><a href="#(output-\d+)">(.*?)</a></li>', page, re.S)
     if [(a, b) for a, b, _ in items] != [(f"output-{i}", f"output-{i}") for i in range(1, len(listed) + 1)]:
         out.append(f"the left pane lists {len(items)} outputs, the document {len(listed)}")
@@ -44,7 +47,9 @@ def page_problems(page: str, diff_page: str, comparison, store) -> list[str]:
         drawn = re.search(rf'<div id="{anchor}" data-pane-output><h3>(.*?)</h3>', page)
         if drawn is None or drawn.group(1) != escape(stage):
             out.append(f"{anchor}: no diff on the right")
-        elif f'<div id="{anchor}" data-pane-output><h3>{escape(stage)}</h3>{_render_output(output)}</div>' not in page:
+        elif (f'<div id="{anchor}" data-pane-output><h3>{escape(stage)}</h3>'
+              f'{_render_output(output, members.get((stage, output["name"])) if output["verified"] is True else None)}'
+              '</div>') not in page:
             out.append(f"{anchor}: not drawn as the Diff page draws it")
     inputs = list(dict.fromkeys(s for n in doc["nodes"] if n["verdict"] in LISTED for s in n["inputs"]))
     if re.findall(r"<p data-input>(.*?)</p>", page) != [escape(s) for s in inputs]:

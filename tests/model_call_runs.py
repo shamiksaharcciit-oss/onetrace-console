@@ -3,8 +3,9 @@ asked, its steps file, written with the installed onetrace's own helpers: test d
 tests; no model is called. Every field is observed with an invented value, so the SDK's comparator
 compares the two records rather than stopping at a precondition.
 
-`record_run(folder, run_id, fingerprint=..., token_ids=..., files_digest=..., with_record=...)`: the
-run's folder; `with_record=False` records the same step with no model-call record.
+`record_run(folder, run_id, fingerprint=..., token_ids=..., files_digest=..., with_record=..., extra=...)`:
+the run's folder; `with_record=False` records the same step with no model-call record; `extra` sets
+more fields, each observed with the value given (`engine.settings.*`, `sampling.*`, `batch.size`).
 """
 from __future__ import annotations
 
@@ -41,6 +42,8 @@ def rec():
     out["input.token_ids_digest"] = m.observed("sha256:" + "2" * 64, SOURCE)
     out["output.token_ids_digest"] = m.observed(spec["output"], SOURCE)
     out["fingerprints"] = [m.fingerprint("tolerant", "first-token-logprobs", 5, 3, m.observed(spec["fingerprint"], SOURCE))]
+    for k, v in spec["extra"].items():
+        out[k] = m.observed(v, SOURCE)
     return out
 
 
@@ -70,12 +73,13 @@ run()
 
 def record_run(folder: Path, run_id: str, *, fingerprint: str = "sha256:" + "a" * 64,
                output: str = "sha256:" + "b" * 64, token_ids: list[str] | None = None,
-               files_digest: str = "sha256:" + "c" * 64, with_record: bool = True) -> Path:
+               files_digest: str = "sha256:" + "c" * 64, with_record: bool = True,
+               extra: dict[str, str] | None = None) -> Path:
     folder.mkdir(parents=True, exist_ok=True)
     code = folder / "model_call_run.py"
     code.write_text(_SCRIPT, encoding="utf-8")
     spec = {"source": SOURCE, "fingerprint": fingerprint, "output": output, "token_ids": token_ids,
-            "files_digest": files_digest, "with_record": with_record}
+            "files_digest": files_digest, "with_record": with_record, "extra": extra or {}}
     env = {**os.environ, "ONETRACE_RUN_ID": run_id}
     subprocess.run([sys.executable, str(code), str(folder / "runs"), json.dumps(spec)], check=True,
                    capture_output=True, env=env, cwd=folder)

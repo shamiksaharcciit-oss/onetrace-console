@@ -8,7 +8,7 @@ are untouched, and this module still does **not** import the original repository
 (022 §2) nothing in `viewer/` imports from that repository, so that this package can leave for
 the SDK repository with one `git mv` and no untangling.
 
-The two pins below -- the whole file's sha256, as 10-01ck §1 asks, and §3's block's -- were
+The two pins below -- the whole file's sha256, and §3's block's -- were
 computed from the vendored bytes by tooling and written in by script (X-11).
 
 X-6: the spec is a hard requirement. A missing or drifted spec **raises**; there is no

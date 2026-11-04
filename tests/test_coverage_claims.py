@@ -14,7 +14,7 @@ account. The claims, and what may qualify each:
     nothing is missing     -- the receipts' own account at most
     consistency            -- a receipt misstating its stage order still passes 0.1.2
     proof of time          -- "existed by", "hasn't changed since", "independent anchor": 0.1.2
-                              checks only that an anchor is declared (10-01cc §1)
+                              checks only that an anchor is declared
     fully checked/verified -- a claim of universal coverage
 
 **What is read:** every page the console draws for real runs through the pinned verifier -- one
@@ -64,7 +64,7 @@ CLAIMS = {
         r"\b(?:checks? out|holds?|held|checked|verified|pass(?:es|ed)?)\b", re.I),
     "nothing is missing": re.compile(r"\bnothing (?:is |was )?missing\b", re.I),
     #: 0.1.2 passes a receipt that misstates its stage order, so "consistent with itself" and
-    #: "checked for consistency" say more than it checks (30bv §3.5 reworded both).
+    #: "checked for consistency" say more than it checks; both were reworded.
     "consistency": re.compile(r"\bconsistent with itself\b|\bchecked for consistency\b", re.I),
     #: Proof of time. 0.1.2 checks only that an anchor state is declared, and
     #: this console checks no anchor.
@@ -244,7 +244,7 @@ def test_only_what_0_2_0_checks_is_allowed_in_a_document():
 
 
 def test_the_operator_readme_says_what_0_1_2_does_not_check(examined):
-    """The two non-claims 30bv §3.5 adds beside the stage-order one: output files are checked
+    """The two non-claims added beside the stage-order one: output files are checked
     only when a run carries them, and a receipt's coverage is its own account."""
     text = " ".join((REPO / "OPERATOR_README.md").read_text(encoding="utf-8").split())
     examined(2, "non-claims read")
