@@ -182,18 +182,32 @@ def load_folder(folder: Path, store: Store, config: Config, *,
         missing = [n for n in compare if n not in names]
         if missing and watched:
             shared = shared_heads(found)
-            loaded = [deliver_one(run_dir, store, config, shared=shared) for run_dir in found]
+            loaded = _checked(found, store, config, shared)
             return Loaded(tuple(loaded), None, WAITING.format(names=" and ".join(missing)))
         if missing:
             raise LoadRefused(f"--compare names {', '.join(missing)}, not a run folder in {folder} "
                               f"(there: {', '.join(names)}).")
     shared = shared_heads(found)
-    loaded = [deliver_one(run_dir, store, config, shared=shared) for run_dir in found]
+    loaded = _checked(found, store, config, shared)
     loaded = recheck_nested(loaded, store, config)
     comparison, note = None, ""
     if compare is not None:
-        comparison, note = _compare(loaded, compare, store)
+        from onetrace_console import startup_progress
+        with startup_progress.phase("comparing pairs", 1) as step:
+            comparison, note = _compare(loaded, compare, store)
+            step()
     return Loaded(tuple(loaded), comparison, note)
+
+
+def _checked(found, store: Store, config: Config, shared: set[str]) -> list:
+    """Each run folder delivered and checked, said as a phase while the console starts."""
+    from onetrace_console import startup_progress
+    out = []
+    with startup_progress.phase("checking runs", len(found)) as step:
+        for run_dir in found:
+            out.append(deliver_one(run_dir, store, config, shared=shared))
+            step()
+    return out
 
 
 def recheck_nested(loaded: list[LoadedRun], store: Store, config: Config) -> list[LoadedRun]:
@@ -355,9 +369,6 @@ def build_public(folder: Path, *, runs_from: Path | None = None, explanations: P
 def main(argv: list[str], *, demo: bool) -> int:
     import argparse
 
-    from onetrace_console.config import ENV_VAR
-    from onetrace_console.serve import main as serve_main
-
     parser = argparse.ArgumentParser(
         prog="onetrace-console demo" if demo else "onetrace-console",
         description=("Build the demo store's runs into ./onetrace-console-demo, load them, "
@@ -397,6 +408,8 @@ def main(argv: list[str], *, demo: bool) -> int:
                                  "wrote under FOLDER/explain/ of comparisons this build holds, "
                                  "read-only")
     parser.add_argument("--open", action="store_true", help="open the page in your browser")
+    parser.add_argument("--quiet", action="store_true",
+                        help="say nothing while starting; only the addresses once it is listening")
     parser.add_argument("--port", type=int, default=None,
                         help="the port to listen on (default: 8080, or the configuration file's)")
     args = parser.parse_args(argv)
@@ -409,13 +422,27 @@ def main(argv: list[str], *, demo: bool) -> int:
         parser.error("--runs-from, --explanations and --site-links go into a build: give --public --build with them")
     if demo and args.public:
         return _public_demo(args)
+    from onetrace_console import startup_progress
+    progress = startup_progress._SILENT if args.quiet else startup_progress.Progress()
+    with startup_progress.using(progress):
+        return _start(args, parser, demo)
 
+
+def _start(args, parser, demo: bool) -> int:
+    """`demo` or a runs folder, past its arguments: the store loaded, the pages drawn, and served;
+    each phase said as it happens (`startup_progress`)."""
+    from onetrace_console import startup_progress
+    from onetrace_console.config import ENV_VAR
+    from onetrace_console.serve import main as serve_main
     if demo:
         if os.environ.get(ENV_VAR) is not None:
             print(f"refusing to start the demo: {ENV_VAR} is set. The demo runs in local mode, "
                   f"with its own store and trust file.\nfix: run it without {ENV_VAR}.",
                   file=sys.stderr)
             return 1
+        #: The first line at once, before the demo's runs are recorded or read.
+        startup_progress.say(startup_progress.LATER_DEMO.format(folder=DEMO_FOLDER)
+                             if (Path.cwd() / DEMO_FOLDER).exists() else startup_progress.FIRST_DEMO)
         try:
             folder = demo_folder(Path.cwd())
         except LoadRefused as e:
@@ -438,6 +465,7 @@ def main(argv: list[str], *, demo: bool) -> int:
         except LoadRefused as e:
             print(f"refusing to start: {e}", file=sys.stderr)
             return 1
+        startup_progress.say(startup_progress.FOLDER.format(folder=args.folder))
     if args.port is not None:
         overrides["port"] = args.port
 

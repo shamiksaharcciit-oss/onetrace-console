@@ -23,16 +23,19 @@ def checks_problems(article: str) -> list[str]:
     """repeated.json's checks: three commands, each once, in the order first asked; Run for the
     two the console runs (by the first index each was asked at), Copy for reproduce, which needs a
     runner one names."""
-    rows = re.findall(r'<li data-check="(\d+)"><code>([^<]*)</code> (.*?)</li>', article, re.S)
+    rows = re.findall(r'<li data-check="(\d+)"(?: data-held)?><code>([^<]*)</code> (.*?)</li>', article, re.S)
     out = []
-    want = [("0", "onetrace diff a b --text --stage score#1", "run"),
+    #: The text check's result is the comparison's own text diff: "Run on this page" (console 0.6.1 item 11).
+    want = [("0", "onetrace diff a b --text --stage score#1", "held"),
             ("2", "onetrace localize a b --for decide#1", "run"),
             ("3", "onetrace reproduce b score#1 --runner <your runner>", "copy")]
     got = []
     for i, cmd, rest in rows:
         run = re.search(rf'data-explain-post="/explain/check\?c=[0-9a-f]{{64}}&amp;e=[^&]+&amp;i={i}"', rest)
         copy = re.search(r'<button type="button" data-copy="([^"]*)" hidden>Copy the command</button>', rest)
-        kind = "run" if run and not copy else "copy" if copy and not run else "?"
+        held = 'data-explain="held">Run on this page</span>' in rest
+        kind = ("held" if held and not run and not copy else "run" if run and not copy
+                else "copy" if copy and not run else "?")
         if copy and unescape(copy.group(1)) != unescape(cmd):
             out.append(f"check {i}: Copy copies {copy.group(1)!r}")
         got.append((i, unescape(cmd), kind))

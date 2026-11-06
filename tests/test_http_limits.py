@@ -60,7 +60,8 @@ def test_every_request_to_a_started_console_takes_its_limit_from_the_helper(exam
             if m:
                 sites.append((p.name, n, m.group(1)))
     examined(len(sites), "requests with a limit")
-    assert len(sites) == 34
+    #: 34 at console 0.6.0; console 0.6.1's items' own tests add 9, each with its limit.
+    assert len(sites) == 43
     assert [s for s in sites if not re.fullmatch(r"\{?limit\([0-9.]+\)\}?", s[2])] == []
 
 

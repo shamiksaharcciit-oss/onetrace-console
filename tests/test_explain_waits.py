@@ -85,8 +85,8 @@ def running_problems(panel: str, step_words: str) -> list[str]:
     out = []
     if step_words not in text:
         out.append(f"the line does not say {step_words!r}: {text!r}")
-    if not re.search(r"started \d\d:\d\d:\d\d UTC", text):
-        out.append(f"the line gives no start time: {text!r}")
+    if not re.search(r"at \d\d:\d\d UTC", text) or not re.search(r"\(\d+ s so far\)", text):
+        out.append(f"the line gives no start time or no elapsed time: {text!r}")
     return out
 
 
@@ -107,7 +107,8 @@ def test_a_press_returns_at_once_and_says_what_it_is_waiting_for(held, examined)
         return s["running"] and s["step"] == "waiting" and s
     s = _until(waiting)
     examined(1, "press waiting for its reply")
-    assert s["words"] == "Sent to openai:test-model and waiting for its reply"
+    #: Console 0.6.1 item 6: the running state names the address, the time it was sent, and waits.
+    assert re.fullmatch(r"Sent to 127\.0\.0\.1:\d+ at \d\d:\d\d UTC; waiting for the reply", s["words"]), s["words"]
     assert seen[0] == "preparing"
     assert running_problems(explain.panel(comparison, store, public=False), s["words"]) == []
     gate.set()

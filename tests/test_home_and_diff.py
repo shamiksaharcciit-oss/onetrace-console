@@ -707,6 +707,9 @@ def test_the_new_pages_pass_the_five_prohibitions(new_pages, examined):
                       r'<button type="submit">search</button></form>',
                       r'<form method="post" action="/compare" data-visitor-compare>.*?'
                       r'<button type="submit">compare</button></form>',
+                      #: A local console's pipeline picker (console 0.6.1 item 4): one pair to /compare.
+                      r'<form method="post" action="/compare" data-local-compare>.*?'
+                      r'<button type="submit">compare</button></form>',
                       r'<label hidden data-benchmark-note>note \(optional\) <input type="text" maxlength="280" '
                       r'data-benchmark-note-input></label>',
                       r'<button type="button" hidden data-benchmark-post="/benchmark\?run=[0-9a-f]{64}&amp;'
@@ -715,11 +718,15 @@ def test_the_new_pages_pass_the_five_prohibitions(new_pages, examined):
         for mechanism in ("<button", "<form", "<input", "onclick=", "onsubmit="):
             assert mechanism not in rest, f"{name} carries {mechanism!r}"
         if panel:
+            #: The panel's text checkbox (console 0.6.1 item 12), by its exact shape: its one input.
+            shown = re.sub(r'<p data-explain="text-choice"><label><input type="checkbox" '
+                           r'data-explain-text="/explain/text\?c=[0-9a-f]{64}&amp;on="(?: checked)? disabled> '
+                           r'[^<]*</label></p>', "", panel.group(0))
             for m in ("<form", "<input", "onclick=", "onsubmit="):
-                assert m not in panel.group(0), f"{name}'s explanation panel carries {m!r}"
-            posts = re.findall(r'<button type="button" data-explain-post="([^"]*)"', panel.group(0))
+                assert m not in shown, f"{name}'s explanation panel carries {m!r}"
+            posts = re.findall(r'<button (?:class="primary" )?type="button" data-explain-post="([^"]*)"', panel.group(0))
             assert panel.group(0).count("<button") == len(posts), f"{name}: a button that posts nowhere named"
-            assert all(re.fullmatch(r"/explain(/packet|/check)?\?c=[0-9a-f]{64}(&amp;[a-z]=[^&\"]*)*", p)
+            assert all(re.fullmatch(r"/explain(/packet|/check|/cancel)?\?c=[0-9a-f]{64}(&amp;[a-z]=[^&\"]*)*", p)
                        for p in posts), posts
         inline = re.findall(r'style="[^"]*(?:color|background)[^"]*"', page, re.I)
         assert not inline, f"{name} carries inline colour: {inline[:2]}"

@@ -85,7 +85,8 @@ def padded(tmp_path: Path, length: int) -> Path:
 
 
 def pair_at(root: Path, monkeypatch):
-    """The panel tests' pair, in a store at `root/store`, and a config naming no model yet."""
+    """The panel tests' pair, in a store at `root/store`, and a config naming a model (console 0.6.1 item 6:
+    with none, the panel offers only Set up Explain), whose reply is never read here."""
     from onetrace_console.checks import run_and_record
     from onetrace_console.compare import compare
     from onetrace_console.store import Store
@@ -98,7 +99,7 @@ def pair_at(root: Path, monkeypatch):
     comparison = compare(a, b, store)
     config = root.parent / "config" / "explain.toml"
     config.parent.mkdir()
-    config.write_text("", encoding="utf-8")
+    config.write_text('[model]\nprovider = "fake"\nname = "reply.json"\n', encoding="utf-8")
     monkeypatch.setenv("ONETRACE_EXPLAIN_CONFIG", str(config))
     return store, comparison, config
 
@@ -471,7 +472,8 @@ def test_over_the_limit_on_windows_the_panel_says_so_before_the_command_runs(
 
 def test_at_the_limit_the_panel_offers_explain(tmp_path, monkeypatch, explain_installed, examined):
     from onetrace_console import explain
-    store, comparison, _ = pair_at(padded(tmp_path, explain.LIMIT), monkeypatch)
+    store, comparison, config = pair_at(padded(tmp_path, explain.LIMIT), monkeypatch)
+    config.write_text('[model]\nprovider = "fake"\nname = "reply.json"\n', encoding="utf-8")
     monkeypatch.setattr(explain, "_on_windows", lambda: True)
     monkeypatch.setattr(explain, "long_paths", lambda: False)
     examined(1, "comparison page")

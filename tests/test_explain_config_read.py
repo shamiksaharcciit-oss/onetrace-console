@@ -51,7 +51,11 @@ def test_only_provider_and_name_reach_the_page_the_state_the_attempt_and_the_log
     monkeypatch.setattr(Handler, "store", store)
     assert explain.configured_model() == f"fake:{REPLIES / 'mixed.json'}"
     seen_states = []
+    #: Explain prepares (console 0.6.1 item 6), then Send sends: both presses, each with its own state.
     req = urllib.request.Request(f"{base}/explain?c={comparison.key}", method="POST")
+    with urllib.request.urlopen(req, timeout=limit(60)) as r:
+        assert r.status == 200
+    req = urllib.request.Request(f"{base}/explain?c={comparison.key}&send=yes", method="POST")
     with urllib.request.urlopen(req, timeout=limit(30)) as r:
         assert r.status == 202
     while True:

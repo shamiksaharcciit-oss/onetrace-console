@@ -101,8 +101,10 @@ def test_nothing_is_drawn_as_not_available(onedoor, examined):
         nav = _nav(page).lower()
         for word in ("not available", "unavailable", "coming soon", "disabled"):
             assert word not in nav, word
-        from onetrace_console.frame import SETUP_LINK
-        assert nav.count("<a ") - nav.count(SETUP_LINK.lower()) == len(_items(page)), "an item that is not a link"
+        #: The settings menu's rows link to the setup pages (console 0.6.1 item 13); they are not items.
+        import re
+        nav = re.sub(r'<div class="settings" data-frame="settings">.*?</ul></div></div>', "", nav, flags=re.S)
+        assert nav.count("<a ") == len(_items(page)), "an item that is not a link"
 
 
 def test_every_item_is_a_page_that_exists(onedoor, examined):

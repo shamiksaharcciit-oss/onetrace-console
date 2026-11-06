@@ -123,14 +123,20 @@ def _get(url: str) -> bytes:
     return data
 
 
-def fetch(root: Path, model: Model, get=_get) -> dict[str, str]:
+def fetch(root: Path, model: Model, get=_get, progress=None) -> dict[str, str]:
     """Fetch each file of `model` not already here and matching, checking its sha256 before it is kept:
-    a mismatch refuses by the file's name and keeps nothing of it. {path: sha256} once all match."""
+    a mismatch refuses by the file's name and keeps nothing of it. {path: sha256} once all match.
+    `progress(n, m)`, where given, is told after each file is checked: n of the model's m files."""
     from onetrace_console.store import _atomic_write
     where = folder(root, model)
-    for path, want in sorted(model.files.items()):
+    files = sorted(model.files.items())
+    if progress is not None:
+        progress(0, len(files))
+    for i, (path, want) in enumerate(files, 1):
         p = where / path
         if p.is_file() and _sha256(p) == want:
+            if progress is not None:
+                progress(i, len(files))
             continue
         data = get(URL.format(repo=model.repo, revision=model.revision, path=path))
         got = hashlib.sha256(data).hexdigest()
@@ -139,6 +145,8 @@ def fetch(root: Path, model: Model, get=_get) -> dict[str, str]:
                           f"it was not kept")
         p.parent.mkdir(parents=True, exist_ok=True)
         _atomic_write(p, data)
+        if progress is not None:
+            progress(i, len(files))
     return check(root, model)
 
 

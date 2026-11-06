@@ -214,6 +214,8 @@ def test_a_watched_console_has_no_form_and_no_read_now_route(tmp_path, examined)
         from tests.test_theme_switch import without_the_console_s_own
         #: The index's search box (console 0.5.0) reads; it is no "read now", and is taken out by its
         #: exact markup.
+        #: The settings menu's gear (console 0.6.1 item 13) is setup, not a read: taken out by its markup.
+        page = re.sub(r'<div class="settings" data-frame="settings">.*?</ul></div></div>', "", page, flags=re.S)
         assert not re.search(r"<(form|button)\b", without_the_console_s_own(without_run_tools(page)), re.I), name
     assert answered == (404, b"no such route\n"), answered
 

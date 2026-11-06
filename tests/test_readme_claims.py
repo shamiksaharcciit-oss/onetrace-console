@@ -20,7 +20,7 @@ import pytest
 from onetrace_console.config import Config
 
 REPO = Path(__file__).resolve().parent.parent
-RELEASE = "0.6.0"
+RELEASE = "0.6.1"
 #: The package's own version: the next release, whose heading says "(not released)" until the release
 #: step drops it. Every other version's heading is plain.
 VERSION = tomllib.loads((REPO / "pyproject.toml").read_text(encoding="utf-8"))["project"]["version"]
@@ -34,6 +34,24 @@ HELD = {"feature", "extra", "option"}
 
 #: This release's: (the entry's lead, as it starts, its kind, the README words that cover it).
 CLAIMS = [
+    ("The confirm button shows the download", "fix", None),
+    ("The extra missing, said plainly", "fix", None),
+    ("The ladder marks a drop only where there is one", "fix", None),
+    ("Two dropdowns to choose a pair", "feature", "- **Choosing two runs:**"),
+    ("Progress while the console starts", "option", "`--quiet` keeps them silent"),
+    ("The Explain panel reads as a flow", "feature", "- **The Explain panel's flow:**"),
+    ("The first-send question in plain words", "wording", None),
+    ("A key variable not set says where to look", "feature",
+     "the variable its `key_env` names, and whether it is set, never its value"),
+    ("Lead: where to look first", "wording", None),
+    ("Backticks as code", "fix", None),
+    ("A check the page already ran reads as run", "feature", "A check the page already ran reads \"Run on this page\""),
+    ("Include the kept text of outputs that differ", "feature",
+     "A checkbox beside Send, off by default, includes the kept text of outputs that differ"),
+    ("A settings button at the top right", "feature", "- **Settings, top right:**"),
+]
+#: 0.6.0's, held as they were.
+CLAIMS_060 = [
     ("One line at the first difference names what kind of thing differs there", "feature",
      "- **The kind of difference:**"),
     ("A JSON output's members that differ, by path", "feature", "- **JSON outputs, by member:**"),
@@ -93,7 +111,7 @@ CLAIMS_050 = [
     ("A run's incident takes", "fix", "An incident's page has a new address; the old address no longer answers."),
 ]
 #: The earlier releases' tables, by release.
-EARLIER = {"0.5.1": CLAIMS_051, "0.5.0": CLAIMS_050}
+EARLIER = {"0.6.0": CLAIMS_060, "0.5.1": CLAIMS_051, "0.5.0": CLAIMS_050}
 #: The next release's, under `## [Unreleased]` until its version is set.
 NEXT: list = []
 #: The configuration keys added since 0.5.0, each named in the README.

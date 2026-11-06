@@ -17,11 +17,12 @@ onetrace-console {version}
 
   onetrace-console --version
   onetrace-console pins        what this build is pinned to
-  onetrace-console demo [--open] [--port N]
+  onetrace-console demo [--open] [--port N] [--quiet]
                                record the demo's runs (small example pipelines, no
                                network calls) into ./onetrace-console-demo, load them,
                                compare them, and serve them on 127.0.0.1, printing the
-                               pages' addresses
+                               pages' addresses; each phase is said on stderr as it
+                               happens, unless --quiet
   onetrace-console demo --public [--open] [--port N]
                                the same demo, read-only: every write refused, a banner on
                                every page, built in a temporary folder and served on 127.0.0.1
@@ -35,7 +36,7 @@ onetrace-console {version}
                                --site-links: the public site's links into the demo, one per
                                line; a listed comparison page named anew gets a page at its
                                old name
-  onetrace-console <runs folder> [--compare A B] [--open] [--port N]
+  onetrace-console <runs folder> [--compare A B] [--open] [--port N] [--quiet]
                    [--trust FILE] [--tsa-cert FILE --tsa-root FILE]
                                load every run folder in <runs folder> and serve them on
                                127.0.0.1, store in ./store. Compares nothing unless

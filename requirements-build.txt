@@ -1,0 +1,9 @@
+# The tools that build the console's wheel and sdist, pinned by hash: setuptools 84.0.0, the version
+# PyPI's onetrace-console 0.6.0 was built with (its wheel's WHEEL file says "Generator: setuptools
+# (84.0.0)"). Built from the release commit by the repository's recipe (tools/export_public.py, then
+# tools/build_backend's sdist with SOURCE_DATE_EPOCH at the commit's own time, then the wheel from that
+# sdist) with this pin, both 0.6.0 files are byte-identical to PyPI's; with 83.0.0 the wheel's WHEEL and
+# RECORD differ. Install it alone, in an environment of its own:
+#   python -m pip install --require-hashes -r requirements-build.txt
+setuptools==84.0.0 \
+    --hash=sha256:51a52592b3b99e102b609654876bd65f19f999935166d1352678931132b0c670

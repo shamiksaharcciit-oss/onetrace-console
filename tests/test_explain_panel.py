@@ -30,7 +30,7 @@ LABEL = "Suggested explanation — AI-generated, may be wrong"
 TITLE = "What may have happened"
 AI_LINE = "AI-generated, may be wrong"
 #: The command's kinds, by the badge the console gives them.
-BADGES = [("lead", "Lead (possible culprit)"), ("ruled out", "Ruled out"), ("note", "Note")]
+BADGES = [("lead", "Lead: where to look first"), ("ruled out", "Ruled out"), ("note", "Note")]
 
 
 def _make(root: Path) -> list[Path]:
@@ -169,7 +169,7 @@ def explained_problems(page: str) -> list[str]:
     cite = re.search(r'<a class="chip" data-cite="node/score#1/instrument" title="[^"]*" href="([^"]*)">', a)
     if cite is None or cite.group(1) != "#step-2":
         out.append("a cite does not link to its node's row, as the graph links it")
-    checks = re.findall(r'<li data-check="(\d+)"><code>([^<]*)</code>', a)
+    checks = re.findall(r'<li data-check="(\d+)"(?: data-held)?><code>([^<]*)</code>', a)
     if [c for _, c in checks][:2] != ["onetrace diff baseline candidate --text --stage score#1".replace(
             "baseline", "a").replace("candidate", "b"), "onetrace localize a b --for decide#1"]:
         out.append(f"checks {checks}")
@@ -390,7 +390,10 @@ def test_sabotage_the_format_page_as_a_link_is_named(pair, monkeypatch, examined
 def test_the_packet_is_shown_with_its_size_and_sha256(pair, examined):
     import hashlib
     from onetrace_console import explain
-    store, comparison, _config = pair
+    store, comparison, config = pair
+    #: Show the packet is offered once Explain has prepared it (console 0.6.1 item 6).
+    _fake(config, "mixed.json")
+    explain.prepare(comparison, store)
     got = explain.packet(comparison, store)
     examined(1, "dry run")
     assert got["exit"] == "0" and len(got["stdout"].splitlines()) >= 2, in_full(got)
@@ -401,35 +404,47 @@ def test_the_packet_is_shown_with_its_size_and_sha256(pair, examined):
 
 
 def _ask(pair, sent: dict | None):
-    """Explain pressed with an endpoint configured that the command has sent `sent` to before."""
+    """Explain pressed (it prepares, and sends nothing) with an endpoint configured that the command has
+    sent `sent` to before."""
     from onetrace_console import explain
     store, comparison, config = pair
     _model(config, "openai:a-model")
     if sent is not None:
         endpoint = re.search(r'base_url = "([^"]*)"', config.read_text(encoding="utf-8")).group(1)
         (config.parent / "explain-sent.json").write_text(json.dumps({endpoint: sent}), encoding="utf-8")
-    got = explain.explain(comparison, store)
+    got = explain.prepare(comparison, store)
     return got, _panel(_diff(store, comparison))
+
+
+def _kinds(got: dict) -> list[str]:
+    return json.loads(got["stdout"].splitlines()[0])["kinds"]
 
 
 def test_the_first_send_question_appears_before_a_first_send_to_an_endpoint(pair, examined):
     got, panel = _ask(pair, None)
     examined(1, "comparison page")
-    assert got["exit"] == "2" and "never sent there before" in got["stdout"], in_full(got)
-    asks = re.search(r'<div data-explain="asks">(.*?)</div>', panel, re.S)
-    assert asks and "never sent there before" in unescape(asks.group(1))
-    assert "constants go with their values" not in got["stdout"] or "constants go" in unescape(asks.group(1))
-    assert re.search(r'data-explain-post="/explain\?c=[0-9a-f]{64}&amp;send=yes"', panel), "a Send button"
+    assert got["exit"] == "0" and "dry run: nothing sent" in got["stdout"], in_full(got)
+    block = re.search(r'<div data-explain="first-send">(.*?)</div>', panel, re.S)
+    assert block and "Before anything is sent" in unescape(block.group(1))
+    assert re.findall(r'<li data-kind="([^"]+)"', block.group(1)) == _kinds(got)
+    send = re.search(r'<button class="primary" type="button" data-explain-post="/explain\?c=[0-9a-f]{64}&amp;send=yes"'
+                     r' hidden>Send to 127\.0\.0\.1:\d+</button>', panel)
+    assert send, "a Send button naming the address"
+    assert not list((pair[2].parent).glob("explain-sent.json")), "nothing was sent"
 
 
 def test_the_question_is_not_asked_again_of_an_endpoint_sent_those_kinds(pair, examined):
     """The command's own record of what it sent where decides; the console asks only when it does."""
-    kinds = ["end_outputs", "instrument", "node", "outcome", "output", "upstream", "verdict"]
+    from onetrace_console import explain
+    store, comparison, config = pair
+    _model(config, "openai:a-model")
+    kinds = _kinds(explain.packet(comparison, store))
     got, panel = _ask(pair, kinds)
     examined(1, "comparison page")
-    assert "never sent there before" not in got["stdout"], in_full(got)
-    assert got["exit"] == "3", in_full(got)      # it went on to send, and nothing listens there
-    assert 'data-explain="asks"' not in panel and "send=yes" not in panel
+    assert got["exit"] == "0", in_full(got)      # prepared, and nothing sent
+    assert 'data-explain="first-send"' not in panel and 'data-flow="prepared"' in panel
+    assert re.search(r">Ready to send to 127\.0\.0\.1:\d+\.<", panel)
+    assert re.search(r"&amp;send=yes\" hidden>Send to 127\.0\.0\.1:\d+</button>", panel), "Send names the address"
 
 
 def test_two_explanations_are_listed_newest_first_and_never_merged(pair, examined):
@@ -455,10 +470,11 @@ def test_a_check_s_own_output_and_exit_are_shown_and_no_lead_is_marked_by_the_co
     explain.explain(comparison, store)
     assert len(explain.explanations(store, comparison.key)) == 1, tried(store, comparison)
     (e,) = explain.explanations(store, comparison.key)
-    got = explain.run_check(store, comparison.key, e["record"], 0)
+    #: Check 1, localize --for: check 0's text diff is the page's own, read as run (console 0.6.1 item 11).
+    got = explain.run_check(store, comparison.key, e["record"], 1)
     panel = _panel(_diff(store, comparison))
     examined(1, "check run")
-    out = re.search(r'<li data-check="0">.*?<details data-explain="check-output">(.*?)</details>', panel, re.S)
+    out = re.search(r'<li data-check="1">.*?<details data-explain="check-output">(.*?)</details>', panel, re.S)
     assert out and got["output"].strip().splitlines()[0] in unescape(out.group(1))
     assert f"<span data-exit>{got['exit']}</span>" in out.group(1)
     #: The command's own lead line says how a lead is settled; nothing else in the panel does.
@@ -595,12 +611,12 @@ def windows_output_problems(store, comparison, config) -> list[str]:
     if said not in panel or raw not in panel:
         out.append("packet: not shown as the command wrote it")
     _model(config, "openai:a-model")
-    explain.explain(comparison, store)
+    explain.prepare(comparison, store)
     panel = _panel(_diff(store, comparison))
-    asks = re.search(r'<div data-explain="asks">(.*?)</div>', panel, re.S)
-    #: The console shows a CR as the text `\u000d` (words.escape): a line read with its CR shows it.
-    if not asks or "never sent there before" not in unescape(asks.group(1)) or "\\u000d" in asks.group(1):
-        out.append("asks: the question is not shown as its lines")
+    block = re.search(r'<div data-explain="first-send">(.*?)</div>', panel, re.S)
+    #: The packet's kinds, read from its first line as Windows writes it, each named in the question.
+    if not block or not re.findall(r'<li data-kind="([^"]+)"', block.group(1)) or "\\u000d" in block.group(1):
+        out.append("asks: the question does not name the packet's kinds")
     if not re.search(r'data-explain-post="/explain\?c=[0-9a-f]{64}&amp;send=yes"', panel):
         out.append("asks: no Send button")
     return out
@@ -639,7 +655,7 @@ def test_sabotage_the_packet_read_split_on_newline_is_named(windows_shaped, monk
 
 
 def test_sabotage_the_question_read_split_on_newline_is_named(windows_shaped, monkeypatch, examined):
-    mutated(monkeypatch, "_asks", 'a.get("stdout", "").splitlines()', 'a.get("stdout", "").split("\\n")')
+    mutated(monkeypatch, "_packet_kinds", '.split("\\n", 1)[0]', '.split("\\r\\n", 1)[0]')
     examined(1, "the question read split on newline")
     assert [p.split(":")[0] for p in windows_output_problems(*windows_shaped)] == ["asks"]
 
@@ -871,10 +887,10 @@ def test_sabotage_an_unreachable_reply_drawn_as_an_explanation_is_named(pair, mo
 
 def test_sabotage_a_question_never_shown_is_named(pair, monkeypatch, examined):
     from onetrace_console import explain
-    monkeypatch.setattr(explain, "_asks", lambda a: [])
+    monkeypatch.setattr(explain, "_packet_kinds", lambda a: [])
     _got, panel = _ask(pair, None)
     examined(1, "planted panel")
-    assert 'data-explain="asks"' not in panel and "send=yes" not in panel, "the question test would fail"
+    assert 'data-explain="first-send"' not in panel, "the question test would fail"
 
 
 def test_sabotage_a_console_that_imports_onetrace_explain_is_named(tmp_path, examined):
@@ -889,7 +905,8 @@ def test_sabotage_a_console_that_imports_onetrace_explain_is_named(tmp_path, exa
 def test_sabotage_a_public_page_with_a_button_is_named(pair, monkeypatch, examined):
     from onetrace_console import explain
     from onetrace_console.frame import rendering
-    store, comparison, _config = pair
+    store, comparison, config = pair
+    _fake(config, "mixed.json")         # a model configured: Ready, its Explain button offered
     monkeypatch.setattr(explain, "_public", lambda: False)
     with rendering(onedoor=False, sign_in=False, public=True):
         page = _diff(store, comparison)

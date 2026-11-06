@@ -196,8 +196,10 @@ def test_with_the_extra_absent_no_route_answers(server, monkeypatch):
             return r.status, r.read()
         except urllib.error.HTTPError as e:
             return e.code, e.read()
-    #: Exactly what a page or a route the console never had answers.
-    assert ask("/neighbours/setup") == (404, b"not rendered: neighbours/setup\n")
+    #: The setup page says the extra is missing (console 0.6.1 item 2, tests/test_neighbours_missing.py);
+    #: the routes that turn it on or off answer exactly as a route the console never had.
+    status, page = ask("/neighbours/setup")
+    assert status == 200 and b'data-neighbours="extra-missing"' in page and b"not rendered" not in page
     assert ask("/neighbours/on", b"embedder=all-MiniLM-L6-v2") == ask("/no-such-route", b"x") == (404, b"no such route\n")
     assert ask("/neighbours/off", b"") == (404, b"no such route\n")
 

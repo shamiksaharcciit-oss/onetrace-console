@@ -33,6 +33,9 @@ LADDER_LABEL = ("Per step, how near the two runs' kept inputs and kept outputs a
                 "there. The exact ladder, the short answer and every verdict are unchanged.")
 LADDER_COLUMNS = ("Step", "Input nearness", "Output nearness", "Drop", "Exact difference at this step")
 LARGEST = "largest drop"
+#: Where no rung's drop is above zero, said once under the ladder; and a negative drop said as such.
+NO_DROP = "No step's outputs are further apart than its inputs."
+NEARER = "outputs nearer by {n}"
 NOT_KEPT = "not kept"
 BY_RECORD = "1.00 by the record"
 #: An embedder's number that rounds to 1.000 where the digests differ: never 1.000, which reads like
@@ -46,6 +49,10 @@ ON_WITH = "Neighbours are on, with {who}."
 TURN_OFF = "Turn neighbours off"
 CONFIRM = "Confirm and turn on"
 CHOOSE = "Continue"
+FETCHING = "Fetching {model}: {n} of {m} files checked"
+FETCHING_NOTE = ("Each file is checked by its sha256 as it arrives. This page refreshes itself every {s} s "
+                 "until neighbours are on.")
+ALREADY = "Already fetching {model}; nothing new was started."
 
 
 def _number(n) -> str:
@@ -138,7 +145,8 @@ def ladder_section(comparison, store) -> str:
     head = "".join(f"<th>{escape(c)}</th>" for c in LADDER_COLUMNS)
     rows = []
     for i, r in enumerate(rungs):
-        drop = "" if r.drop is None else _three(r.drop)
+        drop = ("" if r.drop is None else _three(r.drop) if r.drop >= 0 or _three(-r.drop) == "0.000"
+                else NEARER.format(n=_three(-r.drop)))
         marked = i == mark
         named_in = f' <span class="note">least near: <code>{escape(r.input_name)}</code></span>' if r.input_name else ""
         named_out = f' <span class="note">least near: <code>{escape(r.output_name)}</code></span>' if r.output_name else ""
@@ -152,9 +160,13 @@ def ladder_section(comparison, store) -> str:
     from onetrace_console.words import scroll_region
     table = (f'<table class="timeline" data-section="nearness-ladder"><thead><tr>{head}</tr></thead>'
              f'<tbody>{"".join(rows)}</tbody></table>')
+    #: No mark where nothing dropped, and the line that says so -- where some rung has both numbers;
+    #: a ladder with nothing to compare says nothing of it.
+    none = (f'<p class="note" data-nearness="no-drop">{escape(NO_DROP)}</p>'
+            if mark is None and any(r.drop is not None for r in rungs) else "")
     return (f'<section data-section="nearness" class="nearness"><h2>{escape(LADDER_TITLE)}</h2>'
             f'<p class="note">{escape(LADDER_LABEL)}</p>' + scroll_region(table, LADDER_TITLE, "nearness")
-            + "</section>")
+            + none + "</section>")
 
 
 # ------------------------------------------------------------------------------ the setup page
@@ -172,16 +184,24 @@ def _model_line(m) -> str:
 def setup_page(store, *, query: dict | None = None, said: str = "", csrf: str | None = None) -> str:
     """The setup page: what neighbours are and are not, the setting as it is, and the form that turns it on
     (or off). `query`: the embedder chosen, for the confirmation step."""
-    from onetrace_console.neighbours import NON_CLAIMS, settings
+    from onetrace_console.neighbours import NON_CLAIMS, fetching, settings
     from onetrace_console.neighbours.embedder import ALTERNATE, DEFAULT, MODELS, Refused
     q = {k: (v[0] if isinstance(v, list) else v) for k, v in (query or {}).items()}
     setting = settings.read(store)
+    fetch = fetching.now(store) if setting is None else None
+    busy = fetch is not None and fetch.running
     parts = [f"<h1>{escape(TITLE)}</h1>", f"<p>{escape(INTRO)}</p>", f"<p>{escape(WHAT_IS_READ)}</p>",
              f"<p>{escape(RECORDED)}</p>",
              '<section data-section="non-claims"><h2>What this is not</h2><ul>'
              + "".join(f"<li>{escape(c)}</li>" for c in NON_CLAIMS) + "</ul></section>"]
     if said:
         parts.append(f'<p data-neighbours="said" role="status">{escape(said)}</p>')
+    if busy:
+        parts.append(f'<section data-section="fetching"><h2>Turning on</h2><p data-neighbours="fetching" role="status">'
+                     f'{escape(FETCHING.format(model=fetch.model, n=fetch.checked, m=fetch.total))}</p>'
+                     f'<p class="note">{escape(FETCHING_NOTE.format(s=fetching.REFRESH_SECONDS))}</p></section>')
+    elif fetch is not None and fetch.refused:
+        parts.append(f'<p data-neighbours="refused" role="alert">{escape("Not turned on: " + fetch.refused)}</p>')
     if setting is not None:
         e = setting["embedder"]
         who = (f"the endpoint {e['base_url']} (model {e['model']})" if e.get("kind") == "endpoint"
@@ -205,7 +225,10 @@ def setup_page(store, *, query: dict | None = None, said: str = "", csrf: str | 
         parts.append(f'<section data-section="confirm"><h2>Confirm</h2><p data-neighbours="confirmation">'
                      f'{escape(words)}</p><form method="post" action="/neighbours/on">{_csrf(csrf)}{hidden}'
                      f'<input type="hidden" name="confirmed" value="{escape(words, quote=True)}">'
-                     f'<button type="submit">{escape(CONFIRM)}</button> <a href="/{PATH}">Back</a></form></section>')
+                     f'<button type="submit"{" disabled" if busy else ""}>{escape(CONFIRM)}</button> '
+                     f'<a href="/{PATH}">Back</a></form></section>')
+        return "".join(parts)
+    if busy:
         return "".join(parts)
     d, a = MODELS[DEFAULT], MODELS[ALTERNATE]
     parts.append(
@@ -223,8 +246,75 @@ def setup_page(store, *, query: dict | None = None, said: str = "", csrf: str | 
 
 def document(store, **kw) -> str:
     """The setup page as a whole document, its frame empty for the server to fill as every page's is."""
+    from onetrace_console.neighbours import fetching, settings
     from onetrace_console.render import _document
-    return _document(TITLE, f'<div class="cp setup">{setup_page(store, **kw)}</div>')
+    html = _document(TITLE, f'<div class="cp setup">{setup_page(store, **kw)}</div>')
+    if settings.read(store) is None and fetching.running(store):
+        #: The page refreshes itself while the fetch runs: a <meta> refresh, no script.
+        html = html.replace("</head>", f'<meta http-equiv="refresh" content="{fetching.REFRESH_SECONDS}"></head>', 1)
+    return html
+
+
+MISSING = "The neighbours extra is not installed in the Python this console runs from."
+MISSING_PYTHON = "This console runs from:"
+MISSING_INSTALL = "Install the extra into that Python, then start the console again:"
+
+
+#: Where Windows' shells need the Python quoted, each takes its own line (PowerShell runs a quoted program
+#: only after `&`), each labelled.
+IN_CMD = "In Command Prompt:"
+IN_POWERSHELL = "In PowerShell:"
+
+
+def install_line() -> str:
+    """The command that installs the extra into the Python this console runs from, that Python quoted as
+    this machine's shell takes it: Windows' Command Prompt (`subprocess.list2cmdline`, double quotes where
+    needed), or a POSIX shell (`shlex.quote`)."""
+    import shlex
+    import subprocess
+    import sys
+    from onetrace_console.explain import _on_windows
+    quote = (lambda p: subprocess.list2cmdline([p])) if _on_windows() else shlex.quote
+    return f'{quote(sys.executable) if sys.executable else "python"} -m pip install "onetrace-console[neighbours]"'
+
+
+def install_lines() -> list[tuple[str, str]]:
+    """The install line as the page gives it, each with its label: one line, unlabelled, where the Python
+    needs no quoting (both of Windows' shells run it) or off Windows; on Windows where it is quoted, a line
+    for Command Prompt and the same line led by `& ` for PowerShell."""
+    import sys
+    from onetrace_console.explain import _on_windows
+    line = install_line()
+    if _on_windows() and sys.executable and not line.startswith(sys.executable + " "):
+        return [(IN_CMD, line), (IN_POWERSHELL, "& " + line)]
+    return [("", line)]
+
+
+def missing_page() -> str:
+    """The setup page where the extra is not installed, on a local console: said plainly, with the Python
+    the console runs from (`sys.executable`) and the install line. Nothing is offered to turn on."""
+    import sys
+    from onetrace_console.render import _document
+    from onetrace_console.words import verbatim  # a path as the operating system gives it, escaped once
+    body = (f"<h1>{escape(TITLE)}</h1><p>{escape(INTRO)}</p>"
+            f'<section data-section="extra-missing"><h2>Not installed</h2>'
+            f'<p data-neighbours="extra-missing">{escape(MISSING)}</p>'
+            f'<p>{escape(MISSING_PYTHON)} <code data-neighbours="python">{verbatim(sys.executable or "(not known)")}</code></p>'
+            f'<p>{escape(MISSING_INSTALL)}</p>'
+            f'<pre><code data-neighbours="install">pip install "onetrace-console[neighbours]"</code></pre>'
+            + _install_named(verbatim) + "</section>")
+    return _document(TITLE, f'<div class="cp setup">{body}</div>')
+
+
+def _install_named(verbatim) -> str:
+    """The install line with the Python named: one line, or on Windows where it is quoted, a labelled line
+    for each shell."""
+    lines = install_lines()
+    if len(lines) == 1:
+        return f'<p class="note">With that Python named: <code>{verbatim(lines[0][1])}</code></p>'
+    return ('<p class="note">With that Python named:</p>'
+            + "".join(f'<p class="note" data-shell="{shell}">{escape(label)} <code>{verbatim(line)}</code></p>'
+                      for shell, (label, line) in zip(("cmd", "powershell"), lines)))
 
 
 def setup_href(**query) -> str:

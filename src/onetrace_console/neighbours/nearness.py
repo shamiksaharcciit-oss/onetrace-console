@@ -99,9 +99,19 @@ class Rung:
 
     @property
     def drop(self) -> float | None:
+        """Input nearness minus output nearness; None where a side is not kept, or where both numbers
+        are the record's 1.00 (the digests equal on both sides: nothing was embedded, nothing dropped)."""
         if self.inputs is None or self.outputs is None:
             return None
+        if self.inputs.how == BY_RECORD and self.outputs.how == BY_RECORD:
+            return None
         return self.inputs.value - self.outputs.value
+
+    @property
+    def dropped(self) -> bool:
+        """The outputs are further apart than the inputs, to the three places the page shows: a drop
+        above zero. A drop of 0.000, or a negative one (outputs nearer), is no drop."""
+        return self.drop is not None and round(self.drop, 3) > 0
 
 
 def _least(pairs, vectors) -> tuple[Near | None, str, int]:
@@ -177,8 +187,9 @@ def ladder(comparison, store) -> list[Rung] | None:
 
 def largest_drop(rungs: list[Rung]) -> int | None:
     """The index of the rung with the largest drop from input to output nearness, the first on a tie;
-    None where no rung has both numbers."""
-    drops = [(r.drop, -i) for i, r in enumerate(rungs) if r.drop is not None]
+    only a drop above zero is marked (`Rung.dropped`). None where no rung's outputs are further apart
+    than its inputs."""
+    drops = [(round(r.drop, 3), -i) for i, r in enumerate(rungs) if r.dropped]
     if not drops:
         return None
     return -max(drops)[1]

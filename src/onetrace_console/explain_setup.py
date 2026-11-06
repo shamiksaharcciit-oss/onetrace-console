@@ -3,9 +3,11 @@
 It is a guide, and it changes nothing: no form, no button, nothing it sends or saves. What it reads
 of onetrace-explain's configuration is what the console already reads to say which model an
 explanation is being sent to (`explain.configured_model`): the [model] table's `provider` and
-`name`, never `key_env`, `base_url`, `params` or the key (tests/test_explain_setup.py holds it to
-that, with a value planted in each). Where no model is named, it shows the file's path. A public
-console has no setup page and no link to one.
+`name`, never `base_url`, `params` or the key (tests/test_explain_setup.py holds it to that, with a
+value planted in each). It shows the file's path, the variable `key_env` names, and whether that
+variable is set in the environment the console started from -- "set" or "not set", never its value,
+with the restart line where it is not (console 0.6.1 item 8). A public console has no setup page and no
+link to one.
 
 What it says is true of onetrace-explain as the console measures it (`explain.MEASURED`): the kinds
 it always sends, the two command-line flags that add or hold back, that the console's Explain
@@ -42,8 +44,10 @@ STAYS = ("whole run folders", "signatures and keys", "runs outside this comparis
 OPTIONAL = (("--include-text", "adds the kept text of each output that differs, up to 8 KiB each. Prompts "
              "and documents are kept text, so this sends them."),
             ("--redact NAME", "sends the setting NAME by its name and digests only, never its value."))
-BUTTON_USES = ("The console's Explain button passes neither flag: it sends the kinds above and nothing more. "
-               "To send text, or to hold a value back, run onetrace-explain yourself with the flag.")
+BUTTON_USES = ("The console's Explain button prepares the packet and sends nothing; its Send button, named with "
+               "the address, sends the kinds above, and the kept text only where \"Include the kept text of "
+               "outputs that differ\" beside it is ticked (--include-text). It never passes --redact: to hold a "
+               "value back, run onetrace-explain yourself with the flag.")
 PROMISES = ("A claim without a cite in the record is left out.",
             "An explanation never changes a verdict, an exit code or a CI gate.",
             "Every explanation is recorded as its own run.")
@@ -93,8 +97,12 @@ def body(store) -> str:
     installed = explain.command() is not None
     steps = "".join(f'<li><a href="#step-{n}">{n} · {escape(w)}</a></li>' for n, w in enumerate(STEPS, start=1))
     provider = (f'<p data-setup="model">onetrace-explain\'s configuration names <code>{_as_written(model)}</code>.</p>'
+                f'<p data-setup="file">It reads <code>{_as_written(path)}</code>.</p>'
                 if named else
                 f'<p data-setup="model">No model is named in <code>{_as_written(path)}</code>. {escape(SET_HERE)}</p>')
+    #: The variable `key_env` names, and whether it is set where the console started: never its value
+    #: (console 0.6.1 item 8).
+    provider += explain.key_lines(explain.key_status())
     one = (f'<section class="step" id="step-1" data-step="1"><h2>1 · {escape(STEPS[0])}</h2><div class="choices">'
            f'<div class="choice" data-choice="provider"><h3>Your model provider</h3>{provider}'
            "<p>The key stays in your own environment, in the variable your configuration names: "

@@ -6,9 +6,10 @@ Held here:
   the three promises and the steps a person takes, and linked from the panel and the sidebar;
 - it writes nothing (the store and the configuration's folder byte for byte, before and after), and
   has no form and no control that sends or saves;
-- it never holds a value of `key_env`, `base_url` or `params`, nor the key: a value is planted in
-  each, and in the variable `key_env` names, and none must appear (a sabotage that reads `base_url`
-  is named);
+- it never holds a value of `base_url` or `params`, nor the key: a value is planted in each, and in
+  the variable `key_env` names, and none must appear (a sabotage that reads `base_url` is named). The
+  variable's NAME is shown, with "set" or "not set", since console 0.6.1 item 8
+  (tests/test_explain_key_env.py);
 - a public console has no setup page, and none of its pages links to one.
 """
 from __future__ import annotations
@@ -169,8 +170,11 @@ def test_the_panel_and_the_sidebar_link_to_it_on_a_local_console(local, examined
     _, page = _get(f"{base}/diff/{comparison.key}.html")
     examined(2, "links: the panel's and the sidebar's")
     panel = re.search(r'<section data-section="explain"[^>]*>.*?</section>', page, re.S).group(0)
-    assert '<p data-explain="setup"><a href="/explain/setup">Set up Explain</a></p>' in panel
-    assert page.count(SETUP_LINK) == 1
+    #: Console 0.6.1 item 6: with no model configured, the panel's one button is Set up Explain.
+    assert '<a class="button" data-explain="setup" href="/explain/setup">Set up Explain</a>' in panel
+    #: The sidebar's link left for the settings menu's row, at the top right (console 0.6.1 item 13).
+    assert page.count(SETUP_LINK) == 0
+    assert re.search(r'<a href="/explain/setup" data-setting="explain" data-state="[a-z]+">Explain: ', page)
 
 
 def examples_problems(main: str) -> list[str]:
@@ -259,7 +263,9 @@ def test_no_value_of_key_env_base_url_or_params_nor_the_key_is_on_the_page(local
     status, page = _get(f"{base}/explain/setup")
     examined(len(MARKS) + 1, "planted values")
     assert status == 200 and "Your model provider" in page
-    assert leaks({"the setup page": page}) == []
+    #: The variable's name is shown, by item 8; its value never.
+    assert leaks({"the setup page": page}) == ["the setup page shows key_env's value"]
+    assert f"its key_env names {MARKS['key_env']}, which is set" in unescape(page)
     assert KEY_VALUE not in page
 
 
@@ -280,7 +286,8 @@ def test_sabotage_the_model_read_with_its_endpoint_and_key_is_named(local, monke
     monkeypatch.setattr(explain, "configured_model", wider)
     _, page = _get(f"{base}/explain/setup")
     examined(1, "planted reading")
-    assert leaks({"the setup page": page}) == ["the setup page shows base_url's value"]
+    assert leaks({"the setup page": page}) == ["the setup page shows base_url's value",
+                                               "the setup page shows key_env's value"]
     assert KEY_VALUE in page
 
 
@@ -317,8 +324,11 @@ def test_a_public_console_has_no_setup_page_and_no_link_to_one(public, examined)
 def test_sabotage_the_link_drawn_on_a_public_console_is_named(public, monkeypatch, examined):
     from onetrace_console import frame
     base, _, _, comparison, _ = public
-    real = frame.footer
-    monkeypatch.setattr(frame, "footer", lambda user, public=False, setup_link=False: real(user, setup_link=True))
+    from onetrace_console.settings_menu import menu
+    real = frame.nav
+    #: The settings menu drawn on a public console's pages (console 0.6.1 item 13: the link to the setup
+    #: page is the menu's row now, not the footer's).
+    monkeypatch.setattr(frame, "nav", lambda rel, **kw: real(rel, **{**kw, "settings": menu(None)}))
     examined(4, "a request for the page, and three pages")
     assert public_problems(base, comparison) == [f"{rel} links to the setup page"
                                                  for rel in ("/", "/comparisons.html", f"/diff/{comparison.key}.html")]

@@ -161,13 +161,15 @@ def test_every_exported_page_is_the_served_page_less_the_rewrite_and_the_banner(
             continue
         page = _unbanner(got.decode("utf-8"))
         #: A local console serves its footer with a link to its setup page; a file has none.
-        from onetrace_console.frame import SETUP_LINK
-        served_page = want.decode("utf-8").replace(SETUP_LINK, "", 1)
+        #: A local console serves its settings menu at the top right (console 0.6.1 item 13); a file has none.
+        served_page = re.sub(r'<div class="settings" data-frame="settings">.*?</ul></div></div>', "",
+                             want.decode("utf-8"), count=1, flags=re.S)
         #: What only a console can answer is left out of a file: the search box, the line that
         #: opens it, and the benchmark mark's press.
         from onetrace_console.export_static import without_run_tools
         served_page = without_run_tools(served_page)
-        for tool in ("data-search-box", 'data-what-changed="same-inputs"', "data-benchmark-post"):
+        for tool in ("data-search-box", 'data-what-changed="same-inputs"', "data-benchmark-post",
+                     "data-local-compare"):
             assert tool not in page, (rel, tool)
         #: The one part drawn otherwise: a comparison's explanation panel, its place only on a file
         #: (no button, no script), where the console serves its presses.

@@ -326,11 +326,22 @@ def _render_startup_pages_read(store: Store, root: Path, config: Config | None =
         print(f"onetrace-console: the trust file is now {current} and the time-stamp authority "
               f"{current_tsa}; {rechecked} stored run(s) checked again with them", file=sys.stderr)
     _neighbours_refresh(store, config)
-    for run in store.runs():
+    from onetrace_console import startup_progress
+    runs, comparisons = list(store.runs()), list(store.comparisons())
+    with startup_progress.phase("drawing pages", len(runs) + len(comparisons) + 1) as step:
+        _render_startup_drawn(store, root, config, runs, comparisons, step)
+
+
+def _render_startup_drawn(store: Store, root: Path, config: Config | None, runs, comparisons, step) -> None:
+    """Each run's pages, each comparison's, and the pages over all of them: one step each, said as the
+    console starts (`startup_progress`)."""
+    for run in runs:
         _render_run_pages(run, store, root, config)
+        step()
     for key in store.unreadable_run_keys:
         _render_unreadable_record_pages(store, root, key, kind="run")
-    for comparison in store.comparisons():
+    for comparison in comparisons:
+        step()
         try:
             _render_diff_page(comparison, store, root, public=bool(config and config.public))
         except Exception as e:  # noqa: BLE001 - that page says so, and the log has it
@@ -346,6 +357,7 @@ def _render_startup_pages_read(store: Store, root: Path, config: Config | None =
     for key in store.unreadable_comparison_keys:
         _render_unreadable_record_pages(store, root, key, kind="comparison")
     _render_all_pages(store, root, config)
+    step()
 
 
 def _render_unreadable_record_pages(store: Store, root: Path, key: str, *, kind: str) -> None:
@@ -817,10 +829,21 @@ class Handler(BaseHTTPRequestHandler):
             user = self._principal() if getattr(self, "_request_role", None) == roles.VIEWER else None
             self._respond(200, fill(setup_page(self.store).encode("utf-8"), rel,
                                     onedoor=bool(self.config.extensions.get("onedoor")), user=user,
-                                    setup_link=True), "text/html; charset=utf-8")
+                                    setup_link=True, store=self.store), "text/html; charset=utf-8")
             return
         if rel == "neighbours/setup" and self._neighbours():
             self._handle_neighbours_setup()
+            return
+        if rel == "neighbours/setup" and not self.config.public:
+            #: A local console without the extra: the page says so, with the Python the console runs
+            #: from and the install line. A public console has no such page, the extra or not.
+            from onetrace_console import roles
+            from onetrace_console.frame import fill
+            from onetrace_console.neighbours.pages import PATH, missing_page
+            user = self._principal() if getattr(self, "_request_role", None) == roles.VIEWER else None
+            self._respond(200, fill(missing_page().encode("utf-8"), PATH,
+                                    onedoor=bool(self.config.extensions.get("onedoor")), user=user,
+                                    setup_link=True, store=self.store), "text/html; charset=utf-8")
             return
         if rel == "search":
             self._handle_search()
@@ -869,7 +892,10 @@ class Handler(BaseHTTPRequestHandler):
         from onetrace_console.frame import fill
         user = self._principal() if getattr(self, "_request_role", None) == roles.VIEWER else None
         page = fill(target.read_bytes(), rel, onedoor=bool(self.config.extensions.get("onedoor")),
-                    user=user, public=self.config.public, setup_link=not self.config.public)
+                    user=user, public=self.config.public, setup_link=not self.config.public, store=self.store)
+        if not self.config.public:
+            from onetrace_console.frame import fill_csrf
+            page = fill_csrf(page, self._session_csrf())
         self._respond(200, page, "text/html; charset=utf-8")
 
     # -------------------------------------------------------------- POST
@@ -939,11 +965,15 @@ class Handler(BaseHTTPRequestHandler):
                 if not self._enforce_role("POST", "/compare"):
                     return
                 query = parse_qs(split.query)
+                #: The pipeline page's picker posts a form: a and b, and the CSRF token, in the body.
+                form = bool(body) and not query.get("a")
+                if form:
+                    query = parse_qs(body.decode("utf-8", "replace"))
                 if not self._check_action_csrf(query=query):
                     self._respond(403, b"missing or mismatched CSRF token\n", "text/plain")
                     return
-                self._handle_compare(query)
-            elif split.path in ("/explain", "/explain/packet", "/explain/check"):
+                self._handle_compare(query, form=form)
+            elif split.path in ("/explain", "/explain/packet", "/explain/check", "/explain/cancel", "/explain/text"):
                 if not self._enforce_role("POST", split.path):
                     return
                 query = parse_qs(split.query)
@@ -1187,7 +1217,25 @@ class Handler(BaseHTTPRequestHandler):
             "pages": {"policy": "/policy.html"},
         })
 
-    def _handle_compare(self, query: dict[str, list[str]]) -> None:
+    def _compare_answer(self, status: int, said: dict, form: bool) -> None:
+        """`POST /compare`'s answer: JSON to the Compare buttons; to the picker's form, a redirect to
+        the comparison, or a page with the refusal in the same words."""
+        if not form:
+            self._respond_json(status, said)
+            return
+        if status == 200 and said.get("pages", {}).get("diff"):
+            self._respond(303, b"", "text/plain", [("Location", said["pages"]["diff"])])
+            return
+        from onetrace_console.frame import fill
+        from onetrace_console.visitor_compare import answer_page
+        words = str(said.get("error") or said.get("answer") or "Not compared")
+        words = words if words.rstrip().endswith((".", "!", "?", "…")) else words + "."
+        html = answer_page("Not compared", words, back="/home.html")
+        self._respond(status if status != 200 else 400,
+                      fill(html.encode("utf-8"), "compare", onedoor=bool(self.config.extensions.get("onedoor")),
+                           user=None, setup_link=True, store=self.store), "text/html; charset=utf-8")
+
+    def _handle_compare(self, query: dict[str, list[str]], form: bool = False) -> None:
         from onetrace_console.compare import ComparisonError, compare
         from onetrace_console.store import StoreError
 
@@ -1211,42 +1259,42 @@ class Handler(BaseHTTPRequestHandler):
         b_run = lookup(b_key)
         if a_run is None or b_run is None:
             missing = [k for k, r in (("a", a_run), ("b", b_run)) if r is None]
-            self._respond_json(400, {"error": "; ".join(unreadable) if unreadable else
-                                     f"unknown or malformed run key(s): {missing}"})
+            self._compare_answer(400, {"error": "; ".join(unreadable) if unreadable else
+                                     f"unknown or malformed run key(s): {missing}"}, form)
             return
         if a_run.key == b_run.key:
             #: Said plainly, never 500. Nothing is compared and nothing
             #: is stored: a run compared with itself is the same run.
-            self._respond_json(200, {"same_run": True, "run_key": a_run.key,
-                                     "answer": SAME_RUN})
+            self._compare_answer(200, {"same_run": True, "run_key": a_run.key,
+                                     "answer": SAME_RUN}, form)
             return
         from onetrace_console.store import MISSING_OBJECT, SameFileError
         gone = [(r, self.store.missing(r)) for r in (a_run, b_run)]
         if any(objects for _, objects in gone):
             #: The pair is refused in the fixed words, never a 500; nothing
             #: is compared and nothing stored.
-            self._respond_json(409, {"error": "; ".join(
+            self._compare_answer(409, {"error": "; ".join(
                 f"run {r.key[:12]}: " + MISSING_OBJECT.format(objects=", ".join(objects))
-                for r, objects in gone if objects)})
+                for r, objects in gone if objects)}, form)
             return
         try:
             comparison = compare(a_run, b_run, self.store)
         except ComparisonError as e:
             #: Said, never 500: nothing compared and nothing stored.
-            self._respond_json(400, {"error": str(e)})
+            self._compare_answer(400, {"error": str(e)}, form)
             return
         except SameFileError as e:
             #: A run the store holds that cannot be laid out here as stored: said, nothing
             #: compared and nothing stored.
-            self._respond_json(400, {"error": f"this console cannot lay out a run of this pair "
-                                              f"on this host: {e}"})
+            self._compare_answer(400, {"error": f"this console cannot lay out a run of this pair "
+                                              f"on this host: {e}"}, form)
             return
         rel = _render_diff_page(comparison, self.store, self.store_root, public=self.config.public)
         #: Storing a comparison re-renders its candidate's pages, whose
         #: graph is marked from it; nothing else re-renders them but start-up.
         _render_run_pages(b_run, self.store, self.store_root, self.config)
         _render_all_pages(self.store, self.store_root, self.config)
-        self._respond_json(200, {"comparison_key": comparison.key, "pages": {"diff": f"/{rel}"}})
+        self._compare_answer(200, {"comparison_key": comparison.key, "pages": {"diff": f"/{rel}"}}, form)
 
     def _handle_visitor_compare(self) -> None:
         """`POST /compare` on a public console (`visitor_compare`): the two ids read from the body,
@@ -1321,7 +1369,7 @@ class Handler(BaseHTTPRequestHandler):
                                     found=None if index is not None else run_index.format_of(self.store_root))
         user = self._principal() if getattr(self, "_request_role", None) == roles.VIEWER else None
         self._respond(200, fill(html.encode("utf-8"), "search", onedoor=bool(self.config.extensions.get("onedoor")),
-                                user=user, public=self.config.public, setup_link=not self.config.public),
+                                user=user, public=self.config.public, setup_link=not self.config.public, store=self.store),
                       "text/html; charset=utf-8")
 
     def _handle_bisect(self) -> None:
@@ -1343,7 +1391,7 @@ class Handler(BaseHTTPRequestHandler):
             return
         user = self._principal() if getattr(self, "_request_role", None) == roles.VIEWER else None
         self._respond(200, fill(html.encode("utf-8"), "bisect", onedoor=bool(self.config.extensions.get("onedoor")),
-                                user=user, public=self.config.public, setup_link=not self.config.public),
+                                user=user, public=self.config.public, setup_link=not self.config.public, store=self.store),
                       "text/html; charset=utf-8")
 
     def _neighbours(self) -> bool:
@@ -1364,7 +1412,7 @@ class Handler(BaseHTTPRequestHandler):
         html = document(self.store, query=query, said=said, csrf=self._session_csrf())
         user = self._principal() if getattr(self, "_request_role", None) == roles.VIEWER else None
         self._respond(status, fill(html.encode("utf-8"), PATH, onedoor=bool(self.config.extensions.get("onedoor")),
-                                   user=user, setup_link=True), "text/html; charset=utf-8")
+                                   user=user, setup_link=True, store=self.store), "text/html; charset=utf-8")
 
     def _handle_neighbours(self, path: str, body: bytes) -> None:
         """Turn neighbours on (after the confirmation names the embedder; the local model's files fetched
@@ -1373,9 +1421,33 @@ class Handler(BaseHTTPRequestHandler):
         from onetrace_console.signin import parse_signin_form
         form = parse_signin_form(body) if body else {}
         if path == "/neighbours/on":
+            from onetrace_console.neighbours import fetching
+            from onetrace_console.neighbours.pages import ALREADY
+            if fetching.running(self.store):
+                #: One fetch at a time: a second press is answered, and starts nothing.
+                self._handle_neighbours_setup(said=ALREADY.format(model=fetching.now(self.store).model),
+                                              status=409)
+                return
             try:
-                settings.turn_on(self.store, settings.choose(form), who=self._principal(),
+                chosen = settings.choose(form)
+                if chosen["kind"] == "local":
+                    #: The local model's files are fetched in the background; the setup page shows
+                    #: the count of files checked and refreshes itself until the setting is written.
+                    store, root, config = self.store, self.store_root, self.config
+
+                    def after() -> None:
+                        _neighbours_refresh(store, config)
+                        _render_neighbour_pages(store, root, config)
+                    fetching.forget(self.store)
+                    fetching.start(self.store, chosen, who=self._principal(),
+                                   confirmed=form.get("confirmed", ""), after=after)
+                    self._respond(303, b"", "text/plain", [("Location", "/neighbours/setup")])
+                    return
+                settings.turn_on(self.store, chosen, who=self._principal(),
                                  confirmed=form.get("confirmed", ""))
+            except fetching.AlreadyFetching as e:
+                self._handle_neighbours_setup(said=ALREADY.format(model=e.args[0]), status=409)
+                return
             except embedder.Refused as e:
                 self._handle_neighbours_setup(said=f"Not turned on: {e}", status=400)
                 return
@@ -1456,13 +1528,23 @@ class Handler(BaseHTTPRequestHandler):
         try:
             if explain._lock(comparison.key).locked():
                 raise explain.Busy(explain.BUSY)
-            if path == "/explain":
-                #: The press starts the work and answers at once; the page is drawn again when it ends.
-                explain.start(comparison, store, send=(query.get("send") or [""])[0] == "yes",
+            if path == "/explain" and (query.get("send") or [""])[0] == "yes":
+                #: Send, the only press that sends: it starts the work and answers at once; the page is
+                #: drawn again when it ends.
+                explain.start(comparison, store, send=True,
                               done=lambda: _render_diff_page(comparison, store, root, public=public))
                 self._respond_json(202, {"comparison_key": comparison.key, "started": True,
                                          "state": f"/explain/state?c={comparison.key}"})
                 return
+            elif path == "/explain":
+                #: Explain prepares the packet and never sends (console 0.6.1 item 6).
+                got = explain.prepare(comparison, self.store)
+            elif path == "/explain/cancel":
+                got = explain.cancel(comparison, self.store)
+            elif path == "/explain/text":
+                #: The text checkbox: the choice kept for this comparison only; nothing run or sent.
+                explain.set_include_text(self.store, comparison.key, (query.get("on") or [""])[0] == "yes")
+                got = {"exit": ""}
             elif path == "/explain/packet":
                 got = explain.packet(comparison, self.store)
             else:

@@ -138,12 +138,16 @@ _MARK_CONTROL = re.compile(r'<p>(?:<label hidden data-benchmark-note>.*?</label>
                            r'<button type="button" hidden data-benchmark-post=.*?</p>', re.S)
 
 
+#: A local console's pipeline picker (console 0.6.1 item 4): it posts to the console, so a file has none.
+_LOCAL_PICKER = re.compile(r'<section id="local-compare" data-section="local-compare"[^>]*>.*?</section>\n?', re.S)
+
+
 def without_run_tools(page: str) -> str:
     """A page less what only a console can answer: the index's search box, "Other runs with the
-    same inputs" (which opens it), and the benchmark mark's press -- a marked run keeps its mark,
-    read-only; an unmarked run's page loses the empty section."""
+    same inputs" (which opens it), the benchmark mark's press -- a marked run keeps its mark,
+    read-only; an unmarked run's page loses the empty section -- and the pipeline page's picker."""
     from onetrace_console.benchmark_script import BENCHMARK_SCRIPT
-    page = _SAME_INPUTS.sub("", _RUN_SEARCH.sub("", page))
+    page = _LOCAL_PICKER.sub("", _SAME_INPUTS.sub("", _RUN_SEARCH.sub("", page)))
 
     def mark(m) -> str:
         sec = m.group(0)

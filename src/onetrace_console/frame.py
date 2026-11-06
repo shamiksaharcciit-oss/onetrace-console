@@ -506,9 +506,10 @@ def stylesheet() -> bytes:
     from onetrace_console.explain import EXPLAIN_CSS
     from onetrace_console.explain_setup import SETUP_CSS
     from onetrace_console.info_mark import INFO_CSS
+    from onetrace_console.settings_menu import SETTINGS_CSS
     return (faces + root_css() + "\n" + scale_css() + "\n" + theme_css() + "\n" + CSS + FRAME_CSS + PAGE_CSS + CHIP_CSS
             + THEME_CSS + COMPARE_CSS + PUBLIC_CSS + HEAD_CSS + VIEWS_CSS + SHORT_CSS + EXPLAIN_CSS + SETUP_CSS + INFO_CSS
-            + NARROW_CSS).encode("utf-8")
+            + SETTINGS_CSS + NARROW_CSS).encode("utf-8")
 
 
 def items(onedoor: bool) -> tuple[tuple[str, str, str], ...]:
@@ -572,7 +573,9 @@ SETUP_LINK = f'<div><a href="{_SETUP_PATH}" data-frame="setup">{_SETUP_WORDS}</a
 
 
 def _footer(mode: str, setup_link: bool = False) -> str:
-    link = SETUP_LINK if setup_link else ""
+    #: The setup link left the sidebar for the settings menu at the top right (console 0.6.1 item 13,
+    #: `settings_menu`); `setup_link` is kept for its callers, and draws nothing in the footer.
+    link = ""
     return (f"<footer><div>{mode}</div><div>onetrace-console {escape(__version__)}</div>{link}"
             f"{THEME_SWITCH}{THEME_SCRIPT}</footer>")
 
@@ -604,24 +607,45 @@ def banner() -> str:
             f'{escape(banner_runs())} {escape(banner_compare())}</p>')
 
 
-def nav(rel: str, *, onedoor: bool, foot: str, public: bool = False) -> str:
+def nav(rel: str, *, onedoor: bool, foot: str, public: bool = False, settings: str = "") -> str:
     here = _current(rel)
     links = "".join(
         f'<a href="{href}"{" aria-current=\"page\"" if label == here else ""}>{label}</a>'
         for label, href, _ in items(onedoor))
-    return f'<div class="brand">onetrace</div>{banner() if public else ""}{links}{foot}'
+    return f'<div class="brand">onetrace</div>{settings}{banner() if public else ""}{links}{foot}'
+
+
+#: A form's CSRF field on a drawn page, left empty when it is drawn and filled with the session's token
+#: as the page is served (`fill_csrf`); with no session it stays empty, which the guard does not need.
+CSRF_SLOT = '<input type="hidden" name="csrf_token" value="" data-csrf-slot>'
+
+
+def fill_csrf(page: bytes, token: str | None) -> bytes:
+    """A served page with its CSRF slots holding the session's token (`CSRF_SLOT`)."""
+    marker = CSRF_SLOT.encode("utf-8")
+    if not token or marker not in page:
+        return page
+    from onetrace_console.words import escape as _escape
+    return page.replace(marker, f'<input type="hidden" name="csrf_token" value="{_escape(token, quote=True)}" '
+                                f'data-csrf-slot>'.encode("utf-8"))
 
 
 def fill(page: bytes, rel: str, *, onedoor: bool, user: str | None, public: bool = False,
-         setup_link: bool = False) -> bytes:
+         setup_link: bool = False, store=None) -> bytes:
     """An unsealed page with its frame filled as it is served, or the page unchanged when it has
     no empty frame -- a sealed page, whose frame was filled before its seal."""
     from onetrace_console.viewer.page import FRAME_NAV
     marker = FRAME_NAV.encode("utf-8")
     if page.count(marker) != 1:
         return page
+    #: A local console's page, as it serves it (`setup_link`): the settings menu at the top right,
+    #: its states read now (console 0.6.1 item 13). Never on a public console, nor on a file.
+    settings = ""
+    if setup_link and not public:
+        from onetrace_console.settings_menu import menu
+        settings = menu(store)
     return page.replace(marker, nav(rel, onedoor=onedoor, foot=footer(user, public=public, setup_link=setup_link),
-                                    public=public).encode("utf-8"))
+                                    public=public, settings=settings).encode("utf-8"))
 
 
 # ------------------------------------------------------------------- sealed pages

@@ -138,15 +138,17 @@ def test_a_comparison_with_none_kept_says_so_on_a_build_that_kept_some(kept, tmp
 
 
 def test_the_local_console_is_unchanged_by_a_kept_explanation(kept, examined):
-    """A local console's page is its own: Explain and the packet offered, as before."""
+    """A local console's page is its own: its panel's flow, as before the build kept anything."""
     from onetrace_console import explain
     build, cmp, source = kept
     before = _panel(_local_page(build, cmp))
     explain.keep(source, build)
     examined(1, "local comparison page")
     after = _panel(_local_page(build, cmp))
-    assert "Show the packet" in before and "Show the packet" in after
-    assert re.findall(r"<button\b[^>]*>([^<]*)</button>", after)[:2] == ["Explain", "Show the packet"]
+    flow = lambda p: re.search(r'data-flow="([^"]+)"', p).group(1)  # noqa: E731
+    buttons = lambda p: re.findall(r"<(?:button|a class=\"button\")\b[^>]*>([^<]*)</(?:button|a)>",  # noqa: E731
+                                   re.search(r'<p data-explain="buttons">.*?</p>', p, re.S).group(0))
+    assert flow(after) == flow(before) and buttons(after) == buttons(before) and buttons(after)
 
 
 # ------------------------------------------------------------------ refused, with the reason

@@ -1043,6 +1043,10 @@ TEXT_DIFF_NOT_KEPT = ("This comparison was made before the text diff was kept. C
 TEXT_DIFF_UNREADABLE = "This console can't read this text diff: {why}"
 
 
+#: The text diff section's id, which a check the page already ran links to (console 0.6.1 item 11).
+TEXT_DIFF_ANCHOR = "text-diff"
+
+
 def _text_diff_section(comparison, store) -> str:
     """Item 4: the comparison's own stored run of `onetrace diff --text --json
     --no-follow`, read strictly and drawn as the SDK wrote it, with the limit it was drawn at and
@@ -1051,7 +1055,7 @@ def _text_diff_section(comparison, store) -> str:
                                           text_diff_raw)
     from onetrace_console.kept_inputs import for_this_console
     from onetrace_console.textdiff_view import TextDiffUnreadable, read_textdiff, render_textdiff
-    head = f'<section data-section="text-diff"><h2>{escape(TEXT_DIFF_HEADING)}</h2>'
+    head = f'<section data-section="text-diff"><h2 id="{TEXT_DIFF_ANCHOR}">{escape(TEXT_DIFF_HEADING)}</h2>'
     found = text_diff_raw(comparison, store)
     if found is None:
         return f"{head}<p>{escape(TEXT_DIFF_NOT_KEPT)}</p></section>"

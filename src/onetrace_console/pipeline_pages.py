@@ -201,6 +201,41 @@ def _picker(pipeline) -> str:
     return picker(pipeline)
 
 
+#: A local console's picker (console 0.6.1 item 4): its heading, labels and button.
+LOCAL_PICKER_HEAD = "Compare two runs"
+LOCAL_PICKER_WORDS = ("Choose a baseline and a candidate from this pipeline's runs, oldest first as this console "
+                      "received them. Compare makes the comparison, or opens it where this console holds it.")
+LOCAL_PICKER_BUTTON = "Compare"
+
+
+def _local_picker(pipeline) -> str:
+    """On a local console's pipeline page: two dropdowns of its runs, by name and arrival time, posting
+    `POST /compare` with the run keys and the session's CSRF token (filled as the page is served,
+    `CSRF_SLOT`), through the same guards as the Compare buttons; no GET makes a comparison. Not on a
+    public console (which has its own picker) nor on a static export, whose pages press nothing; and
+    not for a pipeline over the list cap, whose two-step pages stay."""
+    from onetrace_console.explain import _NO_PRESSES
+    from onetrace_console.frame import CSRF_SLOT, rendering_public
+    from onetrace_console.store import arrival_order
+    from onetrace_console.viewer.model import LIST_CAP, NAME_CAP
+    if rendering_public() or _NO_PRESSES.get():
+        return ""
+    runs = arrival_order(pipeline.runs, newest_first=False)
+    if len(runs) < 2 or len(runs) > LIST_CAP:
+        return ""
+
+    def select(name: str, label: str, chosen: int) -> str:
+        options = "".join(f'<option value="{_tag(r.key)}"{" selected" if i == chosen else ""}>'
+                          f"{escape(r.run_id[:NAME_CAP])} · {escape(str(r.received_at).replace('T', ' '))}</option>"
+                          for i, r in enumerate(runs))
+        return f'<label>{escape(label)} <select name="{name}" required>{options}</select></label>'
+    return (f'<section id="local-compare" data-section="local-compare" class="visitor-compare">'
+            f"<h2>{escape(LOCAL_PICKER_HEAD)}</h2><p>{escape(LOCAL_PICKER_WORDS)}</p>"
+            f'<form method="post" action="/compare" data-local-compare>{CSRF_SLOT}'
+            f'{select("a", "Baseline (run A)", len(runs) - 2)} {select("b", "Candidate (run B)", len(runs) - 1)} '
+            f'<button type="submit">{escape(LOCAL_PICKER_BUTTON)}</button></form></section>')
+
+
 def render_pipeline(pipeline, store: Store, *, generated_at: str, which: str = "all") -> str:
     """The pipeline's page, or one of its filters."""
     from onetrace_console.choose_pages import choose_href
@@ -234,6 +269,7 @@ def render_pipeline(pipeline, store: Store, *, generated_at: str, which: str = "
         chain(pipeline, counts),
         f'<p data-section="first-differences">{escape(said)}</p>',
         _picker(pipeline),
+        _local_picker(pipeline),
         f'<p data-section="filters">Show: {filters}</p>',
         f'<p data-section="shown">{len(shown)} of {n} run{"" if n == 1 else "s"} shown.</p>',
         legend(),

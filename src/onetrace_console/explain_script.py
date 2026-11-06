@@ -19,7 +19,7 @@ EXPLAIN_SCRIPT = (
     "[data-explain=asks],[data-explain=refused-press]').forEach(function(e){e.remove()});poll()}"
     "function poll(){fetch('/explain/state?c='+encodeURIComponent(c),{credentials:'same-origin'})"
     ".then(function(r){return r.json()}).then(function(t){if(!t.running){location.reload();return}"
-    "line('running').textContent=t.words+', started '+t.started+' ('+t.elapsed+' s so far).';"
+    "line('running').textContent=t.words+' ('+t.elapsed+' s so far).';"
     "setTimeout(poll,1000)},function(){setTimeout(poll,2000)})}"
     "s.querySelectorAll('button[data-explain-post]').forEach(function(b){"
     "b.hidden=false;b.addEventListener('click',function(){"
@@ -33,4 +33,9 @@ EXPLAIN_SCRIPT = (
     "s.querySelectorAll('button[data-copy]').forEach(function(b){if(!navigator.clipboard)return;"
     "b.hidden=false;b.addEventListener('click',function(){navigator.clipboard.writeText(b.getAttribute('data-copy'))"
     ".then(function(){b.textContent='Copied'},function(){b.textContent='Not copied'})})});"
+    "s.querySelectorAll('input[data-explain-text]').forEach(function(x){x.disabled=false;"
+    "x.addEventListener('change',function(){var m=document.cookie.match(/(?:^|; )onetrace_csrf=([^;]*)/);"
+    "x.disabled=true;fetch(x.getAttribute('data-explain-text')+(x.checked?'yes':'no'),{method:'POST',"
+    "credentials:'same-origin',headers:m?{'X-CSRF-Token':decodeURIComponent(m[1])}:{}})"
+    ".then(function(){location.reload()},function(){x.disabled=false})})});"
     "if(s.querySelector('[data-explain=running]'))poll()})()</script>")

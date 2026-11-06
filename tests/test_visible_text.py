@@ -1295,6 +1295,17 @@ EXPLAINED.setdefault("diff[held-a,held-b]", {}).setdefault("new", {}).update(dic
 _EXPLAIN_032 = "the explanation panel's 0.3.2 heading, and its link to the setup page"
 EXPLAINED.setdefault("diff[held-a,held-b]", {}).setdefault("new", {}).update(dict.fromkeys(
     ["What may have happened", "Set up Explain"], _EXPLAIN_032))
+#: 0.6.1 item 6: the panel reads as a flow, its step line "Prepare → Check → Send → Read" at the top; with
+#: no model configured it says so, and offers only Set up Explain. Measured, not typed.
+_EXPLAIN_061 = "the explanation panel's flow (console 0.6.1 item 6): its step line and its not-set-up state"
+EXPLAINED.setdefault("diff[held-a,held-b]", {}).setdefault("new", {}).update(dict.fromkeys(
+    ["Prepare", "Check", "Send", "Read",
+     "No model is configured for onetrace-explain. Set up Explain shows where to configure one."], _EXPLAIN_061))
+#: 0.6.1 item 7: the intro says nothing is sent until you confirm (Explain prepares; Send sends).
+_EXPLAIN_061_7 = "the explanation panel's intro (console 0.6.1 item 7): nothing is sent until you confirm"
+EXPLAINED.setdefault("diff[held-a,held-b]", {}).setdefault("new", {}).update(dict.fromkeys(
+    ["A suggestion about this comparison's record from a model you configure for onetrace-explain, never a reading "
+     "of it. The verdicts above are what they are without it. Nothing is sent until you confirm."], _EXPLAIN_061_7))
 
 @pytest.fixture(scope="module")
 def now(tmp_path_factory, explain_command):

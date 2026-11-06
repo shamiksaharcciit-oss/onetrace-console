@@ -423,16 +423,23 @@ def build(folder: Path) -> list[RunSpec]:
     from onetrace_console.demo_store.onedoor_demo import Issuer
     issuer = Issuer()
     before = os.environ.get("TRACEPARENT")
+    from onetrace_console import startup_progress
+    pipelines = len({s.folder.split("-", 1)[0] for s in specs})
     try:
-        for spec in specs:
-            run_dir = folder / RUNS_DIRNAME / spec.folder
-            #: Every run recorded inside a span of its own: a W3C traceparent made from its folder,
-            #: the same on every build.
-            os.environ["TRACEPARENT"] = traceparent_for(spec.folder)
-            _record(spec, run_dir, issuer)
-            if spec.sign:
-                keys.sign(run_dir, keys.TRUSTED_SEED if spec.sign == "trusted" else keys.UNTRUSTED_SEED)
-            _after(spec, run_dir)
+        with startup_progress.phase(
+                "recording the demo's runs", len(specs),
+                done=lambda n, took: f"recording the demo's runs: {pipelines} pipelines \u2026 {n} runs, "
+                                     f"{startup_progress.seconds(took)}") as step:
+            for spec in specs:
+                run_dir = folder / RUNS_DIRNAME / spec.folder
+                #: Every run recorded inside a span of its own: a W3C traceparent made from its folder,
+                #: the same on every build.
+                os.environ["TRACEPARENT"] = traceparent_for(spec.folder)
+                _record(spec, run_dir, issuer)
+                if spec.sign:
+                    keys.sign(run_dir, keys.TRUSTED_SEED if spec.sign == "trusted" else keys.UNTRUSTED_SEED)
+                _after(spec, run_dir)
+                step()
     finally:
         if before is None:
             os.environ.pop("TRACEPARENT", None)
@@ -559,8 +566,12 @@ def deliver(folder: Path, store, config):
     #: The comparisons whose two runs are there: a build from an earlier build's runs
     #: (`--runs-from`) holds that build's pipelines only.
     names = {r.name for r in loaded.runs}
-    for i, pair in enumerate(p for p in COMPARISONS + COMPARISONS_BESIDE_KEPT if set(p) <= names):
-        comparison, why = _compare(list(loaded.runs), pair, store)
-        if i == 0:
-            first, note = comparison, why
+    from onetrace_console import startup_progress
+    pairs = [p for p in COMPARISONS + COMPARISONS_BESIDE_KEPT if set(p) <= names]
+    with startup_progress.phase("comparing pairs", len(pairs)) as step:
+        for i, pair in enumerate(pairs):
+            comparison, why = _compare(list(loaded.runs), pair, store)
+            if i == 0:
+                first, note = comparison, why
+            step()
     return replace(loaded, comparison=first, compare_note=note)

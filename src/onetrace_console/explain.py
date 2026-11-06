@@ -54,7 +54,8 @@ LABEL = "Suggested explanation — AI-generated, may be wrong"
 TITLE = "What may have happened"
 AI_LINE = "AI-generated, may be wrong"
 #: A kept claim's kind, as the command records it, by its badge.
-KIND_WORDS = {"lead": "Lead (possible culprit)", "ruled out": "Ruled out", "note": "Note"}
+#: A lead says where to look first; the old label named a cause (console 0.6.1 item 9).
+KIND_WORDS = {"lead": "Lead: where to look first", "ruled out": "Ruled out", "note": "Note"}
 KIND_ORDER = ("lead", "ruled out", "note")
 #: Where the formats the panel reads are written down.
 FORMAT_PAGE = "https://oneproof.dev/onetrace/explain-format.md"
@@ -225,14 +226,16 @@ def _run(folder: Path, args: list[str], env: dict | None = None) -> subprocess.C
                           input=b"", env=utf8_env(env))
 
 
-def _keep(folder: Path, kind: str, args: list[str], proc, *, note: str = "", steps: dict | None = None) -> dict:
+def _keep(folder: Path, kind: str, args: list[str], proc, *, note: str = "", steps: dict | None = None,
+          command: str | None = None) -> dict:
     """An attempt, kept: the command's exit ("" where it gave none, with `note` saying why), its own
     lines, and the step times (seconds, one decimal)."""
     d = folder / "attempts"
     d.mkdir(parents=True, exist_ok=True)
     n = len(list(d.glob("*.json"))) + 1
     code = None if proc is None else proc.returncode
-    attempt = {"n": str(n), "kind": kind, "at": _now(), "command": "onetrace-explain " + " ".join(args),
+    attempt = {"n": str(n), "kind": kind, "at": _now(),
+               "command": ("onetrace-explain " + " ".join(args)) if command is None else command,
                "exit": "" if code is None else str(code),
                "stdout": proc.stdout.decode("utf-8", "replace") if proc is not None else "",
                "stderr": proc.stderr.decode("utf-8", "replace") if proc is not None else ""}
@@ -295,6 +298,107 @@ def configured_model() -> str:
     return f"{m['provider']}:{m['name']}" if isinstance(m, dict) and m.get("provider") and m.get("name") else UNNAMED_MODEL
 
 
+def config_path() -> Path:
+    """The file onetrace-explain reads its model from, as it finds it."""
+    return Path(os.environ.get("ONETRACE_EXPLAIN_CONFIG") or Path.home() / ".config" / "onetrace" / "explain.toml")
+
+
+def model_config() -> dict | None:
+    """The [model] table of onetrace-explain's configuration, read as data, with `provider` and `name`;
+    None where there is none. Only the console's own reading of where a packet goes: never shown whole,
+    and the key is never read (it is in the environment, under the name `key_env` gives)."""
+    import tomllib
+    try:
+        m = tomllib.loads(config_path().read_text(encoding="utf-8")).get("model", {})
+    except (OSError, ValueError, UnicodeDecodeError):
+        return None
+    return m if isinstance(m, dict) and m.get("provider") and m.get("name") else None
+
+
+def endpoint(m: dict | None) -> str:
+    """Where a packet goes, as onetrace-explain names it in its first-send question (its
+    `Model.endpoint`, 0.1.0 and 0.2.0 alike): the base URL less any query, or the Anthropic API."""
+    from urllib.parse import urlsplit, urlunsplit
+    if not m:
+        return ""
+    if m.get("provider") == "fake":
+        return "fake (no network)"
+    base = str(m.get("base_url") or "")
+    if not base:
+        return "https://api.anthropic.com"
+    u = urlsplit(base)
+    host = (u.hostname or "") + (f":{u.port}" if u.port else "")
+    return urlunsplit((u.scheme, host, u.path, "", ""))
+
+
+def host(where: str) -> str:
+    """The address a Send button names: the endpoint's host (and port), as a person reads it."""
+    from urllib.parse import urlsplit
+    if not where or "://" not in where:
+        return where or "the configured model"
+    u = urlsplit(where)
+    return (u.hostname or where) + (f":{u.port}" if u.port else "")
+
+
+def key_status() -> dict | None:
+    """Where onetrace-explain's key is looked for (console 0.6.1 item 8): the file read, the variable its
+    `key_env` names, and whether that variable is set in the environment this console started from --
+    "set" or "not set", never its value. None where the [model] table names no `key_env` (a local
+    server takes no key)."""
+    m = model_config()
+    var = str((m or {}).get("key_env") or "")
+    if not var:
+        return None
+    path = config_path()
+    return {"path": str(path), "short": short_path(path), "var": var, "set": bool(os.environ.get(var))}
+
+
+def short_path(path) -> str:
+    """`path` as the panel names it: its last two parts, after `…`, with the platform's own separator,
+    from the path's own parts (a part may hold a space; Windows' long-path form `\\\\?\\` is a prefix
+    like any drive). A path of two parts or fewer is given whole."""
+    from pathlib import PureWindowsPath
+    sep = "\\" if isinstance(path, PureWindowsPath) else "/"
+    parts = path.parts
+    return f"…{sep}{parts[-2]}{sep}{parts[-1]}" if len(parts) > 2 else str(path)
+
+
+KEY_LINE = "onetrace-explain read {path}; its key_env names {var}, which is {state} in the environment this console started from."
+KEY_RESTART = ("Set {var} in the environment you start the console from, then start the console again; or change "
+               "key_env in that file.")
+
+
+def key_lines(status: dict | None, *, short: bool = False) -> str:
+    """The key's lines, for the setup page and the panel's failure: the file, the variable, set or not
+    set, and where it is not set, the restart line. `short`: the file's path as its last two parts."""
+    from onetrace_console.words import escape, verbatim
+    if status is None:
+        return ""
+    path = status["short"] if short else status["path"]
+    #: The path as the operating system gives it, escaped once for HTML (`verbatim`); the line's own
+    #: words as words. A record's word would show each of a Windows path's backslashes doubled.
+    before, after = KEY_LINE.split("{path}")
+    said = (escape(before) + verbatim(path)
+            + escape(after.format(var=status["var"], state="set" if status["set"] else "not set")))
+    out = f'<p data-explain="key" data-key="{"set" if status["set"] else "not-set"}">{said}</p>'
+    if not status["set"]:
+        out += f'<p data-explain="restart">{escape(KEY_RESTART.format(var=status["var"]))}</p>'
+    return out
+
+
+def sent_kinds(where: str) -> set[str]:
+    """The kinds onetrace-explain records it has sent to `where`, from its own record beside its
+    configuration (`explain-sent.json`), read as data; none where it can't be read."""
+    from onetrace_console.bounded_json import load_json_bounded
+    try:
+        got = load_json_bounded((config_path().parent / "explain-sent.json").read_text(encoding="utf-8"),
+                                "explain-sent.json")
+    except (OSError, ValueError, UnicodeDecodeError, RecursionError):
+        return set()
+    kinds = got.get(where) if isinstance(got, dict) else None
+    return {str(k) for k in kinds} if isinstance(kinds, list) else set()
+
+
 def _spawn(work) -> None:
     threading.Thread(target=work, daemon=True).start()
 
@@ -312,7 +416,7 @@ def start(comparison, store, *, send: bool = False, done=None, in_place: bool = 
     folder = folder_of(store, key)
     folder.mkdir(parents=True, exist_ok=True)
     _set_state(folder, {"kind": "send" if send else "explain", "started_at": _now(), "model": configured_model(),
-                        "step": "preparing"})
+                        "host": host(endpoint(model_config())), "step": "preparing"})
     finished = threading.Event()
 
     def work():
@@ -361,7 +465,9 @@ def state(store, key: str) -> dict:
     except (OSError, ValueError):
         return {"running": False}
     started = datetime.fromisoformat(s["started_at"])
-    return {"running": True, "step": s["step"], "words": STEP_WORDS[s["step"]].format(model=s.get("model", UNNAMED_MODEL)),
+    words = (RUNNING_LINE.format(host=s.get("host") or host(""), at=started.strftime("%H:%M UTC"))
+             if s.get("kind") == "send" else STEP_WORDS[s["step"]].format(model=s.get("model", UNNAMED_MODEL)))
+    return {"running": True, "step": s["step"], "words": words,
             "started": started.strftime("%H:%M:%S UTC"),
             "elapsed": int((datetime.now(timezone.utc) - started).total_seconds())}
 
@@ -370,7 +476,7 @@ def _press(comparison, store, folder: Path, send: bool) -> None:
     """The work of one press: prepare, run the command (watching its record for the step), verify
     what it recorded. Keeps an attempt, with its step times, whatever happens."""
     kind = "send" if send else "explain"
-    args = [REPORT, *(["--yes"] if send else [])]
+    args = [REPORT, *(["--yes"] if send else []), *([TEXT_FLAG] if send and (folder / TEXT_FILE).is_file() else [])]
     times, t0, wall0 = {}, time.monotonic(), time.time()
     from onetrace_console.bounded_json import load_json_bounded
     s = load_json_bounded((folder / RUNNING_FILE).read_text(encoding="utf-8"), RUNNING_FILE)
@@ -448,7 +554,59 @@ def packet(comparison, store) -> dict:
         raise ValueError(too_long(store))
     folder = folder_of(store, comparison.key)
     _prepare(comparison, store, folder)
-    return _keep(folder, "packet", [REPORT, "--dry-run"], _run(folder, [REPORT, "--dry-run"]))
+    args = [REPORT, "--dry-run", *_text_args(store, comparison.key)]
+    return _keep(folder, "packet", args, _run(folder, args))
+
+
+#: "Include the kept text of outputs that differ" (console 0.6.1 item 12): a checkbox beside Send, off by
+#: default, remembered per comparison only (a file in the comparison's folder), passing onetrace-explain's
+#: `--include-text`. What that adds is onetrace-explain's own: for each output that differs, its kept text
+#: where it is text or JSON (`text/`, `application/json`, NDJSON, JSONL), the first 8,192 bytes of each
+#: side, as items of a kind of their own, `text` -- so the first send of text to an address is asked
+#: about as any new kind is (0.1.0 and 0.2.0 alike, `packet.TEXT_CAP`, `packet._kept_text`).
+TEXT_FILE = "include-text"
+TEXT_FLAG = "--include-text"
+TEXT_CHOICE = "Include the kept text of outputs that differ (text and JSON, up to 8 KiB each)"
+
+
+def include_text(store, key: str) -> bool:
+    return (folder_of(store, key) / TEXT_FILE).is_file()
+
+
+def set_include_text(store, key: str, on: bool) -> None:
+    """The comparison's choice, kept beside its presses; a prepared packet made the other way is
+    prepared again before anything is sent (`flow`)."""
+    folder = folder_of(store, key)
+    folder.mkdir(parents=True, exist_ok=True)
+    if on:
+        (folder / TEXT_FILE).write_bytes(b"yes\n")
+    else:
+        (folder / TEXT_FILE).unlink(missing_ok=True)
+
+
+def _text_args(store, key: str) -> list[str]:
+    return [TEXT_FLAG] if include_text(store, key) else []
+
+
+def prepare(comparison, store) -> dict:
+    """Explain's press: the packet prepared (`--dry-run`), never sent. The panel then shows what would
+    go and where, and asks before the first send of a kind to that address (`flow`)."""
+    if too_long(store):
+        raise ValueError(too_long(store))
+    if _lock(comparison.key).locked():
+        raise Busy(BUSY)
+    folder = folder_of(store, comparison.key)
+    _prepare(comparison, store, folder)
+    args = [REPORT, "--dry-run", *_text_args(store, comparison.key)]
+    return _keep(folder, "prepare", args, _run(folder, args))
+
+
+def cancel(comparison, store) -> dict:
+    """Cancel's press: the panel back to Ready, nothing run and nothing sent; kept as a press is."""
+    folder = folder_of(store, comparison.key)
+    folder.mkdir(parents=True, exist_ok=True)
+    return _keep(folder, "cancel", [], SimpleNamespace(returncode=0, stdout=b"", stderr=b""),
+                 note="cancelled: nothing sent", command="")
 
 
 def attempts(store, key: str) -> list[dict]:
@@ -500,6 +658,46 @@ def check_argv(check: dict) -> list[str] | None:
         return [sys.executable, "-m", "onetrace", "localize", "a", "b", "--for", node]
     if c == "match" and check.get("run") in ("baseline", "candidate"):
         return [sys.executable, "-m", "onetrace", "match", "a" if check["run"] == "baseline" else "b"]
+    return None
+
+
+#: A check the page already ran (console 0.6.1 item 11): its row says so, with its one-line result and
+#: a link to the section, in place of its Run button.
+RUN_HERE = "Run on this page"
+SEE_IT = "see it"
+
+
+def held_check(comparison, store, check: dict) -> tuple[str, str] | None:
+    """(its one-line result, the anchor of the section that shows it) where the comparison already
+    holds what `check` would report; None where it does not. Matched by the check's command and
+    arguments (`check_argv`), never by its words:
+    - `onetrace diff a b --text --stage NODE`: the comparison's own text diff (`diff --text`, every
+      stage) holds NODE's result, where it was shown and NODE is in it;
+    - `onetrace localize a b --for NODE`: never held -- the comparison's localize runs with no `--for`,
+      so what it holds is not that command's result, and the check keeps its button.
+    Any other check, or a held run that was not read, keeps its button."""
+    argv = check_argv(check)
+    if argv is None or not hasattr(comparison, "verb"):
+        return None
+    verb, args = argv[3], argv[4:]
+    if verb == "diff" and args[2:4] == ["--text", "--stage"]:
+        from onetrace_console.compare import text_diff_raw
+        from onetrace_console.render import _RESULT_WORDS
+        from onetrace_console.render import TEXT_DIFF_ANCHOR
+        from onetrace_console.textdiff_view import TextDiffUnreadable, read_textdiff
+        found = text_diff_raw(comparison, store)
+        if found is None:
+            return None
+        try:
+            doc = read_textdiff(found[0])
+        except TextDiffUnreadable:
+            return None
+        node = args[4]
+        rows = [n for n in doc.get("nodes", []) if n.get("node") == node] if doc.get("shown") else []
+        if len(rows) != 1:
+            return None
+        said = _RESULT_WORDS.get(rows[0]["verdict"], rows[0]["verdict"])
+        return f"the text diff of {node}: {said}", TEXT_DIFF_ANCHOR
     return None
 
 
@@ -723,7 +921,7 @@ def _attempt_line(a: dict) -> str:
 def _running_line(s: dict) -> str:
     """The press now running: its step in words, the time it started, and how long ago."""
     from onetrace_console.words import escape
-    return (f'<p data-explain="running">{escape(s["words"])}, started {escape(s["started"])} '
+    return (f'<p data-explain="running">{escape(s["words"])} '
             f'<span data-elapsed>({s["elapsed"]} s so far)</span>.</p>')
 
 
@@ -745,6 +943,118 @@ def _asks(a: dict) -> list[str]:
     return [ln for ln in a.get("stdout", "").splitlines() if any(m in ln for m in ASKS_MARKS)]
 
 
+# ------------------------------------------------------------------ the panel's flow
+#: The panel is a small flow (console 0.6.1 item 6): each state says what happens next in one line and
+#: shows only its own buttons. "Explain" prepares the packet and never sends; "Send", always named
+#: with the address, is the only press that sends; "Cancel" sends nothing and goes back to Ready.
+S_NOT_SET_UP, S_READY, S_FIRST_SEND, S_PREPARED, S_RUNNING, S_DONE, S_FAILED = (
+    "not-set-up", "ready", "first-send", "prepared", "running", "done", "failed")
+FLOW_STEPS = ("Prepare", "Check", "Send", "Read")
+NO_MODEL = "No model is configured for onetrace-explain. Set up Explain shows where to configure one."
+READY_LINE = ("1 · Explain prepares what would be sent. 2 · You see it, and confirm before anything leaves "
+              "this machine.")
+FIRST_SEND_HEAD = "Before anything is sent"
+FIRST_SEND_NEW = "onetrace-explain has not sent these kinds of item to {host} before:"
+FIRST_SEND_LINE = "Show the packet sees exactly what goes; Send sends it to {host}."
+#: Each kind of item onetrace-explain names in its first-send question, in words (console 0.6.1 item 7):
+#: the kinds its packet holds, 0.1.0 and 0.2.0 alike (its `packet.build`, and `probe` from its two-run
+#: form). A kind not here is shown by its id alone.
+KIND_PHRASES = {
+    "verdict": "the comparison's verdict, and where the runs first differ",
+    "for": "the result of the comparison's --for: whether a named stage's output matches",
+    "end_outputs": "the comparison's end outputs, by name",
+    "inputs_differ": "which inputs differ, by name and fingerprint",
+    "mask": "the digest of the mask the comparison used",
+    "node": "each stage's name, its verdict and its notes",
+    "instrument": "each stage's instrument: its id, kind, version and configuration fingerprint",
+    "outcome": "each stage's outcome class",
+    "upstream": "the stages each stage reads from",
+    "constant": "each setting that differs, with both values as the runs recorded them",
+    "input": "each input's name, fingerprint and size in bytes",
+    "output": "each output's name, fingerprint and size in bytes",
+    "text": "the kept text of outputs that differ: text and JSON outputs, up to 8 KiB each",
+    "probe": "the results of the read-only checks onetrace-explain ran",
+}
+INTRO = ("A suggestion about this comparison's record from a model you configure for <code>onetrace-explain</code>, "
+         "never a reading of it. The verdicts above are what they are without it. Nothing is sent until you "
+         "confirm.")
+
+
+def kind_phrase(kind: str) -> str:
+    """A kind in the first-send question: its phrase with its id beside it, or its id alone."""
+    from onetrace_console.words import escape
+    said = KIND_PHRASES.get(kind)
+    return f"{escape(said)} (<code>{escape(kind)}</code>)" if said else f"<code>{escape(kind)}</code>"
+PREPARED_LINE = "Ready to send to {host}."
+RUNNING_LINE = "Sent to {host} at {at}; waiting for the reply"
+DONE_LINE = "Read at {at}, from {model}."
+FAILED_FIX = "Set up Explain shows the configuration onetrace-explain reads; then try again."
+SEND = "Send to {host}"
+EXPLAIN, EXPLAIN_AGAIN, SHOW_PACKET, CANCEL, TRY_AGAIN = (
+    "Explain", "Explain again", "Show the packet", "Cancel", "Try again")
+
+
+def _packet_kinds(a: dict) -> list[str]:
+    """The kinds in a prepared packet, as the command printed it (its first line); none where unread."""
+    from onetrace_console.bounded_json import load_json_bounded
+    first = (a.get("stdout") or "").split("\n", 1)[0].rstrip("\r")
+    try:
+        kinds = load_json_bounded(first, "the prepared packet").get("kinds")
+    except (ValueError, AttributeError, RecursionError):
+        return []
+    return [str(k) for k in kinds] if isinstance(kinds, list) else []
+
+
+def flow(store, key: str, *, tried: list | None = None, now: dict | None = None) -> tuple[str, dict]:
+    """The panel's state, and what it says: from the latest press kept (`attempts`), the press now
+    running (`state`) and onetrace-explain's own configuration and record of what it sent where."""
+    tried = attempts(store, key) if tried is None else tried
+    now = state(store, key) if now is None else now
+    m = model_config()
+    where = endpoint(m)
+    info = {"host": host(where), "endpoint": where, "path": str(config_path())}
+    if now.get("running"):
+        return S_RUNNING, {**info, **now}
+    latest = next((a for a in reversed(tried) if a["kind"] not in ("packet",)), None)
+    if latest is None or latest["kind"] == "cancel":
+        if m is None:
+            return S_NOT_SET_UP, info
+        return S_READY, info
+    info["latest"] = latest
+    if latest["kind"] == "prepare":
+        if latest.get("exit") != "0":
+            return S_FAILED, {**info, "step": "Prepare"}
+        if m is None:
+            return S_NOT_SET_UP, info
+        if (TEXT_FLAG in str(latest.get("command", "")).split()) != include_text(store, key):
+            #: Prepared with the other text choice: prepared again before anything is sent.
+            return S_READY, info
+        new = sorted(set(_packet_kinds(latest)) - sent_kinds(where)) if m.get("provider") != "fake" else []
+        return (S_FIRST_SEND if new else S_PREPARED), {**info, "new": new}
+    #: A send, or a press of 0.6.0's Explain (which could send): done where it recorded a reading.
+    if latest.get("exit") == "0" and any(ln.startswith("recorded: ") for ln in latest.get("stdout", "").splitlines()):
+        return S_DONE, info
+    if latest["kind"] == "explain" and latest.get("exit") == "2" and _asks(latest):
+        #: 0.6.0's press stopped at the first-send question: prepare again, in this flow.
+        return (S_READY if m is not None else S_NOT_SET_UP), info
+    return S_FAILED, {**info, "step": "Send"}
+
+
+def _step_line(current: str | None) -> str:
+    from onetrace_console.words import escape
+    items = []
+    for name in FLOW_STEPS:
+        mark = ' aria-current="step"' if name == current else ""
+        items.append(f'<li data-step="{escape(name.lower())}"{mark}>{escape(name)}</li>')
+    return ('<ol class="flow" data-explain="flow" aria-label="Prepare, Check, Send, Read">'
+            + "".join(items) + "</ol>")
+
+
+def _link_button(href: str, words: str, kind: str) -> str:
+    from onetrace_console.words import escape
+    return f'<a class="button" data-explain="{escape(kind)}" href="{escape(href)}">{escape(words)}</a>'
+
+
 def panel(comparison, store, *, public: bool | None = None, steps: dict | None = None,
           facts: dict | None = None) -> str:
     """The comparison's explanation panel: its own frame, below the verdicts, apart from them.
@@ -759,9 +1069,10 @@ def panel(comparison, store, *, public: bool | None = None, steps: dict | None =
     if is_public or _NO_PRESSES.get():
         return head + f'<p data-explain="not-set-up">{escape(NOT_SET_UP_DEMO)}</p></section>'
     from onetrace_console.explain_setup import LINK, PATH
-    setup = f'<p data-explain="setup"><a href="{PATH}">{escape(LINK)}</a></p>'
+    setup_button = _link_button(PATH, LINK, "setup")
     if command() is None:
-        return head + f'<p data-explain="not-installed">{escape(NOT_INSTALLED)} {_format_page()}</p>{setup}</section>'
+        return (head + _step_line(None) + f'<p data-explain="not-installed" data-flow="{S_NOT_SET_UP}">'
+                f'{escape(NOT_INSTALLED)} {_format_page()}</p><p data-explain="buttons">{setup_button}</p></section>')
     if too_long(store):
         return head + f'<p data-explain="too-long">{escape(too_long(store))}</p></section>'
     key = comparison.key
@@ -770,24 +1081,63 @@ def panel(comparison, store, *, public: bool | None = None, steps: dict | None =
         tried = attempts(store, key)
     except ValueError as e:
         return head + f'<p data-explain="refused">{escape(str(e))}</p></section>'
-    latest = next((a for a in reversed(tried) if a["kind"] != "packet"), None)
     now = state(store, key)
-    body = [head, '<p data-explain="what">A suggestion about this comparison\'s record from a model you '
-            "configure for <code>onetrace-explain</code>, never a reading of it. The verdicts above are "
-            "what they are without it. Nothing is sent until you press Explain.</p>"]
-    asks = _asks(latest) if latest and not now["running"] else []
-    buttons = [_button(f"/explain?c={key}", "Explain"), _button(f"/explain/packet?c={key}", "Show the packet")]
-    if asks:
-        body.append('<div data-explain="asks">' + "".join(f'<p class="mono">{escape(ln)}</p>' for ln in asks)
-                    + "</div>")
-        buttons.insert(0, _button(f"/explain?c={key}&send=yes", "Send"))
-    elif latest is not None and not now["running"]:
-        body.append(_attempt_line(latest))
-    if now["running"]:
+    where, info = flow(store, key, tried=tried, now=now)
+    send = SEND.format(host=info["host"])
+    current = {S_READY: "Prepare", S_FIRST_SEND: "Check", S_PREPARED: "Check", S_RUNNING: "Send", S_DONE: "Read",
+               S_FAILED: info.get("step")}.get(where)
+    body = [head.replace('class="explain"', f'class="explain" data-flow="{where}"', 1), _step_line(current),
+            f'<p data-explain="what">{INTRO}</p>']
+    explain_b = _button(f"/explain?c={key}", EXPLAIN)
+    packet_b = _button(f"/explain/packet?c={key}", SHOW_PACKET)
+    send_b = _button(f"/explain?c={key}&send=yes", send).replace("<button ", '<button class="primary" ', 1)
+    cancel_b = _button(f"/explain/cancel?c={key}", CANCEL)
+    if where == S_NOT_SET_UP:
+        #: Not "not-set-up", which is a public console's line and draws the panel at the page's foot.
+        body.append(f'<p data-explain="no-model">{escape(NO_MODEL)}</p>')
+        buttons = [setup_button]
+    elif where == S_READY:
+        body.append(f'<p data-explain="ready">{escape(READY_LINE)}</p>')
+        buttons = [explain_b]
+    elif where == S_FIRST_SEND:
+        body.append(f'<div data-explain="first-send"><h3>{escape(FIRST_SEND_HEAD)}</h3>'
+                    f'<p>{escape(FIRST_SEND_NEW.format(host=info["host"]))}</p><ul data-explain="new-kinds">'
+                    + "".join(f'<li data-kind="{escape(k)}">{kind_phrase(k)}</li>' for k in info["new"])
+                    + f'</ul><p>{escape(FIRST_SEND_LINE.format(host=info["host"]))}</p></div>')
+        buttons = [packet_b, send_b, cancel_b]
+    elif where == S_PREPARED:
+        body.append(f'<p data-explain="prepared">{escape(PREPARED_LINE.format(host=info["host"]))}</p>')
+        buttons = [packet_b, send_b, cancel_b]
+    elif where == S_RUNNING:
         body.append(_running_line(now))
-    body.append('<p data-explain="buttons">' + " ".join(buttons) + "</p>" + setup)
+        buttons = []
+    elif where == S_DONE:
+        latest = info["latest"]
+        at = str(latest.get("at", ""))
+        try:
+            at = datetime.fromisoformat(at).strftime("%Y-%m-%d %H:%M UTC")
+        except ValueError:
+            pass
+        made_now = explanations(store, key)
+        model = made_now[0].get("model", "") if made_now else configured_model()
+        body.append(f'<p data-explain="done">{escape(DONE_LINE.format(at=at, model=model))}</p>')
+        buttons = [_button(f"/explain?c={key}", EXPLAIN_AGAIN), packet_b]
+    else:
+        body.append(_attempt_line(info["latest"]))
+        #: Where the key is looked for, and whether it is there (console 0.6.1 item 8): never its value.
+        body.append(key_lines(key_status(), short=True))
+        body.append(f'<p data-explain="fix">{escape(FAILED_FIX)}</p>')
+        buttons = [setup_button, _button(f"/explain?c={key}", TRY_AGAIN)]
+    if buttons:
+        body.append('<p data-explain="buttons">' + " ".join(buttons) + "</p>")
+    if where in (S_READY, S_FIRST_SEND, S_PREPARED):
+        #: Beside Send, off by default; the panel's script posts each change (no script: disabled).
+        on = include_text(store, key)
+        body.append(f'<p data-explain="text-choice"><label><input type="checkbox" '
+                    f'data-explain-text="/explain/text?c={escape(key)}&amp;on="{" checked" if on else ""} disabled> '
+                    f'{escape(TEXT_CHOICE)}</label></p>')
     pk = next((a for a in reversed(tried) if a["kind"] == "packet"), None)
-    if pk is not None:
+    if pk is not None and where not in (S_NOT_SET_UP, S_READY, S_RUNNING):
         lines = pk.get("stdout", "").splitlines()
         if pk.get("exit") == "0" and len(lines) >= 2:
             body.append('<details data-explain="packet"><summary>The packet, exactly as it would be sent: '
@@ -799,7 +1149,7 @@ def panel(comparison, store, *, public: bool | None = None, steps: dict | None =
     full = {**(facts or {}), **dict(zip(("a", "b"), receipts_by_node(comparison, store)))} if made else {}
     for e in made:
         body.append(_one(e, comparison, store, steps or {}, facts=full))
-    if 'data-explain-post' in "".join(body) or "data-copy=" in "".join(body):
+    if 'data-explain-post' in "".join(body) or "data-copy=" in "".join(body) or "data-explain-text" in "".join(body):
         from onetrace_console.explain_script import EXPLAIN_SCRIPT
         body.append(EXPLAIN_SCRIPT)
     body.append("</section>")
@@ -838,6 +1188,17 @@ EXPLAIN_CSS = """
 .cp .explain .ex-foot{margin-top:12px;font-size:var(--fs-small);color:var(--ink-muted)}
 .cp .explain .ex-foot summary{cursor:pointer}
 .cp .explain .ex-foot .meta p{margin:4px 0;overflow-wrap:anywhere}
+.cp .explain ol.flow{display:flex;flex-wrap:wrap;gap:4px 8px;list-style:none;margin:0 0 8px;padding:0;
+  font-size:var(--fs-small);color:var(--ink-muted)}
+.cp .explain ol.flow li+li::before{content:"\\2192";margin-right:8px;color:var(--ink-muted)}
+.cp .explain ol.flow li[aria-current=step]{color:var(--ink);font-weight:600}
+.cp .explain [data-explain=buttons] button,.cp .explain [data-explain=buttons] a.button{font:inherit;
+  color:var(--ink);background:var(--surface);border:1px solid var(--line-strong);border-radius:var(--r-ctl);
+  padding:4px 10px;cursor:pointer;text-decoration:none;display:inline-block}
+.cp .explain [data-explain=buttons] button.primary{font-weight:600;border-color:var(--accent);color:var(--accent)}
+.cp .explain [data-explain=buttons] button[hidden]{display:none}
+.cp .explain [data-explain=buttons] button:focus-visible,.cp .explain [data-explain=buttons] a.button:focus-visible{
+  outline:2px solid var(--accent);outline-offset:2px}
 """
 #: The checks' heading and its lead; on a public console, KEPT_CHECKS follows the lead.
 CHECKS = "Checks"
@@ -846,6 +1207,17 @@ COPY = "Copy the command"
 #: The footer: every claim the post-check read, and those it left out, with their reasons.
 FOOTER = "{n} claims checked against the record · {m} left out"
 HIDE, SHOW = "Hide the details", "Show the details"
+
+
+#: A backtick pair in the model's words: one or more characters, none a backtick or a line break.
+_BACKTICKS = re.compile(r"`([^`\n]+)`")
+
+
+def inline_code(escaped: str) -> str:
+    """The model's words, already escaped, with each backtick pair shown as inline code (console 0.6.1
+    item 10): after the escaping, so what is inside stays text; no other markup and no links. An
+    unpaired backtick stays a backtick."""
+    return _BACKTICKS.sub(r"<code>\1</code>", escaped)
 
 
 def merged_checks(e: dict) -> list[tuple[int, str]]:
@@ -896,7 +1268,7 @@ def _one(e: dict, comparison, store, steps: dict, read_only: bool = False, facts
                 chips = "".join(_cite(x, steps, facts) for x in c.get("cites", []))
                 cards.append(f'<div class="card claim" data-claim="{escape(kind)}">'
                              f'<span class="badge" data-kind="{escape(kind)}">{escape(KIND_WORDS[kind])}</span>'
-                             f'<p data-claim-text>{escape(c.get("text", ""))}</p>'
+                             f'<p data-claim-text>{inline_code(escape(c.get("text", "")))}</p>'
                              f'<ul class="chips" data-cites aria-label="What it cites">{chips}</ul></div>')
         parts.append('<div class="cards" data-explain="claims">' + "".join(cards) + "</div>")
     merged = merged_checks(e)
@@ -906,6 +1278,13 @@ def _one(e: dict, comparison, store, steps: dict, read_only: bool = False, facts
         for i, cmd in merged:
             if read_only:
                 rows.append(f'<li data-check="{i}"><code>{escape(cmd)}</code></li>')
+                continue
+            held = held_check(comparison, store, checks[i])
+            if held is not None:
+                said, anchor = held
+                rows.append(f'<li data-check="{i}" data-held><code>{escape(cmd)}</code> '
+                            f'<span data-explain="held">{escape(RUN_HERE)}</span>: {escape(said)} '
+                            f'<a href="#{escape(anchor)}">{escape(SEE_IT)}</a></li>')
                 continue
             run = (_button(f"/explain/check?c={comparison.key}&e={rec}&i={i}", "Run")
                    if check_argv(checks[i]) is not None else

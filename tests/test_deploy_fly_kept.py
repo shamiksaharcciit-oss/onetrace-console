@@ -373,7 +373,9 @@ def kept_problems(folder, store, pairs) -> list[str]:
         if len(cards) != len(e["claims"]):
             out.append(f"{rid}: {len(cards)} cards, {len(e['claims'])} claims made")
         for claim in e["claims"]:
-            mine = [c for c in cards if " ".join(_text(c[2]).split()) == " ".join(claim["text"].split())]
+            #: A backtick pair is drawn as inline code (console 0.6.1 item 10): its text, without the marks.
+            words = re.sub(r"`([^`\n]+)`", r"\1", claim["text"])
+            mine = [c for c in cards if " ".join(_text(re.sub(r"</?code>", "", c[2])).split()) == " ".join(words.split())]
             if not mine:
                 out.append(f"{rid}: a claim is not on its page: {claim['text'][:60]!r}")
                 continue
