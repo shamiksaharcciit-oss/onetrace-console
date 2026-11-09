@@ -97,12 +97,13 @@ def test_the_change_at_run_k_is_found_exactly(changed_at_4, examined):
     order = re.findall(r'<tr data-run="([0-9a-f]{64})">', page)
     #: Each run's start as its receipts state it, in the time's `datetime`; shown in the one form, to the
     #: millisecond where it has them.
-    shown = re.findall(r'<td[^>]*class="mono"[^>]*><time datetime="([^"]+)"[^>]*>([^<]+)</time></td>', page)
+    shown = re.findall(r'<td[^>]*class="mono"[^>]*><a [^>]*><time datetime="([^"]+)"[^>]*>([^<]+)</time></a></td>', page)
     assert [a for a, _ in shown] == [bisect_page.recorded_start(runs[i], store)[1] for i in range(1, 7)]
     assert all(re.fullmatch(r"\d{4}-\d\d-\d\d \d\d:\d\d:\d\d(\.\d{3}| UTC)", b) for _, b in shown), shown
-    #: The built page asks the window form by links, one after each run's start; it carries no form.
-    asks = re.findall(r'<a href="bisect\?p=P1&amp;after=([^"]+)" data-bisect-ask>', page)
-    assert len(asks) == len(runs) and "<form" not in page and "<input" not in page
+    #: The built page carries the one window form, a plain GET; each run's start is a link into it.
+    asks = re.findall(r'<a href="bisect\?p=P1&amp;after=([^"]+)" data-bisect-ask', page)
+    assert len(asks) == len(runs)
+    assert len(re.findall(r'<form method="get" action="bisect" data-bisect-window>', page)) == 1
     assert order == [runs[i].key for i in range(1, 7)], "not the recorder's order"
     from onetrace_console.overview import pipelines
     assert [r.key for r in pipelines(store)[0].runs] != order, "the planted arrival order is the recorded one"
@@ -282,3 +283,206 @@ def test_a_public_console_s_window_form_answers_and_writes_nothing(shared_cli_de
     examined(1, "window form on a public console")
     assert status == 200 and 'data-frame="banner"' in page and 'data-bisect-window-result="left"' in page
     assert other == 404 and _tree(built) == before
+
+
+# ---------------------------------------------------------------- the answer first
+
+
+def _answer(page: str) -> str:
+    """The answer's words, each run named as its id (the short key the page shows beside it set aside)."""
+    said = _text(re.search(r'<p data-section="bisect-answer"[^>]*>.*?</p>', page, re.S).group(0))
+    return re.sub(r" · [0-9a-f]{12} ", "", said)
+
+
+def test_the_answer_comes_first_naming_the_run_its_step_and_the_run_before_it(changed_at_4, examined):
+    store, runs, page = changed_at_4
+    examined(1, "the planted series' page")
+    assert page.index('data-section="bisect-answer"') < page.index('data-section="what"')
+    assert _answer(page).startswith(
+        f"The first run to leave the reference is {runs[4].run_id}, at step call (output differs). "
+        f"The run before it, {runs[3].run_id}, reads as the reference.")
+    assert 'data-pair="compare"' in re.search(r'<p data-section="bisect-answer".*?</p>', page, re.S).group(0)
+
+
+def test_where_no_run_left_the_answer_says_so(tmp_path, examined):
+    store, runs = _series(tmp_path, [SAME, SAME, SAME], arrival=[1, 2, 3])
+    examined(len(runs), "planted runs")
+    assert _answer(_page(store)) == bisect_page.ANSWER_NONE
+
+
+def test_with_no_reference_there_is_no_answer_and_today_s_words(tmp_path, examined):
+    from onetrace_console import benchmarks
+    store, runs = _series(tmp_path, [SAME, CHANGED], arrival=[1, 2])
+    benchmarks.unmark(store, runs[1].key)
+    page = _page(store)
+    examined(1, "a pipeline with no reference")
+    assert 'data-section="bisect-answer"' not in page and bisect_page.NO_REFERENCE in _text(page)
+
+
+def test_where_runs_leave_at_more_steps_the_earliest_run_is_named_and_the_rest_counted(changed_at_4, monkeypatch,
+                                                                                    examined):
+    store, runs, _ = changed_at_4
+    real = bisect_page.Walk.at_step
+    monkeypatch.setattr(bisect_page.Walk, "steps", lambda self: ["early", "call", "late"])
+    def at_step(self, step):
+        if step == "call":
+            return real(self, step)
+        got = real(self, "call")
+        k = 5 if step == "early" else 6
+        return {**got, "left": runs[k], "before": runs[k - 1], "word": "setting differs"}
+    monkeypatch.setattr(bisect_page.Walk, "at_step", at_step)
+    examined(3, "steps")
+    said = _answer(_page(store, compute=False))
+    assert said.startswith(f"The first run to leave the reference is {runs[4].run_id}, at step call (output differs).")
+    assert "And 2 more steps: below." in said
+
+
+def test_on_the_demo_p10_s_answer_names_its_run_step_and_word(shared_demo, examined):
+    built = (shared_demo["folder"] / "store" / "pages" / bisect_page.page_href("P10")).read_text(encoding="utf-8")
+    examined(1, "P10's page as built")
+    assert _answer(built).startswith("The first run to leave the reference is pz-53-agent-amount-changed, at step "
+                                     "agent_step (output differs). The run before it, pz-51-agent-baseline, reads as "
+                                     "the reference.")
+
+
+# ---------------------------------------------------------------- plain words, the exact rule kept
+
+
+def test_plain_words_say_how_to_read_it_and_the_exact_rule_is_kept_word_for_word(changed_at_4, examined):
+    store, runs, page = changed_at_4
+    examined(1, "the planted series' page")
+    plain = re.sub(r" · [0-9a-f]{12} ", "",
+                   _text(re.search(r'<div data-section="bisect-how">.*?</div>', page, re.S).group(0)))
+    assert plain == (f"Runs are listed in the order they were recorded, by the recorder's clock. Each is compared "
+                     f"with the reference run, {runs[1].run_id}. A run leaves the reference at the first step whose "
+                     "output, setting or input differs; the same output, only slower, reads as the reference.")
+    rule = re.search(r'<details data-section="bisect-rule">(.*?)</details>', page, re.S).group(1)
+    assert bisect_page.WHAT in html.unescape(rule) and bisect_page.LEAVES in html.unescape(rule)
+    outside = page.replace(re.search(r'<details data-section="bisect-rule">.*?</details>', page, re.S).group(0), "")
+    assert bisect_page.WHAT not in html.unescape(outside) and bisect_page.LEAVES not in html.unescape(outside)
+    assert page.index('data-section="bisect-how"') < page.index('data-section="bisect-steps"')
+
+
+def test_the_reference_line_is_one_line_of_text_with_the_seal_short_and_its_whole_value_folded_after(
+        changed_at_4, examined):
+    """No fold inside the line: a closed Details is a box of its own, and text after it starts a line. The
+    seal is shown short in the line, its comma beside it, and whole in a fold after the line."""
+    store, runs, page = changed_at_4
+    ref = re.search(r'<div data-section="bisect-reference">.*?</div>', page, re.S).group(0)
+    line = re.search(r"<p data-reference-line>(.*?)</p>", ref, re.S).group(1)
+    examined(1, "the reference line")
+    assert "<details" not in line and re.search(r'<span class="mono">sha256:[0-9a-f]+…</span>, made from ', line), line
+    assert re.sub(r" · [0-9a-f]{12} ", "", _text(line)).replace(" ,", ",") == (
+        f"The reference: {re.search(r'sha256:[0-9a-f]+…', line).group(0)}, made from {runs[1].run_id}.")
+    assert re.search(r'</p><details class="fingerprint">.*?data-fingerprint="whole">sha256:[0-9a-f]{64}</span>', ref)
+
+
+# ---------------------------------------------------------------- gaps with their reason
+
+
+def _why(page: str, run) -> str:
+    row = re.search(rf'<tr data-run="{run.key}">.*?</tr>', page, re.S).group(0)
+    #: A full stop after a link reads with no space before it.
+    return _text(re.search(r"<p data-gap-why>.*?</p>", row, re.S).group(0)).replace(" .", ".")
+
+
+def test_a_gap_with_no_reason_in_its_records_says_so(tmp_path, monkeypatch, examined):
+    from onetrace_console import records
+    store, runs = _series(tmp_path, [SAME, SAME, CHANGED], arrival=[1, 2, 3])
+    real = records.state
+    monkeypatch.setattr(records, "state", lambda run, st: records.COULDNT if run.key == runs[2].key else real(run, st))
+    examined(1, "a gap whose check rows all ran")
+    assert _why(_page(store), runs[2]) == bisect_page.GAP_NOT_RECORDED
+
+
+def test_a_gap_whose_check_left_a_step_unsettled_quotes_the_check_s_rows(tmp_path, monkeypatch, examined):
+    """The kept report with rows not run at a step, as onetrace-verify writes for a model-call record format it
+    does not implement: quoted whole, and what would include the run."""
+    from onetrace_console import records
+    from onetrace_console.store import Store
+    store, runs = _series(tmp_path, [SAME, SAME, CHANGED], arrival=[1, 2, 3])
+    real_get, run = Store.get, runs[2]
+    envelope = json.loads(real_get(store, run.check_report).decode("utf-8"))
+    receipt = re.search(r"\] (receipts/[^:]+):", envelope["stdout"]).group(1)
+    planted = [f"[NOT-RUN] {receipt}: record 'model_call.json' format -- model-call-record/0.1-draft: not implemented",
+               f"[NOT-RUN] {receipt}: record 'model_call.json' fields complete and well formed -- record format not implemented"]
+    lines = envelope["stdout"].splitlines()
+    at = next(i for i, ln in enumerate(lines) if ln.startswith("[") and receipt in ln)
+    lines = lines[:at + 1] + planted + lines[at + 1:]
+    #: The text, its summary line and the --json rows are one report: each gains the two rows.
+    rows = json.loads(envelope["rows_json"]["stdout"])
+    rows["rows"][at + 1:at + 1] = [{"name": p.split("] ", 1)[1].split(" -- ")[0], "result": "NOT-RUN",
+                                    "detail": p.split(" -- ", 1)[1]} for p in planted]
+    rows["summary"]["not_run"] += len(planted)
+    envelope["rows_json"]["stdout"] = json.dumps(rows)
+    s = rows["summary"]
+    lines = [f"{s['pass']} pass, {s['fail']} fail, {s['not_run']} not-run  ->  {s['result']}"
+             if re.fullmatch(r"\d+ pass, \d+ fail, \d+ not-run  ->  \w+", ln) else ln for ln in lines]
+    envelope["stdout"] = "\n".join(lines) + "\n"
+    monkeypatch.setattr(Store, "get", lambda self, key: (json.dumps(envelope).encode("utf-8") if key == run.check_report
+                                                          else real_get(self, key)))
+    real = records.state
+    monkeypatch.setattr(records, "state", lambda r, st: records.COULDNT if r.key == run.key else real(r, st))
+    examined(2, "planted rows not run")
+    said = _why(_page(store), run)
+    assert said.startswith(f"The check did not run: {planted[0]}."), said
+    assert "And 1 more row, on its Proof page." in said and said.endswith(bisect_page.GAP_ROWS_INCLUDE)
+
+
+def test_a_gap_with_no_verdict_kept_says_so_and_what_makes_one(tmp_path, examined):
+    from onetrace_console import verdicts
+    from onetrace_console.overview import pipelines
+    store, runs = _series(tmp_path, [SAME, SAME, CHANGED, SAME], arrival=[1, 2, 3, 4])
+    verdicts.reference_record(pipelines(store)[0], store, compute=True)
+    for k in (1, 3, 4):
+        verdicts.verdict_record(runs[k], store, compute=True)
+    examined(1, "a run with no verdict kept")
+    assert _why(_page(store, compute=False), runs[2]) == f"{bisect_page.GAP_NONE_WHY} {bisect_page.GAP_NONE_INCLUDE}"
+
+
+def test_a_refused_verdict_s_gap_gives_the_verdict_s_own_reason(tmp_path, monkeypatch, examined):
+    from onetrace_console import verdicts
+    store, runs = _series(tmp_path, [SAME, SAME, CHANGED], arrival=[1, 2, 3])
+    real = verdicts.verdict_record
+    def refused(run, st, *, compute):
+        ref, rec = real(run, st, compute=compute)
+        if run.key == runs[2].key:
+            rec = {**(rec or {}), "verdict": {"verdict": "refused", "reason": "does not verify", "steps": []}}
+        return ref, rec
+    monkeypatch.setattr(verdicts, "verdict_record", refused)
+    examined(1, "a refused verdict")
+    assert _why(_page(store), runs[2]) == (f"{bisect_page.GAP_VERDICT_WHY.format(reason='does not verify')} "
+                                           f"{bisect_page.GAP_VERDICT_INCLUDE}")
+
+
+# ---------------------------------------------------------------- one "after a time" control
+
+
+def test_one_find_after_control_in_place_of_a_link_on_every_row(changed_at_4, examined):
+    store, runs, page = changed_at_4
+    window = re.search(r'<div data-section="bisect-window">.*?</div>', page, re.S).group(0)
+    examined(1, "the planted series' page")
+    assert _text(window).startswith("Find the first run to leave after:") and ">Find</button>" in window
+    assert '<input type="text" name="after"' in window and 'name="p" value="P1"' in window
+    assert bisect_page.WINDOW_AFTER_RUN not in _text(page)
+    head = re.search(r'<table data-section="bisect-runs"><thead>(.*?)</thead>', page, re.S).group(1)
+    assert _text(head) == "# Run Recorded start Its verdict"
+
+
+def test_a_public_console_answers_as_the_built_page_and_draws_the_same_form(shared_demo, examined):
+    """The page the console answers at `/bisect` (public, nothing run) and the page as built: the same
+    answer, and the one form."""
+    from onetrace_console.frame import rendering
+    from onetrace_console.store import Store
+    folder = shared_demo["folder"]
+    store = Store(folder / "store" / "store")
+    checked = 0
+    for label in ("P1", "P10"):
+        built = (folder / "store" / "pages" / bisect_page.page_href(label)).read_text(encoding="utf-8")
+        with rendering(onedoor=False, sign_in=False, public=True):
+            served = bisect_page.page_for(store, label, "", generated_at=GENERATED_AT)
+        assert _answer(served) == _answer(built), label
+        for page in (built, served):
+            assert len(re.findall(r'<form method="get" action="bisect" data-bisect-window>', page)) == 1
+        checked += 1
+    examined(checked, "pipelines, built and served")

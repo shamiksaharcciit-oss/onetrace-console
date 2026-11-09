@@ -260,8 +260,10 @@ def node_problems(page: str, receipts: list[dict]) -> list[str]:
         if not lines or lines[0] != want:
             out.append(f"{label}: fact {lines[:1]} for {want!r}")
         step = re.search(r"(\d+)(?:\.html)?$", href).group(1)
-        if not marked and checks.get(step) and checks[step] not in lines[1:]:
-            out.append(f"{label}: chip {lines[1:2]} for {checks[step]!r}")
+        #: The chip is the line after the fact, past any "N steps inside" line (a step with steps inside).
+        chips = [ln for ln in lines[1:] if not re.fullmatch(r"\d+ steps? inside", ln)]
+        if not marked and checks.get(step) and checks[step] not in chips:
+            out.append(f"{label}: chip {chips[:1]} for {checks[step]!r}")
     return out
 
 
@@ -310,3 +312,18 @@ def test_sabotage_a_node_fact_the_record_does_not_hold_is_named(demo, examined):
     assert chip != page2
     assert any(": chip ['Checked — all clear.']" in p for p in node_problems(
         chip, [s["receipt"] for s in _steps(unmarked[0], store)]))
+
+
+def test_sabotage_a_chip_after_a_steps_inside_line_is_named(demo, examined):
+    """A box whose step has steps inside reads "N output files · K steps inside · <chip>": a chip planted
+    there is named by its own words, not by the line before it (P10's agent step, whatever the store's
+    order of runs)."""
+    from onetrace_console.stage_pages import _steps
+    store, pages = demo
+    run = next(r for r in store.runs() if r.run_id == "pz-51-agent-baseline")
+    page = _graph_view(pages / "runs" / run.key)
+    assert re.search(r"<title>[^<]*?steps? inside · Checked — it holds\.", page), "no such box"
+    chip = re.sub(r"(<title>[^<]*?steps? inside · )Checked — it holds\.", r"\g<1>Checked — all clear.", page, count=1)
+    examined(1, "planted page")
+    found = node_problems(chip, [s["receipt"] for s in _steps(run, store)])
+    assert any(": chip ['Checked — all clear.']" in p for p in found), found

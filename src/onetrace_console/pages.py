@@ -670,7 +670,7 @@ def verdict_pill(run, store) -> str:
             + (f" {verdicts.against_html(seal)}" if seal else ""))
 
 
-RUN_COLUMNS = ("Run", "Pipeline", "When it ran", "Received by this console", "How far it got",
+RUN_COLUMNS = ("Run", "Pipeline", "When it ran", "Received by this console", "How far it got", "Closed",
                "Records agree", "Signed by a known recorder", "Committed by a known time",
                "Ran as approved")
 #: Each reading the store keeps, as the run page's rung state (`data-state`).
@@ -715,7 +715,7 @@ def _short_line(run: StoredRun, store: Store) -> str:
 
 def runs_table(runs: list[StoredRun], store: Store) -> str:
     """The runs list's table: one row per run, in the order given, each linked to its page."""
-    from onetrace_console import tones
+    from onetrace_console import closing, tones
     from onetrace_console.benchmarks import badge
     from onetrace_console.overview import pipelines, ran_at
     from onetrace_console.run_head import declined_chip
@@ -747,6 +747,8 @@ def runs_table(runs: list[StoredRun], store: Store) -> str:
             f'<td class="value">{time_html(ran) if ran else "not recorded"}</td>'
             f'<td class="value">{time_html(run.received_at)}</td>'
             f"<td>{viewer_escape(got)}{(' ' + stopped) if (stopped := declined_chip(run)) else ''}</td>"
+            #: Whether it closed and how it ended, as the run's head says it (`closing`).
+            f'<td data-answer="closed" data-ending="{closing.state(run.ending)}">{closing.html(run.ending)}</td>'
             + "".join(f'<td data-answer="{k}">{chip(answers[k])}</td>'
                       for k in ("records-agree", "signed", "anchored", "approved"))
             + "</tr>"

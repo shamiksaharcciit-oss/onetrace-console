@@ -710,6 +710,11 @@ def test_the_new_pages_pass_the_five_prohibitions(new_pages, examined):
                       #: A local console's pipeline picker (console 0.6.1 item 4): one pair to /compare.
                       r'<form method="post" action="/compare" data-local-compare>.*?'
                       r'<button type="submit">compare</button></form>',
+                      #: A pipeline's first-run-to-leave page: its one window form, a GET to bisect that reads
+                      #: what is kept and runs nothing (console 0.7.0).
+                      r'<form method="get" action="bisect" data-bisect-window><input type="hidden" name="p" '
+                      r'value="[^"]*"><label>find the first run to leave after: <input type="text" name="after" '
+                      r'value="[^"]*" maxlength="64"></label> <button type="submit">find</button></form>',
                       r'<label hidden data-benchmark-note>note \(optional\) <input type="text" maxlength="280" '
                       r'data-benchmark-note-input></label>',
                       r'<button type="button" hidden data-benchmark-post="/benchmark\?run=[0-9a-f]{64}&amp;'

@@ -95,10 +95,14 @@ _RUNG = re.compile(r'(<tr data-rung="records-agree"[^>]*>.*?<span class="value" 
                    r' checks? made — (?:all hold|it holds)\.)', re.S)
 _STEP = re.compile(r'(<li data-state="pass" data-count="(\d+)"><strong>step (\d+) of \d+ · [^<]*</strong>'
                    r' — <span class="value" data-words="value">\d+</span> checks? made — (?:all hold|it holds)\.)')
+#: A format 0.4 run's close receipt, which is not a step: its line in the list of what was checked, by
+#: its label (`viewer.sentences`, `label.close`). Its receipt is the chain's last.
+_CLOSE = re.compile(r'(<li data-state="pass" data-count="(\d+)"><strong>The close receipt</strong>'
+                    r' — <span class="value" data-words="value">\d+</span> checks? made — (?:all hold|it holds)\.)')
 
 
 def splice(page: str, rows: list[dict], chain_files: list[str]) -> str:
-    """The run page with a mark beside the run's "N checks made" and each step's: `rows`, the
+    """The run page with a mark beside the run's "N checks made", each step's and the close receipt's: `rows`, the
     verifier's own `--json` rows; `chain_files`, the receipts in the chain's order (step n is the
     n-th)."""
     if not rows:
@@ -110,4 +114,7 @@ def splice(page: str, rows: list[dict], chain_files: list[str]) -> str:
         if not 1 <= n <= len(chain_files):
             return m.group(1)
         return m.group(1) + mark(step_note(rows, chain_files[n - 1], int(m.group(2))))
-    return _STEP.sub(step, page)
+    page = _STEP.sub(step, page)
+    if not chain_files:
+        return page
+    return _CLOSE.sub(lambda m: m.group(1) + mark(step_note(rows, chain_files[-1], int(m.group(2)))), page)

@@ -466,8 +466,9 @@ def test_the_runs_page_says_what_changed_under_each_run_whose_comparison_is_held
     from onetrace_console import what_changed
     folder, store, runs = demo
     page = (folder / "store" / "pages" / "executions-all.html").read_text(encoding="utf-8")
+    from onetrace_console.pages import RUN_COLUMNS
     lines = dict(re.findall(r'<tr class="what-changed-row" data-what-changed-of="([0-9a-f]{64})">'
-                            r'<td colspan="9" data-answer="what-changed">What changed: (.*?)</td></tr>', page))
+                            rf'<td colspan="{len(RUN_COLUMNS)}" data-answer="what-changed">What changed: (.*?)</td></tr>', page))
     examined(len(runs), "runs on the Runs page")
     #: The demo is a public console's: each line against the first candidate it holds.
     want = {r.key: what_changed.runs_line(r, store, public=True) for r in runs.values()

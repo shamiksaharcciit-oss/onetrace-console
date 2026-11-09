@@ -95,3 +95,27 @@ def test_concurrency_limiter_a_burst_never_enters_a_patched_hash_function(examin
     results = [attempt() for _ in range(3)]
     assert results == ["refused-before-hashing"] * 3
     assert calls == [], "the patched hash function was called despite the cap being full"
+
+
+def _passed_in_any_window(times: list[float], window: float) -> int:
+    return max((sum(1 for u in times if t <= u < t + window) for t in times), default=0)
+
+
+def test_the_window_is_rolling_a_burst_across_its_edge_passes_no_more_than_the_limit(examined):
+    """An attempt at 0 s, then a burst across the window's edge: in any span of `window_seconds`, no more than
+    `max_attempts` pass. (A fixed window from 0 s would let the limit pass just before 10 s and the limit
+    again just after it.)"""
+    limiter = RateLimiter(max_attempts=3, window_seconds=10)
+    times = [0.0] + [9.0 + 0.1 * i for i in range(30)]
+    passed = [t for t in times if limiter.check_and_record("alice", now=t)]
+    examined(len(times), "attempts: one at 0 s, then a burst from 9 s to 11.9 s")
+    assert _passed_in_any_window(passed, 10) <= 3, passed
+    assert passed == [0.0, 9.0, 9.1, 10.0], passed
+
+
+def test_an_attempt_leaves_the_count_window_seconds_after_it_was_made(examined):
+    limiter = RateLimiter(max_attempts=2, window_seconds=10)
+    examined(4, "attempts")
+    assert limiter.check_and_record("alice", now=0.0) and limiter.check_and_record("alice", now=6.0)
+    assert limiter.check_and_record("alice", now=9.9) is False
+    assert limiter.check_and_record("alice", now=10.0) is True

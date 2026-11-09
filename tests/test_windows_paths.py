@@ -13,7 +13,11 @@ Windows gives it (`PureWindowsPath`; `sys.executable` a Windows interpreter) and
    puts it in double quotes), two lines, each labelled: "In Command Prompt:" the quoted line, and "In
    PowerShell:" the same line led by `& `, as PowerShell runs a quoted program only after `&`. A POSIX
    shell's single quotes (`shlex.quote`) are not quotes there; elsewhere they are, one line. Each line is run
-   through a shell's own parser where the platform has one.
+   through a shell's own parser where the platform has one. The PowerShell line quotes the Python by
+   PowerShell's own rules for each character it treats specially: in double quotes, as the Command
+   Prompt line does, where nothing in it is special inside them (`(`, `)`, `&`, `;`, `@`, `'`, a space);
+   in single quotes, each single quote doubled, where it holds `$`, a backtick or a double quote. Any of
+   them gives the two labelled lines; the Command Prompt line is as before.
 3. The panel's key line shortens the file's path to its last two parts with the platform's own separator,
    from the path itself: a path holding a space, and the long-path form `\\?\`, are shortened too (a
    pattern over the line left them whole, or kept the `\\?\` before the `…`).
@@ -133,6 +137,60 @@ def test_elsewhere_the_install_line_is_quoted_for_a_posix_shell(monkeypatch):
     monkeypatch.setattr(sys, "executable", "/opt/a python/bin/python3")
     assert pages.install_lines() == [("", "'/opt/a python/bin/python3'" + INSTALL)]
     assert CMD not in pages.missing_page()
+
+
+#: A Python in a folder named with each character PowerShell treats specially, and its PowerShell line.
+SPECIAL = {c: rf"C:\Users\a{c}b\python.exe" for c in "()&;$@`'"}
+
+
+def _powershell_quoted(path: str) -> str:
+    """The quoting the PowerShell line is held to, by PowerShell's own rules (as the docstring says)."""
+    if any(c in path for c in "$`\"\u201c\u201d\u201e"):
+        return "'" + "".join(c * 2 if c in "'\u2018\u2019\u201a\u201b" else c for c in path) + "'"
+    return f'"{path}"'
+
+
+@pytest.mark.parametrize("char", sorted(SPECIAL))
+def test_on_windows_a_python_powershell_takes_specially_gets_its_own_powershell_line(monkeypatch, char):
+    from onetrace_console import explain
+    from onetrace_console.neighbours import pages
+    monkeypatch.setattr(explain, "_on_windows", lambda: True)
+    monkeypatch.setattr(sys, "executable", SPECIAL[char])
+    cmd_line = pages.install_line()
+    assert pages.install_lines() == [(CMD, cmd_line), (POWERSHELL, f"& {_powershell_quoted(SPECIAL[char])}" + INSTALL)]
+    assert _install_paragraphs(pages.missing_page()) == [f"{CMD} {cmd_line}",
+                                                          f"{POWERSHELL} & {_powershell_quoted(SPECIAL[char])}{INSTALL}"]
+
+
+def test_the_single_quotes_double_a_single_quote_inside_them(monkeypatch):
+    from onetrace_console import explain
+    from onetrace_console.neighbours import pages
+    monkeypatch.setattr(explain, "_on_windows", lambda: True)
+    monkeypatch.setattr(sys, "executable", r"C:\Users\o'n $x\python.exe")
+    assert dict(pages.install_lines())[POWERSHELL] == r"& 'C:\Users\o''n $x\python.exe'" + INSTALL
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="PowerShell's own parser is Windows'")
+@pytest.mark.parametrize("char", sorted(SPECIAL))
+def test_powershells_parser_reads_each_line_as_that_python(monkeypatch, char):
+    """PowerShell's parser finds no error in the line, and its command is the Python, as given."""
+    import os
+    import subprocess
+    from onetrace_console import explain
+    from onetrace_console.neighbours import pages
+    monkeypatch.setattr(explain, "_on_windows", lambda: True)
+    monkeypatch.setattr(sys, "executable", SPECIAL[char])
+    line = dict(pages.install_lines())[POWERSHELL]
+    parse = ("$e = $null; $a = [System.Management.Automation.Language.Parser]::ParseInput($env:INSTALL_LINE, [ref]$null, "
+             "[ref]$e); $c = $a.FindAll({$args[0] -is [System.Management.Automation.Language.CommandAst]}, $true) | "
+             "Select-Object -First 1; [Console]::Out.Write(\"$($e.Count)`n\"); "
+             "[Console]::Out.Write([Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($c.CommandElements[0].Value)))")
+    got = subprocess.run(["powershell", "-NoProfile", "-NonInteractive", "-Command", parse], capture_output=True, text=True,
+                         timeout=120, env={**os.environ, "INSTALL_LINE": line})
+    assert got.returncode == 0, got
+    errors, named = got.stdout.split("\n", 1)
+    import base64
+    assert (int(errors), base64.b64decode(named.strip()).decode("utf-8")) == (0, SPECIAL[char]), (line, got.stdout)
 
 
 #: In place of installing: the interpreter printing its own name, so a shell's run of a line is seen.

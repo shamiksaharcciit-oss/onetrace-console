@@ -1,0 +1,24 @@
+{
+  "runs": {
+    "refund-closed": {
+      "command": "RUN_ENDING=closed ONETRACE_RUN_ID=refund-closed python pipeline.py",
+      "exit": 0,
+      "folder": "refund-closed"
+    },
+    "refund-killed": {
+      "command": "RUN_ENDING=killed ONETRACE_RUN_ID=refund-killed python pipeline.py",
+      "exit": 3,
+      "folder": "refund-killed"
+    },
+    "refund-raised": {
+      "command": "RUN_ENDING=raised ONETRACE_RUN_ID=refund-raised python pipeline.py",
+      "exit": 1,
+      "folder": "refund-raised"
+    }
+  },
+  "versions": {
+    "onetrace": "0.6.1",
+    "onetrace-verify": "0.6.1",
+    "python": "3.12.10"
+  }
+}

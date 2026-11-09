@@ -1,0 +1,15 @@
+{
+  "command": "tests.test_format_03._make(<this folder>)",
+  "runs": [
+    "held",
+    "nokeep",
+    "optional",
+    "optional-and-required",
+    "plain"
+  ],
+  "versions": {
+    "onetrace": "0.6.1",
+    "onetrace-verify": "0.6.1",
+    "python": "3.12.10"
+  }
+}

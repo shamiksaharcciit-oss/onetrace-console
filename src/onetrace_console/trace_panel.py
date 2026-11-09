@@ -11,9 +11,11 @@ tracing tool". The console builds the link and never calls it.
 
 The trace panel reads OTLP/JSON: the SDK's own export of each run (`onetrace export otel`, made when
 the run is checked), or a file the person gives under `traces/` in the runs folder, which is used in
-its place. It shows, for the first-difference step, both runs' spans side by side: name, duration,
-start offset within the run, the `gen_ai.*` and `onetrace.*` attributes, and child spans; values
-that differ are marked. Every trace view says it is what the app reported, never something onetrace
+its place. It shows, for the first-difference step, both runs' spans: for each span (by name and order
+within the step, children under their step's), one table, one row per attribute -- duration, start
+offset within the run, and the `gen_ai.*` and `onetrace.*` attributes -- attribute | baseline |
+candidate, so the values line up. The rows that differ come first, marked "differs" in a column of
+their own; the rows that are the same are folded under "N attributes the same". Every trace view says it is what the app reported, never something onetrace
 checked. A span's `onetrace.receipt.digest` is set beside the step's receipt digest: "matches the
 receipt" or "differs from the receipt"; with none, nothing.
 """
@@ -34,13 +36,20 @@ SPAN_OPENS = "This console has a tracing tool configured: each trace id's link o
 SPAN_NO_TOOL = "This console has no tracing tool configured, so no id links to one."
 SPAN_PUBLIC = "This is a public console: it links to no tracing tool."
 OPEN = "Open in your tracing tool"
-PANEL_HEADING = "The app's spans at the first difference"
+PANEL_HEADING = "At step {step}: spans from your app's traces ({where})"
+#: Where the spans come from, in the heading's words.
+WHERE = {"given": "the files under traces/", "export": "onetrace export otel of each run"}
+COLUMNS = ("attribute", "baseline", "candidate")
+DIFFERS_WORD = "differs"
+DIFFERS_COLUMN = "whether it differs"
+SAME = "{n} attributes the same"
+SAME_ONE = "1 attribute the same"
+DURATION, OFFSET = "duration", "start, from the run's first span"
+ABSENT = "—"
 PANEL_LEAD = "From the app's own traces, as reported. Not checked by onetrace."
 MATCHES, DIFFERS = "matches the receipt", "differs from the receipt"
 NO_FILE = "No trace file for the {role} run."
 NO_SPAN = "No span for `{stage}` in the {role} run's trace file."
-SOURCES = {"export": "onetrace export otel of the run, made when it was checked",
-           "given": "the file given under traces/ with the runs"}
 #: The attributes the panel shows, by their prefix.
 SHOWN = ("gen_ai.", "onetrace.")
 _HEX = {"trace_id": re.compile(r"[0-9a-f]{32}"), "span_id": re.compile(r"[0-9a-f]{16}")}
@@ -166,25 +175,58 @@ def _ms(ns: int) -> str:
     return f"{ns / 1e6:.1f} ms"
 
 
-def _cell(s: dict | None, origin: int, other: dict | None, receipt_digest: str) -> str:
-    if s is None:
-        return "<td>—</td>"
-    attrs = {k: v for k, v in sorted(s["attrs"].items()) if k.startswith(SHOWN)}
-    oattrs = other["attrs"] if other else {}
-    lines = []
-    for k, v in attrs.items():
-        mark = ' data-differs="yes"' if other is not None and oattrs.get(k) != v else ""
-        lines.append(f'<li{mark}><span class="k">{escape(k)}</span> {code_or_fold(json.dumps(v) if not isinstance(v, str) else v)}'
-                     + (' <span class="mark">differs</span>' if mark else "") + "</li>")
-    digest = s["attrs"].get("onetrace.receipt.digest")
+def _rows(sa: dict | None, sb: dict | None, origins: tuple) -> list[tuple[str, str, str, bool]]:
+    """(attribute, baseline's value, candidate's value, whether they differ), for one span pair: its
+    duration, its start offset in its run, then each shown attribute, by name."""
+    def shown(s):
+        return {k: (v if isinstance(v, str) else json.dumps(v)) for k, v in sorted(s["attrs"].items())
+                if k.startswith(SHOWN)} if s else {}
+    out = []
+    for name, f in ((DURATION, lambda s, o: _ms(s["end"] - s["start"])), (OFFSET, lambda s, o: _ms(s["start"] - o))):
+        va = f(sa, origins[0]) if sa else None
+        vb = f(sb, origins[1]) if sb else None
+        out.append((name, va, vb, va != vb))
+    xa, xb = shown(sa), shown(sb)
+    for k in sorted(xa.keys() | xb.keys()):
+        out.append((k, xa.get(k), xb.get(k), xa.get(k) != xb.get(k)))
+    return out
+
+
+def _row(name: str, va, vb, differs: bool) -> str:
+    def cell(v):
+        return f"<td>{escape(ABSENT)}</td>" if v is None else f"<td>{code_or_fold(v)}</td>"
+    mark = ' data-differs="yes"' if differs else ""
+    #: Every cell a `td`, so a row stacked at a narrow width labels each by its column (`words.labelled`).
+    return (f'<tr{mark}><td data-attribute><span class="k">{escape(name)}</span></td>{cell(va)}{cell(vb)}'
+            f'<td data-differs-cell>{escape(DIFFERS_WORD) if differs else ""}</td></tr>')
+
+
+def _span_table(sa: dict | None, sb: dict | None, origins: tuple, receipt_digests: tuple) -> str:
+    """One span pair's table: the differing rows, then the same rows folded under their count."""
+    rows = _rows(sa, sb, origins)
+    first = [r for r in rows if r[3]]
+    same = [r for r in rows if not r[3]]
+    named = (sa or sb)["name"]
+    depth = (sa or sb).get("depth", 0)
+    head = "".join(f'<th scope="col">{escape(c)}</th>' for c in COLUMNS) + f'<th scope="col" aria-label="{escape(DIFFERS_COLUMN)}"></th>'
     said = ""
-    if isinstance(digest, str) and receipt_digest and s["depth"] == 0:
-        said = f'<p data-trace-receipt="{"matches" if digest == receipt_digest else "differs"}">' \
-               f'{escape(MATCHES if digest == receipt_digest else DIFFERS)}</p>'
-    dur, off = s["end"] - s["start"], s["start"] - origin
-    dmark = ' data-differs="yes"' if other is not None and (other["end"] - other["start"]) != dur else ""
-    return (f'<td><p><code>{escape(s["name"])}</code></p><p{dmark}>{escape(_ms(dur))}, from {escape(_ms(off))}</p>'
-            f'{said}<ul class="plain">{"".join(lines)}</ul></td>')
+    for s, digest, role in ((sa, receipt_digests[0], "baseline"), (sb, receipt_digests[1], "candidate")):
+        got = s["attrs"].get("onetrace.receipt.digest") if s else None
+        if isinstance(got, str) and digest and s["depth"] == 0:
+            said += (f'<p data-trace-receipt="{"matches" if got == digest else "differs"}">{escape(role)}: '
+                     f'{escape(MATCHES if got == digest else DIFFERS)}</p>')
+    from onetrace_console.words import scroll_region
+    fold = ""
+    if same:
+        n = SAME_ONE if len(same) == 1 else SAME.format(n=len(same))
+        fold = (f"<details data-trace-same><summary>{escape(n)}</summary>"
+                + scroll_region(f'<table class="board" data-trace="same"><thead><tr>{head}</tr></thead>'
+                                f'<tbody>{"".join(_row(*r) for r in same)}</tbody></table>', n, "trace-same")
+                + "</details>")
+    return (f'<div data-trace-span data-depth="{depth}"><p><code>{escape(named)}</code></p>'
+            + scroll_region(f'<table class="board" data-trace="spans"><thead><tr>{head}</tr></thead>'
+                            f'<tbody>{"".join(_row(*r) for r in first)}</tbody></table>', named, "trace")
+            + f"{fold}{said}</div>")
 
 
 def panel(stage: str, docs: tuple, sources: tuple, receipt_digests: tuple, roles=("baseline", "candidate")) -> str:
@@ -208,8 +250,10 @@ def panel(stage: str, docs: tuple, sources: tuple, receipt_digests: tuple, roles
         found.append((mine, origin))
     if all(f is None or not f[0] for f in found):
         body = "".join(f"<p>{escape(n)}</p>" for n in notes)
-        return (f'<section data-section="trace-panel" class="trace-panel"><h2>{escape(PANEL_HEADING)}</h2>'
-                f'<p class="reported">{escape(PANEL_LEAD)}</p>{body}</section>')
+        where = " and ".join(dict.fromkeys(WHERE.get(s, s) for s in sources if s)) or WHERE["export"]
+        h1, h2 = PANEL_HEADING.split("{step}")
+        return (f'<section data-section="trace-panel" class="trace-panel"><h2>{escape(h1)}<code>{escape(stage)}</code>'
+                f'{escape(h2.format(where=where))}</h2><p class="reported">{escape(PANEL_LEAD)}</p>{body}</section>')
     #: Paired by name and order within the step.
     keyed = []
     for f in found:
@@ -221,13 +265,10 @@ def panel(stage: str, docs: tuple, sources: tuple, receipt_digests: tuple, roles
     order = list(dict.fromkeys([k for k, _ in keyed[0]] + [k for k, _ in keyed[1]]))
     a, b = dict(keyed[0]), dict(keyed[1])
     oa, ob = (f[1] if f else 0 for f in found)
-    rows = "".join(f"<tr>{_cell(a.get(k), oa, b.get(k), receipt_digests[0])}{_cell(b.get(k), ob, a.get(k), receipt_digests[1])}</tr>"
-                   for k in order)
-    src = " · ".join(f"{role}: {SOURCES.get(s, s)}" for role, s in zip(roles, sources) if s)
-    from onetrace_console.words import scroll_region
-    table = scroll_region(f'<table class="board" data-trace="spans"><thead><tr><th>{escape(roles[0])}</th>'
-                          f'<th>{escape(roles[1])}</th></tr></thead><tbody>{rows}</tbody></table>',
-                          "The app's spans, side by side", "trace")
-    return (f'<section data-section="trace-panel" class="trace-panel"><h2>{escape(PANEL_HEADING)}</h2>'
-            f'<p class="reported">{escape(PANEL_LEAD)}</p><p class="source">At <code>{escape(stage)}</code>. '
-            f'From {escape(src)}.</p>{"".join(f"<p>{escape(n)}</p>" for n in notes)}{table}</section>')
+    tables = "".join(_span_table(a.get(k), b.get(k), (oa, ob), receipt_digests) for k in order)
+    where = " and ".join(dict.fromkeys(WHERE.get(s, s) for s in sources if s)) or WHERE["export"]
+    h1, h2 = PANEL_HEADING.split("{step}")
+    heading = f"<h2>{escape(h1)}<code>{escape(stage)}</code>{escape(h2.format(where=where))}</h2>"
+    return (f'<section data-section="trace-panel" class="trace-panel">{heading}'
+            f'<p class="reported">{escape(PANEL_LEAD)}</p>{"".join(f"<p>{escape(n)}</p>" for n in notes)}'
+            f"{tables}</section>")

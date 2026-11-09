@@ -156,11 +156,12 @@ def runs() -> list[RunSpec]:
 
 
 #: The demo builder's mark: the pipelines whose runs read invented example data from outside the
-#: pipeline and keep it. Only these runs' kept inputs, and only the bytes the builder itself
+#: pipeline and keep it, each input from outside a step kept beside its digest (console 0.7.0: every
+#: pipeline but P2, which is the shipped reference example byte for byte). Only these runs' kept inputs, and only the bytes the builder itself
 #: invents for them (`example_input_digests`), may be shown on a public console, and only for a
 #: demo whose build record vouches for every byte (`allowing_examples`). It lives here, in the
 #: builder's spec, and in no configuration: no setting can extend it to another store.
-EXAMPLE_DATA = ("p4", "p7", "p8")
+EXAMPLE_DATA = ("p1", "p3", "p4", "p5", "p6", "p7", "p8", "p9", "p10", "p11")
 
 
 #: Each pipeline's name, as its own module's first line gives it. A public demo shows it beside the
@@ -182,8 +183,12 @@ def name_of(run_ids) -> str | None:
 
 
 def _module(pipeline: str):
-    from onetrace_console.demo_store import cold_chain, invoice_match, support_reply
-    return {"p4": support_reply, "p7": cold_chain, "p8": invoice_match}[pipeline]
+    from onetrace_console.demo_store import (agent_settle, cold_chain, fill_inspection, invoice_match,
+                                             pump_maintenance, refund_policy, support_reply, ticket_triage,
+                                             torque_check)
+    return {"p1": refund_policy, "p3": ticket_triage, "p4": support_reply, "p5": pump_maintenance,
+            "p6": fill_inspection, "p7": cold_chain, "p8": invoice_match, "p9": torque_check,
+            "p10": agent_settle, "p11": agent_settle}[pipeline]
 
 
 def example_input_digests() -> frozenset:

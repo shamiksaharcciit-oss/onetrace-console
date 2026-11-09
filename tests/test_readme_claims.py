@@ -20,7 +20,7 @@ import pytest
 from onetrace_console.config import Config
 
 REPO = Path(__file__).resolve().parent.parent
-RELEASE = "0.6.1"
+RELEASE = "0.7.0"
 #: The package's own version: the next release, whose heading says "(not released)" until the release
 #: step drops it. Every other version's heading is plain.
 VERSION = tomllib.loads((REPO / "pyproject.toml").read_text(encoding="utf-8"))["project"]["version"]
@@ -32,8 +32,8 @@ READMES = ["README.md", "PYPI_DESCRIPTION.md"]
 #: Kinds whose README words are held; the others are listed and need none.
 HELD = {"feature", "extra", "option"}
 
-#: This release's: (the entry's lead, as it starts, its kind, the README words that cover it).
-CLAIMS = [
+#: 0.6.1's, held as they were: (the entry's lead, as it starts, its kind, the README words that cover it).
+CLAIMS_061 = [
     ("The confirm button shows the download", "fix", None),
     ("The extra missing, said plainly", "fix", None),
     ("The ladder marks a drop only where there is one", "fix", None),
@@ -111,9 +111,44 @@ CLAIMS_050 = [
     ("A run's incident takes", "fix", "An incident's page has a new address; the old address no longer answers."),
 ]
 #: The earlier releases' tables, by release.
-EARLIER = {"0.6.0": CLAIMS_060, "0.5.1": CLAIMS_051, "0.5.0": CLAIMS_050}
-#: The next release's, under `## [Unreleased]` until its version is set.
-NEXT: list = []
+EARLIER = {"0.6.1": CLAIMS_061, "0.6.0": CLAIMS_060, "0.5.1": CLAIMS_051, "0.5.0": CLAIMS_050}
+#: This release's (0.7.0), under `## [Unreleased]` until its version was set.
+CLAIMS: list = [
+    ("The same release files on Windows as on Linux", "fix", None),
+    ("The PowerShell install line quotes by PowerShell's rules", "fix", None),
+    ("Runs recorded by onetrace 0.7 open", "feature", "- Runs recorded by onetrace 0.7, in its format 0.4"),
+    ("onetrace 0.7.1 and onetrace-verify 0.7.1", "pins", "`onetrace` 0.7.1 and `onetrace-verify` 0.7.1"),
+    ("Runs recorded without configuration open", "feature", "- Runs recorded without configuration, by onetrace-auto, open"),
+    ("Whether a run closed, and how it ended", "feature", "- Whether a run closed, and how it ended,"),
+    ("Step expectations", "feature", "- Step expectations: a run's page lists each step's declared expectations"),
+    ("Expectations declared after the run", "feature", "- Expectations declared after the run: on a local console"),
+    ("A tokenizer from this machine", "feature", "- A tokenizer from this machine: where a model step's token"),
+    ("The rendered checks name a page view they stalled on", "fix", None),
+    ("A sub-agent's run is not read as the step's input", "fix", None),
+    ("The first-run-to-leave page says its answer first", "page", None),
+    ("The first-run-to-leave page says how to read it in plain words", "wording", None),
+    ("The reference line is one line", "fix", None),
+    ("Each gap on the first-run-to-leave page gives its reason", "page", None),
+    ("One \"Find the first run to leave after\" control", "page", None),
+    ("Start-up progress on Windows PowerShell 5.1's console", "fix", None),
+    ("The Compare picker keeps each label with its select", "fix", None),
+    ("The app's spans at a differing step, attribute by attribute", "page", None),
+    ("Set up Explain in the console", "feature", "- Set up Explain here: on a local console"),
+    ("Whether a key is stored, with Replace and Remove", "page", None),
+    ("No keychain, said plainly", "page", None),
+    ("The settings menu reads the keychain", "page", None),
+    ("Who can read the key, said on the page", "wording", None),
+    ("onetrace-explain 0.3 with its keyring extra, beside the console", "wording", None),
+    ("A key no request can carry is refused", "fix", None),
+    ("Every demo pipeline keeps its inputs", "feature", "Every pipeline but the reference demo's keeps the inputs its steps read"),
+    ("A static export's first-run-to-leave control is shown disabled", "fix", None),
+    ("onetrace-explain 0.3.0 beside the console, as released", "pins", 'pip install "onetrace-explain[keyring]>=0.3"'),
+    ("The sign-in limit counts a rolling window", "fix", None),
+    ("A locked keychain refuses a Save with no key", "fix", None),
+    ("The settings menu reads `key_source` before `key_env`", "fix", None),
+    ("A static export has no live Compare", "fix", None),
+    ("CSRF values are compared in constant time", "fix", None),
+]
 #: The configuration keys added since 0.5.0, each named in the README.
 NEW_KEYS = ["compare_cache", "compare_client_header", "compare_per_minute", "compare_running", "compare_queue",
             "compare_wait_seconds", "compare_verb_seconds", "tracing", "tokenizers"]
@@ -129,7 +164,7 @@ def leads(changelog: str, release: str = RELEASE) -> list[str]:
 
 def tables() -> dict[str, list]:
     """Every release's table, this one's first."""
-    return {"Unreleased": NEXT, RELEASE: CLAIMS, **EARLIER}
+    return {RELEASE: CLAIMS, **EARLIER}
 
 
 def claim_problems(changelog: str, readmes: dict[str, str]) -> list[str]:

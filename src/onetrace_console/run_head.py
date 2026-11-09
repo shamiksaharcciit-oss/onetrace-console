@@ -152,6 +152,10 @@ def run_head(run: StoredRun, store: Store, model, *, stage_page: str = "", recei
     ran = ran_at(run)
     count = (f"{run.delivered_stages} of {run.stage_count} declared stages"
              + (f"; {run.retries} retr{'y' if run.retries == 1 else 'ies'} recorded" if run.retries else ""))
+    from onetrace_console import closing
+    #: Whether the run closed and how it ended, in the words of onetrace-verify's own row: read from
+    #: the record's contents, with the count.
+    ending = f'<span data-ending="{closing.state(run.ending)}">{closing.html(run.ending)}</span>'
     sub = [f'recorded in the format <span class="mono">{escape(run.format)}</span>' if run.format else "",
            f"ran {_time(ran)}" if ran else "the record gives no time it ran",
            f"received by this console {_time(run.received_at)}"]
@@ -179,7 +183,7 @@ def run_head(run: StoredRun, store: Store, model, *, stage_page: str = "", recei
             f'<div class="title"><{title_tag} class="run-title"><span class="mono" data-words="record">'
             f"{_named(run.run_id)}</span>"
             + (f" · {escape(label)}" if label else "") + f"</{title_tag}>{rest}{chips}</div>"
-            f'<p class="sub"><span{FROM_CONTENTS}>{count} · </span>{" · ".join(s for s in sub if s)}</p>'
+            f'<p class="sub"><span{FROM_CONTENTS}>{count} · {ending} · </span>{" · ".join(s for s in sub if s)}</p>'
             #: Another folder carrying the same run and chain head: each is read on its own, and
             #: the page says which folder this is and how the other's files compare.
             + "".join(f'<p class="sub" data-twin="true">{escape(t)}</p>' for t in twins.sentences(run, store))

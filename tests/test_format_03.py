@@ -429,10 +429,24 @@ def stored_problems(folder: Path, store) -> list[str]:
     return out
 
 
-def test_a_0_3_run_stores_reads_back_and_verifies(runs, store, examined):
-    examined(len(runs), "0.3 runs through the store")
-    assert {name: stored_problems(folder, store) for name, folder in runs.items()} == {
-        name: [] for name in runs}
+#: The same five runs as `_make` makes, recorded by onetrace 0.6.1, the last release to write format
+#: 0.3 (`tools/make_format_members.py`): what the store is held to for a 0.3 run since the pins moved
+#: past it. The runs made here by the installed SDK are its own format.
+MEMBERS = Path(__file__).resolve().parent / "onetrace_runs" / "0.6.1" / "members"
+
+
+@pytest.fixture(scope="module")
+def runs_0_3() -> dict[str, Path]:
+    return {p.name: p for p in sorted(MEMBERS.iterdir()) if p.is_dir()}
+
+
+def test_a_0_3_run_stores_reads_back_and_verifies(runs_0_3, store, examined):
+    from tests.test_checks import _require_installed
+    _require_installed()
+    examined(len(runs_0_3), "0.3 runs through the store")
+    assert sorted(runs_0_3) == ["held", "nokeep", "optional", "optional-and-required", "plain"]
+    assert {name: stored_problems(folder, store) for name, folder in runs_0_3.items()} == {
+        name: [] for name in runs_0_3}
 
 
 def test_a_stored_0_3_run_s_pages_quote_the_check(runs, store, examined):
@@ -452,11 +466,12 @@ def test_a_stored_0_3_run_s_pages_quote_the_check(runs, store, examined):
             assert store.get_run(run.key).nothing_missing == "yes", "Home counts it as its page reads it"
 
 
-def test_sabotage_a_store_without_0_3_is_named(runs, store, monkeypatch, examined):
+def test_sabotage_a_store_without_0_3_is_named(runs_0_3, store, monkeypatch, examined):
     from onetrace_console import ingest
+    from onetrace_console.ingest import Rejection, accept
     monkeypatch.setattr(ingest, "MANIFEST_FORMATS", tuple(f for f in ingest.MANIFEST_FORMATS if not f.endswith("/0.3")))
     examined(1, "0.3 run, sabotaged store")
-    assert stored_problems(runs["plain"], store) != []
+    assert isinstance(accept(_tar(runs_0_3["plain"]), store), Rejection)
 
 
 def refused_problems(data: bytes, store, named: str) -> list[str]:
@@ -476,8 +491,8 @@ def refused_problems(data: bytes, store, named: str) -> list[str]:
     return out
 
 
-UNKNOWN = (("chain", "stage-receipt-chain/0.4"), ("chain", "stage-receipt-chain/1.0"),
-           ("receipt", "stage-receipt/0.4"), ("receipt", "stage-receipt/1.0"))
+UNKNOWN = (("chain", "stage-receipt-chain/0.5"), ("chain", "stage-receipt-chain/1.0"),
+           ("receipt", "stage-receipt/0.5"), ("receipt", "stage-receipt/1.0"))
 
 
 def _unknown(folder: Path, part: str, fmt: str) -> bytes:
@@ -503,9 +518,9 @@ def test_sabotage_a_store_that_takes_any_format_is_named(runs, store, monkeypatc
     monkeypatch.setattr(ingest, "MANIFEST_FORMATS", Any(ingest.MANIFEST_FORMATS))
     monkeypatch.setattr(ingest, "RECEIPT_FORMATS", Any(ingest.RECEIPT_FORMATS))
     examined(len(UNKNOWN), "deliveries in an unknown format, sabotaged store")
-    #: A minor the verifier reads (0.4) is held off by this store's lists alone: named.
+    #: A minor the verifier reads (0.5) is held off by this store's lists alone: named.
     for part, fmt in UNKNOWN:
-        if fmt.endswith("/0.4"):
+        if fmt.endswith("/0.5"):
             assert refused_problems(_unknown(runs["plain"], part, fmt), store, fmt) != [], fmt
     #: A new major is refused by the verifier's own veto even then (`ingest`: "the verifier vetoes
     #: a format, whatever this store's list says").
@@ -518,11 +533,25 @@ def test_sabotage_a_store_that_takes_any_format_is_named(runs, store, monkeypatc
 EARLIER = Path(__file__).resolve().parent / "fixtures" / "earlier-formats-read.json"
 
 
+#: onetrace-verify 0.7's own row about a close receipt, NOT-RUN on a run in an earlier format, which has
+#: none (onetrace's `docs/format.md`, "The close receipt").
+CLOSE_ROW = re.compile(r"\[NOT-RUN\] the close receipt -- not closed: ")
+
+
+def _without_the_close_row(summary: str, lines: list[str]) -> str:
+    """The verifier's summary line less its own row about the close receipt, where the check printed
+    that row: one fewer not-run. Every other count is as the verifier wrote it."""
+    if sum(1 for ln in lines if CLOSE_ROW.match(ln)) != 1:
+        return summary
+    return re.sub(r"\b(\d+) not-run\b", lambda m: f"{int(m.group(1)) - 1} not-run", summary, count=1)
+
+
 def earlier_reading(root: Path, store) -> dict:
     """Each committed earlier-format run (the reference demo, the test fixtures, the SDK's exam),
     stored and checked as the console does, and what it keeps about it: the table
     `earlier-formats-read.json` holds, made by this function under the pinned 0.3.0 SDK before
-    the store took format 0.3."""
+    the store took format 0.3. Since the pins moved to onetrace-verify 0.7, its summary line is read
+    less that verifier's row about the close receipt (`_without_the_close_row`)."""
     import json
     from onetrace_console.checks import run_and_record
     from tests.test_compare import _deliver
@@ -533,6 +562,7 @@ def earlier_reading(root: Path, store) -> dict:
         run = run_and_record(_deliver(f, store, outputs=(f / "artifacts").is_dir()), store, ran_at=RAN_AT)
         report = json.loads(store.get(run.check_report)) if run.check_report else {}
         lines = [ln for ln in (report.get("stdout") or "").splitlines() if ln.strip()]
+        lines[-1:] = [_without_the_close_row(lines[-1], lines)] if lines else []
         out[f.relative_to(root).as_posix()] = {
             "format": run.format, "check_verdict": run.check_verdict, "check_exit": run.check_exit,
             "summary": lines[-1] if lines else "", "nothing_missing": run.nothing_missing,
@@ -540,6 +570,15 @@ def earlier_reading(root: Path, store) -> dict:
             "signed": run.signed, "anchored": run.anchored, "declined": run.declined,
             "recorded_count": run.recorded_count, "completeness_run": "completeness_required" in report}
     return out
+
+
+def test_sabotage_a_summary_is_read_less_only_the_close_receipt_s_row(examined):
+    rows = ["[PASS   ] receipts/01-a.json: chain link",
+            "[NOT-RUN] the close receipt -- not closed: the record ends at a and holds no close"]
+    examined(3, "summaries read")
+    assert _without_the_close_row("9 pass, 0 fail, 5 not-run  ->  PASS", rows + ["x"]) == "9 pass, 0 fail, 4 not-run  ->  PASS"
+    assert _without_the_close_row("9 pass, 0 fail, 5 not-run  ->  PASS", rows[:1]) == "9 pass, 0 fail, 5 not-run  ->  PASS"
+    assert _without_the_close_row("9 pass, 0 fail, 5 not-run  ->  PASS", rows + rows[1:]) == "9 pass, 0 fail, 5 not-run  ->  PASS"
 
 
 def test_earlier_formats_read_as_before(store, examined):

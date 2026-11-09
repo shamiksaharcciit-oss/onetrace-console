@@ -31,6 +31,15 @@ EXAM = Path(__file__).resolve().parent.parent / ".sdk-fixtures" / "exam" / "fixt
 #: are (a new preview delivery is refused since 0.2.0).
 pytestmark = pytest.mark.usefixtures("preview_stored_directly")
 
+@pytest.fixture
+def server(tmp_path):
+    """As conftest's `server`, with the console's store on tmpfs where the platform has one: this module's
+    requests wait on the console's writes, and a stalled sync on a slow disk timed them out."""
+    from tests.conftest import in_memory, serving
+    with in_memory(tmp_path) as folder, serving(folder) as served:
+        yield served
+
+
 
 @contextmanager
 def counting(monkeypatch):
@@ -198,3 +207,15 @@ def test_a_run_written_after_a_request_read_the_store_is_on_the_next_requests_pa
     assert status == 200, body
     examined(1, "run written by another hand")
     assert late in runs_page_keys(root), body
+
+
+def test_this_modules_console_keeps_its_store_in_memory_where_there_is_one(server, examined):
+    """Its requests wait on the console's writes; a stalled sync on a slow disk timed them out, so this
+    module's console keeps its store on tmpfs where the platform has one (Linux's /dev/shm)."""
+    from tests.conftest import tmpfs_root
+    _base, root = server
+    fast = tmpfs_root()
+    examined(1, "the console's store folder")
+    if fast is None:
+        pytest.skip("this platform has no tmpfs at /dev/shm; the store is under the test's own folder")
+    assert root.resolve().is_relative_to(fast.resolve()), (root, fast)

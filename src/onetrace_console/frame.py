@@ -143,6 +143,17 @@ PAGE_CSS = """
 .cp .model-call details.about p{margin:4px 0 0;font-size:var(--fs-small)}
 .cp .model-call-pair ul.comparator li{overflow-wrap:anywhere}
 .cp[data-view=incident] [data-section=which] li{overflow-wrap:anywhere}
+.cp .expectations li,.cp .expectations p,.cp [data-tokenizer-pick],.cp [data-section=tokenizers] li,.cp [data-tokenizer-refused],.cp [data-token-text]{overflow-wrap:anywhere}
+.cp [data-tokenizer-pick]{white-space:normal;max-width:100%}
+.cp form:is([data-local-compare],[data-visitor-compare]){display:flex;flex-wrap:wrap;align-items:flex-end;gap:8px 16px}
+.cp .compare-field{display:flex;flex-direction:column;gap:4px;flex:1 1 16rem;min-width:0;max-width:24rem}
+.cp .compare-field select{width:100%;min-width:0;max-width:100%}
+.cp .trace-panel tr[data-differs]>*{background:var(--hl)}
+.cp .trace-panel [data-differs-cell]{white-space:nowrap}
+.cp .trace-panel [data-trace-span]{margin:12px 0}
+.cp .trace-panel [data-trace-span][data-depth]:not([data-depth="0"]){padding-left:20px}
+.cp form:is([data-local-compare],[data-visitor-compare]) button{flex:0 0 auto}
+.cp [data-tokenizer-pick] label,.cp [data-tokenizer-pick] input{display:block;max-width:100%}
 .cp[data-view=incident] [data-scroll=found-rows]{max-height:448px;overflow:auto}
 .cp[data-view=incident] pre[data-found=summary]{white-space:pre-wrap;overflow-wrap:anywhere}
 .cp [data-card]{background:var(--surface);border:1px solid var(--line);border-radius:var(--r-card);
@@ -400,6 +411,10 @@ CHIP_CSS = (
     f".shell .page table.timeline .mono{{overflow-wrap:anywhere}}\n"
     #: onetrace 0.5.0's parts on a run's page (the viewer's): code in them breaks anywhere at 390.
     f".shell .page .onedoor code,.shell .page .span-context code,.shell .page .nesting code{{overflow-wrap:anywhere}}\n"
+    f".shell .page .expectations li,.shell .page .expectations p,.shell .page [data-tokenizer-pick],"
+    f".shell .page [data-section=tokenizers] li,.shell .page [data-tokenizer-refused],.shell .page [data-token-text]{{overflow-wrap:anywhere}}\n"
+    f".shell .page [data-tokenizer-pick]{{white-space:normal;max-width:100%}}\n"
+    f".shell .page [data-tokenizer-pick] label,.shell .page [data-tokenizer-pick] input{{display:block;max-width:100%}}\n"
     #: Steps inside steps in a run's table of steps (`nesting_ladder`): each child, and each nested
     #: run's row, indented under its calling step.
     f".shell .page tr[data-child-of]>td:first-child{{padding-left:32px}}\n"
@@ -417,6 +432,10 @@ CHIP_CSS = (
     #: (an agent's run, a graph with no plan row) took the table 12 pixels past its frame at 1280.
     f".shell .page table.timeline[data-section=runs-table] td[data-answer] .pill{{margin-right:0;"
     f"padding-left:6px;padding-right:6px}}\n"
+    #: Its cells a little narrower at the sides: with the Closed column, ten columns at their least
+    #: width took the table 58 pixels past its frame at 1280. At 8 pixels it has the 18 pixels of room
+    #: it had with nine.
+    f".shell .page table.timeline[data-section=runs-table] :is(td,th){{padding-left:8px;padding-right:8px}}\n"
     f".cp code{{overflow-wrap:anywhere}}\n"
     #: A runs list with no run in it: its one line, grey as the Overview's zeros are.
     f".shell .page p.zero[data-section=no-runs]{{color:var(--ink-faint)}}\n"

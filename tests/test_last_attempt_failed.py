@@ -216,7 +216,7 @@ def test_a_run_derived_before_this_is_re_derived_with_the_line(tmp_path, store):
     old = replace(run, last_failed="", derived="derivation-2")
     store.put_run(old)
     again = rederive(old, store)
-    assert again.derived == DERIVED == "derivation-10"
+    assert again.derived == DERIVED == "derivation-11"
     assert again.last_failed == '[["b", "TimeoutError"]]'
 
 
@@ -235,7 +235,7 @@ def test_a_store_from_before_the_rename_is_re_derived_at_start_up(tmp_path, stor
     from onetrace_console.serve import _render_startup_pages
     from onetrace_console.store import Store
     run = _stored(tmp_path, store, "before-rename", [("a", None, "ok"), ("b", None, "error")])
-    assert DERIVED == "derivation-10"
+    assert DERIVED == "derivation-11"
     store.put_run(replace(run, last_failed="", derived=PREVIOUS_RELEASE_DERIVED))
     reopened = Store(store.root)
     _render_startup_pages(reopened, tmp_path / "site")

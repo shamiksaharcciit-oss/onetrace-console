@@ -104,6 +104,14 @@ def _read(files: dict[str, str], store: Store, path: str) -> bytes | None:
 
 
 def _steps(run: StoredRun, store: Store) -> list[dict]:
+    """The chain's steps in order: [{index, file, receipt}] -- only receipts the run holds, and not
+    the close receipt that ends a 0.4 chain, which is not a step (`viewer.record.is_close`)."""
+    from onetrace_console.viewer.record import is_close
+    out = _receipts(run, store)
+    return out[:-1] if len(out) > 1 and is_close(out[-1]["receipt"]) else out
+
+
+def _receipts(run: StoredRun, store: Store) -> list[dict]:
     """The chain's receipts in order: [{index, file, receipt}] -- only receipts the run holds."""
     files = _files(run, store)
     manifest = load_json_bounded((_read(files, store, "MANIFEST.json") or b"{}").decode("utf-8"), "MANIFEST.json", "show")

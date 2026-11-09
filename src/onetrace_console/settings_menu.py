@@ -5,11 +5,14 @@ right of every page a local console fills as it serves it, in place of the sideb
 link. The gear opens a small menu, one row per feature, each linking to its setup page (whose addresses
 are unchanged) and saying its state, from the same checks those pages use:
 
-- "Explain: on, <model> (<provider>)", "Explain: not set up" or "Explain: key not found";
+- "Explain: on, <model> (<provider>)", "Explain: not set up" or "Explain: key not found"; where the
+  configuration keeps its key in the keychain (console 0.7.0), "Explain: key stored", "Explain: no key
+  stored" or "Explain: the keychain can't be read (<its type>)";
 - "Neighbours: on, <model>", "Neighbours: off" or "Neighbours: extra not installed".
 
 A dot on the gear says that something set up has stopped working -- the variable `key_env` names is not
-set, or a turned-on local model's file is missing -- never that something is not set up, which is a
+set, no key is stored in the keychain where the table says `key_source = "keyring"` (console 0.7.0), or a
+turned-on local model's file is missing -- never that something is not set up, which is a
 choice. Nothing of a key's value is read or drawn: whether its variable is set, and no more.
 
 The menu is the browser's own popover (`popover`, `popovertarget`), with no script: the button is a
@@ -42,10 +45,32 @@ def explain_row() -> Row:
     m = explain.model_config()
     if explain.command() is None or m is None:
         return Row("explain", "Explain: not set up", PATH, "off")
+    if m.get("key_source") == "keyring":
+        #: Read before key_env, as onetrace-explain 0.3 reads it.
+        return _keychain_row(m)
     status = explain.key_status()
     if status is not None and not status["set"]:
         return Row("explain", "Explain: key not found", PATH, "broken")
     return Row("explain", f"Explain: on, {m['name']} ({m['provider']})", PATH, "on")
+
+
+KEY_STORED = "Explain: key stored"
+NO_KEY_STORED = "Explain: no key stored"
+UNREADABLE = "Explain: the keychain can't be read ({kind})"
+
+
+def _keychain_row(m: dict) -> Row:
+    """The row where the table keeps its key in the keychain (console 0.7.0), in three states, as
+    onetrace-explain 0.3 tells them apart: a key stored for the provider and base_url the table names, none
+    stored, or the keychain can't be read (locked, keyring missing, no keychain), by its error's type. Only
+    the key's presence is read."""
+    from onetrace_console import explain_keychain as K
+    from onetrace_console.explain_setup import PATH
+    try:
+        stored = K.stored(str(m["provider"]), str(m.get("base_url") or ""))
+    except K.Unavailable as e:
+        return Row("explain", UNREADABLE.format(kind=e.kind or type(e).__name__), PATH, "broken")
+    return Row("explain", KEY_STORED, PATH, "on") if stored else Row("explain", NO_KEY_STORED, PATH, "broken")
 
 
 def neighbours_row(store) -> Row:
@@ -76,8 +101,18 @@ def neighbours_row(store) -> Row:
     return Row("neighbours", f"Neighbours: on, {model.name}", href, "on")
 
 
+def tokenizers_row(store) -> Row:
+    """The tokenizers this console keeps (`token_upload`), each removable on its page."""
+    from pathlib import Path
+
+    from onetrace_console import token_upload
+    n = len(token_upload.kept(Path(store.root))) if store is not None else 0
+    words = "Tokenizers: none kept" if n == 0 else f"Tokenizers: {n} kept"
+    return Row("tokenizers", words, f"/{token_upload.PATH}", "on" if n else "off")
+
+
 def rows(store) -> list[Row]:
-    return [explain_row(), neighbours_row(store)]
+    return [explain_row(), neighbours_row(store), tokenizers_row(store)]
 
 
 GEAR_SVG = ('<svg class="gear-mark" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" focusable="false">'

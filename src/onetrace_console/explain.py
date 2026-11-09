@@ -110,7 +110,8 @@ def find(windows: bool, scripts: str | None, python: str, which) -> Path | None:
 
 
 def command() -> Path | None:
-    """The `onetrace-explain` command for this interpreter; None where it isn't."""
+    """The `onetrace-explain` command for this interpreter: the one in its scripts folder or beside it, and
+    where there is none, it falls back to the first `onetrace-explain` on `PATH`; None where neither is."""
     return find(os.name == "nt", sysconfig.get_path("scripts"), sys.executable, shutil.which)
 
 
@@ -121,7 +122,7 @@ FOLDER, KEY_HEX, REPORT, KEY_FILE = "x", 16, "r", "key"
 #: there is `/explain/<run id>/artifacts/_staging/post_check/checked.json.<8>.tmp`, the run id
 #: onetrace-explain's (27 characters), the staging folder and temporary name the SDK's
 #: (tests/test_explain_paths.py measures them, and refuses other versions).
-MEASURED = {"onetrace-explain": "0.1.0", "onetrace": "0.6.1"}
+MEASURED = {"onetrace-explain": "0.1.0", "onetrace": "0.7.1"}
 #: onetrace-explain's run id, as measured with those versions.
 RUN_ID = 27
 MEASURED_BELOW = len("/explain/") + RUN_ID + len("/artifacts/_staging/post_check/checked.json") + len(".12345678.tmp")

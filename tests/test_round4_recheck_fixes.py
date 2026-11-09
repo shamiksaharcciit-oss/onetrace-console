@@ -235,7 +235,8 @@ def _sdk_delivery(tmp_path: Path, which: str, setting: str) -> dict[str, bytes]:
     second(first())
     rec.close()
 
-    hostile = dict(zip(_SAFE_STAGES, STAGES))
+    #: A format 0.4 run's close receipt keeps its reserved name: it is onetrace's, not a step's.
+    hostile = {**dict(zip(_SAFE_STAGES, STAGES)), "onetrace.close": "onetrace.close"}
     manifest = json.loads((out / "MANIFEST.json").read_text(encoding="utf-8"))
     prev = None
     for entry in manifest["chain"]:
@@ -265,11 +266,16 @@ def test_the_hostile_run_carries_every_hostile_name_and_the_pinned_verifier_hold
     files = _sdk_delivery(tmp_path, "a", "1")
     manifest = json.loads(files["MANIFEST.json"].decode("utf-8"))
     assert manifest["run_id"] == IDS["a"]
-    assert [e["stage"] for e in manifest["chain"]] == list(STAGES)
-    for entry, stage in zip(manifest["chain"], STAGES):
+    from onetrace_console.viewer.record import is_close, stage_names
+    #: Its steps: a format 0.4 run's close receipt, the chain's last, is not one.
+    chain = manifest["chain"]
+    if chain and is_close(json.loads(files[chain[-1]["file"]].decode("utf-8"))):
+        chain = chain[:-1]
+    assert [e["stage"] for e in chain] == list(STAGES)
+    for entry, stage in zip(chain, STAGES):
         receipt = json.loads(files[entry["file"]].decode("utf-8"))
         assert receipt["run_id"] == IDS["a"] and receipt["stage"]["name"] == stage
-        assert receipt["coverage"]["declared_stages"] == list(STAGES)
+        assert stage_names(receipt, "declared_stages") == list(STAGES)
         assert stage in receipt["coverage"]["emitting_stages"]
     assert _stored(files, store).check_verdict == "holds"
 

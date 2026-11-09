@@ -1,0 +1,23 @@
+{
+  "file": {
+    "command": "onetrace expect write tools/onetrace_runs/after_the_run.json --out after-the-run.json",
+    "name": "after-the-run.json"
+  },
+  "runs": {
+    "calibrate-fails": {
+      "command": "EXPECT=fails ONETRACE_RUN_ID=calibrate-fails python calibrate.py",
+      "exit": 0
+    },
+    "calibrate-holds": {
+      "command": "EXPECT=holds ONETRACE_RUN_ID=calibrate-holds python calibrate.py",
+      "exit": 0
+    }
+  },
+  "versions": {
+    "onetrace": "0.7.1",
+    "onetrace-auto": "0.7.1",
+    "onetrace-verify": "0.7.1",
+    "python": "3.12.10",
+    "requests": "2.34.2"
+  }
+}

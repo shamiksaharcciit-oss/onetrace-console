@@ -1,0 +1,581 @@
+{
+ "demo-run-1 -> demo-run-2": {
+  "diff": {
+   "exit": "1",
+   "refused": true,
+   "reports": {
+    "diff.json": {
+     "cause": null,
+     "envelope": "diverged",
+     "exit": "1",
+     "first_difference": null,
+     "identical_before": null,
+     "reason": null
+    }
+   }
+  },
+  "diff --text": {
+   "exit": "1",
+   "refused": false,
+   "reports": {}
+  },
+  "localize": {
+   "exit": "1",
+   "refused": true,
+   "reports": {
+    "localize.json": {
+     "cause": null,
+     "envelope": "diverged",
+     "exit": "1",
+     "first_difference": null,
+     "identical_before": null,
+     "reason": null
+    }
+   }
+  }
+ },
+ "p1-01-baseline-set1 -> p1-13-baseline-set1-again": {
+  "diff": {
+   "exit": "0",
+   "refused": false,
+   "reports": {
+    "diff.json": {
+     "cause": null,
+     "envelope": "identical",
+     "exit": "0",
+     "first_difference": null,
+     "identical_before": "5",
+     "reason": null
+    }
+   }
+  },
+  "diff --text": {
+   "exit": "0",
+   "refused": false,
+   "reports": {}
+  },
+  "localize": {
+   "exit": "0",
+   "refused": false,
+   "reports": {
+    "localize.json": {
+     "cause": null,
+     "envelope": "identical",
+     "exit": "0",
+     "first_difference": null,
+     "identical_before": "5",
+     "reason": null
+    }
+   }
+  }
+ },
+ "p1-02-baseline-set2 -> p1-08-candidate-set2": {
+  "diff": {
+   "exit": "1",
+   "refused": true,
+   "reports": {
+    "diff.json": {
+     "cause": null,
+     "envelope": "diverged",
+     "exit": "1",
+     "first_difference": {
+      "index": "2",
+      "stage": "split"
+     },
+     "identical_before": "1",
+     "reason": null
+    }
+   }
+  },
+  "diff --text": {
+   "exit": "1",
+   "refused": false,
+   "reports": {}
+  },
+  "localize": {
+   "exit": "1",
+   "refused": true,
+   "reports": {
+    "localize.json": {
+     "cause": null,
+     "envelope": "diverged",
+     "exit": "1",
+     "first_difference": {
+      "index": "2",
+      "stage": "split"
+     },
+     "identical_before": "1",
+     "reason": null
+    }
+   }
+  }
+ },
+ "p3-23-t-1-rules1 -> p3-27-t-1-rules2": {
+  "diff": {
+   "exit": "1",
+   "refused": true,
+   "reports": {
+    "diff.json": {
+     "cause": null,
+     "envelope": "diverged",
+     "exit": "1",
+     "first_difference": null,
+     "identical_before": null,
+     "reason": null
+    }
+   }
+  },
+  "diff --text": {
+   "exit": "1",
+   "refused": false,
+   "reports": {}
+  },
+  "localize": {
+   "exit": "1",
+   "refused": true,
+   "reports": {
+    "localize.json": {
+     "cause": null,
+     "envelope": "diverged",
+     "exit": "1",
+     "first_difference": null,
+     "identical_before": null,
+     "reason": null
+    }
+   }
+  }
+ },
+ "p4-29-reply-30-days -> p4-30-reply-14-days": {
+  "diff": {
+   "exit": "1",
+   "refused": true,
+   "reports": {
+    "diff.json": {
+     "cause": null,
+     "envelope": "diverged",
+     "exit": "1",
+     "first_difference": {
+      "index": "2",
+      "stage": "draft"
+     },
+     "identical_before": "1",
+     "reason": null
+    }
+   }
+  },
+  "diff --text": {
+   "exit": "1",
+   "refused": false,
+   "reports": {}
+  },
+  "localize": {
+   "exit": "1",
+   "refused": true,
+   "reports": {
+    "localize.json": {
+     "cause": null,
+     "envelope": "diverged",
+     "exit": "1",
+     "first_difference": {
+      "index": "2",
+      "stage": "draft"
+     },
+     "identical_before": "1",
+     "reason": null
+    }
+   }
+  }
+ },
+ "p5-32-pump-baseline -> p5-33-pump-offset-changed": {
+  "diff": {
+   "exit": "1",
+   "refused": true,
+   "reports": {
+    "diff.json": {
+     "cause": null,
+     "envelope": "diverged",
+     "exit": "1",
+     "first_difference": {
+      "index": "2",
+      "stage": "calibrate"
+     },
+     "identical_before": "1",
+     "reason": null
+    }
+   }
+  },
+  "diff --text": {
+   "exit": "1",
+   "refused": false,
+   "reports": {}
+  },
+  "localize": {
+   "exit": "1",
+   "refused": true,
+   "reports": {
+    "localize.json": {
+     "cause": null,
+     "envelope": "diverged",
+     "exit": "1",
+     "first_difference": {
+      "index": "2",
+      "stage": "calibrate"
+     },
+     "identical_before": "1",
+     "reason": null
+    }
+   }
+  }
+ },
+ "p5-32-pump-baseline -> p5-34-pump-firmware-changed": {
+  "diff": {
+   "exit": "0",
+   "refused": false,
+   "reports": {
+    "diff.json": {
+     "cause": null,
+     "envelope": "identical",
+     "exit": "0",
+     "first_difference": null,
+     "identical_before": "6",
+     "reason": null
+    }
+   }
+  },
+  "diff --text": {
+   "exit": "0",
+   "refused": false,
+   "reports": {}
+  },
+  "localize": {
+   "exit": "0",
+   "refused": false,
+   "reports": {
+    "localize.json": {
+     "cause": null,
+     "envelope": "identical",
+     "exit": "0",
+     "first_difference": null,
+     "identical_before": "6",
+     "reason": null
+    }
+   }
+  }
+ },
+ "p6-36-fill-baseline -> p6-37-fill-exposure-changed": {
+  "diff": {
+   "exit": "1",
+   "refused": true,
+   "reports": {
+    "diff.json": {
+     "cause": null,
+     "envelope": "diverged",
+     "exit": "1",
+     "first_difference": {
+      "index": "1",
+      "stage": "measure"
+     },
+     "identical_before": "0",
+     "reason": null
+    }
+   }
+  },
+  "diff --text": {
+   "exit": "1",
+   "refused": false,
+   "reports": {}
+  },
+  "localize": {
+   "exit": "1",
+   "refused": true,
+   "reports": {
+    "localize.json": {
+     "cause": null,
+     "envelope": "diverged",
+     "exit": "1",
+     "first_difference": {
+      "index": "1",
+      "stage": "measure"
+     },
+     "identical_before": "0",
+     "reason": null
+    }
+   }
+  }
+ },
+ "p6-36-fill-baseline -> p6-38-fill-below-reject-line": {
+  "diff": {
+   "exit": "1",
+   "refused": true,
+   "reports": {
+    "diff.json": {
+     "cause": null,
+     "envelope": "diverged",
+     "exit": "1",
+     "first_difference": {
+      "index": "1",
+      "stage": "measure"
+     },
+     "identical_before": "0",
+     "reason": null
+    }
+   }
+  },
+  "diff --text": {
+   "exit": "1",
+   "refused": false,
+   "reports": {}
+  },
+  "localize": {
+   "exit": "1",
+   "refused": true,
+   "reports": {
+    "localize.json": {
+     "cause": null,
+     "envelope": "diverged",
+     "exit": "1",
+     "first_difference": {
+      "index": "1",
+      "stage": "measure"
+     },
+     "identical_before": "0",
+     "reason": null
+    }
+   }
+  }
+ },
+ "p7-39-cold-chain-baseline -> p7-40-cold-chain-one-reading-changed": {
+  "diff": {
+   "exit": "1",
+   "refused": true,
+   "reports": {
+    "diff.json": {
+     "cause": null,
+     "envelope": "diverged",
+     "exit": "1",
+     "first_difference": {
+      "index": "1",
+      "stage": "fill_gaps"
+     },
+     "identical_before": "0",
+     "reason": null
+    }
+   }
+  },
+  "diff --text": {
+   "exit": "1",
+   "refused": false,
+   "reports": {}
+  },
+  "localize": {
+   "exit": "1",
+   "refused": true,
+   "reports": {
+    "localize.json": {
+     "cause": null,
+     "envelope": "diverged",
+     "exit": "1",
+     "first_difference": {
+      "index": "1",
+      "stage": "fill_gaps"
+     },
+     "identical_before": "0",
+     "reason": null
+    }
+   }
+  }
+ },
+ "p8-42-invoice-tolerance-2pct -> p8-43-invoice-tolerance-5pct": {
+  "diff": {
+   "exit": "1",
+   "refused": true,
+   "reports": {
+    "diff.json": {
+     "cause": null,
+     "envelope": "diverged",
+     "exit": "1",
+     "first_difference": {
+      "index": "2",
+      "stage": "match"
+     },
+     "identical_before": "1",
+     "reason": null
+    }
+   }
+  },
+  "diff --text": {
+   "exit": "1",
+   "refused": false,
+   "reports": {}
+  },
+  "localize": {
+   "exit": "1",
+   "refused": true,
+   "reports": {
+    "localize.json": {
+     "cause": null,
+     "envelope": "diverged",
+     "exit": "1",
+     "first_difference": {
+      "index": "2",
+      "stage": "match"
+     },
+     "identical_before": "1",
+     "reason": null
+    }
+   }
+  }
+ },
+ "p8-43-invoice-tolerance-5pct -> p8-44-invoice-quantity-changed": {
+  "diff": {
+   "exit": "1",
+   "refused": true,
+   "reports": {
+    "diff.json": {
+     "cause": null,
+     "envelope": "diverged",
+     "exit": "1",
+     "first_difference": {
+      "index": "1",
+      "stage": "read_invoice"
+     },
+     "identical_before": "0",
+     "reason": null
+    }
+   }
+  },
+  "diff --text": {
+   "exit": "1",
+   "refused": false,
+   "reports": {}
+  },
+  "localize": {
+   "exit": "1",
+   "refused": true,
+   "reports": {
+    "localize.json": {
+     "cause": null,
+     "envelope": "diverged",
+     "exit": "1",
+     "first_difference": {
+      "index": "1",
+      "stage": "read_invoice"
+     },
+     "identical_before": "0",
+     "reason": null
+    }
+   }
+  }
+ },
+ "p9-46-torque-baseline -> p9-47-torque-tool-firmware-changed": {
+  "diff": {
+   "exit": "0",
+   "refused": false,
+   "reports": {
+    "diff.json": {
+     "cause": null,
+     "envelope": "identical",
+     "exit": "0",
+     "first_difference": null,
+     "identical_before": "3",
+     "reason": null
+    }
+   }
+  },
+  "diff --text": {
+   "exit": "0",
+   "refused": false,
+   "reports": {}
+  },
+  "localize": {
+   "exit": "0",
+   "refused": false,
+   "reports": {
+    "localize.json": {
+     "cause": null,
+     "envelope": "identical",
+     "exit": "0",
+     "first_difference": null,
+     "identical_before": "3",
+     "reason": null
+    }
+   }
+  }
+ },
+ "p9-46-torque-baseline -> p9-48-torque-one-bolt-low": {
+  "diff": {
+   "exit": "1",
+   "refused": true,
+   "reports": {
+    "diff.json": {
+     "cause": null,
+     "envelope": "diverged",
+     "exit": "1",
+     "first_difference": {
+      "index": "1",
+      "stage": "read_tool_log"
+     },
+     "identical_before": "0",
+     "reason": null
+    }
+   }
+  },
+  "diff --text": {
+   "exit": "1",
+   "refused": false,
+   "reports": {}
+  },
+  "localize": {
+   "exit": "1",
+   "refused": true,
+   "reports": {
+    "localize.json": {
+     "cause": null,
+     "envelope": "diverged",
+     "exit": "1",
+     "first_difference": {
+      "index": "1",
+      "stage": "read_tool_log"
+     },
+     "identical_before": "0",
+     "reason": null
+    }
+   }
+  }
+ },
+ "pz-51-agent-baseline -> pz-53-agent-amount-changed": {
+  "diff": {
+   "exit": "1",
+   "refused": true,
+   "reports": {
+    "diff.json": {
+     "cause": null,
+     "envelope": "diverged",
+     "exit": "1",
+     "first_difference": null,
+     "identical_before": null,
+     "reason": null
+    }
+   }
+  },
+  "diff --text": {
+   "exit": "1",
+   "refused": false,
+   "reports": {}
+  },
+  "localize": {
+   "exit": "1",
+   "refused": true,
+   "reports": {
+    "localize.json": {
+     "cause": null,
+     "envelope": "diverged",
+     "exit": "1",
+     "first_difference": null,
+     "identical_before": null,
+     "reason": null
+    }
+   }
+  }
+ }
+}

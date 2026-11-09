@@ -90,10 +90,13 @@ def content_security_policy(*, local: bool = False) -> str:
     from onetrace_console.benchmark_script import BENCHMARK_SCRIPT
     from onetrace_console.compare_script import COMPARE_SCRIPT
     from onetrace_console.explain_script import EXPLAIN_SCRIPT
-    #: The explanation panel's, the Compare buttons' and the benchmark mark's are a local console's
-    #: only: a public one has no such button, so its policy does not name their scripts.
+    from onetrace_console.expectations_script import EXPECTATIONS_SCRIPT
+    from onetrace_console.token_script import TOKEN_SCRIPT
+    #: The explanation panel's, the Compare buttons', the benchmark mark's and the expectations file's
+    #: and the tokenizer picker's are a local console's only: a public one has no such button, so its policy
+    #: does not name them.
     hashes = " ".join(_script_hash(s) for s in inline_scripts()
-                      + ((EXPLAIN_SCRIPT, COMPARE_SCRIPT, BENCHMARK_SCRIPT) if local else ()))
+                      + ((EXPLAIN_SCRIPT, COMPARE_SCRIPT, BENCHMARK_SCRIPT, EXPECTATIONS_SCRIPT, TOKEN_SCRIPT) if local else ()))
     return ("default-src 'none'; style-src 'self' 'unsafe-inline'; font-src 'self'; "
             f"img-src 'self' data:; script-src {hashes}; "
             + ("connect-src 'self'; " if local else "")

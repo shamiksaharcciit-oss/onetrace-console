@@ -35,6 +35,15 @@ LINK = re.compile(r'<a href="([^"]+)"( aria-current="page")?>([^<]*)</a>')
 FOOTER = re.compile(r"<footer>(.*?)</footer>", re.S)
 UNFRAMED = ("home.html", "incidents.html")
 
+@pytest.fixture
+def server(tmp_path):
+    """As conftest's `server`, with the console's store on tmpfs where the platform has one: this module's
+    requests wait on the console's writes, and a stalled sync on a slow disk timed them out."""
+    from tests.conftest import in_memory, serving
+    with in_memory(tmp_path) as folder, serving(folder) as served:
+        yield served
+
+
 
 def _nav(page: bytes) -> str:
     found = NAV.findall(page.decode("utf-8"))
@@ -380,3 +389,15 @@ def _sign_in_on(store_root: Path) -> None:
     Handler.rate_limit_per_account = RateLimiter(max_attempts=100, window_seconds=60)
     Handler.rate_limit_per_client = RateLimiter(max_attempts=100, window_seconds=60)
     Handler.rate_limit_concurrent_hashes = ConcurrencyLimiter(max_concurrent=100)
+
+
+def test_this_modules_console_keeps_its_store_in_memory_where_there_is_one(server, examined):
+    """Its requests wait on the console's writes; a stalled sync on a slow disk timed them out, so this
+    module's console keeps its store on tmpfs where the platform has one (Linux's /dev/shm)."""
+    from tests.conftest import tmpfs_root
+    _base, root = server
+    fast = tmpfs_root()
+    examined(1, "the console's store folder")
+    if fast is None:
+        pytest.skip("this platform has no tmpfs at /dev/shm; the store is under the test's own folder")
+    assert root.resolve().is_relative_to(fast.resolve()), (root, fast)

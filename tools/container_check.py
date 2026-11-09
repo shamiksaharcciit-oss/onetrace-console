@@ -41,7 +41,7 @@ import urllib.request
 from urllib.parse import urlsplit
 
 #: The routes that write, and one that does not exist: every one is refused the same way.
-ROUTES = ("/v1/runs", "/text-diff/more?c=0", "/benchmark?run=0&mark=yes", "/v1/decisions", "/signin",
+ROUTES = ("/v1/runs", "/text-diff/more?c=0", "/benchmark?run=0&mark=yes", "/expectations?run=0", "/model-tokenizers?digest=x", "/model-tokenizers/remove?digest=x", "/v1/decisions", "/signin",
           "/signout", "/no-such-route")
 #: The public console's one route that runs something (Compare on a pipeline's own runs): a body
 #: declared past its limit is refused at once, unread.

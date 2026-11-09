@@ -5,7 +5,9 @@ the pages before it prints an address; on a first start that takes minutes, and 
 Now each phase says itself as it happens, flushed: `recording the demo's runs: 9 pipelines … 41 runs,
 38 s`; `checking runs: 12 of 41`; `comparing pairs: 4 of 9`; `drawing pages: 520 of 1800`; then the
 address. On a terminal a count line updates in place (`\\r`); where stderr is not a terminal (CI, a log
-file) each step is a line of its own. The first line is said at once. `--quiet` keeps the old silence.
+file) each step is a line of its own. On Windows the console's virtual-terminal mode is asked for before
+the first line (`windows_vt`); where the console does not take it (Windows PowerShell 5.1's classic
+console, say), a count line is redrawn with `\\r` and padded with spaces, and no escape code is written. The first line is said at once. `--quiet` keeps the old silence.
 
 The phases are said by the code that does them (`phase`), through the one `Progress` the command set up
 (`using`); with none set up -- a library caller, a test, `serve` -- they say nothing.
@@ -17,18 +19,53 @@ import sys
 import time
 
 
-class Progress:
-    """Phase lines to `stream`: in place on a terminal (`tty`), one line per step otherwise."""
+#: SetConsoleMode's flag for escape codes (`ESC[K`), as Windows names it.
+ENABLE_VIRTUAL_TERMINAL_PROCESSING = 0x0004
 
-    def __init__(self, stream=None, *, tty: bool | None = None, clock=time.monotonic):
+
+def windows_vt(stream) -> bool:
+    """Whether the Windows console `stream` writes to takes escape codes, after asking it to
+    (`SetConsoleMode` with ENABLE_VIRTUAL_TERMINAL_PROCESSING). False where it is no console, or
+    refuses."""
+    try:
+        import ctypes
+        import msvcrt
+        handle = msvcrt.get_osfhandle(stream.fileno())
+        kernel32 = ctypes.windll.kernel32
+        mode = ctypes.c_uint32()
+        if not kernel32.GetConsoleMode(handle, ctypes.byref(mode)):
+            return False
+        if mode.value & ENABLE_VIRTUAL_TERMINAL_PROCESSING:
+            return True
+        return bool(kernel32.SetConsoleMode(handle, mode.value | ENABLE_VIRTUAL_TERMINAL_PROCESSING))
+    except Exception:  # noqa: BLE001 - any way it is not taken, the lines are drawn without escape codes
+        return False
+
+
+class Progress:
+    """Phase lines to `stream`: in place on a terminal (`tty`), one line per step otherwise. `vt`:
+    whether the terminal takes escape codes; by default, yes, but on Windows only where its console
+    takes virtual-terminal mode when asked (a stream with no file behind it is taken at its word)."""
+
+    def __init__(self, stream=None, *, tty: bool | None = None, vt: bool | None = None, clock=time.monotonic):
         self.stream = sys.stderr if stream is None else stream
         if tty is None:
             try:
                 tty = bool(self.stream.isatty())
             except (AttributeError, ValueError, OSError):
                 tty = False
-        self.tty, self.clock = tty, clock
+        if tty and vt is None:
+            vt = True
+            if sys.platform == "win32":
+                try:
+                    self.stream.fileno()
+                except (AttributeError, ValueError, OSError):
+                    pass               # no file behind it: a caller's stream, taken at its word
+                else:
+                    vt = windows_vt(self.stream)
+        self.tty, self.vt, self.clock = tty, bool(vt), clock
         self._open = False             # a count line is on the terminal, not yet ended
+        self._width = 0                # the count line's length on the terminal, where no escape erases it
 
     def _write(self, text: str) -> None:
         try:
@@ -46,10 +83,19 @@ class Progress:
         if self._open:
             self._write("\n")
             self._open = False
+            self._width = 0
+
+    def _in_place(self, line: str, end: str = "") -> None:
+        """`line` over the count line on the terminal: erased by escape code, or padded with spaces."""
+        if self.vt:
+            self._write("\r" + line + "\x1b[K" + end)
+        else:
+            self._write("\r" + line + " " * max(0, self._width - len(line)) + end)
+        self._width = 0 if end else len(line)
 
     def _count(self, line: str) -> None:
         if self.tty:
-            self._write("\r" + line + "\x1b[K")
+            self._in_place(line)
             self._open = True
         else:
             self._write(line + "\n")
@@ -72,7 +118,7 @@ class Progress:
             took = self.clock() - started
             last = done(count[0], took) if done else f"{name}: {count[0]} of {total}, {seconds(took)}"
             if self.tty:
-                self._write("\r" + last + "\x1b[K\n")
+                self._in_place(last, "\n")
                 self._open = False
             else:
                 self._write(last + "\n")

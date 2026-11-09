@@ -49,7 +49,8 @@ _SIGN_IN_SCHEMA: dict[str, tuple[type, object]] = {
     "session_idle_timeout_seconds": (int, 1800),
     "session_absolute_timeout_seconds": (int, 43200),
     #: Rate limiting: per account and per client, both configurable,
-    #: over the same sliding window.
+    #: over the same rolling window: at most that many attempts in any
+    #: span of `rate_limit_window_seconds`.
     "rate_limit_max_attempts_per_account": (int, 10),
     "rate_limit_max_attempts_per_client": (int, 20),
     "rate_limit_window_seconds": (int, 300),

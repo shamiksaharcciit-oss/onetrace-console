@@ -131,7 +131,16 @@ def _rendering(config: Config | None):
     return rendering(onedoor=bool(config.extensions.get("onedoor")),
                      sign_in=bool(config.sign_in.get("enabled")), public=config.public,
                      tracing_link=(config.tracing or {}).get("link", ""),
-                     tokenizers=tuple((t["folder"], tuple(t["files"])) for t in config.tokenizers or ()))
+                     tokenizers=tuple((t["folder"], tuple(t["files"])) for t in config.tokenizers or ())
+                     + _kept_tokenizers(config))
+
+
+def _kept_tokenizers(config: Config) -> tuple:
+    """The tokenizers this console keeps (`token_upload`), named as configured ones are: a local console's."""
+    if config.public or not config.store_root:
+        return ()
+    from onetrace_console import token_upload
+    return token_upload.named(Path(config.store_root) / "store")
 
 
 def _render_run_pages(run, store: Store, root: Path, config: Config | None = None) -> None:
@@ -552,6 +561,14 @@ class Handler(BaseHTTPRequestHandler):
                 return False
         return True
 
+    def _body_limit(self) -> int:
+        """The most a request's body may hold: the configured limit, and on a local console's tokenizer
+        upload, the upload's own (`token_upload.MOST_UPLOAD`)."""
+        if not self.config.public and urlsplit(self.path).path == "/model-tokenizers":
+            from onetrace_console.token_upload import MOST_UPLOAD
+            return MOST_UPLOAD
+        return self.config.max_request_body
+
     def _read_body_bounded(self, length: int) -> bytes | None:
         """Read exactly `length` bytes, refusing before the read starts if `length`
         already exceeds the configured limit, and abandoning the read -- returning
@@ -580,7 +597,7 @@ class Handler(BaseHTTPRequestHandler):
         "stalled": a client still trickling bytes keeps re-arming a fresh, shrinking
         budget and never times out; only one that truly stops does.
         """
-        if length > self.config.max_request_body:
+        if length > self._body_limit():
             return None
         deadline = time.monotonic() + self.config.request_timeout_seconds
         chunks: list[bytes] = []
@@ -759,7 +776,9 @@ class Handler(BaseHTTPRequestHandler):
 
         submitted = self._submitted_csrf_token(body=body, query=query)
         cookie = parse_cookies(self.headers.get("Cookie")).get(CSRF_COOKIE, "")
-        return bool(submitted) and submitted == cookie == session.csrf_token
+        import hmac
+        return (bool(submitted) and hmac.compare_digest(submitted.encode("utf-8"), cookie.encode("utf-8"))
+                and hmac.compare_digest(submitted.encode("utf-8"), session.csrf_token.encode("utf-8")))
 
     # -------------------------------------------------------------- GET
     def _reading(self):
@@ -827,9 +846,7 @@ class Handler(BaseHTTPRequestHandler):
             from onetrace_console.explain_setup import page as setup_page
             from onetrace_console.frame import fill
             user = self._principal() if getattr(self, "_request_role", None) == roles.VIEWER else None
-            self._respond(200, fill(setup_page(self.store).encode("utf-8"), rel,
-                                    onedoor=bool(self.config.extensions.get("onedoor")), user=user,
-                                    setup_link=True, store=self.store), "text/html; charset=utf-8")
+            self._setup_page(200, setup_page(self.store), rel, user)
             return
         if rel == "neighbours/setup" and self._neighbours():
             self._handle_neighbours_setup()
@@ -844,6 +861,20 @@ class Handler(BaseHTTPRequestHandler):
             self._respond(200, fill(missing_page().encode("utf-8"), PATH,
                                     onedoor=bool(self.config.extensions.get("onedoor")), user=user,
                                     setup_link=True, store=self.store), "text/html; charset=utf-8")
+            return
+        if rel == "model-tokenizers":
+            #: The tokenizers this console keeps, with Remove: a local console's only.
+            if self.config.public:
+                self._respond(404, b"not found\n", "text/plain")
+                return
+            from onetrace_console import roles, token_upload
+            from onetrace_console.frame import fill
+            user = self._principal() if getattr(self, "_request_role", None) == roles.VIEWER else None
+            from onetrace_console.render import _document
+            page = _document(token_upload.SETTINGS_HEADING,
+                             f'<div class="cp">{token_upload.settings_page(Path(self.store.root))}</div>')
+            self._respond(200, fill(page.encode("utf-8"), rel, onedoor=bool(self.config.extensions.get("onedoor")),
+                                    user=user, setup_link=True, store=self.store), "text/html; charset=utf-8")
             return
         if rel == "search":
             self._handle_search()
@@ -938,9 +969,9 @@ class Handler(BaseHTTPRequestHandler):
         #: Refused BEFORE the read starts, and the connection is closed rather than
         #: drained: reading and discarding a body that was refused for being too large
         #: is the same cost the limit exists to avoid.
-        if length > self.config.max_request_body:
+        if length > self._body_limit():
             self._respond(413, f"body of {length} bytes exceeds the configured "
-                              f"{self.config.max_request_body}-byte limit\n".encode(),
+                              f"{self._body_limit()}-byte limit\n".encode(),
                          "text/plain")
             self.close_connection = True
             return
@@ -989,6 +1020,22 @@ class Handler(BaseHTTPRequestHandler):
                     self._respond(403, b"missing or mismatched CSRF token\n", "text/plain")
                     return
                 self._handle_benchmark(query, body)
+            elif split.path == "/expectations":
+                if not self._enforce_role("POST", "/expectations"):
+                    return
+                query = parse_qs(split.query)
+                if not self._check_action_csrf(query=query):
+                    self._respond(403, b"missing or mismatched CSRF token\n", "text/plain")
+                    return
+                self._handle_expectations(query, body)
+            elif split.path in ("/model-tokenizers", "/model-tokenizers/remove"):
+                if not self._enforce_role("POST", split.path):
+                    return
+                query = parse_qs(split.query)
+                if not self._check_action_csrf(query=query):
+                    self._respond(403, b"missing or mismatched CSRF token\n", "text/plain")
+                    return
+                self._handle_model_tokenizers(split.path, query, body)
             elif split.path == "/text-diff/more":
                 if not self._enforce_role("POST", "/text-diff/more"):
                     return
@@ -997,6 +1044,15 @@ class Handler(BaseHTTPRequestHandler):
                     self._respond(403, b"missing or mismatched CSRF token\n", "text/plain")
                     return
                 self._handle_text_diff_more(query)
+            elif split.path == "/explain/setup" and not self.config.public:
+                #: The Set up Explain form's Save (`explain_setup.save`): a local console's only; a public
+                #: console has no such route.
+                if not self._enforce_role("POST", split.path):
+                    return
+                if not self._check_action_csrf(body=body):
+                    self._respond(403, b"missing or mismatched CSRF token\n", "text/plain")
+                    return
+                self._handle_explain_setup(body)
             elif split.path in ("/neighbours/on", "/neighbours/off") and self._neighbours():
                 #: Neighbours by input (`neighbours`): a route only where the extra is installed on a
                 #: local console; anywhere else this is the unknown route below.
@@ -1060,7 +1116,9 @@ class Handler(BaseHTTPRequestHandler):
         #: is refused the same way -- never distinguished for an attacker's benefit.
         submitted_csrf = form.get(CSRF_FIELD, "")
         cookie_csrf = cookies.get(CSRF_COOKIE, "")
-        if not submitted_csrf or not cookie_csrf or submitted_csrf != cookie_csrf:
+        import hmac
+        if not submitted_csrf or not cookie_csrf or not hmac.compare_digest(
+                submitted_csrf.encode("utf-8"), cookie_csrf.encode("utf-8")):
             self._respond(403, b"sign-in refused: missing or mismatched CSRF token\n",
                          "text/plain")
             return
@@ -1414,6 +1472,23 @@ class Handler(BaseHTTPRequestHandler):
         self._respond(status, fill(html.encode("utf-8"), PATH, onedoor=bool(self.config.extensions.get("onedoor")),
                                    user=user, setup_link=True, store=self.store), "text/html; charset=utf-8")
 
+    def _setup_page(self, status: int, page: str, rel: str = "explain/setup", user: str | None = None) -> None:
+        """The Set up Explain page, framed as every page is, its form's CSRF slot holding the session's
+        token."""
+        from onetrace_console.frame import fill, fill_csrf
+        self._respond(status, fill_csrf(fill(page.encode("utf-8"), rel,
+                                             onedoor=bool(self.config.extensions.get("onedoor")), user=user,
+                                             setup_link=True, store=self.store), self._session_csrf()),
+                      "text/html; charset=utf-8")
+
+    def _handle_explain_setup(self, body: bytes) -> None:
+        """Save, from the setup page's form: the page again, saying what was written or why nothing was."""
+        from onetrace_console import explain_setup, roles
+        from onetrace_console.signin import parse_signin_form
+        status, said, written = explain_setup.save(parse_signin_form(body) if body else {})
+        user = self._principal() if getattr(self, "_request_role", None) == roles.VIEWER else None
+        self._setup_page(status, explain_setup.page(self.store, said=said, written=written), user=user)
+
     def _handle_neighbours(self, path: str, body: bytes) -> None:
         """Turn neighbours on (after the confirmation names the embedder; the local model's files fetched
         and checked) or off; then embed what is kept, and draw the pages again."""
@@ -1505,6 +1580,61 @@ class Handler(BaseHTTPRequestHandler):
                 _render_run_pages(other, self.store, self.store_root, self.config)
         _render_all_pages(self.store, self.store_root, self.config)
         self._respond_json(200, {"run_key": run.key, "benchmark": which == "yes"})
+
+    def _handle_expectations(self, query: dict[str, list[str]], body: bytes) -> None:
+        """"Check against an expectations file" on a local console (`expectations_after`): the run
+        checked against the file named in the JSON body `{"path": ...}`, what the check said kept in
+        the store, then the run's pages drawn again."""
+        from onetrace_console import expectations_after
+        from onetrace_console.bounded_json import load_json_bounded
+        from onetrace_console.store import StoreError
+        key = (query.get("run") or [""])[0]
+        try:
+            run = self.store.get_run(key) if re.fullmatch(r"[0-9a-f]{64}", key) else None
+        except StoreError:
+            run = None
+        if run is None:
+            self._respond_json(400, {"error": "unknown or malformed run key"})
+            return
+        try:
+            got = load_json_bounded(body.decode("utf-8"), "the named file") if body else None
+        except (UnicodeDecodeError, ValueError, RecursionError):
+            got = None
+        named = got.get("path") if isinstance(got, dict) else None
+        if not isinstance(named, str):
+            self._respond_json(400, {"error": 'the body is {"path": "<the file\'s path on this machine>"}'})
+            return
+        try:
+            entry = expectations_after.check(self.store, run, named.strip())
+        except expectations_after.ExpectationsError as e:
+            self._respond_json(400, {"error": str(e)})
+            return
+        _render_run_pages(run, self.store, self.store_root, self.config)
+        self._respond_json(200, {"run_key": run.key, "file": entry["file"], "seal": entry["seal"],
+                                 "rows": len(entry["rows"])})
+
+    def _handle_model_tokenizers(self, path: str, query: dict[str, list[str]], body: bytes) -> None:
+        """A tokenizer picked on a model step's page, kept only where its files hash to the digest named
+        (`token_upload.keep`), or one kept removed; then every page drawn again, so each model step reads
+        with what is kept now."""
+        from onetrace_console import token_upload
+        digest = (query.get("digest") or [""])[0]
+        try:
+            if path == "/model-tokenizers/remove":
+                if not token_upload.remove(Path(self.store.root), digest):
+                    self._respond_json(400, {"error": f"this console keeps no tokenizer {digest}"})
+                    return
+                entry = {"digest": digest, "removed": True}
+            else:
+                name = (query.get("name") or [""])[0]
+                entry = token_upload.keep(Path(self.store.root), digest, body, name)
+        except token_upload.UploadError as e:
+            self._respond_json(400, {"error": str(e)})
+            return
+        for run in self.store.runs():
+            _render_run_pages(run, self.store, self.store_root, self.config)
+        self._respond_json(200, {"digest": entry["digest"], "files": entry.get("files", []),
+                                 "removed": bool(entry.get("removed"))})
 
     def _handle_explain(self, path: str, query: dict[str, list[str]]) -> None:
         """One press on a comparison's explanation panel (`explain`): Explain, Send (`send=yes`,

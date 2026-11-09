@@ -8,12 +8,14 @@ on the page draws its kept text; and it says nothing of the difference being une
 matches other runs on that input's digest. A kept text input is drawn as a line diff of its text,
 real line breaks, escaped for HTML, beside the outputs; an input not kept stays digest-only.
 
-Held with the demo's P7 pair (one logger reading changed) and three P7 runs recorded here, and the
-P6 pair whose frame differs, not kept.
+Held with the demo's P7 pair (one logger reading changed) and three P7 runs recorded here, and a P6
+pair recorded here with its frame not kept: the demo's P6 keeps its frame since console 0.7.0, so the
+input not kept is recorded here as P6 recorded it before, its keeping turned off.
 """
 from __future__ import annotations
 
 import hashlib
+import json
 import re
 from html import unescape
 
@@ -21,7 +23,20 @@ from tests.test_compare_page import _page, demo  # noqa: F401
 from tests.test_times_and_words import _console
 
 P7 = ("p7-39-cold-chain-baseline", "p7-40-cold-chain-one-reading-changed")
-P6 = ("p6-36-fill-baseline", "p6-38-fill-below-reject-line")
+
+
+def _unkept_p6_page(root, monkeypatch) -> str:
+    """The comparison page of a P6 pair whose frame differs (full, then below the reject line), each
+    recorded here with its step's keeping turned off: the frame is recorded by its digest alone."""
+    from onetrace.emit import StageContext
+    from onetrace_console.demo_store import fill_inspection
+    monkeypatch.setattr(StageContext, "keep_input", lambda self, name, data: None)
+    runs = root / "runs"
+    for name, frame in (("a", "full"), ("b", "low")):
+        fill_inspection.main(runs / name, f"fill-{name}", frame, "10")
+    monkeypatch.undo()
+    _store, pages, loaded = _console(root, runs, compare=("a", "b"))
+    return (pages / "diff" / f"{loaded.comparison.key}.html").read_text(encoding="utf-8")
 
 
 def _text(html: str) -> str:
@@ -76,8 +91,8 @@ def test_the_p7_kept_logger_is_a_line_diff_with_real_line_breaks(demo, examined)
     assert "1 line removed · 1 added" in _text(block.group(1))
 
 
-def test_an_input_not_kept_stays_digest_only(demo, examined):  # noqa: F811
-    page = _page(demo, *P6)
+def test_an_input_not_kept_stays_digest_only(tmp_path, monkeypatch, examined):
+    page = _unkept_p6_page(tmp_path, monkeypatch)
     examined(1, "comparison page")
     assert "data-kept-diff" not in page
     assert re.search(r"<p data-input>input frame\.json \([^)]*\) changed: [0-9a-f]{12} -&gt; [0-9a-f]{12}", page)
@@ -128,9 +143,10 @@ def test_sabotage_each_card_fault_is_named(demo, examined):  # noqa: F811
         assert card_problems(bad, "logger", old, new, linked=True), name
 
 
-def test_an_input_not_kept_is_named_first_with_no_link(demo, examined):  # noqa: F811
+def test_an_input_not_kept_is_named_first_with_no_link(tmp_path, monkeypatch, examined):
     from onetrace_console.demo_store import fill_inspection
-    page = _page(demo, *P6)
+    page = _unkept_p6_page(tmp_path, monkeypatch)
     examined(1, "comparison page")
-    assert card_problems(page, "frame.json", _short(fill_inspection.frame_bytes("full")),
-                         _short(fill_inspection.frame_bytes("low")), linked=False) == []
+    old, new = (_short(json.dumps(fill_inspection.frame_bytes(f).decode("utf-8")).encode("utf-8"))
+                for f in ("full", "low"))
+    assert card_problems(page, "frame.json", old, new, linked=False) == []

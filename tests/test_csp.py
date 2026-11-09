@@ -49,9 +49,12 @@ def policy_problems(policy: str, *, local: bool) -> list[str]:
     from onetrace_console.benchmark_script import BENCHMARK_SCRIPT
     from onetrace_console.compare_script import COMPARE_SCRIPT
     from onetrace_console.explain_script import EXPLAIN_SCRIPT
-    #: The explanation panel's, the Compare buttons' and the benchmark mark's are the local console's only.
+    from onetrace_console.expectations_script import EXPECTATIONS_SCRIPT
+    from onetrace_console.token_script import TOKEN_SCRIPT
+    #: The explanation panel's, the Compare buttons', the benchmark mark's, the expectations file's and the
+    #: tokenizer picker's are the local console's only.
     shipped = {_hash(s) for s in inline_scripts()
-               + ((EXPLAIN_SCRIPT, COMPARE_SCRIPT, BENCHMARK_SCRIPT) if local else ())}
+               + ((EXPLAIN_SCRIPT, COMPARE_SCRIPT, BENCHMARK_SCRIPT, EXPECTATIONS_SCRIPT, TOKEN_SCRIPT) if local else ())}
     if set(directives.get("script-src", [])) != shipped:
         out.append(f"script-src is not exactly the shipped scripts' hashes: {directives.get('script-src')}")
     for name, sources in directives.items():

@@ -136,6 +136,9 @@ _SAME_INPUTS = re.compile(r'<p data-what-changed="same-inputs">.*?</p>', re.S)
 _BENCHMARK = re.compile(r'<section data-section="benchmark".*?</section>', re.S)
 _MARK_CONTROL = re.compile(r'<p>(?:<label hidden data-benchmark-note>.*?</label> )?'
                            r'<button type="button" hidden data-benchmark-post=.*?</p>', re.S)
+_EXPECTATIONS_AFTER = re.compile(r'<section data-section="expectations-after".*?</section>', re.S)
+_EXPECTATIONS_CONTROL = re.compile(r'<p><label hidden data-expectations-after-field>.*?</p>', re.S)
+_TOKENIZER_PICK = re.compile(r'<div data-tokenizer-pick>.*?</div>', re.S)
 
 
 #: A local console's pipeline picker (console 0.6.1 item 4): it posts to the console, so a file has none.
@@ -145,7 +148,8 @@ _LOCAL_PICKER = re.compile(r'<section id="local-compare" data-section="local-com
 def without_run_tools(page: str) -> str:
     """A page less what only a console can answer: the index's search box, "Other runs with the
     same inputs" (which opens it), the benchmark mark's press -- a marked run keeps its mark,
-    read-only; an unmarked run's page loses the empty section -- and the pipeline page's picker."""
+    read-only; an unmarked run's page loses the empty section -- the expectations file's press, alike,
+    a model step's tokenizer picker, and the pipeline page's picker."""
     from onetrace_console.benchmark_script import BENCHMARK_SCRIPT
     page = _LOCAL_PICKER.sub("", _SAME_INPUTS.sub("", _RUN_SEARCH.sub("", page)))
 
@@ -154,7 +158,17 @@ def without_run_tools(page: str) -> str:
         if "data-benchmark-mark" not in sec:
             return ""
         return _MARK_CONTROL.sub("", sec.replace(BENCHMARK_SCRIPT, ""))
-    return _BENCHMARK.sub(mark, page)
+
+    def expectations(m) -> str:
+        #: A run checked against a file keeps what was kept, read-only; one never checked loses the
+        #: section with its press.
+        from onetrace_console.expectations_script import EXPECTATIONS_SCRIPT
+        sec = m.group(0)
+        if 'data-expectations-after="rows"' not in sec:
+            return ""
+        return _EXPECTATIONS_CONTROL.sub("", sec.replace(EXPECTATIONS_SCRIPT, ""))
+    #: A model step's tokenizer picker: a local console's press, gone from an export.
+    return _TOKENIZER_PICK.sub("", _EXPECTATIONS_AFTER.sub(expectations, _BENCHMARK.sub(mark, page)))
 
 
 def _page(served: bytes, rel: str) -> bytes:
@@ -271,6 +285,13 @@ def export(source: Path, keys: list[str], out: Path) -> dict[str, str]:
             #: Local mode serves every rendered page (`do_GET`, with no role enforced), so each
             #: is exported as served.
             served = fill(path.read_bytes(), rel, onedoor=False, user=None)
+            if rel.startswith("bisect-") and rel.endswith(".html"):
+                #: The first-run-to-leave page's window form asks a console; an export has none.
+                from onetrace_console.bisect_page import exported
+                served = exported(served.decode("utf-8")).encode("utf-8")
+            #: Compare asks a console too: shown disabled, and no script that reads the session's token.
+            from onetrace_console.compare_script import exported as compare_exported
+            served = compare_exported(served.decode("utf-8")).encode("utf-8")
             files[rel] = _page(served, rel)
             was = _FINGERPRINT.search(served.decode("utf-8"))
             if was:

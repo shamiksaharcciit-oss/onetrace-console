@@ -71,9 +71,11 @@ from onetrace_console.store import (SameFileError, StoredRun, Store, StoreError,
 #: 0). Its new members -- a run's optional stages, a held step's attempted links, the manifest's
 #: `outputs_kept` -- are shown as the check's own rows say them (`viewer.model`), never read from
 #: the receipts here. An earlier format reads as before; one this list does not name is refused.
-MANIFEST_FORMATS = ("stage-receipt-chain/0.3", "stage-receipt-chain/0.2", "stage-receipt-chain/0.1",
-                    "stage-receipt-chain/0.0-preview")
-RECEIPT_FORMATS = ("stage-receipt/0.3", "stage-receipt/0.2", "stage-receipt/0.1",
+#: 0.4 is what onetrace 0.7 writes, and onetrace-verify 0.7 reads it: every run it closes ends with
+#: a close receipt, which is not a step and is set aside as the verbs set it aside (`viewer.record`).
+MANIFEST_FORMATS = ("stage-receipt-chain/0.4", "stage-receipt-chain/0.3", "stage-receipt-chain/0.2",
+                    "stage-receipt-chain/0.1", "stage-receipt-chain/0.0-preview")
+RECEIPT_FORMATS = ("stage-receipt/0.4", "stage-receipt/0.3", "stage-receipt/0.2", "stage-receipt/0.1",
                    "stage-receipt/0.0-preview")
 
 SUMS_NAME = "SHA256SUMS"
@@ -520,8 +522,8 @@ def _declared_by(receipt: dict, declared: list[str], seen: set[str]) -> None:
     surrogate is shown escaped and never makes a run unshowable, so it is indexed in
     the escaped form a page shows it in: the store's records are UTF-8."""
     from onetrace_console.viewer.page import display
-    coverage = receipt.get("coverage")
-    names = coverage.get("declared_stages") if isinstance(coverage, dict) else None
+    from onetrace_console.viewer.record import stage_names
+    names = stage_names(receipt, "declared_stages")
     for name in (names if isinstance(names, list) else ()):
         if isinstance(name, str) and name not in seen:
             seen.add(name)
@@ -630,7 +632,11 @@ def accept(data: bytes, store: Store, *, headers: dict[str, str] | None = None,
     declared: list[str] = []
     seen_declared: set[str] = set()
     attempts: list[tuple] = []  # (stage name, outcome class) of each receipt, in chain order
-    for entry in (chain if isinstance(chain, list) else []):
+    #: The close receipt that ends a 0.4 chain is not a step (`viewer.record.is_close`): it is
+    #: neither a stage delivered nor an attempt, and the stage it declares is not one of the run's.
+    from onetrace_console.viewer.record import is_close
+    last_entry = len(chain) - 1 if isinstance(chain, list) else -1
+    for i, entry in enumerate(chain if isinstance(chain, list) else []):
         if not isinstance(entry, dict):
             continue
         path = entry.get("file")
@@ -652,7 +658,9 @@ def accept(data: bytes, store: Store, *, headers: dict[str, str] | None = None,
         if receipt_format is not None and receipt_format not in RECEIPT_FORMATS:
             rows.append(row(held, "format is one this store implements",
                             f"{receipt_format!r} is not among {list(RECEIPT_FORMATS)}"))
-        if receipt_format in RECEIPT_FORMATS:
+        if receipt_format in RECEIPT_FORMATS and i == last_entry and i > 0 and is_close(receipt):
+            pass
+        elif receipt_format in RECEIPT_FORMATS:
             #: Delivered: a file the chain names that is a receipt (otherwise `notes.txt` and
             #: `SHA256SUMS` named in the chain read "3 of 3 delivered").
             receipts.add(held)

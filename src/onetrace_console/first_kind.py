@@ -4,7 +4,8 @@ Chosen from what the records hold at the step diff's report names as the first d
 order, the first that holds:
 
 1. **Inputs differ:** a recorded input of the step's own (`render.own_inputs`, as the short answer
-   reads them) differs between the runs.
+   reads them) differs between the runs. A link to a run the step started (`run:<its id>`, an
+   agent's sub-agent) is not one of them: the step diff descends into that run.
 2. **A decision step:** the two runs' recorded decision refs at the step differ
    (`onedoor_panel.differs` says "decision"). The line names each side's verdicts from the refs, and
    the policy version only where both runs' decisions are found in a held decision export (by
@@ -64,10 +65,16 @@ def _first_stage(report) -> str | None:
     return str(getattr(rows[0], "node", None) or rows[0].stage).split("#", 1)[0]
 
 
+#: A step's link to a run it started (an agent's sub-agent), as the receipt names it: `run:<its run id>`.
+SUB_RUN = "run:"
+
+
 def _inputs_differ(stage: str, a: list[dict], b: list[dict]) -> bool:
+    """Whether an input of the step's own differs: not a link to a run the step started, whose name and
+    digest differ between any two runs (a difference inside that run is the step diff's, as it descends)."""
     from onetrace_console.render import own_inputs
     x, y = own_inputs(a).get(stage, {}), own_inputs(b).get(stage, {})
-    return any(x.get(n) != y.get(n) for n in x.keys() | y.keys())
+    return any(x.get(n) != y.get(n) for n in x.keys() | y.keys() if not n.startswith(SUB_RUN))
 
 
 def _export_row(ref: dict, store):

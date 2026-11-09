@@ -18,6 +18,8 @@ from __future__ import annotations
 
 import hashlib
 import io
+import os
+import sys
 import tarfile
 from contextlib import contextmanager
 from pathlib import Path
@@ -267,6 +269,35 @@ def server(tmp_path):
     """
     with serving(tmp_path) as served:
         yield served
+
+
+def tmpfs_root() -> Path | None:
+    """Linux's /dev/shm where it is a writable tmpfs (memory: a sync there never waits on a disk); None
+    elsewhere."""
+    shm = Path("/dev/shm")
+    if not sys.platform.startswith("linux") or not shm.is_dir() or not os.access(shm, os.W_OK):
+        return None
+    try:
+        mounts = Path("/proc/mounts").read_text(encoding="utf-8").splitlines()
+    except OSError:
+        return None
+    return shm if any(m.split()[1:3] == ["/dev/shm", "tmpfs"] for m in mounts if len(m.split()) > 2) else None
+
+
+@contextmanager
+def in_memory(tmp_path: Path):
+    """A folder on tmpfs (`tmpfs_root`), removed afterwards, where the platform has one; else `tmp_path`."""
+    import shutil
+    import tempfile
+    root = tmpfs_root()
+    if root is None:
+        yield tmp_path
+        return
+    folder = Path(tempfile.mkdtemp(prefix="onetrace-console-test-", dir=root))
+    try:
+        yield folder
+    finally:
+        shutil.rmtree(folder, ignore_errors=True)
 
 
 @contextmanager

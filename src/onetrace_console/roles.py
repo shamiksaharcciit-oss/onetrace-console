@@ -75,6 +75,8 @@ _VIEWER_GET_PATTERNS = tuple(re.compile(p) for p in (
     #: Neighbours by input's setup page (`neighbours`), on a local console: the setup itself where the
     #: extra is installed, and where it is not, the page that says so; a public console has none.
     r"^neighbours/setup$",
+    #: The tokenizers this console keeps (`token_upload`), with Remove, on a local console.
+    r"^model-tokenizers$",
     r"^choose-p[0-9]+-[0-9a-f]{64}\.html$",
     r"^policy\.html$",
     r"^policy/[^/]+\.html$",
@@ -100,11 +102,21 @@ _POST_ROLES = {
     #: "Mark as benchmark" and its undo (`benchmarks`): a mark in the console's store, never in a
     #: record; who can compare runs can say which run to compare against.
     "/benchmark": VIEWER,
+    #: "Check against an expectations file" (`expectations_after`): a check of a run against a file the
+    #: person names, kept in the console's store, never in a record; who can compare runs can check one.
+    "/expectations": VIEWER,
     #: Turning neighbours by input on or off (`neighbours`): a setting of the whole store that decides
     #: which model reads its kept inputs, so an admin's. Only where the extra is installed on a local
     #: console; anywhere else the server has no such route.
     "/neighbours/on": ADMIN,
     "/neighbours/off": ADMIN,
+    #: Keeping a tokenizer picked on a model step's page, and removing one (`token_upload`): a setting of
+    #: the whole store that decides which tokenizer decodes its model steps, so an admin's.
+    "/model-tokenizers": ADMIN,
+    "/model-tokenizers/remove": ADMIN,
+    #: Set up Explain's Save (`explain_setup`): it writes this user's onetrace-explain configuration and
+    #: keychain, so an admin's. A local console's only.
+    "/explain/setup": ADMIN,
 }
 
 

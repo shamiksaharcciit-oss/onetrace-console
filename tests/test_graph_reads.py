@@ -100,6 +100,7 @@ def test_the_demo_run_pages_wrap_and_draw_their_recorded_reads(tmp_path_factory,
 
     from onetrace_console.folder_load import build_public
     from onetrace_console.store import Store
+    from onetrace_console.viewer.record import is_close
     from tests.test_checks import _require_installed
     _require_installed()
     folder = tmp_path_factory.mktemp("demo") / "demo"
@@ -111,7 +112,9 @@ def test_the_demo_run_pages_wrap_and_draw_their_recorded_reads(tmp_path_factory,
         if 'data-section="graph-linear"' not in page:
             continue
         rd = folder / "runs" / run.run_id / "receipts"
-        receipts = [json.loads(p.read_text(encoding="utf-8")) for p in sorted(rd.glob("*.json"))]
+        #: Its steps' receipts: a format 0.4 run's close receipt is not a step, and draws no box.
+        receipts = [r for r in (json.loads(p.read_text(encoding="utf-8")) for p in sorted(rd.glob("*.json")))
+                    if not is_close(r)]
         ids = [r["stage"]["name"] + (f'#{r["stage"]["instance"]}' if r["stage"].get("instance") else "")
                for r in receipts]
         reads = [{i["name"][8:] for i in r.get("inputs", []) if i["name"].startswith("receipt:")}

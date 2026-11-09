@@ -168,6 +168,9 @@ def test_every_exported_page_is_the_served_page_less_the_rewrite_and_the_banner(
         #: opens it, and the benchmark mark's press.
         from onetrace_console.export_static import without_run_tools
         served_page = without_run_tools(served_page)
+        #: Compare, which asks a console, is shown disabled in a file (console 0.7.0).
+        from onetrace_console.compare_script import exported as compare_exported
+        served_page = compare_exported(served_page)
         for tool in ("data-search-box", 'data-what-changed="same-inputs"', "data-benchmark-post",
                      "data-local-compare"):
             assert tool not in page, (rel, tool)

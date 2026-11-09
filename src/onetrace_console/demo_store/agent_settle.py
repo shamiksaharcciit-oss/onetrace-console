@@ -34,18 +34,18 @@ def main(runs_dir, run_id: str, inner_id: str, amount: str) -> None:
     planner = Instrument("agent-planner", "agent", "1.0.0", {"steps": "1"})
     runs = Path(runs_dir)
 
-    @ot.stage("settle", instrument=tool)
+    @ot.stage("settle", instrument=tool, keep_inputs=["total"])
     def settle(total):
         ot.constant("amount", amount)
         ot.constant("data", EXAMPLE)
         return {"settled": str(int(total) + int(amount))}
 
-    @ot.run(run_dir=str(runs) + "/{run_id}", stages=INNER_STAGES, manifest=__file__,
+    @ot.run(run_dir=str(runs) + "/{run_id}", stages=INNER_STAGES, manifest=__file__, keep_inputs=["total"],
             anchor_reason="a demo record; anchoring is not part of this demo")
     def sub_agent(total):
         return settle(total)
 
-    @ot.stage("agent_step", instrument=planner)
+    @ot.stage("agent_step", instrument=planner, keep_inputs=["total"])
     def agent_step(total):
         #: The planner's two model calls, as model-call records: invented example data in
         #: `model-call-record/1.0` (`model_call_example`); no model is called.
@@ -64,7 +64,7 @@ def main(runs_dir, run_id: str, inner_id: str, amount: str) -> None:
     @ot.run(run_dir=str(runs) + "/{run_id}", stages=STAGES, manifest=__file__,
             anchor_reason="a demo record; anchoring is not part of this demo")
     def agent():
-        return agent_step("100")
+        return agent_step(TOTAL)
 
     import contextlib
     import io
@@ -80,3 +80,16 @@ def main(runs_dir, run_id: str, inner_id: str, amount: str) -> None:
             os.environ.pop("ONETRACE_RUN_ID", None)
         else:
             os.environ["ONETRACE_RUN_ID"] = before
+
+
+#: The total the agent's run gives its step, and the step its sub-agent's `settle`: from outside each run.
+TOTAL = "100"
+
+
+def kept_inputs(args: dict) -> list[bytes]:
+    """The bytes of every input a run with `args` keeps, as the SDK's `keep_inputs` encodes them: the
+    total, given to the agent's `agent_step` (P10), or to the sub-agent's run and its `settle` (P11)."""
+    from onetrace.decorators import INTAKE, encode_v1
+    if "of" in args:
+        return [encode_v1(TOTAL, INTAKE, "total"), encode_v1(TOTAL, "settle", "total")]
+    return [encode_v1(TOTAL, "agent_step", "total")]

@@ -8,6 +8,7 @@ carrying the session's CSRF token where there is a session, as sign-out's form d
 """
 from __future__ import annotations
 
+import re
 from urllib.parse import quote
 
 from onetrace_console.words import escape
@@ -266,27 +267,53 @@ IN_CMD = "In Command Prompt:"
 IN_POWERSHELL = "In PowerShell:"
 
 
-def install_line() -> str:
-    """The command that installs the extra into the Python this console runs from, that Python quoted as
-    this machine's shell takes it: Windows' Command Prompt (`subprocess.list2cmdline`, double quotes where
-    needed), or a POSIX shell (`shlex.quote`)."""
+#: What the neighbours page installs; the Set up Explain page names its own (`explain_setup.KEYRING_EXTRA`).
+EXTRA = '"onetrace-console[neighbours]"'
+
+
+def install_line(package: str = EXTRA) -> str:
+    """The command that installs `package` (the extra) into the Python this console runs from, that Python
+    quoted as this machine's shell takes it: Windows' Command Prompt (`subprocess.list2cmdline`, double
+    quotes where needed), or a POSIX shell (`shlex.quote`)."""
     import shlex
     import subprocess
     import sys
     from onetrace_console.explain import _on_windows
     quote = (lambda p: subprocess.list2cmdline([p])) if _on_windows() else shlex.quote
-    return f'{quote(sys.executable) if sys.executable else "python"} -m pip install "onetrace-console[neighbours]"'
+    return f'{quote(sys.executable) if sys.executable else "python"} -m pip install {package}'
 
 
-def install_lines() -> list[tuple[str, str]]:
+#: What PowerShell takes as a bare word in a command's name: anything else, the Python is quoted there.
+_POWERSHELL_BARE = re.compile(r"[A-Za-z0-9_.:\\/-]+")
+#: What is special inside PowerShell's double quotes (a variable, its escape, a double quote, its
+#: typographic double quotes), and its single quotes, straight and typographic. The typographic ones by
+#: their numbers: they are read in a path, never written on a page.
+_POWERSHELL_EXPANDS = "$`\"" + "".join(map(chr, (0x201C, 0x201D, 0x201E)))
+_POWERSHELL_SINGLE = "'" + "".join(map(chr, (0x2018, 0x2019, 0x201A, 0x201B)))
+
+
+def powershell_quoted(path: str) -> str:
+    """`path` as PowerShell takes it, by its own rules: as given where it is a bare word; in double quotes
+    where nothing in it is special inside them; else in single quotes, each single quote doubled."""
+    if _POWERSHELL_BARE.fullmatch(path):
+        return path
+    if not any(c in path for c in _POWERSHELL_EXPANDS):
+        return f'"{path}"'
+    return "'" + "".join(c * 2 if c in _POWERSHELL_SINGLE else c for c in path) + "'"
+
+
+def install_lines(package: str = EXTRA) -> list[tuple[str, str]]:
     """The install line as the page gives it, each with its label: one line, unlabelled, where the Python
-    needs no quoting (both of Windows' shells run it) or off Windows; on Windows where it is quoted, a line
-    for Command Prompt and the same line led by `& ` for PowerShell."""
+    needs quoting in neither of Windows' shells (both run it) or off Windows; on Windows where either quotes
+    it, a line for Command Prompt (`install_line`) and one for PowerShell, led by `& `, the Python quoted by
+    PowerShell's own rules (`powershell_quoted`)."""
     import sys
     from onetrace_console.explain import _on_windows
-    line = install_line()
-    if _on_windows() and sys.executable and not line.startswith(sys.executable + " "):
-        return [(IN_CMD, line), (IN_POWERSHELL, "& " + line)]
+    line = install_line(package)
+    if (_on_windows() and sys.executable
+            and (not line.startswith(sys.executable + " ") or not _POWERSHELL_BARE.fullmatch(sys.executable))):
+        return [(IN_CMD, line),
+                (IN_POWERSHELL, f'& {powershell_quoted(sys.executable)} -m pip install {package}')]
     return [("", line)]
 
 
@@ -306,10 +333,10 @@ def missing_page() -> str:
     return _document(TITLE, f'<div class="cp setup">{body}</div>')
 
 
-def _install_named(verbatim) -> str:
+def _install_named(verbatim, package: str = EXTRA) -> str:
     """The install line with the Python named: one line, or on Windows where it is quoted, a labelled line
     for each shell."""
-    lines = install_lines()
+    lines = install_lines(package)
     if len(lines) == 1:
         return f'<p class="note">With that Python named: <code>{verbatim(lines[0][1])}</code></p>'
     return ('<p class="note">With that Python named:</p>'

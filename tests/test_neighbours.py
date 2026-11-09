@@ -3,7 +3,7 @@ without its change.
 
 The store here is a few of the demo's runs, recorded and delivered as the console takes them in: P4's
 two support replies (one setting apart, so in two groups), P7's cold-chain baseline and the run with one
-reading changed (one configuration, near kept inputs), and P3's first ticket, which keeps nothing.
+reading changed (one configuration, near kept inputs), and P2's first run (the reference demo's), which keeps nothing.
 
 The embedder for most tests is an OpenAI-compatible endpoint (`embedder.Endpoint`, the console's own
 code) whose server is a function here: a bag of words, so near texts are near. The local ONNX model is
@@ -25,7 +25,7 @@ import pytest
 
 REPO = Path(__file__).resolve().parent.parent
 SPECS = ("p4-29-reply-30-days", "p4-30-reply-14-days", "p7-39-cold-chain-baseline",
-         "p7-40-cold-chain-one-reading-changed", "p3-23-t-1-rules1")
+         "p7-40-cold-chain-one-reading-changed", "p2-21-demo-run-1")
 ENDPOINT = {"kind": "endpoint", "base_url": "http://127.0.0.1:9/v1", "model": "bag-of-words"}
 #: What names the feature on a page: its sections, its headings and label, its setup page. Not the word
 #: "embedder" alone, which a demo pipeline's own record holds as an instrument's kind.
@@ -136,7 +136,7 @@ def _absent(monkeypatch):
 def test_the_base_install_gains_no_dependency():
     import tomllib
     project = tomllib.loads((REPO / "pyproject.toml").read_text(encoding="utf-8"))["project"]
-    assert project["dependencies"] == ["onetrace==0.6.1", "onetrace-verify[crypto]==0.6.1"]
+    assert project["dependencies"] == ["onetrace==0.7.1", "onetrace-verify[crypto]==0.7.1"]
     assert project["optional-dependencies"] == {
         "neighbours": ["onnxruntime==1.31.0", "tokenizers==0.23.3", "numpy==2.5.4"]}
     base = (REPO / "requirements.lock").read_text(encoding="utf-8")
@@ -267,7 +267,7 @@ def test_only_kept_files_are_embedded_never_a_record(held):
 def test_a_run_that_kept_nothing_has_nothing_embedded_and_its_page_says_so(on):
     from onetrace_console.neighbours import kept
     store, runs = on
-    run = runs["p3-23-t-1-rules1"]
+    run = runs["p2-21-demo-run-1"]
     assert all(p.text is None for p in kept.parts(run, store))
     page = _case(run, store)
     assert "This run kept no input, so it has no neighbours." in page
@@ -279,8 +279,8 @@ def test_outputs_are_kept_only_under_the_input_opt_in(held):
     store, runs = held
     p7 = kept.parts(runs["p7-39-cold-chain-baseline"], store)
     assert any(p.kind == kept.OUTPUT and p.text is not None for p in p7)
-    p3 = kept.parts(runs["p3-23-t-1-rules1"], store)
-    assert any(p.kind == kept.OUTPUT for p in p3) and not any(p.text for p in p3)
+    p2 = kept.parts(runs["p2-21-demo-run-1"], store)
+    assert any(p.kind == kept.OUTPUT for p in p2) and not any(p.text for p in p2)
 
 
 # ------------------------------------------------------------------------------ the derived file

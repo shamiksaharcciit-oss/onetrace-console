@@ -1,4 +1,4 @@
-"""Rate-limit sign-in attempts, per account and per client, over the same window.
+"""Rate-limit sign-in attempts, per account and per client, over the same rolling window.
 
 In-memory only, like `sessions.py` -- a rate limit that survived a
 restart would need to be a stored record, and nothing here claims to be one; a
@@ -8,14 +8,17 @@ from __future__ import annotations
 
 import threading
 import time
+from collections import deque
 from dataclasses import dataclass, field
 
 
 @dataclass
 class RateLimiter:
-    """A fixed window per key: at most `max_attempts` calls to `check_and_record(key)`
-    return `True` (allowed) within any `window_seconds`-long window; the rest return
-    `False` until the window rolls over. Two independent limiters -- one keyed by
+    """A rolling window per key: the time of each attempt let through is kept, and
+    `check_and_record(key)` returns `False` while `max_attempts` of them fall inside the
+    last `window_seconds`; so in any span of `window_seconds`, at most `max_attempts`
+    calls return `True`. An attempt leaves the count `window_seconds` after it was made.
+    A refused attempt is not kept. Two independent limiters -- one keyed by
     account, one by client -- are how "per account and per client" is built: this
     class does not know which is which, it just counts by whatever key it's given.
     """
@@ -24,19 +27,18 @@ class RateLimiter:
 
     def __post_init__(self) -> None:
         self._lock = threading.Lock()
-        #: key -> (window_start, count)
-        self._windows: dict[str, tuple[float, int]] = {}
+        #: key -> the times of the attempts let through inside the last window, oldest first
+        self._attempts: dict[str, deque[float]] = {}
 
     def check_and_record(self, key: str, *, now: float | None = None) -> bool:
         now = time.monotonic() if now is None else now
         with self._lock:
-            start, count = self._windows.get(key, (now, 0))
-            if now - start >= self.window_seconds:
-                start, count = now, 0
-            if count >= self.max_attempts:
-                self._windows[key] = (start, count)
+            kept = self._attempts.setdefault(key, deque())
+            while kept and now - kept[0] >= self.window_seconds:
+                kept.popleft()
+            if len(kept) >= self.max_attempts:
                 return False
-            self._windows[key] = (start, count + 1)
+            kept.append(now)
             return True
 
     def reset(self, key: str) -> None:
@@ -44,7 +46,7 @@ class RateLimiter:
         the same budget a string of failed guesses would have used.
         """
         with self._lock:
-            self._windows.pop(key, None)
+            self._attempts.pop(key, None)
 
 
 @dataclass

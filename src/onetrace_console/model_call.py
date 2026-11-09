@@ -289,8 +289,13 @@ def _as_text(record: dict | None, searched=None) -> tuple:
     if dec is not None:
         note = token_text.search_note(searched) if searched is not None else ""
         return dec, f'<p data-token-text="decoded">{dec.label_html()}</p>{note}'
+    #: Where the record states its tokenizer.digest, the picker that takes one from this machine and keeps
+    #: it only where its files hash to that digest (`token_upload`): a local console's.
+    want = token_text.recorded_digest(record)
+    from onetrace_console import token_upload
+    pick = token_upload.picker(want) if want is not None else ""
     return None, (f'<p data-token-text="not-shown">{escape(token_text.CANNOT.format(why=why))}</p>'
-                  + "".join(f'<p data-tokenizer-refused>{r}</p>' for r in refused))
+                  + "".join(f'<p data-tokenizer-refused>{r}</p>' for r in refused) + pick)
 
 
 def timeline(name: str, steps: dict, record: dict | None = None, searched=None) -> str:

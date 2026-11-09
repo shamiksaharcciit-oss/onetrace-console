@@ -184,8 +184,11 @@ def main(out_dir, run_id: str, settings: dict, question_set: str, *, fault: str 
 
     def load_docs(ctx):
         ctx.constant("shop", SHOP)
-        docs = load_json_bounded(ctx.read_external(docs_path, "application/json", name="documents",
-                                                   trust_class="operator-authored"), "documents")
+        data = kept_text(docs_path)
+        ctx.read_memory(data, "application/json", name="documents", trust_class="operator-authored")
+        ctx.keep_declared = True
+        ctx.keep_input("documents", data)
+        docs = load_json_bounded(docs_path.read_text(encoding="utf-8"), "documents")
         return ctx.write_json("documents.json", {"documents": docs})
 
     def split(ctx, loaded):
@@ -209,9 +212,11 @@ def main(out_dir, run_id: str, settings: dict, question_set: str, *, fault: str 
         ctx.read_receipt("split")
         chunks = ctx.read_json(chunked)["chunks"]
         vectors = ctx.read_json(embedded)["vectors"]
-        questions = load_json_bounded(ctx.read_external(questions_path, "application/json",
-                                                        name="questions",
-                                                        trust_class="operator-authored"), "questions")
+        data = kept_text(questions_path)
+        ctx.read_memory(data, "application/json", name="questions", trust_class="operator-authored")
+        ctx.keep_declared = True
+        ctx.keep_input("questions", data)
+        questions = load_json_bounded(questions_path.read_text(encoding="utf-8"), "questions")
         ctx.constant("top_k", settings["top_k"])
         hits = []
         for q in questions:
@@ -259,3 +264,15 @@ def main(out_dir, run_id: str, settings: dict, question_set: str, *, fault: str 
             raise
         # recorded as an error and kept; the run closes with its last attempt failed
     rec.close()
+
+
+def kept_inputs(args: dict) -> list[bytes]:
+    """The bytes of every input a run with `args` keeps: the shop's pages and its question set, as
+    `main` writes them (invented example data)."""
+    return [json.dumps(json.dumps(DOCUMENTS, sort_keys=True)).encode("utf-8"),
+            json.dumps(json.dumps(QUESTION_SETS[args["question_set"]], sort_keys=True)).encode("utf-8")]
+
+def kept_text(path) -> bytes:
+    """A file this pipeline reads from outside the run, as its step reads it and keeps it: a JSON string
+    of its text, the bytes its digest is computed over (as P7 reads its logger)."""
+    return json.dumps(Path(path).read_text(encoding="utf-8")).encode("utf-8")

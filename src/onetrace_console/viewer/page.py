@@ -800,6 +800,10 @@ def _not_checked_rows(items, steps: int) -> str:
     reason only one item has keeps its own line."""
     groups: dict[str, list] = {}
     for c in items:
+        if c.label == template("label.close"):
+            #: The close receipt is not a step: its line is its own, never one of "Every step".
+            groups.setdefault(f"close\0{id(c)}", []).append(c)
+            continue
         groups.setdefault(_line(c.sentence) + "".join(f"<div>{_part(q)}</div>" for q in c.quotes),
                           []).append(c)
     rows = []

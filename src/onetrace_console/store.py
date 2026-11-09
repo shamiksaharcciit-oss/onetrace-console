@@ -151,6 +151,10 @@ class StoredRun:
     #: The step the run stopped at by its own rule (`ingest.declined_at`), as JSON {"stage",
     #: "reason", "left": [...]}, or "null" where it did not stop at one. Derived with the fields above.
     declined: str = ""
+    #: Whether the run closed and how it ended (`closing.ending_of`), as JSON {"closed", "ended_by",
+    #: "last"}: its close receipt's own `onetrace.ended_by`, or the last step where it has none.
+    #: Derived with the fields above.
+    ending: str = ""
     declared_digest: str = ""
     #: Rung 3, "nothing missing", as the run's own page decides it (`viewer.model.
     #: nothing_missing`), recorded when the run is checked: yes, no, couldnt-check or

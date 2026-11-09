@@ -4,8 +4,9 @@ Held here:
 - it is served on a local console in its three steps, with the provider and model the console
   already reads, the kinds always sent, the two flags and whether the Explain button uses them,
   the three promises and the steps a person takes, and linked from the panel and the sidebar;
-- it writes nothing (the store and the configuration's folder byte for byte, before and after), and
-  has no form and no control that sends or saves;
+- a GET writes nothing (the store and the configuration's folder byte for byte, before and after), and
+  the page's one form is the Set up Explain form (console 0.7.0, tests/test_explain_setup_form.py): no
+  other form, and no control that sends or runs anything;
 - it never holds a value of `base_url` or `params`, nor the key: a value is planted in each, and in
   the variable `key_env` names, and none must appear (a sabotage that reads `base_url` is named). The
   variable's NAME is shown, with "set" or "not set", since console 0.6.1 item 8
@@ -94,7 +95,7 @@ def content_problems(main: str, *, named: str | None, path: str) -> list[str]:
     if named is None and f"No model is named in {path}. {S.SET_HERE}" not in said:
         out.append("no model, and the path and 'Set your model here.' are not said")
     for words in (*S.ALWAYS_SENT, *S.STAYS, *S.PROMISES, S.BUTTON_USES, "--include-text", "--redact NAME",
-                  "pip install onetrace-explain", "On this machine", "Your model provider", "Show the packet"):
+                  'pip install "onetrace-explain[keyring]>=0.3"', "On this machine", "Your model provider", "Show the packet"):
         if words not in said:
             out.append(f"missing: {words[:50]!r}")
     if f"Set [model] in {path}" not in said:
@@ -184,7 +185,7 @@ def examples_problems(main: str) -> list[str]:
     blocks = [unescape(b) for b in re.findall(r"<pre><code>(.*?)</code></pre>", main, re.S)]
     out = []
     models = [b for b in blocks if b.startswith("[model]")]
-    if len(models) != 2 or not any(b == "pip install onetrace-explain" for b in blocks):
+    if len(models) != 2 or not any(b == 'pip install "onetrace-explain[keyring]>=0.3"' for b in blocks):
         out.append(f"examples {[b[:20] for b in blocks]}")
     for b in models:
         if b.count("\n") < 3 or not b.splitlines()[1].startswith("provider = "):
@@ -215,8 +216,15 @@ def test_sabotage_an_escaped_line_break_in_an_example_is_named(local, monkeypatc
 
 # ------------------------------------------------------------------ it writes nothing, and offers nothing
 
+#: The Set up Explain forms (console 0.7.0), by their exact opening tags: the model's, and the key's Replace
+#: and Remove where a key is stored; the only forms the page may hold.
+SETUP_FORM = re.compile(r'<form method="post" action="/explain/setup" data-setup-form="(?:model|key|remove)">.*?</form>',
+                        re.S)
+
+
 def control_problems(main: str) -> list[str]:
-    """A form, or a control that sends, runs or saves, in the page's own content."""
+    """A form, or a control that sends, runs or saves, in the page's own content, the setup form set aside."""
+    main = SETUP_FORM.sub("", main)
     out = []
     for tag in ("form", "button", "input", "select", "textarea"):
         if re.search(rf"<{tag}\b", main, re.I):
@@ -227,7 +235,7 @@ def control_problems(main: str) -> list[str]:
     return out
 
 
-def test_the_page_writes_nothing_and_has_no_control_that_sends_or_saves(local, examined):
+def test_a_get_writes_nothing_and_the_page_s_only_control_is_the_setup_form(local, examined):
     base, root, store, _, config = local
     _planted(config)
     from pathlib import Path
@@ -247,7 +255,7 @@ def test_sabotage_a_turn_on_button_planted_is_named(local, monkeypatch, examined
     from onetrace_console import explain_setup
     base, _, _, _, _ = local
     real = explain_setup.body
-    monkeypatch.setattr(explain_setup, "body", lambda store: real(store).replace(
+    monkeypatch.setattr(explain_setup, "body", lambda store, **kw: real(store, **kw).replace(
         "</div>", '<form method="post" action="/explain/setup"><button>Turn on Explain</button></form></div>', 1))
     _, page = _get(f"{base}/explain/setup")
     examined(1, "planted page")

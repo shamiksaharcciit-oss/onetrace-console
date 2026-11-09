@@ -213,3 +213,34 @@ def test_the_demo_s_input_pairs_carry_the_inputs_line(shared_demo, examined):
     assert got[("p8-43-invoice-tolerance-5pct", "p8-44-invoice-quantity-changed")] == "inputs"
     assert got[("p9-46-torque-baseline", "p9-48-torque-one-bolt-low")] == "inputs"
     assert got[("p1-02-baseline-set2", "p1-08-candidate-set2")] is None
+
+
+def _receipt(stage: str, inputs: dict[str, str]) -> dict:
+    return {"stage": {"name": stage}, "inputs": [{"name": n, "digest": d} for n, d in inputs.items()], "outputs": []}
+
+
+def test_a_sub_run_s_link_is_not_one_of_the_step_s_own_inputs(examined):
+    """An agent step's sub-agent run is linked as an input named `run:<the child run's id>`, whose name
+    and digest differ between any two runs. It is not an input from outside the run: the step's own
+    inputs are the same, and the inputs line is not said."""
+    a = [_receipt("agent_step", {"total": "sha256:" + "1" * 64, "run:pz-56-baseline-subagent": "sha256:" + "a" * 64})]
+    b = [_receipt("agent_step", {"total": "sha256:" + "1" * 64, "run:pz-58-changed-subagent": "sha256:" + "b" * 64})]
+    examined(2, "planted agent steps with a sub-agent run's link")
+    assert not first_kind._inputs_differ("agent_step", a, b)
+    c = [_receipt("agent_step", {"total": "sha256:" + "2" * 64, "run:pz-58-changed-subagent": "sha256:" + "b" * 64})]
+    assert first_kind._inputs_differ("agent_step", a, c)
+
+
+def test_the_demo_s_agent_pair_whose_difference_is_inside_its_sub_agent_has_no_inputs_line(shared_demo, examined):
+    """P10: `total`, the agent step's one input from outside the run, is the same in both runs; the
+    first difference is inside the sub-agent run, at its step `settle`, as the short answer says."""
+    from onetrace_console.store import Store
+    store = Store(shared_demo["folder"] / "store" / "store")
+    ids = {r.key: r.run_id for r in store.runs()}
+    pages = shared_demo["folder"] / "store" / "pages" / "diff"
+    (c,) = [c for c in store.comparisons()
+            if (ids.get(c.run_a), ids.get(c.run_b)) == ("pz-51-agent-baseline", "pz-53-agent-amount-changed")]
+    page = (pages / f"{c.key}.html").read_text(encoding="utf-8")
+    examined(1, "P10's comparison page")
+    assert _said(page)[0] != "inputs", _said(page)
+    assert first_kind.at_stage("agent_step", c, store) is None or first_kind.at_stage("agent_step", c, store)[0] != "inputs"

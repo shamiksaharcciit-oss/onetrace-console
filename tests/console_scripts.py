@@ -21,3 +21,24 @@ def console_script(name: str) -> Path | None:
             return Path(folder) / file
     found = shutil.which(name)
     return Path(found) if found else None
+
+
+def required_script(name: str, *, python: str | Path | None = None, scripts: str | Path | None = None,
+                    windows: bool | None = None) -> Path:
+    """The installed command `name` a test runs: in the interpreter's scripts folder
+    (`sysconfig.get_path("scripts")`) first, then in the interpreter's own folder, by its name on the
+    platform (`<name>.exe` on Windows). Never PATH, and never a skip: where neither folder holds it, the
+    test fails, naming both folders. `python`, `scripts` and `windows` stand in for this interpreter's own,
+    for the helper's tests."""
+    import pytest
+    windows = os.name == "nt" if windows is None else windows
+    python = Path(sys.executable if python is None else python)
+    if scripts is None and python == Path(sys.executable):
+        scripts = sysconfig.get_path("scripts")
+    file = f"{name}.exe" if windows else name
+    folders = [Path(f) for f in (scripts, python.parent) if f]
+    for folder in folders:
+        if (folder / file).is_file():
+            return folder / file
+    pytest.fail(f"{file} is in neither this interpreter's scripts folder nor its own folder: "
+                f"{', '.join(str(f) for f in folders)}. Install it into this environment (see PINS.md).")

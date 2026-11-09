@@ -6,7 +6,9 @@
 2. P10's candidate step page shows its spans joined by the recorded trace context, a tool call's two
    retries and its status error, and the first model call checked against its record (they agree)
    and the second against a record that reports no model (nothing to check).
-3. P3's retried lookup: the first lookup's HTTP call reads status error.
+3. P3's retried lookup: the first lookup's HTTP call reads status error, and does whenever the two lookups
+   are recorded within one millisecond (a receipt's times are to the millisecond): the demo's invented
+   calls keep the chain's order then, not their span ids'.
 4. A held comparison of P10's agent runs carries the ranked differences, the retries and the status
    error first; no span view on the public demo links to a tracing tool.
 5. A build from that build writes each export once.
@@ -85,6 +87,41 @@ def test_p3_s_retried_lookup_reads_status_error_on_its_first_call(demo, examined
     examined(2, "step pages")
     row = lambda p: re.search(r'<tr data-span="[0-9a-f]{16}" data-depth="1" data-what="HTTP call"[^>]*>', p).group(0)  # noqa: E731
     assert 'data-status="error"' in row(first) and 'data-status="error"' not in row(second)
+
+
+def _recorded_on_a_clock_that_stands_still(tmp_path, monkeypatch) -> tuple[list[dict], list]:
+    """P3's retried run recorded with onetrace's clock frozen: only the pipeline's own wait moves it on
+    (`time.sleep`, by what it waits), so every step that does not wait is stamped in one millisecond, as
+    on a fast enough machine. The two lookups' receipts, and their step trees from the demo's calls."""
+    import datetime
+    from onetrace import emit
+    from onetrace_console.demo_store import ticket_triage
+    from onetrace_console.span_tree import read_export, step_tree
+    now = [datetime.datetime(2030, 1, 1, tzinfo=datetime.timezone.utc)]
+    monkeypatch.setattr(emit, "_now", lambda: now[0].isoformat(timespec="milliseconds"))
+    import time
+    monkeypatch.setattr(time, "sleep", lambda s: now.__setitem__(0, now[0] + datetime.timedelta(seconds=s)))
+    from onetrace_console.demo_store import traceparent_for
+    run = tmp_path / "p3-28-t-3-rules1-lookup-retried"
+    monkeypatch.setenv("TRACEPARENT", traceparent_for(run.name))  # as the demo records it, inside a span
+    ticket_triage.main(run, run.name, "T-3", "1", fault="lookup-once")
+    manifest = json.loads((run / "MANIFEST.json").read_text(encoding="utf-8"))
+    receipts = [json.loads((run / e["file"]).read_text(encoding="utf-8")) for e in manifest["chain"]]
+    lookups = [r for r in receipts if r["stage"]["name"] == "lookup_account"]
+    spans = read_export(json.dumps({"resourceSpans": [{"resource": {"attributes": []}, "scopeSpans": [
+        {"spans": app_traces.spans_for(run)}]}]}).encode())
+    return lookups, [step_tree(spans, r) for r in lookups]
+
+
+def test_the_retry_is_recorded_after_the_failed_lookup_however_fast_the_machine(tmp_path, monkeypatch, examined):
+    """The retry starts in a later recorded millisecond than the failed lookup ended, so each lookup's
+    step page holds its own call: the failed one's HTTP call reads status error, the retry's does not."""
+    from onetrace_console.span_tree import _ns
+    (failed, retry), (first, second) = _recorded_on_a_clock_that_stands_still(tmp_path, monkeypatch)
+    examined(2, "lookups recorded on a clock only the pipeline's wait moves")
+    assert _ns(retry["time"]["started"]) > _ns(failed["time"]["ended"]), (failed["time"], retry["time"])
+    calls = lambda tree: [s.status for s, depth in tree.rows if depth == 1 and s.name == "GET"]  # noqa: E731
+    assert calls(first) == ["error"] and calls(second) == ["unset"], (calls(first), calls(second))
 
 
 def test_a_held_p10_comparison_ranks_the_retries_and_the_status_error_first(demo, examined):

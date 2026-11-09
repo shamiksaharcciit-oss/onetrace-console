@@ -8,6 +8,7 @@ start that reuses `onetrace-console-demo/` says so. `--quiet` keeps the old sile
 from __future__ import annotations
 
 import io
+import sys
 import re
 from pathlib import Path
 
@@ -160,3 +161,57 @@ def test_the_demos_first_line_is_said_at_once_and_a_later_start_says_it_reuses(s
     #: What the first start said after its build is read here too: the later start's line is the last.
     assert said_before_build[1].splitlines()[-1] == sp.LATER_DEMO.format(folder=DEMO_FOLDER)
     assert "onetrace-console-demo/" in said_before_build[1]
+
+
+# ---------------------------------------------------------------- a console that takes no escape codes
+
+
+def test_without_vt_mode_a_count_updates_in_place_with_no_escape_byte():
+    """Windows PowerShell 5.1's classic console prints `ESC[K` as it is: where VT mode was not accepted,
+    a count line is redrawn with `\\r` and padded with spaces over the longer line before it."""
+    out, clock = io.StringIO(), Clock()
+    p = sp.Progress(out, tty=True, vt=False, clock=clock)
+    with p.phase("checking runs", 54) as step:
+        for _ in range(54):
+            step()
+    with p.phase("drawing pages", 2, done=lambda n, took: "pages: drawn") as step:
+        step()
+    text = out.getvalue()
+    assert "\x1b" not in text
+    assert "\rchecking runs: 49 of 54\rchecking runs: 50 of 54" in text
+    assert text.endswith("\rpages: drawn" + " " * (len("drawing pages: 1 of 2") - len("pages: drawn")) + "\n")
+
+
+@pytest.fixture
+def a_file_stream(tmp_path):
+    with open(tmp_path / "stderr.txt", "w", encoding="utf-8", newline="") as f:
+        yield f
+
+
+def test_on_windows_a_console_that_refuses_vt_mode_gets_no_escape_byte(a_file_stream, monkeypatch):
+    asked = []
+    monkeypatch.setattr(sp.sys, "platform", "win32")
+    monkeypatch.setattr(sp, "windows_vt", lambda stream: asked.append(stream) or False)
+    p = sp.Progress(a_file_stream, tty=True, clock=Clock())
+    with p.phase("checking runs", 2) as step:
+        step()
+    a_file_stream.flush()
+    text = open(a_file_stream.name, encoding="utf-8", newline="").read()
+    assert asked == [a_file_stream] and "\x1b" not in text and text.startswith("\rchecking runs: 0 of 2")
+
+
+def test_on_windows_a_console_that_takes_vt_mode_is_asked_before_the_first_line(a_file_stream, monkeypatch):
+    said = []
+    monkeypatch.setattr(sp.sys, "platform", "win32")
+    monkeypatch.setattr(sp, "windows_vt", lambda stream: said.append(open(stream.name).read()) or True)
+    p = sp.Progress(a_file_stream, tty=True, clock=Clock())
+    with p.phase("checking runs", 1) as step:
+        step()
+    a_file_stream.flush()
+    assert said == [""] and "\x1b[K" in open(a_file_stream.name, encoding="utf-8", newline="").read()
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="SetConsoleMode is Windows' own")
+def test_on_windows_a_stream_that_is_no_console_does_not_take_vt_mode(a_file_stream):
+    """The real call: a file is no console, so GetConsoleMode fails and no escape code is written."""
+    assert sp.windows_vt(a_file_stream) is False

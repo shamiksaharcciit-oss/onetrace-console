@@ -19,6 +19,14 @@ from onetrace_console.viewer.model import LIST_CAP
 from onetrace_console.words import escape, generated_footer, scroll_region, time_html
 
 
+#: How a pair not compared yet is compared: on the console's page, and in a static export (`compare_script.exported`).
+HOW_LOCAL = ("A pair not compared yet has a Compare button, which sends this console the request shown beside it, "
+             "with your session's CSRF token, and opens the comparison. The request can also be sent by hand, as the "
+             "operator's guide shows.")
+HOW_EXPORTED = ("A pair not compared yet shows its Compare disabled: comparing needs a running console. The request "
+                "that makes it is shown beside it, as the operator's guide gives it.")
+
+
 def choose_href(label: str) -> str:
     """The page listing a pipeline's runs as run A."""
     return f"choose-{label.lower()}.html"
@@ -142,9 +150,7 @@ def render_pair(pipeline, a_run, store: Store, *, generated_at: str,
                f"pairs it holds: {len(compared)} of the {len(others)} other runs of {label} "
                f"{'has' if len(compared) == 1 else 'have'} a comparison with this run as run A.</p>")
     else:
-        how = ('<p data-section="how">A pair not compared yet has a Compare button, which sends this '
-               "console the request shown beside it, with your session's CSRF token, and opens the "
-               "comparison. The request can also be sent by hand, as the operator's guide shows.</p>")
+        how = f'<p data-section="how">{HOW_LOCAL}</p>'
     body = [
         f'<p class="crumbs" data-section="crumbs"><a href="comparisons.html">Comparisons</a> / '
         f'<a href="{_tag(choose_href(pipeline.label))}">{label}</a> / run A</p>',

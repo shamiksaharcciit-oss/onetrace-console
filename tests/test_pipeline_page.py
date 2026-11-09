@@ -136,8 +136,10 @@ def compare_problems(store, read) -> list[str]:
         #: The one exception, on a public console: Compare's picker of the pipeline's own runs
         #: (`visitor_compare`), by its exact shape -- two selects and one button, posting to /compare.
         main = re.sub(r'<form method="post" action="/compare" data-visitor-compare>'
-                      r'<label>Baseline \(run A\) <select name="a">(?:<option [^>]*>[^<]*</option>)+</select></label> '
-                      r'<label>Candidate \(run B\) <select name="b">(?:<option [^>]*>[^<]*</option>)+</select></label> '
+                      r'<label class="compare-field"><span class="compare-label">Baseline \(run A\)</span>'
+                      r'<select name="a">(?:<option [^>]*>[^<]*</option>)+</select></label>'
+                      r'<label class="compare-field"><span class="compare-label">Candidate \(run B\)</span>'
+                      r'<select name="b">(?:<option [^>]*>[^<]*</option>)+</select></label>'
                       r'<button type="submit">Compare</button></form>', "", main)
         for tag in ("<form", "<button", "<input", "<script"):
             if tag in main:

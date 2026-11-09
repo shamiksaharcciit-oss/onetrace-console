@@ -228,11 +228,13 @@ def _local_picker(pipeline) -> str:
         options = "".join(f'<option value="{_tag(r.key)}"{" selected" if i == chosen else ""}>'
                           f"{escape(r.run_id[:NAME_CAP])} · {escape(str(r.received_at).replace('T', ' '))}</option>"
                           for i, r in enumerate(runs))
-        return f'<label>{escape(label)} <select name="{name}" required>{options}</select></label>'
+        #: One field: the label's words above its own select (`compare-field`).
+        return (f'<label class="compare-field"><span class="compare-label">{escape(label)}</span>'
+                f'<select name="{name}" required>{options}</select></label>')
     return (f'<section id="local-compare" data-section="local-compare" class="visitor-compare">'
             f"<h2>{escape(LOCAL_PICKER_HEAD)}</h2><p>{escape(LOCAL_PICKER_WORDS)}</p>"
             f'<form method="post" action="/compare" data-local-compare>{CSRF_SLOT}'
-            f'{select("a", "Baseline (run A)", len(runs) - 2)} {select("b", "Candidate (run B)", len(runs) - 1)} '
+            f'{select("a", "Baseline (run A)", len(runs) - 2)}{select("b", "Candidate (run B)", len(runs) - 1)}'
             f'<button type="submit">{escape(LOCAL_PICKER_BUTTON)}</button></form></section>')
 
 

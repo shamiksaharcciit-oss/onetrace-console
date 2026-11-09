@@ -193,7 +193,12 @@ def _titles(page: str) -> dict[str, str]:
 #: Measured by rendering it with the version alone set back to 0.5.1: the old digest.
 #: Moved by the version, 0.6.0 to 0.6.1, from 47c93f5d9cb62d4281642205d823fdf7ac91bbcdf218b7efc6b80e33a57c4783.
 #: Measured by rendering it with the version alone set back to 0.6.0: the old digest.
-UNMARKED_R_CASE_SHA256 = "014b7947c26f32bdb362887d069320b1fd2447e789d6113855a8b331de1037ce"
+#: Moved by the run head's line on whether the run closed (console 0.7.0), from
+#: 014b7947c26f32bdb362887d069320b1fd2447e789d6113855a8b331de1037ce: the one difference, measured by
+#: rendering it with the head's code alone set back to the commit before it (the old digest).
+#: Moved by the version, 0.6.1 to 0.7.0, from 2b1b7ce790829eecdfa9f333e5708cae00d1a233e5161321c15e6a5c71f5e0d7.
+#: Measured by rendering it with the version alone set back to 0.6.1: the old digest.
+UNMARKED_R_CASE_SHA256 = "7f4e171f89e9f9e287db821ed78f9ba545458cc221a8604c9be5304c5d97c94c"
 _VERIFIER_PATH = re.compile(r"\S*onetrace_verify[/\\]verify\.py")
 _FINGERPRINT = re.compile(r"<!--fingerprint-->[0-9a-f]{64}<!--/fingerprint-->")
 _VERIFIER_BLOCK = re.compile(r'(<pre data-layer="3">)(\[[A-Z][A-Z-]* *\] .*?)(</pre>)', re.S)

@@ -43,8 +43,16 @@ RELEASE_0_4_0 = {
     "onetrace_verify-0.4.0-py3-none-any.whl": "b2e0df9547a3d6c6761f5722762983b275cd114e5d5b82e4a3a4d5a773a5a2be",
     "onetrace_verify-0.4.0.tar.gz": "12fcc9ac308774be6d031ac33de1e0fa2038f0dcae188ed9106eac67c764ec48",
 }
-#: Since console 0.5.1, onetrace 0.6.1 and onetrace-verify 0.6.1, from PyPI: its four files, as PyPI
-#: serves them, written here by script from its JSON.
+#: Since console 0.7.0, onetrace 0.7.1 and onetrace-verify 0.7.1, from PyPI: its four files, as PyPI
+#: serves them, written here by script from its JSON (`https://pypi.org/pypi/<name>/0.7.1/json`).
+RELEASE_0_7_1 = {
+    "onetrace-0.7.1-py3-none-any.whl": "889ef744a23c3a5ce05489bfe3a0c75ffbc3f97f46e9e28815f6012637f2f995",
+    "onetrace-0.7.1.tar.gz": "62c3effa214ea40977ebeb7748208a0ce4c7e6d837083532b8e54d1752eb57f2",
+    "onetrace_verify-0.7.1-py3-none-any.whl": "912a1111840a5ad1206385186e2808e1af0fa380406ace7c3b28d9bac92bc05c",
+    "onetrace_verify-0.7.1.tar.gz": "fc0a38ab636f2cf5f9253140e5f5e5bcd4a03a2d887631dff8a6ee4a83bcc03c",
+}
+#: Console 0.5.1's to 0.6.1's, onetrace 0.6.1 and onetrace-verify 0.6.1, from PyPI: its four files, as
+#: PyPI serves them, written here by script from its JSON.
 RELEASE_0_6_1 = {
     "onetrace-0.6.1-py3-none-any.whl": "637c719342086ec7ecb303616eba69179112423a722dc51cd335b759412f8980",
     "onetrace-0.6.1.tar.gz": "3ca7f40a94208d3f4e44227e39581aaf031972dae676803d1b0b608578c16bd5",
@@ -108,19 +116,48 @@ ACCEPTED_29AG = {
 }
 
 
-def test_the_lock_pins_exactly_the_0_6_1_wheels(examined):
+def test_the_lock_pins_exactly_the_0_7_1_wheels(examined):
     entries = lock_entries()
     examined(2, "pins checked against PyPI's sha256")
     from tests.test_pins import CRYPTO_PINS
     #: The crypto extra's five, from PyPI, are held by tests/test_signed_run.py.
     assert set(entries) - CRYPTO_PINS == {
-        "onetrace==0.6.1", "onetrace-verify==0.6.1"} and CRYPTO_PINS <= set(entries), entries
+        "onetrace==0.7.1", "onetrace-verify==0.7.1"} and CRYPTO_PINS <= set(entries), entries
     assert {k: v for k, v in entries.items() if k not in CRYPTO_PINS} == {
-        "onetrace==0.6.1": RELEASE_0_6_1["onetrace-0.6.1-py3-none-any.whl"],
-        "onetrace-verify==0.6.1": RELEASE_0_6_1["onetrace_verify-0.6.1-py3-none-any.whl"],
+        "onetrace==0.7.1": RELEASE_0_7_1["onetrace-0.7.1-py3-none-any.whl"],
+        "onetrace-verify==0.7.1": RELEASE_0_7_1["onetrace_verify-0.7.1-py3-none-any.whl"],
     }, entries
-    assert ONETRACE_WHL_SHA256 == RELEASE_0_6_1["onetrace-0.6.1-py3-none-any.whl"]
-    assert ONETRACE_VERIFY_WHL_SHA256 == RELEASE_0_6_1["onetrace_verify-0.6.1-py3-none-any.whl"]
+    assert ONETRACE_WHL_SHA256 == RELEASE_0_7_1["onetrace-0.7.1-py3-none-any.whl"]
+    assert ONETRACE_VERIFY_WHL_SHA256 == RELEASE_0_7_1["onetrace_verify-0.7.1-py3-none-any.whl"]
+
+
+def lock_hashes(text: str) -> dict[str, list[str]]:
+    """{requirement: every sha256 the lock gives it, in order}, parsed from the lock's text."""
+    out: dict[str, list[str]] = {}
+    req = None
+    for line in text.splitlines():
+        if not line.strip() or line.lstrip().startswith("#"):
+            req = None
+            continue
+        if not line[:1].isspace():
+            req = line.split()[0]
+            out[req] = []
+        out[req] += re.findall(r"--hash=sha256:([0-9a-f]{64})", line) if req else []
+    return out
+
+
+def test_each_lock_pins_every_file_pypi_lists_for_the_0_7_1_sdk(examined):
+    """Both locks give onetrace 0.7.1 and onetrace-verify 0.7.1 the sha256 of every file PyPI lists for
+    it, the wheel's then the sdist's, and no other: RELEASE_0_7_1, written from PyPI's JSON."""
+    want = {"onetrace==0.7.1": [RELEASE_0_7_1["onetrace-0.7.1-py3-none-any.whl"],
+                                RELEASE_0_7_1["onetrace-0.7.1.tar.gz"]],
+            "onetrace-verify==0.7.1": [RELEASE_0_7_1["onetrace_verify-0.7.1-py3-none-any.whl"],
+                                       RELEASE_0_7_1["onetrace_verify-0.7.1.tar.gz"]]}
+    locks = {n: lock_hashes((REPO / n).read_text(encoding="utf-8"))
+             for n in ("requirements.lock", "src/onetrace_console/requirements.lock")}
+    examined(2 * len(want), "SDK pins in the two locks")
+    for name, hashes in locks.items():
+        assert {k: hashes.get(k) for k in want} == want, name
 
 
 #: Where the pins are written for an install, and the one record of them.
@@ -167,7 +204,7 @@ def test_the_0_5_0_pins_read_from_the_package_index(examined):
 def test_sabotage_a_development_wheel_s_hash_back_in_the_lock_is_named(examined):
     texts = _pin_sources()
     dev = DEV_0_4_0["onetrace-0.4.0-py3-none-any.whl"]
-    texts["requirements.lock"] = texts["requirements.lock"].replace(RELEASE_0_6_1["onetrace-0.6.1-py3-none-any.whl"], dev)
+    texts["requirements.lock"] = texts["requirements.lock"].replace(RELEASE_0_7_1["onetrace-0.7.1-py3-none-any.whl"], dev)
     examined(1, "planted lock")
     assert dev in texts["requirements.lock"]
     assert development_wheel_problems(texts) == [
@@ -215,10 +252,10 @@ def test_the_wheel_cache_names_what_the_lock_pins(examined):
     entries = lock_entries()
     examined(len(w.WHEELS), "cached wheels checked against the lock")
     assert w.SOURCE == "pypi"
-    assert set(w.WHEELS) == {"onetrace==0.6.1", "onetrace-verify==0.6.1"}
+    assert set(w.WHEELS) == {"onetrace==0.7.1", "onetrace-verify==0.7.1"}
     for req, (name, sha) in w.WHEELS.items():
         assert entries[req] == sha, (req, sha)
-        assert RELEASE_0_6_1[name] == sha, (name, sha)
+        assert RELEASE_0_7_1[name] == sha, (name, sha)
 
 
 def _fake_exam(root: Path) -> None:

@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import json
 import re
+import time
 from pathlib import Path
 
 from onetrace.emit import Instrument, Recorder
@@ -55,6 +56,9 @@ RULES = {
     "2": [("technical", ["app", "error", "crash", "crashed", "login", "log"]),
           ("billing", ["charged", "invoice", "refund", "payment", "billing"])],
 }
+
+#: The wait before the lookup's retry, in seconds: two of the record's milliseconds.
+RETRY_WAIT_S = 0.002
 
 LOOKUP_FAULT = ("set by the demo to show a retry: the first attempt raises this instead of "
                 "running; nothing else went wrong")
@@ -96,8 +100,11 @@ def main(out_dir, run_id: str, ticket: str, rules: str, *, fault: str = "",
                    anchor_reason="a demo record; anchoring is not part of this demo")
 
     def intake(ctx):
-        t = load_json_bounded(ctx.read_external(ticket_path, "application/json", name="ticket",
-                                                trust_class="operator-authored"), "ticket")
+        data = kept_text(ticket_path)
+        ctx.read_memory(data, "application/json", name="ticket", trust_class="operator-authored")
+        ctx.keep_declared = True
+        ctx.keep_input("ticket", data)
+        t = load_json_bounded(ticket_path.read_text(encoding="utf-8"), "ticket")
         return ctx.write_json("ticket.json", t)
 
     def classify(ctx, taken):
@@ -114,9 +121,11 @@ def main(out_dir, run_id: str, ticket: str, rules: str, *, fault: str = "",
             ctx.constant("attempt", attempt)
         if attempt == "1":
             raise TimeoutError(LOOKUP_FAULT)
-        accounts = load_json_bounded(ctx.read_external(accounts_path, "application/json",
-                                                       name="accounts",
-                                                       trust_class="operator-authored"), "accounts")
+        data = kept_text(accounts_path)
+        ctx.read_memory(data, "application/json", name="accounts", trust_class="operator-authored")
+        ctx.keep_declared = True
+        ctx.keep_input("accounts", data)
+        accounts = load_json_bounded(accounts_path.read_text(encoding="utf-8"), "accounts")
         return ctx.write_json("account.json", {"account": t["account"], **accounts[t["account"]]})
 
     def draft_reply(ctx, classed, account, looked_up):
@@ -142,6 +151,10 @@ def main(out_dir, run_id: str, ticket: str, rules: str, *, fault: str = "",
             rec.run_node("lookup_account", "1", lookup, lookup_account, taken, "1")
         except TimeoutError:
             pass  # recorded as an error and kept; the pipeline retries once
+        #: As a retrying caller does, it waits before the retry: long enough that the retry starts in a later
+        #: recorded millisecond than the failed attempt ended (a receipt's times are to the millisecond), so
+        #: each attempt's step page holds its own call, however fast the machine.
+        time.sleep(RETRY_WAIT_S)
         account = rec.run_node("lookup_account", "2", lookup, lookup_account, taken, "2")
         looked_up = "lookup_account#2"
     elif fault:
@@ -155,3 +168,15 @@ def main(out_dir, run_id: str, ticket: str, rules: str, *, fault: str = "",
     rec.run_node("route", None, Instrument("queue-router", "tool", "1.0.0", {"queues": "v1"}),
                  route, drafted)
     rec.close()
+
+
+def kept_inputs(args: dict) -> list[bytes]:
+    """The bytes of every input a run with `args` keeps: its ticket and the accounts, as `main` writes
+    them (invented example data)."""
+    return [json.dumps(json.dumps({"id": args["ticket"], **TICKETS[args["ticket"]]}, sort_keys=True)).encode("utf-8"),
+            json.dumps(json.dumps(ACCOUNTS, sort_keys=True)).encode("utf-8")]
+
+def kept_text(path) -> bytes:
+    """A file this pipeline reads from outside the run, as its step reads it and keeps it: a JSON string
+    of its text, the bytes its digest is computed over (as P7 reads its logger)."""
+    return json.dumps(Path(path).read_text(encoding="utf-8")).encode("utf-8")

@@ -348,7 +348,7 @@ def check(run_dir: Path, *, ran_at: str | None = None, trust_file: str | None = 
 
 
 #: The chain formats whose check is run again with `--require-complete` (`check`).
-COMPLETENESS_FORMATS = ("stage-receipt-chain/0.3",)
+COMPLETENESS_FORMATS = ("stage-receipt-chain/0.3", "stage-receipt-chain/0.4")
 
 
 def nothing_missing_state(folder: Path, envelope: dict | None = None) -> str:
@@ -391,8 +391,9 @@ def nothing_missing_state(folder: Path, envelope: dict | None = None) -> str:
 #:   7. adds the step a run stopped at by its own rule (`ingest.declined_at`);
 #:   8. adds what the run's own check says of its approved plan ("Ran as approved");
 #:   9. rung 3 reads "Not reached" where the run stopped at a step's own rule;
-#:  10. adds rung 1, "Records agree", as the run's own page decides it, and why.
-DERIVED = "derivation-10"
+#:  10. adds rung 1, "Records agree", as the run's own page decides it, and why;
+#:  11. adds whether the run closed and how it ended (`closing.ending_of`).
+DERIVED = "derivation-11"
 
 
 def _reading(folder: Path, envelope: dict | None, read) -> str:
@@ -521,7 +522,11 @@ def derived_from(folder: Path, envelope: dict | None = None) -> dict:
     declared: list[str] = []
     seen: set[str] = set()
     attempts: list[tuple] = []  # (stage name, outcome class, outcome status), in the chain's order
-    for entry in _manifest(folder / "MANIFEST.json").get("chain") or []:
+    #: The close receipt that ends a 0.4 chain is not a step, as at ingest (`viewer.record.is_close`).
+    from onetrace_console.viewer.record import is_close
+    chain = _manifest(folder / "MANIFEST.json").get("chain") or []
+    chain = chain if isinstance(chain, list) else []
+    for i, entry in enumerate(chain):
         name = entry.get("file") if isinstance(entry, dict) else None
         held = files.get(same_file(name)) if isinstance(name, str) else None
         if held is None:
@@ -531,7 +536,7 @@ def derived_from(folder: Path, envelope: dict | None = None) -> dict:
         except (UnicodeDecodeError, ValueError, RecursionError):
             continue
         if isinstance(receipt, dict) and receipt.get("format") in RECEIPT_FORMATS:
-            if held in receipts:
+            if held in receipts or (i == len(chain) - 1 and i > 0 and is_close(receipt)):
                 continue
             receipts.add(held)
             _declared_by(receipt, declared, seen)
@@ -551,7 +556,18 @@ def derived_from(folder: Path, envelope: dict | None = None) -> dict:
             **delivered_and_retries(attempts, seen),
             "last_failed": json.dumps(last_attempt_failed(attempts, declared)),
             "declined": json.dumps(declined_at(attempts, declared)),
+            "ending": _ending(folder),
             "digests": json.dumps(digests), "derived": DERIVED}
+
+
+def _ending(folder: Path) -> str:
+    """The run's kept ending (`closing.ending_of`), or "" where its record cannot be read for it."""
+    from onetrace_console.closing import ending_of
+    from onetrace_console.viewer.record import RecordError
+    try:
+        return json.dumps(ending_of(folder), sort_keys=True)
+    except RecordError:
+        return ""
 
 
 

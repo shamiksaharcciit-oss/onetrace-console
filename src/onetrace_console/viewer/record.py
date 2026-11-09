@@ -46,12 +46,58 @@ class Step:
     data: dict             # the same bytes, parsed; never re-serialised for display
 
 
+#: Format 0.4's close receipt (onetrace's `docs/format.md`, "The close receipt"): the receipt a run
+#: writes when it closes, after its last step. Its stage and instrument are `onetrace.close`, of kind
+#: `close`, and every 0.4 receipt declares that stage last. It is not a step: the verbs set it aside
+#: before they compare, and so does this console. The name is reserved from format 0.4 on only: in a
+#: run written before, a stage of that name is a step like any other.
+CLOSE_STAGE = "onetrace.close"
+CLOSE_KIND = "close"
+
+
+def reserves_close(receipt_format) -> bool:
+    """The receipt's own format is `stage-receipt/0.4` or later, where `onetrace.close` is reserved."""
+    if not isinstance(receipt_format, str) or not receipt_format.startswith("stage-receipt/"):
+        return False
+    major, _, minor = receipt_format.split("/", 1)[1].partition(".")
+    return major.isdigit() and (int(major) > 0 or (minor.isdigit() and int(minor) >= 4))
+
+
+def is_close(receipt) -> bool:
+    """A close receipt: its own format reserves the name, and its instrument is `onetrace.close`
+    of kind `close` (the format's first reading rule)."""
+    if not isinstance(receipt, dict) or not reserves_close(receipt.get("format")):
+        return False
+    instrument = receipt.get("instrument")
+    return (isinstance(instrument, dict) and instrument.get("id") == CLOSE_STAGE
+            and instrument.get("kind") == CLOSE_KIND)
+
+
+def stage_names(receipt: dict, field: str):
+    """A receipt's `coverage.<field>` (`declared_stages`, `emitting_stages`) as its steps read: the
+    list as recorded, less `onetrace.close` where the receipt's format reserves it. Whatever is not a
+    list is returned as it is, for the shape checks to read."""
+    coverage = receipt.get("coverage") if isinstance(receipt, dict) else None
+    names = coverage.get(field) if isinstance(coverage, dict) else None
+    if not isinstance(names, list) or not reserves_close(receipt.get("format")):
+        return names
+    return [n for n in names if n != CLOSE_STAGE]
+
+
 @dataclass(frozen=True, slots=True)
 class Record:
     run_dir: Path
     manifest_raw: bytes
     manifest: dict
+    #: The run's steps, in chain order: every receipt but a close receipt that ends the chain.
     steps: tuple[Step, ...]
+    #: The close receipt that ends the chain, set aside from the steps; None for a run with none.
+    close: Step | None = None
+
+    @property
+    def receipts(self) -> tuple[Step, ...]:
+        """Every receipt in the chain, in its order: the steps, then the close receipt."""
+        return self.steps + ((self.close,) if self.close is not None else ())
 
     @property
     def run_id(self) -> str:
@@ -165,5 +211,6 @@ def read_record(run_dir: Path, manifest_name: str = "MANIFEST.json") -> Record:
                           manifest_fingerprint=str(entry.get("digest", "")),
                           raw=raw,
                           data=_load_json(raw, rel)))
+    close = steps.pop() if len(steps) > 1 and is_close(steps[-1].data) else None
     return Record(run_dir=run_dir, manifest_raw=manifest_raw, manifest=manifest,
-                  steps=tuple(steps))
+                  steps=tuple(steps), close=close)

@@ -66,14 +66,14 @@ def test_a_0_1_delivery_is_taken(store, examined):
 
 
 def test_a_delivery_in_the_installed_sdk_s_format_is_taken(store, tmp_path, examined):
-    """What the pinned SDK writes now (format 0.3, onetrace 0.4.0) is taken."""
+    """What the pinned SDK writes now (format 0.4, onetrace 0.7.1) is taken."""
     _require_installed()
     from tests.test_last_attempt_failed import _emit
-    _emit(tmp_path / "r", "a-0-3-run", [("a", "1", "ok"), ("b", "1", "ok")])
+    _emit(tmp_path / "r", "a-0-4-run", [("a", "1", "ok"), ("b", "1", "ok")])
     got = accept(_delivery(tmp_path / "r"), store)
-    examined(1, "0.3 delivery taken")
+    examined(1, "0.4 delivery taken")
     assert got.run is not None, getattr(got, "body", got)
-    assert got.run.format == "stage-receipt-chain/0.3", got.run.format
+    assert got.run.format == "stage-receipt-chain/0.4", got.run.format
 
 
 def test_a_0_2_delivery_is_taken(store, examined):

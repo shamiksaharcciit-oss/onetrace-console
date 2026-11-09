@@ -57,8 +57,11 @@ def main(out_dir, run_id: str, frame: str, exposure_tenths: str) -> None:
                    policy="fail-closed", anchor_reason="a demo record; anchoring is not part of this demo")
 
     def measure(ctx):
-        raw = ctx.read_external(frame_path, "application/json", name="frame.json",
-                                trust_class="externally-sourced")
+        data = kept_text(frame_path)
+        ctx.read_memory(data, "application/json", name="frame.json", trust_class="externally-sourced")
+        ctx.keep_declared = True
+        ctx.keep_input("frame.json", data)
+        raw = frame_path.read_bytes()
         ctx.constant("data", EXAMPLE)
         rows = [int(r) for r in load_json_bounded(raw.decode("utf-8"), "the frame")["rows"]]
         liquid = [r * int(exposure_tenths) // 10 > EDGE for r in rows]
@@ -89,5 +92,11 @@ def main(out_dir, run_id: str, frame: str, exposure_tenths: str) -> None:
 
 
 def kept_inputs(args: dict) -> list[bytes]:
-    """P6 keeps no input's text."""
-    return []
+    """The bytes of every input a run with `args` keeps: the camera's frame, as `main` writes it
+    (invented example data)."""
+    return [json.dumps(frame_bytes(args["frame"]).decode("utf-8")).encode("utf-8")]
+
+def kept_text(path) -> bytes:
+    """A file this pipeline reads from outside the run, as its step reads it and keeps it: a JSON string
+    of its text, the bytes its digest is computed over (as P7 reads its logger)."""
+    return json.dumps(Path(path).read_text(encoding="utf-8")).encode("utf-8")

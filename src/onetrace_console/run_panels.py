@@ -1,6 +1,6 @@
 """What onetrace 0.5 records about a run, on its page and its steps' pages: the gated steps and their
 decisions (`onedoor_panel`), the span context (`trace_panel`), and steps and runs inside steps
-(`nesting_view`). Each section is spliced into the viewer's run page before it is sealed, as the
+(`nesting_view`); and what onetrace 0.7's zero-configuration recording holds about it (`auto_panel`). Each section is spliced into the viewer's run page before it is sealed, as the
 console's other blocks are; a run that records none of these gets no new section.
 
 The decisions, the span context and the nesting are read from the record's contents, so on a run
@@ -9,7 +9,7 @@ verifier's own decision rows are a check, not the record's contents: they stay o
 """
 from __future__ import annotations
 
-from onetrace_console import model_call, nesting_view, onedoor_panel, span_tree, trace_panel
+from onetrace_console import auto_panel, expectations, model_call, nesting_view, onedoor_panel, span_tree, trace_panel
 from onetrace_console.bounded_json import load_json_bounded
 
 #: The viewer's section the new ones are placed before, on every run page.
@@ -45,7 +45,16 @@ def sections(run, store) -> str:
         rows = (f'<section data-section="onedoor-rows" class="onedoor"><h2>{onedoor_panel.ROWS_HEADING}</h2>'
                 f'{onedoor_panel.rows_block(onedoor_panel.decision_rows(_envelope(run, store)))}</section>')
     held = held_runs(store)
-    return (nesting_view.parent_section(manifest, held) + gated + rows
+    #: A zero-configuration run's hooks, boundaries and gaps (onetrace-auto, format 0.4), read from the
+    #: manifest and every receipt, the close receipt's too, with the verifier's `auto:` rows.
+    from onetrace_console.stage_pages import _receipts
+    auto = auto_panel.run_section(manifest, [r["receipt"] for r in _receipts(run, store)], _envelope(run, store))
+    #: Each step's declared expectations, with the verifier's row for each (onetrace 0.7).
+    expected = expectations.run_section([s["receipt"] for s in steps], _envelope(run, store))
+    #: And those declared after the run, from a file the person names: apart, and labelled so.
+    from onetrace_console import expectations_after
+    expected += expectations_after.section(run, store, public=rendering_public())
+    return (auto + expected + nesting_view.parent_section(manifest, held) + gated + rows
             + trace_panel.run_section(manifest, steps, tracing_link(), public=rendering_public())
             + span_tree.run_section(span_tree.for_run(run, store), [s["receipt"] for s in steps])
             + nesting_view.run_section(steps, held))

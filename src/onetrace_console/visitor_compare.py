@@ -322,12 +322,14 @@ def picker(pipeline) -> str:
     def select(name: str, label: str, chosen: int) -> str:
         options = "".join(f'<option value="{escape(r.run_id)}"{" selected" if i == chosen else ""}>'
                           f"{escape(r.run_id)}</option>" for i, r in enumerate(runs))
-        return f'<label>{escape(label)} <select name="{name}">{options}</select></label>'
+        #: One field: the label's words above its own select, as the local console's picker draws it.
+        return (f'<label class="compare-field"><span class="compare-label">{escape(label)}</span>'
+                f'<select name="{name}">{options}</select></label>')
     return (f'<section id="visitor-compare" data-section="visitor-compare" class="visitor-compare">'
             f"<h2>{escape(PICKER_HEAD)}</h2>"
             f"<p>{escape(PICKER_WORDS.format(per_minute=PER_MINUTE))}</p>"
             f'<form method="post" action="/compare" data-visitor-compare>'
-            f'{select("a", "Baseline (run A)", 0)} {select("b", "Candidate (run B)", 1)} '
+            f'{select("a", "Baseline (run A)", 0)}{select("b", "Candidate (run B)", 1)}'
             f'<button type="submit">{escape(PICKER_BUTTON)}</button></form></section>')
 
 

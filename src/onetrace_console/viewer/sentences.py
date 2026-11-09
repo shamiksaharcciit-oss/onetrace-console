@@ -791,6 +791,7 @@ LABELS: dict[str, str] = {
     "nothing.out": "nothing",
     "step.of": "step {n} of {total}",
     "label.manifest": "The list of steps",
+    "label.close": "The close receipt",
     "unit.bytes": "bytes",
     "section.reproduce": "What could be re-checked",
     # 030 §1's own words for the two digests beneath the eighth sentence, "nothing else".
@@ -935,6 +936,9 @@ LABELS_RULED_29GS: dict[str, str] = {
 #: Each value names the §5 bullet (or §4 paragraph) the label serves. The words are this
 #: channel's: C034 gives the items, not their wording, except where noted.
 LABELS_UNRULED: dict[str, str] = {
+    "label.close":
+        "the name onetrace's format note gives the receipt a format 0.4 run writes when it closes, "
+        "and the name of onetrace-verify's own row for it, `the close receipt`; no words ruled yet",
     "check.source_fallback":
         "the reader's specification: it requires the text parser kept \"only as a fallback that "
         "says openly that it is the fallback\", which authorises a sentence and words "

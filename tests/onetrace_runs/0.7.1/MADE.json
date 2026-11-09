@@ -1,0 +1,36 @@
+{
+  "runs": {
+    "auto-bound": {
+      "command": "ONETRACE_AUTO=1 ONETRACE_AUTO_MAX_RUN_BYTES=3000 ONETRACE_RUNS=runs ONETRACE_RUN_ID=auto-bound python auto_app.py",
+      "exit": 0,
+      "folder": "auto-bound"
+    },
+    "auto-orders": {
+      "command": "ONETRACE_AUTO=1 ONETRACE_AUTO_KEEP=outputs ONETRACE_RUNS=runs ONETRACE_RUN_ID=auto-orders python auto_app.py",
+      "exit": 0,
+      "folder": "auto-orders"
+    },
+    "refund-closed": {
+      "command": "RUN_ENDING=closed ONETRACE_RUN_ID=refund-closed python pipeline.py",
+      "exit": 0,
+      "folder": "refund-closed"
+    },
+    "refund-killed": {
+      "command": "RUN_ENDING=killed ONETRACE_RUN_ID=refund-killed python pipeline.py",
+      "exit": 3,
+      "folder": "refund-killed"
+    },
+    "refund-raised": {
+      "command": "RUN_ENDING=raised ONETRACE_RUN_ID=refund-raised python pipeline.py",
+      "exit": 1,
+      "folder": "refund-raised"
+    }
+  },
+  "versions": {
+    "onetrace": "0.7.1",
+    "onetrace-auto": "0.7.1",
+    "onetrace-verify": "0.7.1",
+    "python": "3.12.10",
+    "requests": "2.34.2"
+  }
+}

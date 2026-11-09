@@ -66,25 +66,65 @@ COMMITTED_FORMAT = ("stage-receipt-chain/0.2", "stage-receipt/0.2")
 _DIGEST = re.compile(rb"[0-9a-f]{64}")
 
 
-def same_run_in_a_later_format(committed: bytes, made: bytes) -> bool:
-    """`made` is `committed` recorded in format 0.3: the same JSON once its 64-hex digests are masked,
-    its format strings read as 0.2 and its manifest's `outputs_kept: all` left out. Nothing else."""
+#: The later formats the pinned SDK has recorded the demo in: 0.3, and since onetrace 0.7, 0.4.
+LATER = ("0.3", "0.4")
+#: Format 0.4's close receipt (onetrace's `docs/format.md`, "The close receipt"): the chain's last
+#: entry, which every 0.4 receipt declares last. It is not a step.
+CLOSE = "onetrace.close"
+
+
+def same_run_in_a_later_format(committed: bytes, made: bytes, closed_complete: bool = False) -> bool:
+    """`made` is `committed` recorded in format 0.3 or 0.4: the same JSON once its 64-hex digests are
+    masked, its format strings read as 0.2, its manifest's `outputs_kept: all` left out, and in 0.4 the
+    close receipt set aside -- the chain's last entry, if it is the close receipt's, the close stage a
+    receipt declares last, and that entry's bytes in the size of an earlier receipt read as an input.
+    And where the run's close receipt reads `complete` (`closed_complete`), a 0.4 step's `incomplete`
+    reads as `complete`: in 0.4 only the close receipt can (the format's second reading rule). Nothing
+    else."""
     try:
         a, b = (json.loads(_DIGEST.sub(b"<digest>", x).decode("utf-8")) for x in (committed, made))
     except ValueError:
         return False
     if not (isinstance(a, dict) and isinstance(b, dict)):
         return False
-    if b.get("format") in ("stage-receipt-chain/0.3", "stage-receipt/0.3"):
-        b["format"] = b["format"][:-1] + "2"
+    fmt = b.get("format")
+    if fmt in [f"stage-receipt-chain/{v}" for v in LATER] + [f"stage-receipt/{v}" for v in LATER]:
+        b["format"] = fmt.rsplit("/", 1)[0] + "/0.2"
+    if fmt in ("stage-receipt-chain/0.4", "stage-receipt/0.4"):
+        chain = b.get("chain")
+        if isinstance(chain, list) and chain and isinstance(chain[-1], dict) and chain[-1].get("stage") == CLOSE:
+            b["chain"] = chain[:-1]
+        coverage = b.get("coverage")
+        if isinstance(coverage, dict) and (coverage.get("declared_stages") or [None])[-1] == CLOSE:
+            coverage["declared_stages"] = coverage["declared_stages"][:-1]
+        if closed_complete and isinstance(coverage, dict) and coverage.get("completeness") == "incomplete" \
+                and ((a.get("coverage") or {}).get("completeness")) == "complete":
+            coverage["completeness"] = "complete"
+        #: An earlier receipt read as an input is that receipt's bytes, which declare the close stage
+        #: too: longer by exactly its entry in the list.
+        for item in b.get("inputs") or []:
+            if isinstance(item, dict) and str(item.get("name", "")).startswith("receipt:") \
+                    and isinstance(item.get("bytes"), str) and item["bytes"].isdigit():
+                item["bytes"] = str(int(item["bytes"]) - len(f',"{CLOSE}"'))
     if b.get("outputs_kept") == "all" and "outputs_kept" not in a:
         del b["outputs_kept"]
     return a == b
 
 
+def _close_receipt(run: Path) -> str | None:
+    """The run's close receipt's file, where it is in format 0.4 and the chain's last entry."""
+    from onetrace_console.viewer.record import is_close
+    chain = json.loads((run / "MANIFEST.json").read_bytes()).get("chain") or []
+    if not chain:
+        return None
+    last = chain[-1]["file"]
+    return last if is_close(json.loads((run / last).read_bytes())) else None
+
+
 def test_the_committed_runs_are_what_the_script_produces(regenerated, examined):
     """Every file the script writes: byte for byte, or -- the manifest and the receipts, which the
-    pinned SDK records in format 0.3 -- the same run in that later format and nothing else. The
+    pinned SDK records in a later format -- the same run in that later format and nothing else, a 0.4
+    run's close receipt set aside (`same_run_in_a_later_format`). The
     signatures beside the chain are not the script's: they were added after, with a demo key that no
     longer exists (the README says so), so they are held by the signing tests below, and are the
     only files the script does not make."""
@@ -94,12 +134,16 @@ def test_the_committed_runs_are_what_the_script_produces(regenerated, examined):
         signed = {rel for rel in committed if str(rel).replace("\\", "/").startswith("signatures/")}
         assert [str(rel).replace("\\", "/") for rel in sorted(signed)] == ["signatures/1.json"], day
         committed = [rel for rel in committed if rel not in signed]
+        close = _close_receipt(regenerated / f"day-{day}")
+        made = [rel for rel in made if rel != close]
+        closed_complete = close is not None and json.loads((regenerated / f"day-{day}" / close).read_bytes())[
+            "coverage"]["completeness"] == "complete"
         assert committed == made, day
         assert json.loads((RUNS / f"day-{day}" / "MANIFEST.json").read_bytes())["format"] == COMMITTED_FORMAT[0]
         for rel in committed:
             x, y = (RUNS / f"day-{day}" / rel).read_bytes(), (regenerated / f"day-{day}" / rel).read_bytes()
             recorded = rel == "MANIFEST.json" or str(rel).replace("\\", "/").startswith("receipts/")
-            assert x == y or (recorded and same_run_in_a_later_format(x, y)), rel
+            assert x == y or (recorded and same_run_in_a_later_format(x, y, closed_complete)), rel
             checked += 1
     examined(checked, "files of the two committed runs compared with a fresh generation")
 
@@ -111,7 +155,17 @@ def test_sabotage_a_changed_value_in_a_regenerated_receipt_is_named(regenerated,
     examined(2, "planted receipts")
     assert same_run_in_a_later_format(x, y)
     assert not same_run_in_a_later_format(x, y.replace(b'"model"', b'"modeL"', 1))
-    assert not same_run_in_a_later_format(x, y.replace(b'"stage-receipt/0.3"', b'"stage-receipt/0.4"', 1))
+    assert not same_run_in_a_later_format(x, y.replace(b'"stage-receipt/0.4"', b'"stage-receipt/0.5"', 1)
+                                          .replace(b'"stage-receipt/0.3"', b'"stage-receipt/0.5"', 1))
+    #: In 0.4, only the close stage declared last is set aside: another stage declared is a difference;
+    #: and a last step's `incomplete` reads as `complete` only where the close receipt reads so.
+    last = "receipts/07-config-applied.json"
+    lx, ly = (RUNS / "day-1" / last).read_bytes(), (regenerated / "day-1" / last).read_bytes()
+    if b'"stage-receipt/0.4"' in ly:
+        assert same_run_in_a_later_format(lx, ly, closed_complete=True)
+        assert not same_run_in_a_later_format(lx, ly, closed_complete=False)
+    if b'"stage-receipt/0.4"' in y:
+        assert not same_run_in_a_later_format(x, y.replace(b'"onetrace.close"]', b'"onetrace.closed"]', 1))
 
 
 def _data(receipt: dict) -> list[str]:
@@ -186,12 +240,12 @@ def test_the_first_difference_is_the_model_stage_and_only_its_seed_differs(tmp_p
 
 
 def test_the_store_takes_exactly_the_listed_formats():
-    """Format 0.3 added, and the store's lists are exactly these -- a format
+    """Formats 0.3 and 0.4 added, and the store's lists are exactly these -- a format
     joins or leaves them only by changing this test."""
     from onetrace_console.ingest import MANIFEST_FORMATS, RECEIPT_FORMATS
-    assert MANIFEST_FORMATS == ("stage-receipt-chain/0.3", "stage-receipt-chain/0.2",
+    assert MANIFEST_FORMATS == ("stage-receipt-chain/0.4", "stage-receipt-chain/0.3", "stage-receipt-chain/0.2",
                                 "stage-receipt-chain/0.1", "stage-receipt-chain/0.0-preview")
-    assert RECEIPT_FORMATS == ("stage-receipt/0.3", "stage-receipt/0.2", "stage-receipt/0.1",
+    assert RECEIPT_FORMATS == ("stage-receipt/0.4", "stage-receipt/0.3", "stage-receipt/0.2", "stage-receipt/0.1",
                                "stage-receipt/0.0-preview")
     fmt = json.loads((RUNS / "day-1" / "MANIFEST.json").read_bytes())["format"]
     assert fmt in MANIFEST_FORMATS, "the demo's own format is one the store implements"

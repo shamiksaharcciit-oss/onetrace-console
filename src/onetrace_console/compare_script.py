@@ -23,3 +23,20 @@ COMPARE_SCRIPT = (
     ".then(function(x){if(x.ok&&x.j.pages&&x.j.pages.diff){location.href=x.j.pages.diff;return}"
     "b.disabled=false;if(s){s.textContent=said(x.j.error||x.j.answer||'Not compared')}},"
     "function(){b.disabled=false;if(s){s.textContent='The console could not be reached.'}})})})</script>")
+
+
+#: A static export (console 0.7.0): a Compare control shown disabled, with one line, as the first-run-to-leave
+#: control is (`bisect_page.exported`).
+NEEDS_CONSOLE = "Needs a running console."
+_LIVE = __import__("re").compile(r'<button type="button" hidden data-compare-post="[^"]*">([^<]*)</button>')
+_SAID = __import__("re").compile(r'<span data-compare-said[^>]*></span>')
+
+
+def exported(page: str) -> str:
+    """A page as a static export shows it: each Compare button disabled, with "Needs a running console.";
+    no script that reads the session's CSRF cookie, and no line about the session's token."""
+    from onetrace_console.choose_pages import HOW_EXPORTED, HOW_LOCAL
+    page = page.replace(COMPARE_SCRIPT, "").replace(HOW_LOCAL, HOW_EXPORTED)
+    page = _LIVE.sub(lambda m: f'<button type="button" disabled data-compare-needs-console>{m.group(1)}</button> '
+                               f'<span data-needs-console>{NEEDS_CONSOLE}</span>', page)
+    return _SAID.sub("", page)

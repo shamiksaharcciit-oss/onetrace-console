@@ -38,7 +38,7 @@ import json
 import re
 from dataclasses import dataclass
 
-from onetrace_console.viewer.record import Record, RecordUnreadable, Step, unshowable
+from onetrace_console.viewer.record import Record, RecordUnreadable, Step, stage_names, unshowable
 from onetrace_console.viewer.report import CLI_COMMAND, SOURCE_TEXT, Finding, Report, ReportUnreadable, parse
 from onetrace_console.viewer.sentences import STEP_WORDS, template
 from onetrace_console.viewer.verbs import (DagNode, Failure, LadderRow, Reproduce, ReproduceRow, SingleRun, SingleRunDag, TwoRun, boundary_covers)
@@ -306,8 +306,9 @@ RUN_SUBJECT = "run"
 #: graph rows, read from `--json`. Neither is a step's; the second kind is
 #: drawn in the "Ran as approved" rung, not beside the strip. And onetrace-verify 0.5.0's
 #: `decisions:` and `nesting:` rows, about the run's gated steps and the runs inside its steps:
-#: drawn in the run page's own sections for them, never as a step.
-WHOLE_RUN = frozenset({RUN_SUBJECT, "", "decisions", "nesting"})
+#: drawn in the run page's own sections for them, never as a step. And onetrace-verify 0.7's `auto:`
+#: rows, about a zero-configuration run's hooks and boundaries: drawn in its own section, never as a step.
+WHOLE_RUN = frozenset({RUN_SUBJECT, "", "decisions", "nesting", "auto"})
 #: A record beside the chain, at run level like `run:` -- exactly
 #: `anchors/<name>.json` or `signatures/<name>.json` (one segment after the folder, no backslash,
 #: nothing after `.json`), whose file is in the run, compared by code point. Anything else under
@@ -368,13 +369,12 @@ def missing_stages(record: Record) -> tuple[str, ...]:
     #: declared names (a 48 KB upload) took 38 s per page (round 4, B3).
     seen: set[str] = set()
     emitting: set[str] = set()
-    for s in record.steps:
-        cov = s.data.get("coverage", {})
-        for name in cov.get("declared_stages", []) or []:
+    for s in record.receipts:
+        for name in stage_names(s.data, "declared_stages") or []:
             if str(name) not in seen:
                 seen.add(str(name))
                 declared.append(str(name))
-        emitting.update(str(n) for n in (cov.get("emitting_stages", []) or []))
+        emitting.update(str(n) for n in (stage_names(s.data, "emitting_stages") or []))
     return tuple(name for name in declared if name not in emitting)
 
 
@@ -600,8 +600,7 @@ def last_attempt_failed(record: Record) -> tuple[tuple[str, str], ...]:
     declared: list[str] = []
     last: dict[str, tuple[str, str]] = {}
     for s in record.steps:
-        coverage = s.data.get("coverage")
-        names = coverage.get("declared_stages") if isinstance(coverage, dict) else None
+        names = stage_names(s.data, "declared_stages")
         for name in names if isinstance(names, list) else ():
             if isinstance(name, str) and name not in declared:
                 declared.append(name)
@@ -625,8 +624,7 @@ def declined_at_step(record: Record) -> tuple:
     seen: set = set()
     last = None
     for s in record.steps:
-        coverage = s.data.get("coverage")
-        names = coverage.get("declared_stages") if isinstance(coverage, dict) else None
+        names = stage_names(s.data, "declared_stages")
         for name in names if isinstance(names, list) else ():
             if isinstance(name, str) and name not in declared:
                 declared.append(name)
@@ -952,7 +950,8 @@ def _step_view(record: Record, report: Report | None, step: Step) -> StepView:
 
 
 def _checked_lists(record: Record, report: Report) -> tuple[tuple[CheckCount, ...], tuple[CheckCount, ...]]:
-    subjects = [s.file for s in record.steps] + ["manifest"]
+    #: Every receipt is a subject: the close receipt as well as the steps.
+    subjects = [s.file for s in record.receipts] + ["manifest"]
     #: The run itself is a subject too, and its rows are drawn beside the strip, not listed here.
     #: A row naming no subject is about the run as a whole too: 0.2.0's two graph rows, read from
     #: `--json`, drawn in the "Ran as approved" rung, not listed here.
@@ -963,6 +962,8 @@ def _checked_lists(record: Record, report: Report) -> tuple[tuple[CheckCount, ..
     labels = {s.file: template("step.of").format(n=s.manifest_index, total=total) + " · " + _words(s)
               for s in record.steps}
     labels["manifest"] = template("label.manifest")
+    if record.close is not None:
+        labels[record.close.file] = template("label.close")
     checked: list[CheckCount] = []
     not_checked: list[CheckCount] = []
     for subj in subjects:
@@ -1036,7 +1037,7 @@ def _records_agree(record: Record, report: Report | None, strip: Strip,
         # A FAIL is a no; a PASS whose rows cannot be read cannot be tied to every step.
         return _rung("records-agree", _NO if report.overall == "fail" else _COULDNT, strip.sentence)
     if strip.state == "holds":
-        subjects = [s.file for s in record.steps] + ["manifest"]
+        subjects = [s.file for s in record.receipts] + ["manifest"]
         if not all(count_findings(report, "pass", subject) for subject in subjects):
             return _rung("records-agree", _COULDNT, line("rung.records.partial"))
         # The evidence for a yes is the verifier run with
@@ -1140,7 +1141,7 @@ def _nothing_missing(record: Record, report: Report | None = None) -> Rung:
     receipt that is incomplete or whose own lists leave a declared stage unemitted, a gap.
     """
     unstated = False
-    for s in record.steps:
+    for s in record.receipts:
         coverage = s.data.get("coverage", _ABSENT)
         emission = s.data.get("emission", _ABSENT)
         present = [part for part in (coverage, emission) if part is not _ABSENT]
@@ -1168,7 +1169,12 @@ def _nothing_missing(record: Record, report: Report | None = None) -> Rung:
             unstated = True
     if unstated:
         return _rung("nothing-missing", _NOT_CHECKED, line("rung.missing.unstated"))
-    coverages = [s.data["coverage"] for s in record.steps]
+    #: Read as the steps read them: `onetrace.close` set aside where the format reserves it; and
+    #: completeness off the last receipt, the close receipt where the run has one (the format's
+    #: second reading rule).
+    coverages = [{"declared_stages": stage_names(s.data, "declared_stages"),
+                  "emitting_stages": stage_names(s.data, "emitting_stages"),
+                  "completeness": s.data["coverage"]["completeness"]} for s in record.receipts]
     declared = {n for c in coverages for n in c["declared_stages"]}
     in_trail = {_stage(s) for s in record.steps}
     says_complete_and_is_not = any(
@@ -1201,8 +1207,7 @@ def _declared_order(record: Record) -> list[str]:
     """Every stage the receipts declare, in the order they first declare it."""
     order: list[str] = []
     for s in record.steps:
-        coverage = s.data.get("coverage")
-        names = coverage.get("declared_stages") if isinstance(coverage, dict) else None
+        names = stage_names(s.data, "declared_stages")
         for name in names if isinstance(names, list) else ():
             if isinstance(name, str) and name not in order:
                 order.append(name)
@@ -1778,7 +1783,7 @@ class ListRow:
 def list_row(record: Record) -> ListRow:
     """A list's row for one run: refused, as the run's own pages are, for a part it cannot read."""
     refuse_unreadable_parts(record)
-    case_for, more = _case_for(record.steps[0].data.get("coverage", {}).get("declared_stages", []))
+    case_for, more = _case_for(stage_names(record.steps[0].data, "declared_stages") or [])
     return ListRow(run_id=record.run_id, case_ran=_case_ran(record), case_for=case_for,
                    step_count=len(record.steps), case_for_more=more)
 
@@ -1825,7 +1830,7 @@ def build_model(record: Record, envelope: dict | None, generated_at: str,
             report, problem = None, str(e)
     answer, question = _answer(record)
     first, last = record.steps[0].data, record.steps[-1].data
-    case_for, case_for_more = _case_for(first.get("coverage", {}).get("declared_stages", []))
+    case_for, case_for_more = _case_for(stage_names(first, "declared_stages") or [])
     env = envelope or {}
     changed, reproduced, boundary = _verb_states(verbs)
     strip = _strip(record, report, problem)

@@ -87,7 +87,7 @@ def test_each_p8_run_reads_as_its_builder_made_it(demo, examined):
     examined(len(READINGS), "P8 runs")
     assert reading_problems(store, runs, READINGS) == []
     #: Declined at its last declared step: a receipt for each of the three, none past it.
-    receipts = [p for p, _ in runs[DECLINED].listing if p.startswith("receipts/")]
+    receipts = [p for p, _ in runs[DECLINED].listing if p.startswith("receipts/") and not p.endswith("-onetrace-close.json")]
     assert len(receipts) == len(invoice_match.STAGES) and invoice_match.STAGES[-1] == "approve_payment", receipts
 
 
