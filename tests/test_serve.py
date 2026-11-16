@@ -5,19 +5,18 @@ exercises it over real HTTP with `urllib` -- no mocking of the handler, because 
 point of this module is the wiring between a request and the library calls underneath it, and
 a mock would test the mock.
 """
+
 from __future__ import annotations
 
 import json
 import urllib.error
 import urllib.request
 from pathlib import Path
-from tests.http_limits import limit
 
 import pytest
 
-from onetrace_console.store import Store
 from tests.conftest import make_tar
-
+from tests.http_limits import limit
 
 #: `server` moved to `tests/conftest.py`, shared with `test_upload_hardening.py`.
 
@@ -115,8 +114,9 @@ def _real_delivery(folder: Path) -> bytes:
     files = {"MANIFEST.json": (folder / "MANIFEST.json").read_bytes()}
     for entry in manifest["chain"]:
         files[entry["file"]] = (folder / entry["file"]).read_bytes()
-    files["SHA256SUMS"] = ("\n".join(
-        f"{hashlib.sha256(b).hexdigest()}  {p}" for p, b in files.items()) + "\n").encode("utf-8")
+    files["SHA256SUMS"] = ("\n".join(f"{hashlib.sha256(b).hexdigest()}  {p}" for p, b in files.items()) + "\n").encode(
+        "utf-8"
+    )
     buf = io.BytesIO()
     with tarfile.open(fileobj=buf, mode="w") as tar:
         for path, blob in files.items():
@@ -138,8 +138,7 @@ def test_compare_after_two_ingests_renders_the_diff_page(server, examined):
     exam = Path(__file__).resolve().parent.parent / ".sdk-fixtures" / "exam" / "fixtures" / "ingest-r1"
     run_c, run_c_poppler24 = exam / "run_C", exam / "run_C_poppler24"
     if not (run_c.is_dir() and run_c_poppler24.is_dir()):
-        pytest.fail(f"the SDK's exam fixtures are not there under {exam}\n"
-                   f"    python tools/fetch_sdk_fixtures.py")
+        pytest.fail(f"the SDK's exam fixtures are not there under {exam}\n    python tools/fetch_sdk_fixtures.py")
 
     base, store_root = server
     s1, b1 = _post(base, "/v1/runs", _real_delivery(run_c))
@@ -182,8 +181,7 @@ def test_a_restart_regenerates_every_page_from_the_store_alone(server, examined)
     exam = Path(__file__).resolve().parent.parent / ".sdk-fixtures" / "exam" / "fixtures" / "ingest-r1"
     run_c, run_c_poppler24 = exam / "run_C", exam / "run_C_poppler24"
     if not (run_c.is_dir() and run_c_poppler24.is_dir()):
-        pytest.fail(f"the SDK's exam fixtures are not there under {exam}\n"
-                   f"    python tools/fetch_sdk_fixtures.py")
+        pytest.fail(f"the SDK's exam fixtures are not there under {exam}\n    python tools/fetch_sdk_fixtures.py")
 
     base, store_root = server
     _, b1 = _post(base, "/v1/runs", _real_delivery(run_c))
@@ -193,8 +191,7 @@ def test_a_restart_regenerates_every_page_from_the_store_alone(server, examined)
     _, b3 = _post(base, f"/compare?a={a['run_key']}&b={b['run_key']}")
     diff_rel = json.loads(b3)["pages"]["diff"]
 
-    before = sorted(p.relative_to(store_root / "pages").as_posix()
-                    for p in (store_root / "pages").rglob("*.html"))
+    before = sorted(p.relative_to(store_root / "pages").as_posix() for p in (store_root / "pages").rglob("*.html"))
     examined(len(before), "pages present before the simulated restart")
     assert any("runs/" in p for p in before) and any("diff/" in p for p in before), before
 
@@ -204,19 +201,19 @@ def test_a_restart_regenerates_every_page_from_the_store_alone(server, examined)
     #: The store itself, opened fresh -- not the handler's live one -- the same way a real
     #: restart would open a Store over the volume's existing contents.
     from onetrace_console.store import Store
+
     reopened = Store(store_root / "store")
     _render_startup_pages(reopened, store_root)
 
-    after = sorted(p.relative_to(store_root / "pages").as_posix()
-                  for p in (store_root / "pages").rglob("*.html"))
-    assert after == before, (
-        f"regeneration did not reproduce the same pages\n  before: {before}\n  after: {after}")
+    after = sorted(p.relative_to(store_root / "pages").as_posix() for p in (store_root / "pages").rglob("*.html"))
+    assert after == before, f"regeneration did not reproduce the same pages\n  before: {before}\n  after: {after}"
 
     s, body = _get(base, diff_rel)
     assert s == 200 and len(body) > 0, (s, diff_rel)
 
 
 # ------------------------------------------- main() with no config file: local mode
+
 
 class _ReachedServerConstruction(Exception):
     """Raised by a stand-in server the moment `main()` constructs it, carrying the address."""
@@ -235,15 +232,17 @@ def _capture_server(monkeypatch):
     return serve_module
 
 
-def test_a_named_config_file_is_the_explicit_flag_that_binds_elsewhere(tmp_path, monkeypatch,
-                                                                     examined):
+def test_a_named_config_file_is_the_explicit_flag_that_binds_elsewhere(tmp_path, monkeypatch, examined):
     """Beyond loopback only by naming a file that says so -- and with sign-in on it must also
     pass the existing plain-HTTP refusal, unchanged."""
     from onetrace_console.config import ENV_VAR
+
     config_path = tmp_path / "config.json"
     config_path.write_text(
         f'{{"host": "0.0.0.0", "port": 8081, "store_root": "{(tmp_path / "s").as_posix()}", '
-        f'"sign_in": {{"enabled": false}}}}', encoding="utf-8")
+        f'"sign_in": {{"enabled": false}}}}',
+        encoding="utf-8",
+    )
     monkeypatch.setenv(ENV_VAR, str(config_path))
     serve_module = _capture_server(monkeypatch)
     examined(1, "serve.main() with a config file naming every interface")
@@ -252,8 +251,7 @@ def test_a_named_config_file_is_the_explicit_flag_that_binds_elsewhere(tmp_path,
     assert reached.value.args[0] == ("0.0.0.0", 8081)
 
 
-def test_main_still_starts_with_a_real_config_file_even_if_it_turns_sign_in_off(
-        tmp_path, monkeypatch, examined):
+def test_main_still_starts_with_a_real_config_file_even_if_it_turns_sign_in_off(tmp_path, monkeypatch, examined):
     """The refusal is for "no file at all", never for a file that exists and
     makes its own explicit choice -- including explicitly turning sign-in
     off, which stays a warning, not a refusal. Proven without
@@ -261,8 +259,8 @@ def test_main_still_starts_with_a_real_config_file_even_if_it_turns_sign_in_off(
     whose constructor raises a sentinel the moment `main()` reaches it -- past
     every refusal check, config load, and store/access-log setup.
     """
-    from onetrace_console.config import ENV_VAR
     import onetrace_console.serve as serve_module
+    from onetrace_console.config import ENV_VAR
 
     class _ReachedServerConstruction(Exception):
         pass
@@ -276,7 +274,8 @@ def test_main_still_starts_with_a_real_config_file_even_if_it_turns_sign_in_off(
     config_path.write_text(
         f'{{"host": "127.0.0.1", "port": 8080, "store_root": "{store_root.as_posix()}", '
         f'"sign_in": {{"enabled": false}}}}',
-        encoding="utf-8")
+        encoding="utf-8",
+    )
     monkeypatch.setenv(ENV_VAR, str(config_path))
     monkeypatch.setattr(serve_module, "ConsoleServer", _FakeServer)
 

@@ -5,6 +5,7 @@ through `onetrace_console.bounded_json.load_json_bounded`: a value nested to exa
 depth is read; one level deeper is refused, and so is a value deeper than `json.loads` itself can
 parse; each refusal says the value is nested too deeply, in the reader's own error, never a crash.
 """
+
 from __future__ import annotations
 
 import json
@@ -30,11 +31,13 @@ ABYSS = '{"a":' * 100_000 + "1" + "}" * 100_000
 
 def _record(text: str):
     from onetrace_console.viewer.record import _load_json
+
     return _load_json(text.encode("utf-8"), "MANIFEST.json")
 
 
 def _kept_report(text: str, tmp_path):
     from onetrace_console.viewer.report import load
+
     path = tmp_path / "check-report.json"
     path.write_text(text, encoding="utf-8")
     return load(path)
@@ -42,11 +45,13 @@ def _kept_report(text: str, tmp_path):
 
 def _json_run(text: str):
     from onetrace_console.viewer.report import _json_doc
+
     return _json_doc({"stdout": text, "exit_status": "0"}, "check")
 
 
 def _verb_report(text: str, tmp_path):
     from onetrace_console.viewer.verbs import read_report
+
     (tmp_path / "diff.json").write_text(text, encoding="utf-8")
     return read_report(tmp_path / "diff.json")
 

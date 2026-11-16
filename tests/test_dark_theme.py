@@ -13,6 +13,7 @@
 The contrast of every text colour on its ground, in both themes, is held in
 tests/test_shared_style.py. Each check has its sabotage.
 """
+
 from __future__ import annotations
 
 import re
@@ -22,6 +23,7 @@ import pytest
 
 def test_every_light_role_has_a_dark_value_and_the_derived_ones_say_why(examined):
     from onetrace_console.viewer import tokens
+
     dark = tokens.dark_palette()
     examined(len(dark), "roles in the dark theme")
     assert set(dark) == set(tokens.palette_names())
@@ -36,6 +38,7 @@ def test_each_stylesheet_is_dark_unless_light_is_chosen(where, examined):
     from onetrace_console import frame
     from onetrace_console.viewer import page
     from onetrace_console.viewer.tokens import dark_palette
+
     css = frame.stylesheet().decode("utf-8") if where == "console" else page._style()
     examined(1, f"the {where} stylesheet")
     default = re.search(r"(?:^|\n):root:not\(\[data-theme=light\]\)\{([^}]*)\}", css)
@@ -48,6 +51,7 @@ def test_the_navigation_s_only_control_is_the_theme_switch_in_its_footer(examine
     """The theme is dark until a reader picks one with the footer's switch; the
     navigation itself carries nothing to press and nothing to run (the console's no-form rule)."""
     from onetrace_console import frame
+
     examined(2, "the navigation, without and with its footer")
     nav = frame.nav("home.html", onedoor=False, foot="")
     assert not re.search(r"<(button|form|input|script)\b|theme", nav, re.I), nav
@@ -60,6 +64,7 @@ def test_the_dark_contrast_check_names_a_dim_ink(monkeypatch, examined):
     """Sabotage: the dark theme's body text drawn in the page's own ground colour."""
     from onetrace_console.viewer import tokens
     from tests.test_shared_style import _sheet, contrast_problems
+
     tokens.dark_palette.cache_clear()
     monkeypatch.setitem(tokens.DARK_ROLES, "ink", "--bg")
     try:
@@ -72,6 +77,7 @@ def test_the_dark_contrast_check_names_a_dim_ink(monkeypatch, examined):
 
 def test_changed_vendored_bytes_raise(monkeypatch, tmp_path, examined):
     from onetrace_console.viewer import tokens
+
     changed = tmp_path / "TOKENS_DARK.css"
     changed.write_bytes(tokens.DARK_PATH.read_bytes().replace(b"#0b1626", b"#0b1627", 1))
     monkeypatch.setattr(tokens, "DARK_PATH", changed)

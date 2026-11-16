@@ -1,6 +1,6 @@
 """onetrace's viewer: the answer view and the case view, generated from a run's record.
 
-Specified by the viewer's specification (019), and kept in its own package (022 §2). Static
+Kept in its own package. Static
 HTML, no backend, no network at view time. The page cannot verify; it shows a verification
 that ran when the page was generated, and the command that repeats it without us.
 

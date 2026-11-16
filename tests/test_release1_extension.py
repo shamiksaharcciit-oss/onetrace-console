@@ -8,6 +8,7 @@
 The extension's code stays, and its own tests still drive it directly; only the console's
 start refuses the setting.
 """
+
 from __future__ import annotations
 
 import json
@@ -25,8 +26,7 @@ def _file(tmp_path, monkeypatch, body: dict) -> None:
     monkeypatch.setenv(ENV_VAR, str(path))
 
 
-def test_switching_the_extension_on_is_refused_at_start(local_main, capsys, tmp_path,
-                                                         monkeypatch):
+def test_switching_the_extension_on_is_refused_at_start(local_main, capsys, tmp_path, monkeypatch):
     serve_module, _ = local_main
     _file(tmp_path, monkeypatch, {"extensions": {"onedoor": True}})
     assert serve_module.main([]) == 1

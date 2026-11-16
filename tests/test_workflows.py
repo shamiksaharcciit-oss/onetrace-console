@@ -11,6 +11,7 @@
 The workflows are read by their indentation, enough for the shapes they use; there is no YAML
 library in the suite's pins. Each rule has its own sabotage below.
 """
+
 from __future__ import annotations
 
 import re
@@ -74,8 +75,9 @@ def problems(text: str) -> list[str]:
             continue
         for expression in _EXPRESSION.findall(raw):
             if re.search(r"\brunner\.", expression) and step_key not in RUNNER_ALLOWED:
-                out.append(f"line {number}: the runner context under {'.'.join(path)}, where "
-                           f"GitHub does not make it available")
+                out.append(
+                    f"line {number}: the runner context under {'.'.join(path)}, where GitHub does not make it available"
+                )
     return out
 
 
@@ -86,7 +88,7 @@ def _workflows() -> list[Path]:
 def test_every_workflow_uses_the_runner_context_only_where_it_exists(examined):
     files = _workflows()
     examined(len(files), "workflow files")
-    assert len(files) >= 1, files   # the public tree has one workflow; this repository has more
+    assert len(files) >= 1, files  # the public tree has one workflow; this repository has more
     found = {f.name: problems(f.read_text(encoding="utf-8")) for f in files}
     assert found == {f.name: [] for f in files}, found
 
@@ -128,15 +130,14 @@ def test_the_planted_forms_are_caught_and_the_allowed_ones_are_not(examined):
     clean = _JOB.format(job_env="", run_line="")
     job_env = _JOB.format(job_env="    env:\n      OUT: ${{ runner.temp }}/out\n", run_line="")
     in_run = _JOB.format(job_env="", run_line="          echo ${{ github.sha }}\n")
-    in_one_line_run = clean.replace("        run: |\n          echo start\n",
-                                    "        run: echo ${{ github.ref }}\n")
+    in_one_line_run = clean.replace("        run: |\n          echo start\n", "        run: echo ${{ github.ref }}\n")
     examined(4, "planted workflows")
     assert problems(clean) == []
-    assert problems(job_env) == ["line 7: the runner context under jobs.planted.env.OUT, where "
-                                 "GitHub does not make it available"], problems(job_env)
+    assert problems(job_env) == [
+        "line 7: the runner context under jobs.planted.env.OUT, where GitHub does not make it available"
+    ], problems(job_env)
     assert problems(in_run) == ["line 10: an expression inside a run: script"], problems(in_run)
-    assert problems(in_one_line_run) == ["line 8: an expression inside a run: script"], \
-        problems(in_one_line_run)
+    assert problems(in_one_line_run) == ["line 8: an expression inside a run: script"], problems(in_one_line_run)
 
 
 # ------------------------------------------------------------------ the base image, by digest
@@ -146,8 +147,7 @@ _FROM = re.compile(r"^FROM\s+(\S+)", re.M)
 
 def unpinned(dockerfile: str) -> list[str]:
     """Every FROM image not named by digest."""
-    return [image for image in _FROM.findall(dockerfile)
-            if not re.search(r"@sha256:[0-9a-f]{64}$", image)]
+    return [image for image in _FROM.findall(dockerfile) if not re.search(r"@sha256:[0-9a-f]{64}$", image)]
 
 
 def test_the_demo_image_names_its_base_by_digest(examined):
@@ -157,8 +157,7 @@ def test_the_demo_image_names_its_base_by_digest(examined):
     assert unpinned(text) == []
 
 
-@pytest.mark.parametrize("image", ["python:3.12-slim", "python:latest", "python",
-                                   "python:3.12-slim@sha256:f77ac9e4"])
+@pytest.mark.parametrize("image", ["python:3.12-slim", "python:latest", "python", "python:3.12-slim@sha256:f77ac9e4"])
 def test_a_base_image_by_tag_alone_is_caught(image, examined):
     """The sabotage: the digest taken off, or cut short."""
     text = DOCKERFILE.read_text(encoding="utf-8")

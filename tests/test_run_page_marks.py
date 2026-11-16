@@ -11,6 +11,7 @@ marked:
 6. a corrupt report -- no marks, and the sentence saying so.
 And: storing a comparison over HTTP re-renders the candidate's page, and nothing else does.
 """
+
 from __future__ import annotations
 
 import json
@@ -34,9 +35,9 @@ def runs(store):
     _require_installed()
     _require_exam()
     from onetrace_console.checks import run_and_record
+
     #: Delivered and checked, as an ingest does: a run page needs the run's own check.
-    return {n: run_and_record(_deliver(DAG / f"run_{n}", store), store, ran_at=FIXED_RAN_AT)
-            for n in "PQR"}, store
+    return {n: run_and_record(_deliver(DAG / f"run_{n}", store), store, ran_at=FIXED_RAN_AT) for n in "PQR"}, store
 
 
 def _case(run, store) -> str:
@@ -52,6 +53,7 @@ def _graph(page: str) -> str:
 def _titles(page: str) -> dict[str, str]:
     """Each box's title, with the titles of the lines it quotes from the report after it."""
     from tests.test_compare_graph import _box_titles
+
     return {t.split(" · ")[0]: t for _attrs, t in _box_titles(_graph(page))}
 
 
@@ -59,49 +61,42 @@ def _titles(page: str) -> dict[str, str]:
 #: that belong to the machine, not the page: the verifier's path (a path relative to wherever
 #: pytest made its temp folder, into wherever the host keeps its venv) and so the
 #: fingerprint that covers it. Everything else is pinned, byte for byte.
-#: Measured by tooling, and measured equal to the page drawn by the earlier code
-#: (the vendored viewer 8fdf301 and the console as it was at f8c506a): with no comparison the
-#: page is today's page. It moves only when the page itself does, as any golden pin.
-#: Moved for viewer commit 0fad8d7: the graph panel's scrollbar is drawn, five
-#: lines of the viewer's CSS that the page carries; rendered by tooling with the previous
-#: wheel (ed28d32, which gives the previous pin) and the new one, nothing else moves.
-#: Previously `b262a43b…`.
-#: A third thing belongs to the machine (as test_visible_text already holds):
-#: the verifier's line endings. Windows writes its stdout in text mode, so every LF it writes
-#: arrives as CR LF, and the page's verbatim layer of that output carries the CRs raw. The
-#: Windows check of daa3c2b (run #2) failed here with 1e27ccb5... -- reproduced exactly off Windows
-#: by giving the verifier's stdout CR LF line endings, and nothing else on the page differed. So
-#: inside a verbatim block of the verifier's rows, one or more CRs before an LF go; a CR anywhere
-#: else on the page is kept.
-#: Moved again for viewer commit 35c643b: quoted fields wrap anywhere (two lines of
-#: CSS) and the boundary section, drawn here outside the console's frame, is headed "Where the
-#: record stops"; rendered by tooling with the previous wheel (0fad8d7, giving the previous pin)
-#: and the new one, nothing else moves. Previously `782d75b0…`.
-#: And for the run names: R's own incident row names it "dag-r37-r · 721042dcd617"
-#: rather than by its key alone; rendered by tooling at 977c80a and now, nothing else moves.
-#: Previously `c3eda474…`.
-#: And for viewer commit 64c4026: the viewer's stylesheet carries the failed-last-
-#: attempt line's rule (R has none to state); rendered by tooling with 35c643b's wheel and
-#: 64c4026's, only those two lines of CSS differ. Previously `0d9abcae…`.
-#: And for board 5: the case page links the run receipt in its Policy section;
-#: rendered by tooling at b691e8f and now, only that one paragraph differs, and the page without it
-#: hashes to the previous pin. Previously `9cf4ca13…`.
-#: And for the dead links: the incident's "the report it came from" now links the run's
-#: case page and "all incidents" the Incidents page, each relative to the page; with those two
-#: links put back as they were, the page hashes to the previous pin. Previously `8c93bd6a…`.
-#: And for viewer commit 75f13ac: the ladder gains "Ran as approved", which on R --
-#: a graph run checked by 0.1.2 -- says the check that ran can't say; with exactly that one row
-#: taken out, the page hashes to the previous pin. Previously `1f16c575…`.
-#: And for viewer commit 02c6204, on the 0.2.0 development build: the check is the
-#: installed onetrace-verify, so its command reads `onetrace-verify MANIFEST.json` (twice), the page
-#: regenerates with `generate --cli`, the check's own words gain the CLI's two graph-edge rows (76 to
-#: 78 pass), and "Ran as approved" reads yes from them. Rendered by tooling with 682eb99 (the console
-#: on 0.1.2 and its viewer, which gives the previous pin exactly) and now: nothing else moves.
-#: Previously `691c07fb…`.
-#: And for the Signed half (viewer commit 7a15842, on the third development build): the
-#: signing rung reads Unsigned from the check's own signature rows, which R has none of; with exactly
-#: that row put back to "Not yet available · records are unsigned in this release", the page hashes
-#: to the previous pin (measured with this test's own fixture). Previously `fc15cabb…`.
+#: Measured by tooling, and measured equal to the page drawn by the earlier code (the viewer and
+#: the console as they were before the comparison-less page was drawn): with no comparison the page
+#: is today's page. It moves only when the page itself does, as any golden pin. Each time it moved,
+#: the page was drawn by tooling with the code before and after the change, and only what that
+#: change names differed:
+#: - the graph panel's scrollbar, five lines of the viewer's CSS the page carries. Previously
+#:   `b262a43b…`.
+#: - quoted fields wrap anywhere (two lines of CSS), and the boundary section, drawn here outside
+#:   the console's frame, is headed "Where the record stops". Previously `782d75b0…`.
+#: - R's own incident row names it "dag-r37-r · 721042dcd617" rather than by its key alone.
+#:   Previously `c3eda474…`.
+#: - the viewer's stylesheet carries the failed-last-attempt line's rule (R has none to state):
+#:   only those two lines of CSS differ. Previously `0d9abcae…`.
+#: - the case page links the run receipt in its Policy section: only that one paragraph differs,
+#:   and the page without it hashes to the previous pin. Previously `9cf4ca13…`.
+#: - the incident's "the report it came from" links the run's case page and "all incidents" the
+#:   Incidents page, each relative to the page; with those two links put back as they were, the
+#:   page hashes to the previous pin. Previously `8c93bd6a…`.
+#: - the ladder gains "Ran as approved", which on R -- a graph run checked by 0.1.2 -- says the
+#:   check that ran can't say; with exactly that one row taken out, the page hashes to the
+#:   previous pin. Previously `1f16c575…`.
+#: - on the 0.2.0 development build, the check is the installed onetrace-verify, so its command
+#:   reads `onetrace-verify MANIFEST.json` (twice), the page regenerates with `generate --cli`, the
+#:   check's own words gain the CLI's two graph-edge rows (76 to 78 pass), and "Ran as approved"
+#:   reads yes from them; drawn with the console on 0.1.2 and its viewer, which gives the previous
+#:   pin exactly, nothing else moves. Previously `691c07fb…`.
+#: - the signing rung reads Unsigned from the check's own signature rows, which R has none of; with
+#:   exactly that row put back to "Not yet available · records are unsigned in this release", the
+#:   page hashes to the previous pin (measured with this test's own fixture). Previously
+#:   `fc15cabb…`.
+#: A third thing belongs to the machine (as test_visible_text already holds): the verifier's line
+#: endings. Windows writes its stdout in text mode, so every LF it writes arrives as CR LF, and the
+#: page's verbatim layer of that output carries the CRs raw. A Windows check once failed here with
+#: 1e27ccb5... -- reproduced exactly off Windows by giving the verifier's stdout CR LF line endings,
+#: and nothing else on the page differed. So inside a verbatim block of the verifier's rows, one or
+#: more CRs before an LF go; a CR anywhere else on the page is kept.
 #: Moved when the first screens were made plain, from aedd4f5a9b2f2d74d159846fb92ee1cf2ab69afd14e38554ca3e5ba56bef03c5.
 #: The page before and after differs in exactly two places, measured by diffing the two renderings:
 #: the topology I-COULD-NOT-CHECK incident block is gone (no incident for a check the pinned release
@@ -198,7 +193,14 @@ def _titles(page: str) -> dict[str, str]:
 #: rendering it with the head's code alone set back to the commit before it (the old digest).
 #: Moved by the version, 0.6.1 to 0.7.0, from 2b1b7ce790829eecdfa9f333e5708cae00d1a233e5161321c15e6a5c71f5e0d7.
 #: Measured by rendering it with the version alone set back to 0.6.1: the old digest.
-UNMARKED_R_CASE_SHA256 = "7f4e171f89e9f9e287db821ed78f9ba545458cc221a8604c9be5304c5d97c94c"
+#: Moved by the console's button styles (each button's style class), from
+#: 7f4e171f89e9f9e287db821ed78f9ba545458cc221a8604c9be5304c5d97c94c: measured by rendering it at the commit that gave
+#: the buttons their class and at the one before it (the old digest).
+#: Moved by the busy state's hook (each button that starts work names its work in progress), from
+#: 246549412e88ba53cac64b8d23bb4483de88a16be59ff8b44c63d2bf030e871a: measured by rendering it with the hook and without.
+#: Moved by the version, 0.7.0 to 0.8.0, from fe6e6dda55d3f15647efa0e5a983534ab79b4712e8c09290f48ec3579e7041e1.
+#: Measured by rendering it with the version alone set back to 0.7.0: the old digest.
+UNMARKED_R_CASE_SHA256 = "6f01b2405e5d23e8754631e94f559a49612215f8a00f62e80e8ada15f8d936e0"
 _VERIFIER_PATH = re.compile(r"\S*onetrace_verify[/\\]verify\.py")
 _FINGERPRINT = re.compile(r"<!--fingerprint-->[0-9a-f]{64}<!--/fingerprint-->")
 _VERIFIER_BLOCK = re.compile(r'(<pre data-layer="3">)(\[[A-Z][A-Z-]* *\] .*?)(</pre>)', re.S)
@@ -208,7 +210,7 @@ _VERIFIER_EOL = re.compile(r"\r+\n")
 _RECEIVED = re.compile(r'received by this console <time datetime="[^"]*" title="[^"]*">[^<]*</time>')
 #: The run's pipeline label in the head (its crumbs and its title): labels follow the order the
 #: pipelines first arrived in, which differs between deliveries whose arrivals share a second.
-_LABEL = re.compile(r'( / | · )P\d+(</h1>| / )')
+_LABEL = re.compile(r"( / | · )P\d+(</h1>| / )")
 
 
 def _before_050(page: str) -> str:
@@ -218,13 +220,14 @@ def _before_050(page: str) -> str:
     reference run (`config_compare`), which the export keeps. The hash below is then the one pinned
     before 0.5.0, so the rest of the page is shown unchanged."""
     import re
+
     from onetrace_console.export_static import without_run_tools
+
     return re.sub(r'<section data-section="config-compare".*?</section>', "", without_run_tools(page), flags=re.S)
 
 
 def _machine_free(page: str) -> str:
-    page = _VERIFIER_BLOCK.sub(lambda m: m.group(1) + _VERIFIER_EOL.sub("\n", m.group(2))
-                               + m.group(3), page)
+    page = _VERIFIER_BLOCK.sub(lambda m: m.group(1) + _VERIFIER_EOL.sub("\n", m.group(2)) + m.group(3), page)
     page = _VERIFIER_PATH.sub("<verifier>", page)
     page = _RECEIVED.sub("received by this console <time>", page)
     page = _LABEL.sub(lambda m: m.group(1) + "P<n>" + m.group(2), page)
@@ -238,21 +241,24 @@ def windows_runs(store, monkeypatch):
     import subprocess
 
     import onetrace_console.viewer.report as report
+
     real = subprocess.run
 
     def text_mode(cmd, *args, **kwargs):
         done = real(cmd, *args, **kwargs)
         if any("onetrace_verify" in str(part) for part in cmd) and isinstance(done.stdout, bytes):
             #: CR LF once, whether the platform wrote LF or, on Windows, CR LF already.
-            done = subprocess.CompletedProcess(done.args, done.returncode,
-                                               re.sub(rb"(?<!\r)\n", b"\r\n", done.stdout), done.stderr)
+            done = subprocess.CompletedProcess(
+                done.args, done.returncode, re.sub(rb"(?<!\r)\n", b"\r\n", done.stdout), done.stderr
+            )
         return done
+
     monkeypatch.setattr(report.subprocess, "run", text_mode)
     _require_installed()
     _require_exam()
     from onetrace_console.checks import run_and_record
-    return {n: run_and_record(_deliver(DAG / f"run_{n}", store), store, ran_at=FIXED_RAN_AT)
-            for n in "PQR"}, store
+
+    return {n: run_and_record(_deliver(DAG / f"run_{n}", store), store, ran_at=FIXED_RAN_AT) for n in "PQR"}, store
 
 
 def test_1_the_verifier_s_crlf_never_reaches_the_page(windows_runs):
@@ -260,13 +266,13 @@ def test_1_the_verifier_s_crlf_never_reaches_the_page(windows_runs):
     Windows, in; no \\r on the page; the page otherwise the same as with LF."""
     import hashlib
     import json
+
     found, store = windows_runs
     stored = json.loads(store.get(found["R"].check_report).decode("utf-8"))
     assert "\r" not in stored["stdout"], "read as \\n where the console reads it"
     page = _case(found["R"], store)
     assert "\r" not in page
-    assert (hashlib.sha256(_machine_free(_before_050(page)).encode("utf-8")).hexdigest()
-            == UNMARKED_R_CASE_SHA256)
+    assert hashlib.sha256(_machine_free(_before_050(page)).encode("utf-8")).hexdigest() == UNMARKED_R_CASE_SHA256
 
 
 def test_1_the_premise_the_verifier_s_output_arrives_in_crlf(windows_runs):
@@ -275,8 +281,8 @@ def test_1_the_premise_the_verifier_s_output_arrives_in_crlf(windows_runs):
     import sys
 
     import onetrace_console.viewer.report as report
-    done = report.subprocess.run([sys.executable, "-c", "print('x')", "onetrace_verify"],
-                                 capture_output=True)
+
+    done = report.subprocess.run([sys.executable, "-c", "print('x')", "onetrace_verify"], capture_output=True)
     assert done.stdout == b"x\r\n", done.stdout
     assert subprocess.run is report.subprocess.run
 
@@ -291,15 +297,15 @@ def test_1_a_cr_outside_the_verifier_s_output_is_kept():
 
 def test_1_no_comparison_the_page_is_unmarked_and_unchanged(runs):
     import hashlib
+
     found, store = runs
     page = _case(found["R"], store)
-    assert (hashlib.sha256(_machine_free(_before_050(page)).encode("utf-8")).hexdigest()
-            == UNMARKED_R_CASE_SHA256)
+    assert hashlib.sha256(_machine_free(_before_050(page)).encode("utf-8")).hexdigest() == UNMARKED_R_CASE_SHA256
     #: Since step 2 the check is the installed CLI and names no verifier path;
     #: `_machine_free` still takes one out of a page from before.
     assert len(_FINGERPRINT.findall(page)) == 1 and "onetrace-verify MANIFEST.json" in page
     assert not _VERIFIER_PATH.search(page)
-    assert 'data-mark=' not in page and "graph-marked-from" not in page
+    assert "data-mark=" not in page and "graph-marked-from" not in page
     assert "graph-marks-unreadable" not in page
     assert all(" · " not in t for t in _titles(page).values()), "a node carries a state"
     assert _case(found["R"], store) == page
@@ -335,6 +341,7 @@ def test_4_a_restart_draws_the_same_page_byte_for_byte(runs, tmp_path, monkeypat
     from onetrace_console import serve
     from onetrace_console.serve import _render_startup_pages
     from onetrace_console.store import Store
+
     #: The page states when it was generated, read from the clock; both renders read one time,
     #: so the bytes compared are the page's own, not two clock readings a second apart.
     monkeypatch.setattr(serve, "_now", lambda: GENERATED_AT)
@@ -366,23 +373,25 @@ def test_6_a_corrupt_report_marks_nothing_and_says_so(runs):
     verbs = tuple(replace(v, reports=reports) if v.verb == DIFF else v for v in c.verbs)
     store.put_comparison(replace(c, verbs=verbs))
     page = _case(found["R"], store)
-    assert 'data-mark=' not in page and "graph-marked-from" not in page
+    assert "data-mark=" not in page and "graph-marked-from" not in page
     assert "gave no verdicts that could be read, so none are shown on this graph" in page
 
 
 def test_storing_a_comparison_re_renders_the_candidate_s_page(server):
     """Over HTTP: POST /compare stores a comparison and re-renders the candidate's pages."""
     import urllib.request
+
     _require_installed()
     _require_exam()
     from tests.test_serve import _post, _real_delivery
+
     base, store_root = server
     keys = {}
     for n in "PR":
         _, body = _post(base, "/v1/runs", _real_delivery(DAG / f"run_{n}"))
         keys[n] = json.loads(body)["run_key"]
     case = store_root / "pages" / "runs" / keys["R"] / CASE
-    assert b'data-mark=' not in case.read_bytes()
+    assert b"data-mark=" not in case.read_bytes()
     status, _ = _post(base, f"/compare?a={keys['P']}&b={keys['R']}")
     assert status == 200
     assert b'data-mark="first"' in case.read_bytes()

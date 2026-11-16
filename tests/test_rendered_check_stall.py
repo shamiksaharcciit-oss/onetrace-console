@@ -9,6 +9,7 @@ reads that line and puts it on its summary line, whether the view's own limit or
 Held with a stand-in for playwright that never opens the second view's page, and stand-ins for the
 browser's Python (POSIX shell scripts, so these run where there is one). No browser is started.
 """
+
 from __future__ import annotations
 
 import importlib.util
@@ -24,10 +25,13 @@ REPO = Path(__file__).resolve().parent.parent
 
 pytestmark = pytest.mark.skipif(sys.platform == "win32", reason="the stand-ins are POSIX shell scripts")
 
-JOBS = [["http://127.0.0.1:9/a.html", "a", 1280, ""], ["http://127.0.0.1:9/b.html", "b", 390, ""],
-        ["http://127.0.0.1:9/c.html", "c", 1280, ""]]
+JOBS = [
+    ["http://127.0.0.1:9/a.html", "a", 1280, ""],
+    ["http://127.0.0.1:9/b.html", "b", 390, ""],
+    ["http://127.0.0.1:9/c.html", "c", 1280, ""],
+]
 
-STUB = '''
+STUB = """
 import os, time
 from contextlib import contextmanager
 opened = 0
@@ -52,11 +56,14 @@ class P:
 @contextmanager
 def sync_playwright():
     yield P
-'''
+"""
 
 
 def _check(tool: str = "explain_look_check"):
-    spec = importlib.util.spec_from_file_location(tool, REPO / "tools" / f"{tool}.py")
+    from tests.export_tree import tool as tool_path
+
+    #: A public export leaves the gate's own tools out: there the test skips; here a missing one fails.
+    spec = importlib.util.spec_from_file_location(tool, tool_path(f"{tool}.py"))
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
     return mod
@@ -84,20 +91,31 @@ def stub(tmp_path) -> Path:
 @TOOLS
 def test_the_browser_script_stops_on_a_view_past_its_limit_and_names_it(stub, tool, examined):
     start = time.monotonic()
-    done = subprocess.run([sys.executable, "-c", *_script(tool, JOBS, "3")], capture_output=True, text=True, timeout=120,
-                          env={"PYTHONPATH": str(stub), "STUB_STALL_AT": "2", "PATH": "/usr/bin:/bin"})
+    done = subprocess.run(
+        [sys.executable, "-c", *_script(tool, JOBS, "3")],
+        capture_output=True,
+        text=True,
+        timeout=120,
+        env={"PYTHONPATH": str(stub), "STUB_STALL_AT": "2", "PATH": "/usr/bin:/bin"},
+    )
     took = time.monotonic() - start
     examined(1, f"{tool}'s browser script, with a stand-in playwright that stalls the second view")
     assert done.returncode == 3, (done.returncode, done.stderr[-1500:])
-    assert "stalled: view 2 of 3: b at 390 (http://127.0.0.1:9/b.html), waiting on a new page, for 3 s" in done.stderr, (
-        done.stderr[-1500:])
+    assert (
+        "stalled: view 2 of 3: b at 390 (http://127.0.0.1:9/b.html), waiting on a new page, for 3 s" in done.stderr
+    ), done.stderr[-1500:]
     assert took < 60, took
 
 
 @TOOLS
 def test_with_no_stall_the_script_says_each_view_and_gives_every_result(stub, tool, examined):
-    done = subprocess.run([sys.executable, "-c", *_script(tool, JOBS, "30")], capture_output=True, text=True, timeout=120,
-                          env={"PYTHONPATH": str(stub), "STUB_STALL_AT": "0", "PATH": "/usr/bin:/bin"})
+    done = subprocess.run(
+        [sys.executable, "-c", *_script(tool, JOBS, "30")],
+        capture_output=True,
+        text=True,
+        timeout=120,
+        env={"PYTHONPATH": str(stub), "STUB_STALL_AT": "0", "PATH": "/usr/bin:/bin"},
+    )
     examined(1, f"{tool}'s browser script, with a stand-in playwright that never stalls")
     assert done.returncode == 0, done.stderr[-1500:]
     assert [r["page"] for r in json.loads(done.stdout)] == ["a", "b", "c"]
@@ -114,14 +132,18 @@ def _stand_in(tmp_path: Path, body: str) -> Path:
 def test_the_checks_summary_line_names_the_stalled_view(tmp_path, examined):
     check = _check()
     check.LIMIT = check.layout_check.Limit(60)
-    py = _stand_in(tmp_path, "echo 'view 2 of 3: b at 390 (http://127.0.0.1:9/b.html): a new page' >&2\n"
-                             "echo 'stalled: view 2 of 3: b at 390 (http://127.0.0.1:9/b.html), waiting on a new page, "
-                             "for 3 s' >&2\nexit 3\n")
+    py = _stand_in(
+        tmp_path,
+        "echo 'view 2 of 3: b at 390 (http://127.0.0.1:9/b.html): a new page' >&2\n"
+        "echo 'stalled: view 2 of 3: b at 390 (http://127.0.0.1:9/b.html), waiting on a new page, "
+        "for 3 s' >&2\nexit 3\n",
+    )
     with pytest.raises(check.layout_check.Stopped) as got:
         check._browser(str(py), JOBS, None, "light", 3)
     examined(1, "the check, given a browser script that stalled on its second view")
-    assert str(got.value) == ("the browser stalled at view 2 of 3: b at 390 (http://127.0.0.1:9/b.html), "
-                              "waiting on a new page, for 3 s"), str(got.value)
+    assert str(got.value) == (
+        "the browser stalled at view 2 of 3: b at 390 (http://127.0.0.1:9/b.html), waiting on a new page, for 3 s"
+    ), str(got.value)
 
 
 @TOOLS
@@ -138,5 +160,7 @@ def test_at_the_whole_checks_limit_the_summary_line_names_the_view_it_waited_on(
     assert code == 2
     assert time.monotonic() - start < 60
     last = capsys.readouterr().out.strip().splitlines()[-1]
-    assert last == (f"{name} (light): no page views judged, FAILED: stopped at its limit of 3 s, "
-                    "waiting on the browser at view 1 of 3: a at 1280 (http://127.0.0.1:9/a.html), loading"), last
+    assert last == (
+        f"{name} (light): no page views judged, FAILED: stopped at its limit of 3 s, "
+        "waiting on the browser at view 1 of 3: a at 1280 (http://127.0.0.1:9/a.html), loading"
+    ), last

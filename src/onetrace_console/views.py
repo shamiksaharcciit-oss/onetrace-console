@@ -16,6 +16,7 @@ not be checked -- or, for a comparison, either run does -- that line is red and 
 the step-by-step verdicts are not on "What changed": they are on "Proof", under a line that says
 why they are there.
 """
+
 from __future__ import annotations
 
 import re
@@ -99,8 +100,7 @@ VIEWS_CSS = """
 :is(.shell .page,.cp) h2[data-section=withheld]{margin:0 0 8px;color:var(--bad-ink)}
 """
 
-_VOID = {"area", "base", "br", "col", "embed", "hr", "img", "input", "link", "meta", "param", "source",
-         "track", "wbr"}
+_VOID = {"area", "base", "br", "col", "embed", "hr", "img", "input", "link", "meta", "param", "source", "track", "wbr"}
 
 
 @dataclass(frozen=True)
@@ -239,8 +239,10 @@ def _tabs(what_href: str, proof_href: str, current: str) -> str:
 
 def _line(said: str, red: bool, proof_href: str, tone: str, withheld: str) -> str:
     words = said + (f" {withheld}" if red else "")
-    return (f'<p data-section="integrity" data-tone="{tone}">{escape(words)} '
-            f'<a href="{escape(proof_href, quote=True)}">{escape(TO_PROOF[red])}</a></p>')
+    return (
+        f'<p data-section="integrity" data-tone="{tone}">{escape(words)} '
+        f'<a href="{escape(proof_href, quote=True)}">{escape(TO_PROOF[red])}</a></p>'
+    )
 
 
 def _marked(html: str, mark: str) -> list[tuple[int, int]]:
@@ -262,36 +264,46 @@ def _withheld_head(head: str, state: str, proof_href: str) -> str:
     """The run head on a red run's "What changed": without what it reads from the record, and one
     line, before its tabs, saying so and linking to "Proof"."""
     from onetrace_console.run_head import FROM_CONTENTS
+
     for start, end in reversed(_marked(head, FROM_CONTENTS.strip())):
         head = head[:start] + head[end:]
     tabs = '<nav class="tabs"'
     if head.count(tabs) != 1:
         raise ValueError("the run head does not carry exactly one row of tabs")
-    line = (f'<p class="sub" data-withheld="true">{escape(RUN_NOT_SHOWN[state])} '
-            f'<a href="{escape(proof_href, quote=True)}">{escape(TO_PROOF[True])}</a></p>')
+    line = (
+        f'<p class="sub" data-withheld="true">{escape(RUN_NOT_SHOWN[state])} '
+        f'<a href="{escape(proof_href, quote=True)}">{escape(TO_PROOF[True])}</a></p>'
+    )
     return head.replace(tabs, line + tabs, 1)
 
 
 def _repeat(page: str, items: list[Part]) -> str:
     """The answer trail's command to repeat the check, marked as its copy; "" where the trail has none."""
     from onetrace_console.viewer.sentences import template
-    trail = next((page[p.start:p.end] for p in items if key(p) == "strip"), "")
-    found = re.search(r'<details data-layer="4"><summary>' + re.escape(escape(template("command.verify")))
-                      + r"</summary>.*?</details>", trail, re.S)
+
+    trail = next((page[p.start : p.end] for p in items if key(p) == "strip"), "")
+    found = re.search(
+        r'<details data-layer="4"><summary>'
+        + re.escape(escape(template("command.verify")))
+        + r"</summary>.*?</details>",
+        trail,
+        re.S,
+    )
     return found.group(0).replace("<details ", f"<details {FROM_TRAIL} ", 1) if found else ""
 
 
 def _with_repeat(reproduce: str, command: str) -> str:
-    """"What could be re-checked" with the trail's command at its end."""
+    """ "What could be re-checked" with the trail's command at its end."""
     if not command:
         return reproduce
     if not reproduce.endswith("</section>"):
         raise ValueError("What could be re-checked does not end its own section")
-    return reproduce[:-len("</section>")] + command + "</section>"
+    return reproduce[: -len("</section>")] + command + "</section>"
 
 
-def split(page: str, kind: str, what_href: str, proof_href: str, said: str, state: str,
-          withheld: str = WITHHELD) -> tuple[str, str]:
+def split(
+    page: str, kind: str, what_href: str, proof_href: str, said: str, state: str, withheld: str = WITHHELD
+) -> tuple[str, str]:
     """(the "What changed" view, the "Proof" view) of a drawn page. `kind` is "run" or "diff";
     `said` is the integrity line's words and `state` the rung 1 state it was read from (for a pair,
     the worse of the two), which makes the line red and withholds the step-by-step verdicts."""
@@ -303,8 +315,7 @@ def split(page: str, kind: str, what_href: str, proof_href: str, said: str, stat
         command = _repeat(page, items) if red else ""
         if red:
             withheld = RUN_WITHHELD[state]
-            rows_from = (f'<h2 data-section="withheld" data-tone="bad">'
-                         f'{escape(RUN_ROWS_FROM[state])}</h2>')
+            rows_from = f'<h2 data-section="withheld" data-tone="bad">{escape(RUN_ROWS_FROM[state])}</h2>'
     else:
         inner, items = parts(page, lambda tag, a: tag == "div" and "cp" in (a.get("class") or "").split())
         places = _places_diff(items, red)
@@ -318,54 +329,69 @@ def split(page: str, kind: str, what_href: str, proof_href: str, said: str, stat
         if view == WHAT:
             head += _line(said, red, proof_href, tone, withheld)
         elif red:
-            head += (rows_from + f'<p data-section="integrity" data-tone="bad">'
-                     f'{escape(WITHHELD_HERE.format(said=said))}</p>')
+            head += (
+                rows_from + f'<p data-section="integrity" data-tone="bad">{escape(WITHHELD_HERE.format(said=said))}</p>'
+            )
         out, at = [page[:inner]], inner
         if after is None:
             out.append(head)
         for i, (part, place) in enumerate(zip(items, places)):
             #: What lies between two parts (white space, as drawn) is on both views.
-            out.append(page[at:part.start])
+            out.append(page[at : part.start])
             if place in keep and view == WHAT and red and kind == "run" and key(part) == "run-head":
-                out.append(_withheld_head(page[part.start:part.end], state, proof_href))
+                out.append(_withheld_head(page[part.start : part.end], state, proof_href))
             elif place in keep and view == WHAT and command and key(part) == "reproduce":
-                out.append(_with_repeat(page[part.start:part.end], command))
+                out.append(_with_repeat(page[part.start : part.end], command))
             elif place in keep:
-                out.append(page[part.start:part.end])
+                out.append(page[part.start : part.end])
             if i == after:
                 out.append(head)
             at = part.end
         out.append(page[at:])
         views[view] = "".join(out)
-    return (_across(views[WHAT], views[PROOF], proof_href),
-            _across(views[PROOF], views[WHAT], what_href))
+    return (_across(views[WHAT], views[PROOF], proof_href), _across(views[PROOF], views[WHAT], what_href))
 
 
 def _across(view: str, other: str, other_href: str) -> str:
     """`view` with each in-page link (`#id`) whose target is on the other view, not this one,
     pointed at the other view's file."""
+
     def ids(html: str) -> set[str]:
         return set(re.findall(r'\bid="([^"]+)"', html))
+
     here, there = ids(view), ids(other)
-    return re.sub(r'href="#([^"]+)"',
-                  lambda m: (f'href="{escape(other_href, quote=True)}#{m.group(1)}"'
-                             if m.group(1) not in here and m.group(1) in there else m.group(0)), view)
+    return re.sub(
+        r'href="#([^"]+)"',
+        lambda m: (
+            f'href="{escape(other_href, quote=True)}#{m.group(1)}"'
+            if m.group(1) not in here and m.group(1) in there
+            else m.group(0)
+        ),
+        view,
+    )
 
 
 def retarget(page: str, what: str, proof: str, what_name: str, proof_name: str) -> str:
     """Another page's links into the run page (`<what_name>#id`) pointed at the view that holds
     the id: where it went to "Proof", at that."""
+
     def ids(html: str) -> set[str]:
         return set(re.findall(r'\bid="([^"]+)"', html))
+
     on_what, on_proof = ids(what), ids(proof)
-    return re.sub(rf'href="{re.escape(what_name)}#([^"]+)"',
-                  lambda m: (f'href="{proof_name}#{m.group(1)}"'
-                             if m.group(1) not in on_what and m.group(1) in on_proof else m.group(0)), page)
+    return re.sub(
+        rf'href="{re.escape(what_name)}#([^"]+)"',
+        lambda m: (
+            f'href="{proof_name}#{m.group(1)}"' if m.group(1) not in on_what and m.group(1) in on_proof else m.group(0)
+        ),
+        page,
+    )
 
 
 def run_said(run, store) -> tuple[str, str]:
     """(the integrity line's words, the rung 1 state) for a run, as `records` reads it."""
     from onetrace_console import records
+
     state = records.state(run, store)
     why = records.why(run, store)
     said = RUN_SAID[state]
@@ -377,6 +403,7 @@ def pair_said(comparison, store) -> tuple[str, str]:
     comparison page's own sentence of what the two records establish."""
     from onetrace_console import records
     from onetrace_console.render import _held, records_words
+
     states = []
     for k in (comparison.run_a, comparison.run_b):
         run = _held(store, k)

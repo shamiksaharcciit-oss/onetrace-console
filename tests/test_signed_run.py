@@ -9,9 +9,9 @@ folder outside the run. Nothing here hand-writes a signature record.
     FAIL row, shown as it is. Each stored check records the trust file it ran with (its sha256, or
     "none"), and a change of trust file checks the run again, said, never silently.
 """
+
 from __future__ import annotations
 
-import functools
 import json
 import re
 import sys
@@ -23,10 +23,10 @@ from onetrace_console.checks import NO_TRUST_FILE, run_and_record, stored_trust_
 from onetrace_console.config import Config, ConfigError, _from_mapping
 from onetrace_console.ingest import accept
 from onetrace_console.store import Store
+from tests.conftest import whole_folds
 from tests.test_checks import FIXED_RAN_AT, _require_installed
 from tests.test_reference_demo import DEMO, _delivery
 from tests.test_stage_pages import GENERATED_AT
-from tests.conftest import whole_folds
 
 INSTALL_LINE = "install onetrace-verify[crypto] to check signatures"
 
@@ -36,8 +36,10 @@ def signed(tmp_path, monkeypatch):
     """(the signed run's folder, its key_id, its signatures/1.json bytes)."""
     _require_installed()
     from onetrace.signing import keygen, sign_run
+
     monkeypatch.syspath_prepend(str(DEMO))
     import demo as pipeline
+
     out = tmp_path / "signed-run"
     pipeline.main(str(out), "exec-signed", 1, "2026-09-28T10:00:00.000+00:00")
     sys.modules.pop("demo", None)
@@ -63,23 +65,25 @@ def _stdout(run, store) -> str:
 
 def _signed_rung(run, store) -> tuple[str, str]:
     from onetrace_console.pages import CASE, RUN_PROOF, render_execution
+
     #: The ladder is on "What changed", or on "Proof" for a run whose records don't hold up.
     drawn = render_execution(run, store, generated_at=GENERATED_AT).pages
     case = drawn[CASE] + drawn[RUN_PROOF]
-    found = re.search(r'<tr data-rung="signed" data-state="([^"]+)"><td>.*?</td><td>(.*?)</td></tr>',
-                      case, re.S)
+    found = re.search(r'<tr data-rung="signed" data-state="([^"]+)"><td>.*?</td><td>(.*?)</td></tr>', case, re.S)
     assert found, "no signing rung"
     return found.group(1), re.sub(r"\s+", " ", unescape(re.sub(r"<[^>]+>", " ", whole_folds(found.group(2))))).strip()
 
 
 def _trust(tmp_path, key_id: str, label: str, name: str = "trust.json"):
     path = tmp_path / name
-    path.write_text(json.dumps({"format": "onetrace-trust/0.1",
-                                "keys": [{"key_id": key_id, "label": label}]}), encoding="utf-8")
+    path.write_text(
+        json.dumps({"format": "onetrace-trust/0.1", "keys": [{"key_id": key_id, "label": label}]}), encoding="utf-8"
+    )
     return path
 
 
 # ------------------------------------------------------------------- §1: the extra is installed
+
 
 def test_the_pinned_verifier_checks_a_signature_rather_than_asking_for_the_extra(signed, tmp_path):
     run, store = _checked(signed, tmp_path)
@@ -89,6 +93,7 @@ def test_the_pinned_verifier_checks_a_signature_rather_than_asking_for_the_extra
 
 
 # ------------------------------------------------------------------- §2: the trust file
+
 
 def test_without_a_trust_file_a_valid_signature_is_signed_key_not_trusted(signed, tmp_path):
     run, store = _checked(signed, tmp_path)
@@ -101,13 +106,13 @@ def test_a_trust_file_naming_the_key_reads_yes_with_its_label(signed, tmp_path):
     trust = _trust(tmp_path, signed[1], "Ops recorder")
     run, store = _checked(signed, tmp_path, trust_file=str(trust))
     import hashlib
+
     assert stored_trust_record(run, store) == "sha256:" + hashlib.sha256(trust.read_bytes()).hexdigest()
     assert _signed_rung(run, store) == ("yes", f"Yes · Ops recorder · {signed[1]}")
 
 
 @pytest.mark.parametrize("folder", ["plain", "back\\slash"])
-def test_a_trust_file_the_verifier_cannot_read_is_its_own_fail_row_shown_as_it_is(signed, tmp_path,
-                                                                                folder):
+def test_a_trust_file_the_verifier_cannot_read_is_its_own_fail_row_shown_as_it_is(signed, tmp_path, folder):
     """On every OS, a backslash in the trust file's path included (the text row escapes it, the
     --json row doesn't, and the rows still pair)."""
     #: On Windows a backslash is the separator, so "back\\slash" is two folders there --
@@ -120,12 +125,14 @@ def test_a_trust_file_the_verifier_cannot_read_is_its_own_fail_row_shown_as_it_i
     assert re.search(r"^\[FAIL   \] --trust \S+", out, re.M), out[-600:]
     assert run.check_verdict == "contradicts"
     from onetrace_console.pages import CASE, render_execution
+
     case = unescape(render_execution(run, store, generated_at=GENERATED_AT).pages[CASE])
     assert "--trust" in case, "the verifier's own row is on the page"
 
 
 def test_a_changed_trust_file_checks_the_run_again_and_says_so(signed, tmp_path, capsys):
     from onetrace_console.serve import _render_startup_pages
+
     trust = _trust(tmp_path, signed[1], "Ops recorder")
     run, store = _checked(signed, tmp_path, trust_file=str(trust))
     first = stored_trust_record(run, store)
@@ -142,7 +149,8 @@ def test_a_changed_trust_file_checks_the_run_again_and_says_so(signed, tmp_path,
 def test_the_setting_is_absent_by_default_and_a_path_or_null(tmp_path):
     assert Config().trust_file is None
     assert _from_mapping({"trust_file": "/etc/onetrace/trust.json"}, source="t").trust_file == (
-        "/etc/onetrace/trust.json")
+        "/etc/onetrace/trust.json"
+    )
     assert _from_mapping({"trust_file": None}, source="t").trust_file is None
     for wrong in (3, "", "a\x00b", True):
         with pytest.raises(ConfigError):
@@ -152,8 +160,8 @@ def test_the_setting_is_absent_by_default_and_a_path_or_null(tmp_path):
 def test_the_lock_pins_the_sdks_crypto_versions_by_hash():
     """§1: exactly the versions the SDK's crypto extra pins at 0.2.0, each with hashes."""
     from pathlib import Path
+
     lock = (Path(__file__).resolve().parent.parent / "requirements.lock").read_text(encoding="utf-8")
-    for pin in ("cryptography==50.0.1", "rfc3161-client==1.0.9", "asn1crypto==1.5.1", "cffi==2.1.1",
-                "pycparser==3.0"):
-        block = lock[lock.index(pin):].split("\n\n")[0]
+    for pin in ("cryptography==50.0.1", "rfc3161-client==1.0.9", "asn1crypto==1.5.1", "cffi==2.1.1", "pycparser==3.0"):
+        block = lock[lock.index(pin) :].split("\n\n")[0]
         assert "--hash=sha256:" in block, pin

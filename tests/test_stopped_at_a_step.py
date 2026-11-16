@@ -19,6 +19,7 @@ that keeps it red:
 The verifier has no row on declared steps (its own rows on such a run all pass), so rung 3 is the
 console's reading alone; the verifier's rows are quoted as they are.
 """
+
 from __future__ import annotations
 
 import re
@@ -35,8 +36,7 @@ STOPPED = [("intake", "ok"), ("approve", "declined")]
 RED = {
     "a-step-missing-before-the-declining-one": (STAGES, [("approve", "declined")]),
     "no-recorded-decline": (STAGES, [("intake", "ok"), ("approve", "ok")]),
-    "a-receipt-for-a-later-step": (STAGES + ["notify"],
-                                   [("intake", "ok"), ("pay", "ok"), ("approve", "declined")]),
+    "a-receipt-for-a-later-step": (STAGES + ["notify"], [("intake", "ok"), ("pay", "ok"), ("approve", "declined")]),
 }
 GENERATED_AT = "2026-10-06T12:00:00+00:00"
 
@@ -54,6 +54,7 @@ def _rung3(page: str) -> tuple[str, str]:
 
 def _case_page(run, store) -> str:
     from onetrace_console.pages import CASE, render_execution
+
     return render_execution(run, store, generated_at=GENERATED_AT).pages[CASE]
 
 
@@ -65,8 +66,10 @@ def stopped(tmp_path, store):
 
 # ------------------------------------------------------------------ the run stopped at a step
 
+
 def test_its_rung_3_reads_not_reached_in_the_declined_outline(stopped, examined):
     from onetrace_console import tones
+
     run, store = stopped
     examined(1, "run stopped at a step")
     assert run.nothing_missing == "not-reached"
@@ -79,6 +82,7 @@ def test_its_rung_3_reads_not_reached_in_the_declined_outline(stopped, examined)
     #: in the declined outline and nothing else.
     from onetrace_console.frame import stylesheet
     from tests.test_tones import _drawn
+
     assert tones.tone(tones.RUNG, "not-reached") == "dec"
     assert _drawn(stylesheet().decode("utf-8")).get("not-reached") == {"dec"}, "never red"
 
@@ -86,6 +90,7 @@ def test_its_rung_3_reads_not_reached_in_the_declined_outline(stopped, examined)
 def test_it_leaves_a_declared_stage_missing_for_stopped_at_a_step(stopped, examined):
     from onetrace_console import tones
     from onetrace_console.overview import ATTENTION_WORDS, attention_kind, needs_attention
+
     run, store = stopped
     examined(1, "run stopped at a step")
     assert attention_kind(run, store) == "stopped-at-a-step"
@@ -98,11 +103,11 @@ def test_the_overviews_rung_3_counts_it_apart_and_every_run_once(stopped, examin
     """Its own count beside "missing a declared stage" and "not established", so the counts still
     add up to every stored run, and the count opens exactly that run."""
     from onetrace_console.home import tallies
+
     run, store = stopped
     by = {t.slug: t for t in tallies(store)}
     examined(len(store.runs()), "stored runs counted on rung 3")
-    parts = ("nothing-missing", "missing-a-declared-stage", "missing-not-established",
-             "stopped-at-a-step")
+    parts = ("nothing-missing", "missing-a-declared-stage", "missing-not-established", "stopped-at-a-step")
     assert sum(by[s].count for s in parts) == len(store.runs())
     assert [r.key for r in by["stopped-at-a-step"].runs] == [run.key]
     assert by["missing-a-declared-stage"].count == 0
@@ -110,9 +115,11 @@ def test_the_overviews_rung_3_counts_it_apart_and_every_run_once(stopped, examin
 
 # ------------------------------------------------------------------ the three that stay red
 
+
 @pytest.mark.parametrize("name", list(RED))
 def test_these_stay_no_in_red(tmp_path, store, name, examined):
     from onetrace_console.overview import attention_kind
+
     _require_installed()
     run = _stored(tmp_path, store, name, *RED[name])
     examined(1, name)
@@ -120,6 +127,7 @@ def test_these_stay_no_in_red(tmp_path, store, name, examined):
     #: A missing stage, unless its records come first in the order: a run whose only step declined
     #: wrote no output files, so its records are not checked, which the order lists before it.
     from onetrace_console import records
+
     agree = records.state(run, store)
     assert attention_kind(run, store) == ("missing-stage" if agree == "yes" else agree), agree
     state, _ = _rung3(_case_page(run, store))
@@ -130,8 +138,7 @@ def test_these_stay_no_in_red(tmp_path, store, name, examined):
 #: "not-reached", so the test above would fail on that sabotage.
 SABOTAGE = {
     "a-step-missing-before-the-declining-one": ("_missing_before", lambda *a: ()),
-    "no-recorded-decline": ("declined_at_step",
-                            lambda record: (str(record.steps[-1].data["stage"]["name"]), "", ())),
+    "no-recorded-decline": ("declined_at_step", lambda record: (str(record.steps[-1].data["stage"]["name"]), "", ())),
     "a-receipt-for-a-later-step": ("_recorded_after", lambda *a: ()),
 }
 
@@ -140,6 +147,7 @@ SABOTAGE = {
 def test_sabotage_each_condition_that_keeps_it_red(tmp_path, monkeypatch, name, examined):
     import onetrace_console.viewer.model as model
     from onetrace_console.checks import nothing_missing_state
+
     _require_installed()
     folder = tmp_path / name
     _emit(folder, name, *RED[name])
@@ -154,6 +162,7 @@ def test_sabotage_a_stopped_run_read_as_missing_is_caught(tmp_path, monkeypatch,
     """The other way: with the rule taken away, the stopped run reads No again."""
     import onetrace_console.viewer.model as model
     from onetrace_console.checks import nothing_missing_state
+
     _require_installed()
     folder = tmp_path / "stopped"
     _emit(folder, "stopped", STAGES, STOPPED)

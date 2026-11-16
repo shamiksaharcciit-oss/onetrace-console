@@ -18,6 +18,7 @@ the public banner, and then a build record over all of it -- then it exits. A pu
 serves that folder's store as it is and draws nothing. `demo --public` builds one into a
 temporary folder and serves it on 127.0.0.1, to try.
 """
+
 from __future__ import annotations
 
 import hashlib
@@ -26,13 +27,18 @@ import os
 import sys
 import tarfile
 from dataclasses import dataclass
+from datetime import UTC
 from pathlib import Path, PurePosixPath
+from typing import TYPE_CHECKING
 
-from onetrace_console.config import Config
-from onetrace_console.oserror import shown
-from onetrace_console.ingest import MANIFEST_NAME, SUMS_NAME
-from onetrace_console.store import StoredRun, Store
 from onetrace_console import records
+from onetrace_console.config import Config
+from onetrace_console.ingest import MANIFEST_NAME, SUMS_NAME
+from onetrace_console.oserror import shown
+from onetrace_console.store import Store, StoredRun
+
+if TYPE_CHECKING:
+    from onetrace_console.compare import StoredComparison
 
 DEMO_FOLDER = "onetrace-console-demo"
 #: onetrace holds this file in a run's folder while it is recording, and removes it after.
@@ -45,52 +51,60 @@ class LoadRefused(Exception):
 
 @dataclass(frozen=True)
 class LoadedRun:
-    name: str                       # the run folder's name
-    run: StoredRun | None           # the stored, checked run; None when refused
-    refused: str = ""               # why it was not loaded
+    name: str  # the run folder's name
+    run: StoredRun | None  # the stored, checked run; None when refused
+    refused: str = ""  # why it was not loaded
 
 
 @dataclass(frozen=True)
 class Loaded:
     runs: tuple[LoadedRun, ...]
-    comparison: object | None = None    # the StoredComparison asked for, if made
-    compare_note: str = ""              # why the comparison asked for was not made
+    comparison: StoredComparison | None = None  # the StoredComparison asked for, if made
+    compare_note: str = ""  # why the comparison asked for was not made
 
 
 def run_folders(folder: Path) -> list[Path]:
     if not folder.is_dir():
         raise LoadRefused(f"{folder} is not a folder.")
-    found = sorted((p for p in folder.iterdir() if p.is_dir() and (p / MANIFEST_NAME).is_file()),
-                   key=lambda p: p.name)
+    found = sorted((p for p in folder.iterdir() if p.is_dir() and (p / MANIFEST_NAME).is_file()), key=lambda p: p.name)
     if not found:
-        hint = (f" {folder} is itself a run folder: name the folder that holds it."
-                if (folder / MANIFEST_NAME).is_file() else "")
-        raise LoadRefused(f"no run folders in {folder}: a run folder is one holding a "
-                          f"{MANIFEST_NAME}.{hint}")
+        hint = (
+            f" {folder} is itself a run folder: name the folder that holds it."
+            if (folder / MANIFEST_NAME).is_file()
+            else ""
+        )
+        raise LoadRefused(f"no run folders in {folder}: a run folder is one holding a {MANIFEST_NAME}.{hint}")
     return found
 
 
-def delivery(run_dir: Path) -> bytes:
+def delivery(run_dir: Path, *, skip_lock: bool = False) -> bytes:
     """The run folder as `POST /v1/runs` takes it: every file, and a SHA256SUMS covering them.
     A SHA256SUMS the folder holds is delivered as it is, so the console checks it.
 
     The files go in the order of their names as POSIX paths, on every platform: the delivery's bytes
     make the run's bundle, whose digest names its comparisons (`compare.comparison_key`). Sorted as
     this host's paths, Windows' case-folding put `MANIFEST.json` after `artifacts/`, and the same run
-    was named otherwise there."""
+    was named otherwise there.
+
+    `skip_lock`: the folder's own `.lock` is the recorder's, not the record's, and is left out: for a
+    run whose recorder is gone, or one loaded as not closed (`run_lock`)."""
     files: dict[str, bytes] = {}
     for path in sorted(run_dir.rglob("*"), key=lambda p: PurePosixPath(p.relative_to(run_dir).as_posix())):
         rel = path.relative_to(run_dir).as_posix()
         if path.is_symlink():
             raise _Undeliverable(f"it holds a link ({rel}), and a run folder holds files only")
+        if skip_lock and rel == RECORDING_LOCK:
+            continue
         if path.name == RECORDING_LOCK:
-            raise _Undeliverable(f"it is still being recorded (onetrace's {RECORDING_LOCK} is in "
-                                 f"it); load it once the run has finished")
+            raise _Undeliverable(
+                f"it is still being recorded (onetrace's {RECORDING_LOCK} is in it); load it once the run has finished"
+            )
         if path.is_file():
             files[rel] = path.read_bytes()
     if SUMS_NAME not in files:
-        files[SUMS_NAME] = "".join(f"{hashlib.sha256(b).hexdigest()}  {p}\n"
-                                   for p, b in sorted(files.items())).encode("utf-8")
+        files[SUMS_NAME] = "".join(f"{hashlib.sha256(b).hexdigest()}  {p}\n" for p, b in sorted(files.items())).encode(
+            "utf-8"
+        )
     buf = io.BytesIO()
     with tarfile.open(fileobj=buf, mode="w") as tar:
         for rel, blob in files.items():
@@ -109,6 +123,7 @@ def identity(run_dir: Path) -> tuple[str, str] | None:
     what tells two folders carrying one run apart from two runs. Its reading never refuses a folder;
     the delivery does that, in its own words."""
     from onetrace_console.bounded_json import load_json_bounded
+
     try:
         m = load_json_bounded((run_dir / MANIFEST_NAME).read_bytes(), "a run's manifest")
     except Exception:  # noqa: BLE001 - unreadable here is refused by the delivery, said there
@@ -130,35 +145,49 @@ def shared_heads(run_dirs) -> set[str]:
     return {n for names in by_identity.values() if len(names) > 1 for n in names}
 
 
-def deliver_one(run_dir: Path, store: Store, config: Config, *,
-                shared: set[str] | None = None) -> LoadedRun:
+def deliver_one(
+    run_dir: Path, store: Store, config: Config, *, shared: set[str] | None = None, not_closed: bool = False
+) -> LoadedRun:
     """One run folder, delivered and checked: what `load_folder` does for each folder at start,
     and the folder watcher for each finished run after (`watch.py`). There is no second path.
 
     Runs are folders, not chain heads: a folder that carries the same run and chain head as
     another folder beside it is stored under its own folder's key, and read on its own. `shared`:
-    the names of such folders, where the caller has read them all already."""
+    the names of such folders, where the caller has read them all already.
+
+    The folder's own `.lock` (`run_lock.state`): one naming a process on this host that is gone is left
+    out, and the run is loaded; it reads "not closed". One that is empty, or names another host, lists
+    the folder as locked on the Runs page and loads nothing, unless `not_closed` (the Runs page's
+    "Load as not closed") asks for it. One naming a live process skips the folder, as before."""
     from onetrace_console.checks import check_options, run_and_record
     from onetrace_console.ingest import Rejection, accept
+
     if shared is None:
-        shared = shared_heads(p for p in run_dir.parent.iterdir()
-                              if p.is_dir() and (p / MANIFEST_NAME).is_file())
+        shared = shared_heads(p for p in run_dir.parent.iterdir() if p.is_dir() and (p / MANIFEST_NAME).is_file())
+    from onetrace_console import run_lock
+
+    lock = run_lock.state(run_dir)
+    if lock.kind in run_lock.LISTED_WORDS and not not_closed:
+        run_lock.note(run_dir.name, run_dir, lock.kind)
+        return LoadedRun(run_dir.name, None, "not loaded: " + run_lock.REFUSED[lock.kind])
     try:
-        data = delivery(run_dir)
+        skip = lock.kind == "dead" or (not_closed and lock.kind != "live")
+        data = delivery(run_dir, skip_lock=True) if skip else delivery(run_dir)
     except _Undeliverable as e:
         return LoadedRun(run_dir.name, None, f"not loaded: {e}")
     except OSError as e:
         from onetrace_console.oserror import said
+
         return LoadedRun(run_dir.name, None, f"not loaded: cannot read it: {said(e)}")
-    accepted = accept(data, store, limits=config, run_folder=run_dir.name,
-                      shared_head=run_dir.name in shared)
+    accepted = accept(data, store, limits=config, run_folder=run_dir.name, shared_head=run_dir.name in shared)
     if isinstance(accepted, Rejection):
-        return LoadedRun(run_dir.name, None,
-                         "refused: " + "; ".join(r.strip() for r in accepted.rows))
+        return LoadedRun(run_dir.name, None, "refused: " + "; ".join(r.strip() for r in accepted.rows))
     #: The files the worked examples keep beside a run (the decision export, the permit issuers,
     #: a trace under traces/), kept with it for its check and its pages (`beside`).
     from onetrace_console import beside
+
     beside.from_folder(store, accepted.run.key, run_dir)
+    run_lock.unlist(run_dir.name)
     return LoadedRun(run_dir.name, run_and_record(accepted.run, store, **check_options(config)))
 
 
@@ -166,8 +195,9 @@ def deliver_one(run_dir: Path, store: Store, config: Config, *,
 WAITING = "waiting for {names}: the comparison is made when both run folders have arrived"
 
 
-def load_folder(folder: Path, store: Store, config: Config, *,
-                compare: tuple[str, str] | None = None, watched: bool = False) -> Loaded:
+def load_folder(
+    folder: Path, store: Store, config: Config, *, compare: tuple[str, str] | None = None, watched: bool = False
+) -> Loaded:
     """Deliver, check and (if asked) compare; nothing is stored when the request itself is wrong.
     `watched`: the folder is watched while the console runs (`watch.py`), so a folder with no run
     yet is not refused, and a `--compare` naming a folder not there yet waits for it."""
@@ -176,7 +206,7 @@ def load_folder(folder: Path, store: Store, config: Config, *,
     except LoadRefused:
         if not (watched and Path(folder).is_dir()):
             raise
-        found = []                      # nothing yet: a watched folder waits for its runs
+        found = []  # nothing yet: a watched folder waits for its runs
     names = [p.name for p in found]
     if compare is not None:
         missing = [n for n in compare if n not in names]
@@ -185,14 +215,16 @@ def load_folder(folder: Path, store: Store, config: Config, *,
             loaded = _checked(found, store, config, shared)
             return Loaded(tuple(loaded), None, WAITING.format(names=" and ".join(missing)))
         if missing:
-            raise LoadRefused(f"--compare names {', '.join(missing)}, not a run folder in {folder} "
-                              f"(there: {', '.join(names)}).")
+            raise LoadRefused(
+                f"--compare names {', '.join(missing)}, not a run folder in {folder} (there: {', '.join(names)})."
+            )
     shared = shared_heads(found)
     loaded = _checked(found, store, config, shared)
     loaded = recheck_nested(loaded, store, config)
     comparison, note = None, ""
     if compare is not None:
         from onetrace_console import startup_progress
+
         with startup_progress.phase("comparing pairs", 1) as step:
             comparison, note = _compare(loaded, compare, store)
             step()
@@ -202,6 +234,7 @@ def load_folder(folder: Path, store: Store, config: Config, *,
 def _checked(found, store: Store, config: Config, shared: set[str]) -> list:
     """Each run folder delivered and checked, said as a phase while the console starts."""
     from onetrace_console import startup_progress
+
     out = []
     with startup_progress.phase("checking runs", len(found)) as step:
         for run_dir in found:
@@ -218,6 +251,7 @@ def recheck_nested(loaded: list[LoadedRun], store: Store, config: Config) -> lis
     from onetrace_console.home import _envelope
     from onetrace_console.nesting_view import nested_inputs
     from onetrace_console.render import _receipts_in_order
+
     held = {r.run_id for r in store.runs()}
     out = []
     for item in loaded:
@@ -237,6 +271,7 @@ def recheck_nested(loaded: list[LoadedRun], store: Store, config: Config) -> lis
 def _compare(loaded: list[LoadedRun], pair: tuple[str, str], store: Store):
     from onetrace_console.compare import ComparisonError, compare
     from onetrace_console.store import SameFileError
+
     by_name = {r.name: r for r in loaded}
     a, b = by_name[pair[0]], by_name[pair[1]]
     if a.run is None or b.run is None:
@@ -249,7 +284,7 @@ def _compare(loaded: list[LoadedRun], pair: tuple[str, str], store: Store):
         return None, f"not compared: {e}"
 
 
-def announce(folder: Path, loaded: Loaded, store: Store) -> tuple[list[tuple[str, str]], str]:
+def announce(folder: Path, loaded: Loaded, store: Store) -> tuple[list[tuple[str, str | None]], str]:
     """What to print once the console is listening, as (text, page path or None) pairs, and the
     page `--open` opens: the comparison when one was made, otherwise the overview (""). Each run
     says its "Records agree" as its own page reads it (`records.said`)."""
@@ -265,12 +300,15 @@ def announce(folder: Path, loaded: Loaded, store: Store) -> tuple[list[tuple[str
             lines.append((f"  {r.name.ljust(width)}  {word}", f"runs/{r.run.key}/case.html"))
     opened = ""
     if loaded.comparison is not None:
-        by_key = {r.run.key: r.name for r in ok}
+        by_key = {r.run.key: r.name for r in ok if r.run is not None}
         cmp = loaded.comparison
         opened = f"diff/{cmp.key}.html"
         unchecked = records.unchecked_sides(cmp, store)
-        said = (" " + records.UNCHECKED_SAID.format(
-            names=" and ".join(by_key.get(r.key, r.run_id) for _, r in unchecked))) if unchecked else ""
+        said = (
+            (" " + records.UNCHECKED_SAID.format(names=" and ".join(by_key.get(r.key, r.run_id) for _, r in unchecked)))
+            if unchecked
+            else ""
+        )
         lines.append((f"compared {by_key[cmp.run_a]} with {by_key[cmp.run_b]}:{said}", opened))
     elif loaded.compare_note:
         lines.append((loaded.compare_note, None))
@@ -278,11 +316,56 @@ def announce(folder: Path, loaded: Loaded, store: Store) -> tuple[list[tuple[str
     return lines, opened
 
 
+def own_demo_folder() -> str:
+    """The demo folder this console builds and reuses: named by its version, `onetrace-console-demo-<version>`."""
+    from onetrace_console import __version__
+
+    return f"{DEMO_FOLDER}-{__version__}"
+
+
+def _version(text: str) -> tuple[int, ...] | None:
+    try:
+        return tuple(int(x) for x in text.split("."))
+    except ValueError:
+        return None
+
+
+def other_demos(cwd: Path) -> list[str]:
+    """One line for each demo folder in `cwd` that is not this version's own (the unversioned `onetrace-console-demo/`
+    and any other version's), naming who built it from its build record: never read further, moved or changed."""
+    from onetrace_console import __version__, demo_store
+    from onetrace_console.bounded_json import load_json_bounded
+
+    own = own_demo_folder()
+    lines = []
+    for folder in sorted(cwd.iterdir()) if cwd.is_dir() else []:
+        if folder.name == own or not folder.is_dir():
+            continue
+        if folder.name != DEMO_FOLDER and not folder.name.startswith(DEMO_FOLDER + "-"):
+            continue
+        try:
+            record = load_json_bounded((folder / demo_store.BUILD_RECORD).read_text(encoding="utf-8"), "a build record")
+            built = record.get("console_version") if isinstance(record, dict) else None
+        except (OSError, ValueError, RecursionError):
+            built = None
+        theirs, mine = _version(built) if isinstance(built, str) else None, _version(__version__)
+        newer = theirs is not None and mine is not None and theirs > mine
+        who = f"onetrace-console {built}" if theirs is not None else "an earlier onetrace-console"
+        which = "newer" if newer else "older"
+        lines.append(
+            f"{'A newer' if newer else 'An older'} demo, built by {who}, is in `{folder.name}/`. It isn't used. "
+            f"This is {__version__}'s demo, in `{own}/`. You can remove the {which} folder when you like."
+        )
+    return lines
+
+
 def demo_folder(cwd: Path) -> Path:
-    """Build the demo store into `onetrace-console-demo/`, or check that the one already there is
-    the builder's, byte for byte (its build record). Returns that folder."""
+    """Build the demo store into this version's own folder (`own_demo_folder`), or check that the one already there
+    is the builder's, byte for byte (its build record). Returns that folder. Any other demo folder in `cwd` is left
+    as it is (`other_demos`)."""
     from onetrace_console import demo_store
-    target = cwd / DEMO_FOLDER
+
+    target = cwd / own_demo_folder()
     if not target.exists():
         demo_store.build(target)
         return target
@@ -291,12 +374,19 @@ def demo_folder(cwd: Path) -> Path:
         raise LoadRefused(
             f"{target} is not the demo as its builder made it: {'; '.join(problems[:5])}"
             f"{' and more' if len(problems) > 5 else ''}. Remove {target.name}, or run the demo "
-            f"from another folder.")
+            f"from another folder."
+        )
     return target
 
 
-def build_public(folder: Path, *, runs_from: Path | None = None, explanations: Path | None = None,
-                 site_links: Path | None = None) -> tuple[list[tuple[str, str | None]], str]:
+def build_public(
+    folder: Path,
+    *,
+    runs_from: Path | None = None,
+    explanations: Path | None = None,
+    site_links: Path | None = None,
+    builder=None,
+) -> tuple[list[tuple[str, str | None]], str]:
     """Build the public demo into `folder`, which must not exist yet or be empty: the demo store's
     runs and trust file, the runs delivered, checked and compared, every page drawn as a public
     console serves it, and a build record over all of it, which a public console checks before it
@@ -307,13 +397,21 @@ def build_public(folder: Path, *, runs_from: Path | None = None, explanations: P
     `explain/` under; the explanations of comparisons this build holds are kept, read-only
     (`explain.keep`), and every other file is refused with its reason, printed. `site_links`: the
     public site's links into the demo (`deploy/fly/site_links.txt`); a listed comparison page this
-    build names anew gets a page at its old name that sends a reader on (`site_links`)."""
+    build names anew gets a page at its old name that sends a reader on (`site_links`). `builder`: the store's
+    builder, the demo's (`demo_store`) by default, or the capture store's (`demo_store.captures`), which takes no
+    `runs_from`."""
     from onetrace_console import demo_store
     from onetrace_console.config import Config
     from onetrace_console.serve import _render_startup_pages
+
     if folder.exists() and (not folder.is_dir() or any(folder.iterdir())):
         raise LoadRefused(f"{folder} is not a new, empty folder; the public demo is built into one.")
-    if runs_from is not None:
+    builder = demo_store if builder is None else builder
+    if builder is not demo_store:
+        if runs_from is not None:
+            raise LoadRefused(f"the {builder.NAME} store is built from its own runs: --runs-from is the demo's.")
+        builder.build(folder)
+    elif runs_from is not None:
         try:
             demo_store.build_from(folder, runs_from)
         except (ValueError, FileExistsError) as e:
@@ -321,47 +419,63 @@ def build_public(folder: Path, *, runs_from: Path | None = None, explanations: P
     else:
         demo_store.build(folder)
     store_root = folder / "store"
-    config = Config(public=True, store_root=str(store_root),
-                    trust_file=str(folder / demo_store.TRUST_NAME),
-                    sign_in={**Config().sign_in, "enabled": False})
+    config = Config(
+        public=True,
+        store_root=str(store_root),
+        trust_file=str(folder / demo_store.TRUST_NAME),
+        sign_in={**Config().sign_in, "enabled": False},
+    )
     store = Store(store_root / "store")
     #: The demo's own example inputs, its build record vouching for them, are drawn as shown.
     with demo_store.allowing_examples(folder), store.reading():
-        loaded = demo_store.deliver(folder, store, config)
+        loaded = builder.deliver(folder, store, config)
         #: Each pipeline's two drift reports, kept now: a public console never runs the command.
         from onetrace_console.drift import ensure_all
+
         ensure_all(store)
         #: Each pipeline's baseline marked as its benchmark, read-only from now on (`benchmarks`).
-        from datetime import datetime, timezone
+        from datetime import datetime
+
         from onetrace_console.benchmarks import mark_build
-        mark_build(store, [r.name for r in loaded.runs],
-                   datetime.now(timezone.utc).isoformat(timespec="seconds"))
+
+        mark_build(store, [r.name for r in loaded.runs], datetime.now(UTC).isoformat(timespec="seconds"))
         #: Each pipeline's reference, its profile and every run's verdict, kept now: a public
         #: console never runs the command (`verdicts`).
         from onetrace_console.verdicts import ensure_all as ensure_verdicts
+
         ensure_verdicts(store)
-        said = []
+        said: list[tuple[str, str | None]] = []
         if explanations is not None:
             #: The explanations the builder names, kept before any page is drawn.
             from onetrace_console.explain import keep
+
             try:
                 kept = keep(explanations, store)
             except ValueError as e:
                 raise LoadRefused(str(e)) from None
             n = len(kept["kept"])
-            said.append((f"kept {n} explanation{'' if n == 1 else 's'} from {explanations}; "
-                         f"refused {len(kept['refused'])}", None))
+            said.append(
+                (
+                    f"kept {n} explanation{'' if n == 1 else 's'} from {explanations}; refused {len(kept['refused'])}",
+                    None,
+                )
+            )
             said += [(shown(f"  refused {r['file']}: {r['reason']}"), None) for r in kept["refused"]]
         _render_startup_pages(store, store_root, config)
         if site_links is not None:
             from onetrace_console import site_links as links
             from onetrace_console.serve import PAGES_DIRNAME
+
             try:
-                moved = links.write_redirects(store, store_root / PAGES_DIRNAME, links.read(site_links))
+                moved = links.write_redirects(
+                    store, store_root / PAGES_DIRNAME, links.read(site_links), links.read_pairs(site_links)
+                )
             except (links.Unplaced, ValueError) as e:
                 raise LoadRefused(f"{site_links}: {e}") from None
             said += [(f"{old} has moved to {new}", None) for old, new in moved.items()]
-    demo_store.write_build_record(folder, (demo_store.RUNS_DIRNAME, demo_store.TRUST_NAME, "store"))
+    demo_store.write_build_record(
+        folder, (demo_store.RUNS_DIRNAME, demo_store.TRUST_NAME, "store"), builder=builder.NAME
+    )
     lines, opened = announce(folder / demo_store.RUNS_DIRNAME, loaded, store)
     return said + lines, opened
 
@@ -371,58 +485,115 @@ def main(argv: list[str], *, demo: bool) -> int:
 
     parser = argparse.ArgumentParser(
         prog="onetrace-console demo" if demo else "onetrace-console",
-        description=("Build the demo store's runs into ./onetrace-console-demo, load them, "
-                     "compare them, and serve them on 127.0.0.1." if demo else
-                     "Load every run folder in a folder, then serve them on 127.0.0.1."))
+        description=(
+            "Build the demo store's runs into ./onetrace-console-demo-<version>, load them, "
+            "compare them, and serve them on 127.0.0.1."
+            if demo
+            else "Load every run folder in a folder, then serve them on 127.0.0.1."
+        ),
+    )
     if not demo:
         parser.add_argument("folder", metavar="runs-folder", help="the folder holding run folders")
-        parser.add_argument("--compare", nargs=2, metavar=("A", "B"),
-                            help="compare run folder A (the baseline) with run folder B")
-        parser.add_argument("--trust", metavar="FILE", default=None,
-                            help="the signing keys you trust, an onetrace-trust/0.1 file: a run "
-                                 "signed by one reads \"Signed by a known recorder: Yes\"")
-        parser.add_argument("--tsa-cert", metavar="FILE", default=None,
-                            help="the RFC 3161 time-stamp authority's certificate you trust, so "
-                                 "a run's anchor can be checked (with --tsa-root)")
-        parser.add_argument("--tsa-root", metavar="FILE", action="append", default=[],
-                            help="the root that certificate chains to; may be given more than once")
-        parser.add_argument("--watch-interval", metavar="N", type=float, default=None,
-                            help="read the folder for new runs every N seconds while serving "
-                                 "(default 2)")
-        parser.add_argument("--no-watch", action="store_true",
-                            help="read the folder once, at start, and not again")
+        parser.add_argument(
+            "--compare", nargs=2, metavar=("A", "B"), help="compare run folder A (the baseline) with run folder B"
+        )
+        parser.add_argument(
+            "--trust",
+            metavar="FILE",
+            default=None,
+            help="the signing keys you trust, an onetrace-trust/0.1 file: a run "
+            'signed by one reads "Signed by a known recorder: Yes"',
+        )
+        parser.add_argument(
+            "--tsa-cert",
+            metavar="FILE",
+            default=None,
+            help="the RFC 3161 time-stamp authority's certificate you trust, so "
+            "a run's anchor can be checked (with --tsa-root)",
+        )
+        parser.add_argument(
+            "--tsa-root",
+            metavar="FILE",
+            action="append",
+            default=[],
+            help="the root that certificate chains to; may be given more than once",
+        )
+        parser.add_argument(
+            "--watch-interval",
+            metavar="N",
+            type=float,
+            default=None,
+            help="read the folder for new runs every N seconds while serving (default 2)",
+        )
+        parser.add_argument("--no-watch", action="store_true", help="read the folder once, at start, and not again")
     if demo:
-        parser.add_argument("--public", action="store_true",
-                            help="the read-only public demo: every write refused, a banner on "
-                                 "every page")
-        parser.add_argument("--build", type=Path, metavar="FOLDER", default=None,
-                            help="with --public: build the public demo into a new folder and exit")
-        parser.add_argument("--runs-from", type=Path, metavar="FOLDER", default=None,
-                            help="with --public --build: take an earlier build's runs and trust "
-                                 "file, where its build record vouches for every byte")
-        parser.add_argument("--site-links", type=Path, metavar="FILE", default=None,
-                            help="with --public --build: the public site's links into the demo, one per "
-                                 "line; a listed comparison page named anew gets a page at its old name")
-        parser.add_argument("--explanations", type=Path, metavar="FOLDER", default=None,
-                            help="with --public --build: keep the explanations onetrace-explain "
-                                 "wrote under FOLDER/explain/ of comparisons this build holds, "
-                                 "read-only")
+        parser.add_argument(
+            "--public",
+            action="store_true",
+            help="the read-only public demo: every write refused, a banner on every page",
+        )
+        parser.add_argument(
+            "--build",
+            type=Path,
+            metavar="FOLDER",
+            default=None,
+            help="with --public: build the public demo into a new folder and exit",
+        )
+        parser.add_argument(
+            "--runs-from",
+            type=Path,
+            metavar="FOLDER",
+            default=None,
+            help="with --public --build: take an earlier build's runs and trust "
+            "file, where its build record vouches for every byte",
+        )
+        parser.add_argument(
+            "--site-links",
+            type=Path,
+            metavar="FILE",
+            default=None,
+            help="with --public --build: the public site's links into the demo, one per "
+            "line; a listed comparison page named anew gets a page at its old name",
+        )
+        parser.add_argument(
+            "--captures",
+            action="store_true",
+            help="with --public: the capture store (P10's runs whose model calls are captured at L3, example data) "
+            "in place of the demo",
+        )
+        parser.add_argument(
+            "--explanations",
+            type=Path,
+            metavar="FOLDER",
+            default=None,
+            help="with --public --build: keep the explanations onetrace-explain "
+            "wrote under FOLDER/explain/ of comparisons this build holds, "
+            "read-only",
+        )
     parser.add_argument("--open", action="store_true", help="open the page in your browser")
-    parser.add_argument("--quiet", action="store_true",
-                        help="say nothing while starting; only the addresses once it is listening")
-    parser.add_argument("--port", type=int, default=None,
-                        help="the port to listen on (default: 8080, or the configuration file's)")
+    parser.add_argument(
+        "--quiet", action="store_true", help="say nothing while starting; only the addresses once it is listening"
+    )
+    parser.add_argument(
+        "--port", type=int, default=None, help="the port to listen on (default: 8080, or the configuration file's)"
+    )
     args = parser.parse_args(argv)
     if args.port is not None and not 0 < args.port < 65536:
         parser.error("--port takes a TCP port, 1 to 65535")
     if demo and args.build is not None and not args.public:
         parser.error("--build builds the public demo: give --public with it")
-    if demo and (args.runs_from is not None or args.explanations is not None or args.site_links is not None) \
-            and args.build is None:
+    if demo and args.captures and not args.public:
+        parser.error("--captures builds the capture store as a public console serves it: give --public with it")
+    if (
+        demo
+        and (args.runs_from is not None or args.explanations is not None or args.site_links is not None)
+        and args.build is None
+    ):
         parser.error("--runs-from, --explanations and --site-links go into a build: give --public --build with them")
     if demo and args.public:
         return _public_demo(args)
     from onetrace_console import startup_progress
+
     progress = startup_progress._SILENT if args.quiet else startup_progress.Progress()
     with startup_progress.using(progress):
         return _start(args, parser, demo)
@@ -434,15 +605,28 @@ def _start(args, parser, demo: bool) -> int:
     from onetrace_console import startup_progress
     from onetrace_console.config import ENV_VAR
     from onetrace_console.serve import main as serve_main
+
     if demo:
         if os.environ.get(ENV_VAR) is not None:
-            print(f"refusing to start the demo: {ENV_VAR} is set. The demo runs in local mode, "
-                  f"with its own store and trust file.\nfix: run it without {ENV_VAR}.",
-                  file=sys.stderr)
+            print(
+                f"refusing to start the demo: {ENV_VAR} is set. The demo runs in local mode, "
+                f"with its own store and trust file.\nfix: run it without {ENV_VAR}.",
+                file=sys.stderr,
+            )
             return 1
         #: The first line at once, before the demo's runs are recorded or read.
-        startup_progress.say(startup_progress.LATER_DEMO.format(folder=DEMO_FOLDER)
-                             if (Path.cwd() / DEMO_FOLDER).exists() else startup_progress.FIRST_DEMO)
+        startup_progress.say(
+            startup_progress.LATER_DEMO.format(folder=own_demo_folder())
+            if (Path.cwd() / own_demo_folder()).exists()
+            else startup_progress.FIRST_DEMO
+        )
+        #: Another version's demo folder here: named, printed and on the Overview's local notice, never used.
+        others = other_demos(Path.cwd())
+        for line in others:
+            print(line, file=sys.stderr, flush=True)
+        from onetrace_console.render import set_local_notices
+
+        set_local_notices(others)
         try:
             folder = demo_folder(Path.cwd())
         except LoadRefused as e:
@@ -472,6 +656,7 @@ def _start(args, parser, demo: bool) -> int:
     def prepare(store: Store, config: Config):
         if demo:
             from onetrace_console import demo_store
+
             loaded = demo_store.deliver(runs.parent, store, config)
         else:
             loaded = load_folder(runs, store, config, compare=pair)
@@ -480,8 +665,7 @@ def _start(args, parser, demo: bool) -> int:
     if demo or args.no_watch:
         return serve_main([], overrides=overrides, prepare=prepare, open_browser=args.open)
     watching = _Watching(runs, pair, args.watch_interval)
-    return serve_main([], overrides=overrides, prepare=watching.prepare, open_browser=args.open,
-                      watch=watching.watch)
+    return serve_main([], overrides=overrides, prepare=watching.prepare, open_browser=args.open, watch=watching.watch)
 
 
 class _Watching:
@@ -492,18 +676,23 @@ class _Watching:
 
     def __init__(self, runs: Path, pair, interval):
         from onetrace_console import watch
+
         self.runs, self.pair = runs, pair
         self.interval = watch.INTERVAL if interval is None else interval
         self.loaded: list[LoadedRun] = []
         self.compared = None
-        self.store = self.config = self.root = None
+        #: Set by prepare() (the store and configuration) and serve() (the pages' root) before any intake reads them.
+        self.store: Store = None  # type: ignore[assignment]  # set by prepare() before the first intake
+        self.config: Config = None  # type: ignore[assignment]  # as `store`
+        self.root: Path = None  # type: ignore[assignment]  # set as the console serves; read only while it does
         self.serving = False
-        self.watcher = None
+        self.watcher: watch.Watcher = None  # type: ignore[assignment]  # set by prepare() before it is read
 
-    def _intake(self, run_dir: Path) -> bool:
+    def _intake(self, run_dir: Path, *, not_closed: bool = False) -> bool:
         from onetrace_console.serve import INTAKE_LOCK, _render_run_pages
+
         with INTAKE_LOCK:
-            got = deliver_one(run_dir, self.store, self.config)
+            got = deliver_one(run_dir, self.store, self.config, not_closed=not_closed)
             self.loaded.append(got)
             if got.run is None:
                 print(shown(f"onetrace-console: {run_dir.name}: {got.refused}"), file=sys.stderr, flush=True)
@@ -512,6 +701,7 @@ class _Watching:
                 #: Where neighbours by input are on, the new run's kept texts are embedded first and its
                 #: group's pages drawn with them (`neighbours`); otherwise its own pages, as before.
                 from onetrace_console.serve import _neighbours_on, _neighbours_refresh, _render_neighbour_pages
+
                 if _neighbours_on(self.store, self.config):
                     _neighbours_refresh(self.store, self.config)
                     _render_neighbour_pages(self.store, self.root, self.config)
@@ -523,6 +713,7 @@ class _Watching:
     def _examine(self, run_dir: Path) -> tuple[str, str]:
         """A folder changed since it was taken in, as its own check now reads it."""
         from onetrace_console.checks import CONTRADICTS, check, check_options
+
         try:
             verdict = check(run_dir, **check_options(self.config)).verdict
         except Exception:  # noqa: BLE001 - said, never raised
@@ -542,11 +733,12 @@ class _Watching:
 
     def _on_change(self, took) -> None:
         from onetrace_console.serve import INTAKE_LOCK, _render_all_pages, _render_diff_page
+
         with INTAKE_LOCK:
             before = self.compared
             self._compare_if_ready()
             if not self.serving:
-                return              # at start: the start-up drawing draws everything
+                return  # at start: the start-up drawing draws everything
             if self.compared is not None and before is None:
                 _render_diff_page(self.compared, self.store, self.root, public=self.config.public)
             _render_all_pages(self.store, self.root, self.config)
@@ -555,9 +747,11 @@ class _Watching:
         import time
 
         from onetrace_console import watch
+
         self.store, self.config = store, config
-        self.watcher = watch.Watcher(self.runs, self._intake, interval=self.interval,
-                                     on_change=self._on_change, examine=self._examine)
+        self.watcher = watch.Watcher(
+            self.runs, self._intake, interval=self.interval, on_change=self._on_change, examine=self._examine
+        )
         #: Known before the start-up drawing, so its pages carry the line saying the folder is
         #: watched; set only in `watch()`, it reached a page only after a later pickup redrew it.
         watch.CURRENT = self.watcher
@@ -567,21 +761,23 @@ class _Watching:
         self._compare_if_ready()
         note = ""
         if self.pair is not None and self.compared is None:
-            missing = [n for n in self.pair if not any(r.name == n and r.run is not None
-                                                        for r in self.loaded)]
+            missing = [n for n in self.pair if not any(r.name == n and r.run is not None for r in self.loaded)]
             note = WAITING.format(names=" and ".join(missing))
         if not self.loaded:
-            print(f"onetrace-console: no finished run in {self.runs} yet; watching it every "
-                  f"{self.interval:g} s", file=sys.stderr, flush=True)
+            print(
+                f"onetrace-console: no finished run in {self.runs} yet; watching it every {self.interval:g} s",
+                file=sys.stderr,
+                flush=True,
+            )
             return ([("overview:", "")], "")
         return announce(self.runs, Loaded(tuple(self.loaded), self.compared, note), store)
 
     def watch(self, store: Store, root: Path, config: Config):
         from onetrace_console import watch
+
         self.root, self.serving = root, True
         watch.CURRENT = self.watcher
         return self.watcher
-
 
 
 def evidence_files(args) -> dict:
@@ -597,20 +793,33 @@ def evidence_files(args) -> dict:
             with open(path, "rb"):
                 pass
         except OSError as e:
-            raise LoadRefused(f"{flag} {value}: cannot read {path} ({e.strerror or e}).\nfix: give "
-                              f"{flag} the path of a file this console can read.") from None
+            raise LoadRefused(
+                f"{flag} {value}: cannot read {path} ({e.strerror or e}).\nfix: give "
+                f"{flag} the path of a file this console can read."
+            ) from None
         return str(path)
+
     out: dict = {}
     if args.trust is not None:
         out["trust_file"] = readable("--trust", args.trust)
     if bool(args.tsa_cert) != bool(args.tsa_root):
-        raise LoadRefused("--tsa-cert and --tsa-root go together: the verifier checks the time-stamp "
-                          "authority's certificate against the root it chains to.\nfix: give "
-                          "both, or neither.")
+        raise LoadRefused(
+            "--tsa-cert and --tsa-root go together: the verifier checks the time-stamp "
+            "authority's certificate against the root it chains to.\nfix: give "
+            "both, or neither."
+        )
     if args.tsa_cert:
         out["tsa_cert"] = readable("--tsa-cert", args.tsa_cert)
         out["tsa_roots"] = [readable("--tsa-root", r) for r in args.tsa_root]
     return out
+
+
+def _builder(args):
+    """The store `demo --public` builds: the capture store's builder with --captures, the demo's otherwise."""
+    from onetrace_console import demo_store
+    from onetrace_console.demo_store import captures
+
+    return captures if args.captures else demo_store
 
 
 def _public_demo(args) -> int:
@@ -619,33 +828,47 @@ def _public_demo(args) -> int:
 
     from onetrace_console.config import ENV_VAR
     from onetrace_console.serve import main as serve_main
+
     if args.build is not None:
         if args.open or args.port is not None:
-            print("refusing: --build builds the public demo and exits; it serves nothing, so it "
-                  "takes no --open or --port.", file=sys.stderr)
+            print(
+                "refusing: --build builds the public demo and exits; it serves nothing, so it "
+                "takes no --open or --port.",
+                file=sys.stderr,
+            )
             return 2
+        builder = _builder(args)
+        what = "the capture store" if args.captures else "the public demo"
         try:
-            lines, _ = build_public(args.build, runs_from=args.runs_from, explanations=args.explanations,
-                                    site_links=args.site_links)
+            lines, _ = build_public(
+                args.build,
+                runs_from=args.runs_from,
+                explanations=args.explanations,
+                site_links=args.site_links,
+                builder=builder,
+            )
         except LoadRefused as e:
-            print(f"refusing to build the public demo: {e}", file=sys.stderr)
+            print(f"refusing to build {what}: {e}", file=sys.stderr)
             return 1
         for text, _ in lines:
             if text.startswith(("kept ", "  refused ")):
                 print(text)
-        print(f"built the public demo in {args.build}: its store is {args.build / 'store'}, its "
-              f"trust file {args.build / 'trust.json'}")
+        print(
+            f"built {what} in {args.build}: its store is {args.build / 'store'}, its "
+            f"trust file {args.build / 'trust.json'}"
+        )
         return 0
     if os.environ.get(ENV_VAR) is not None:
-        print(f"refusing to start the demo: {ENV_VAR} is set. The demo runs in local mode, "
-              f"with its own store and trust file.\nfix: run it without {ENV_VAR}.",
-              file=sys.stderr)
+        print(
+            f"refusing to start the demo: {ENV_VAR} is set. The demo runs in local mode, "
+            f"with its own store and trust file.\nfix: run it without {ENV_VAR}.",
+            file=sys.stderr,
+        )
         return 1
     with tempfile.TemporaryDirectory(prefix="onetrace-console-public-demo-") as tmp:
         folder = Path(tmp) / "demo"
-        ready = build_public(folder)
-        overrides = {"public": True, "store_root": str(folder / "store"),
-                     "trust_file": str(folder / "trust.json")}
+        ready = build_public(folder, builder=_builder(args))
+        overrides = {"public": True, "store_root": str(folder / "store"), "trust_file": str(folder / "trust.json")}
         if args.port is not None:
             overrides["port"] = args.port
         return serve_main([], overrides=overrides, announce=ready, open_browser=args.open)

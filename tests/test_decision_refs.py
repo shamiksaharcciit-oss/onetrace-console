@@ -2,18 +2,25 @@
 synthetic receipts in tests/fixtures/synthetic_receipts/ (the SDK does not emit
 decision_refs yet). One test per state, plus the join-trusts-the-receipt sabotage.
 """
+
 from __future__ import annotations
 
 import json
 
 import pytest
 
-from onetrace_console.onedoor_ext.decision_refs import (STATE_MATCH, STATE_MISMATCH,
-                                                         STATE_MISSING, STATE_NONE,
-                                                         STATE_UNKNOWN, citation_incidents,
-                                                         join_run, join_stage, render_panel)
-from onetrace_console.onedoor_ext.decisions import (DecisionRow, StoredDecisionExport,
-                                                    accept_export)
+from onetrace_console.onedoor_ext.decision_refs import (
+    STATE_MATCH,
+    STATE_MISMATCH,
+    STATE_MISSING,
+    STATE_NONE,
+    STATE_UNKNOWN,
+    citation_incidents,
+    join_run,
+    join_stage,
+    render_panel,
+)
+from onetrace_console.onedoor_ext.decisions import DecisionRow, StoredDecisionExport, accept_export
 from tests.test_upload_hardening import _member, _tar
 
 
@@ -21,8 +28,7 @@ from tests.test_upload_hardening import _member, _tar
 def ingested(onedoor_fixture_dir, store):
     jsonl = (onedoor_fixture_dir / "onedoor-export.jsonl").read_bytes()
     sidecar = (onedoor_fixture_dir / "onedoor-export.jsonl.sha256").read_bytes()
-    archive = _tar(_member("onedoor-export.jsonl", jsonl),
-                   _member("onedoor-export.jsonl.sha256", sidecar))
+    archive = _tar(_member("onedoor-export.jsonl", jsonl), _member("onedoor-export.jsonl.sha256", sidecar))
     accept_export(archive, store)
     return store
 
@@ -42,7 +48,7 @@ def test_state_1_a_matching_citation(ingested, five_states, examined):
     c = _by_stage(citations, "notify_ops")
     assert c.state == STATE_MATCH
     assert c.request_id == "e5504d65-cfd0-494e-b98e-9a49f77207b3"
-    assert c.verdict == "executed"          # onedoor's own row word, not a translation
+    assert c.verdict == "executed"  # onedoor's own row word, not a translation
 
 
 def test_state_2_a_mismatched_citation(ingested, five_states, examined):
@@ -108,6 +114,7 @@ def test_states_2_and_4_raise_incidents_and_no_other_state_does(ingested, five_s
 # ------------------------------------------------------- a request_id naming
 # more than one row
 
+
 def _store_with_two_rows_one_request_id(store):
     """The exact adversarial shape onedoor's own `tests/test_decision_ref_checker.py`
     uses (`ROW_PROPOSE`/`ROW_RESUME`, both `request_id="req-c"`): two rows, one
@@ -116,29 +123,23 @@ def _store_with_two_rows_one_request_id(store):
     request_id (onedoor mints a fresh one per `docs/decision-ref.md`) -- this
     case is rare-to-adversarial in practice and still has to join correctly.
     """
-    propose_line = ('{"decision":"proposed","id":3,"kind":"decision",'
-                    '"request_id":"req-c"}')
-    resume_line = ('{"decision":"executed","id":4,"kind":"exec_intent",'
-                   '"request_id":"req-c"}')
+    propose_line = '{"decision":"proposed","id":3,"kind":"decision","request_id":"req-c"}'
+    resume_line = '{"decision":"executed","id":4,"kind":"exec_intent","request_id":"req-c"}'
     propose = DecisionRow(raw_line=propose_line)
     resume = DecisionRow(raw_line=resume_line)
-    assert propose.decision_digest != resume.decision_digest, \
-        "the two hand-built rows must actually differ"
+    assert propose.decision_digest != resume.decision_digest, "the two hand-built rows must actually differ"
     #: A real delivery holding exactly these two lines: rows are shown only after their
     #: stored copy is checked against the delivery, so an export whose
     #: delivery was never stored could not be joined at all.
     delivery = store.put((propose_line + "\n" + resume_line + "\n").encode("utf-8"))
     #: Filed under its delivery's own key, as ingest files every export: a record is
     #: checked against the delivery its filename names.
-    export = StoredDecisionExport(
-        key=delivery, export_object=delivery, received_at="now",
-        rows=(propose, resume))
+    export = StoredDecisionExport(key=delivery, export_object=delivery, received_at="now", rows=(propose, resume))
     store.put_decision_export(export)
     return propose, resume
 
 
-def test_a_request_id_naming_two_rows_resolves_each_reference_to_its_own_row(
-        store, examined):
+def test_a_request_id_naming_two_rows_resolves_each_reference_to_its_own_row(store, examined):
     propose, resume = _store_with_two_rows_one_request_id(store)
 
     ref_for_propose = {"request_id": "req-c", "decision_digest": propose.decision_digest}
@@ -157,8 +158,7 @@ def test_a_request_id_naming_two_rows_resolves_each_reference_to_its_own_row(
     assert c_neither.state == STATE_MISMATCH
 
 
-def test_sabotage_picking_the_first_row_found_breaks_the_resumptions_own_citation(
-        store, examined):
+def test_sabotage_picking_the_first_row_found_breaks_the_resumptions_own_citation(store, examined):
     """The sabotage for a request_id naming more than one row: pick `rows[0]`
     regardless of digest. A reference correctly naming the SECOND row (the
     resumption) must then be misread as matching the FIRST (the propose) -- a
@@ -170,15 +170,16 @@ def test_sabotage_picking_the_first_row_found_breaks_the_resumptions_own_citatio
 
     sabotaged = join_stage("s2", ref_for_resume, True, store, _pick_first_row=True)
     assert sabotaged.state == STATE_MATCH
-    assert sabotaged.verdict == "proposed", \
-        "the sabotage should have returned the FIRST row's (propose) verdict, " \
+    assert sabotaged.verdict == "proposed", (
+        "the sabotage should have returned the FIRST row's (propose) verdict, "
         "wrongly, for a reference that actually names the resumption"
+    )
 
 
 # --------------------------------------------------------------------- sabotage
 
-def test_sabotage_trusting_the_receipts_own_verdict_breaks_states_2_and_3(
-        ingested, five_states, examined):
+
+def test_sabotage_trusting_the_receipts_own_verdict_breaks_states_2_and_3(ingested, five_states, examined):
     """The specified sabotage: make the join accept `ref["verdict"]` on its own
     word, without checking the export. States 2 (mismatch) and 3 (unknown) must
     become unreachable -- both stages report MATCH instead, which is exactly the
@@ -186,5 +187,5 @@ def test_sabotage_trusting_the_receipts_own_verdict_breaks_states_2_and_3(
     """
     sabotaged = join_run(five_states["stages"], ingested, _trust_receipt_verdict=True)
     examined(2, "stages whose real state the sabotaged join gets wrong")
-    assert _by_stage(sabotaged, "apply_patch").state == STATE_MATCH   # really MISMATCH
-    assert _by_stage(sabotaged, "rollback").state == STATE_MATCH      # really UNKNOWN
+    assert _by_stage(sabotaged, "apply_patch").state == STATE_MATCH  # really MISMATCH
+    assert _by_stage(sabotaged, "rollback").state == STATE_MATCH  # really UNKNOWN

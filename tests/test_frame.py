@@ -16,9 +16,11 @@ disk and the printed fingerprint checks on what the reader gets -- in local mode
 A sealed page's footer states the configuration ("Local mode" or "Sign-in required") and the
 version, and never a user; an unsealed page's states the session.
 """
+
 from __future__ import annotations
 
 import re
+from datetime import UTC
 from pathlib import Path
 
 import pytest
@@ -35,14 +37,15 @@ LINK = re.compile(r'<a href="([^"]+)"( aria-current="page")?>([^<]*)</a>')
 FOOTER = re.compile(r"<footer>(.*?)</footer>", re.S)
 UNFRAMED = ("home.html", "incidents.html")
 
+
 @pytest.fixture
 def server(tmp_path):
     """As conftest's `server`, with the console's store on tmpfs where the platform has one: this module's
     requests wait on the console's writes, and a stalled sync on a slow disk timed them out."""
     from tests.conftest import in_memory, serving
+
     with in_memory(tmp_path) as folder, serving(folder) as served:
         yield served
-
 
 
 def _nav(page: bytes) -> str:
@@ -60,6 +63,7 @@ def _footer_text(page: bytes) -> str:
     are each there once and left out of what it states (tests/test_theme_switch.py holds them), as
     is a local console's link to the setup page (tests/test_explain_setup.py holds it)."""
     from onetrace_console.frame import SETUP_LINK, THEME_SCRIPT, THEME_SWITCH
+
     footer = FOOTER.findall(_nav(page))
     assert len(footer) == 1
     assert footer[0].count(THEME_SWITCH) == 1 and footer[0].count(THEME_SCRIPT) == 1
@@ -83,14 +87,18 @@ def onedoor(server):
 
 # ----------------------------------------------------------------------- the navigation
 
+
 def test_the_navigation_lists_overview_runs_comparisons_and_incidents_without_onedoor(server, examined):
     base, _ = server
     status, page, _, _ = _get(base, "/")
     examined(1, "Overview served")
     assert status == 200
     assert [(label, href) for label, href, _ in _items(page)] == [
-        ("Overview", "/"), ("Runs", "/executions-all.html"), ("Comparisons", "/comparisons.html"),
-        ("Incidents", "/incidents.html")]
+        ("Overview", "/"),
+        ("Runs", "/executions-all.html"),
+        ("Comparisons", "/comparisons.html"),
+        ("Incidents", "/incidents.html"),
+    ]
 
 
 def test_the_navigation_adds_policy_with_onedoor(onedoor, examined):
@@ -98,8 +106,7 @@ def test_the_navigation_adds_policy_with_onedoor(onedoor, examined):
     status, page, _, _ = _get(base, "/")
     examined(1, "Overview served")
     assert status == 200
-    assert [label for label, _, _ in _items(page)] == ["Overview", "Runs", "Comparisons",
-                                                       "Incidents", "Policy"]
+    assert [label for label, _, _ in _items(page)] == ["Overview", "Runs", "Comparisons", "Incidents", "Policy"]
 
 
 def test_nothing_is_drawn_as_not_available(onedoor, examined):
@@ -112,6 +119,7 @@ def test_nothing_is_drawn_as_not_available(onedoor, examined):
             assert word not in nav, word
         #: The settings menu's rows link to the setup pages (console 0.6.1 item 13); they are not items.
         import re
+
         nav = re.sub(r'<div class="settings" data-frame="settings">.*?</ul></div></div>', "", nav, flags=re.S)
         assert nav.count("<a ") == len(_items(page)), "an item that is not a link"
 
@@ -128,10 +136,18 @@ def test_every_item_is_a_page_that_exists(onedoor, examined):
 
 def test_every_link_answers_200_to_a_signed_in_user(onedoor, examined):
     base, store_root = onedoor
-    saved = {n: getattr(Handler, n) for n in ("config", "account_store", "session_store",
-                                              "token_store", "rate_limit_per_account",
-                                              "rate_limit_per_client",
-                                              "rate_limit_concurrent_hashes")}
+    saved = {
+        n: getattr(Handler, n)
+        for n in (
+            "config",
+            "account_store",
+            "session_store",
+            "token_store",
+            "rate_limit_per_account",
+            "rate_limit_per_client",
+            "rate_limit_concurrent_hashes",
+        )
+    }
     _sign_in_on(store_root)
     try:
         cookie, _ = _sign_in(base)
@@ -152,8 +168,12 @@ def test_every_link_answers_200_to_a_signed_in_user(onedoor, examined):
 def test_the_current_page_is_marked_and_only_it(onedoor, examined):
     base, _ = onedoor
     #: The All counts page is the Overview's own list, so it sits under Overview.
-    expected = {"home.html": "Overview", "counts.html": "Overview", "incidents.html": "Incidents",
-                "policy.html": "Policy"}
+    expected = {
+        "home.html": "Overview",
+        "counts.html": "Overview",
+        "incidents.html": "Incidents",
+        "policy.html": "Policy",
+    }
     examined(len(expected), "pages")
     for rel, label in expected.items():
         current = [item for item, _, cur in _items(_get(base, f"/{rel}")[1]) if cur]
@@ -161,6 +181,7 @@ def test_the_current_page_is_marked_and_only_it(onedoor, examined):
 
 
 # --------------------------------------------------------------------------- the footer
+
 
 def test_the_footer_states_local_mode_and_the_version(server, examined):
     base, _ = server
@@ -171,6 +192,7 @@ def test_the_footer_states_local_mode_and_the_version(server, examined):
 
 def _package_version() -> str:
     import tomllib
+
     text = (Path(__file__).resolve().parent.parent / "pyproject.toml").read_text(encoding="utf-8")
     return tomllib.loads(text)["project"]["version"]
 
@@ -178,15 +200,16 @@ def _package_version() -> str:
 def test_every_footer_shows_the_package_s_own_version(server, examined):
     """The version a footer shows is the one pyproject.toml gives the package, not only the
     module's constant: a served page's, a drawn page's, and the generator line's."""
-    from datetime import datetime, timezone
+    from datetime import datetime
 
     from onetrace_console.pages import GENERATOR
     from onetrace_console.words import generated_footer
+
     version = _package_version()
     base, _ = server
     for rel in UNFRAMED:
         assert _footer_text(_get(base, f"/{rel}")[1]).endswith(f" onetrace-console {version}"), rel
-    drawn = generated_footer(datetime(2026, 10, 15, tzinfo=timezone.utc))
+    drawn = generated_footer(datetime(2026, 10, 15, tzinfo=UTC))
     assert re.search(rf"by onetrace-console {re.escape(version)}\.</p></footer>$", drawn), drawn
     assert GENERATOR == f"onetrace-console {version}"
     examined(len(UNFRAMED) + 2, "footers read")
@@ -194,10 +217,18 @@ def test_every_footer_shows_the_package_s_own_version(server, examined):
 
 def test_the_footer_names_the_signed_in_user(server, examined):
     base, store_root = server
-    saved = {n: getattr(Handler, n) for n in ("config", "account_store", "session_store",
-                                              "token_store", "rate_limit_per_account",
-                                              "rate_limit_per_client",
-                                              "rate_limit_concurrent_hashes")}
+    saved = {
+        n: getattr(Handler, n)
+        for n in (
+            "config",
+            "account_store",
+            "session_store",
+            "token_store",
+            "rate_limit_per_account",
+            "rate_limit_per_client",
+            "rate_limit_concurrent_hashes",
+        )
+    }
     _sign_in_on(store_root)
     try:
         cookie, _ = _sign_in(base)
@@ -212,17 +243,20 @@ def test_the_footer_names_the_signed_in_user(server, examined):
 
 def test_the_footer_is_escaped(examined):
     from onetrace_console.frame import footer
+
     examined(1, "footer drawn")
-    assert "<b>" not in footer('<b>x</b>') and "&lt;b&gt;" in footer('<b>x</b>')
+    assert "<b>" not in footer("<b>x</b>") and "&lt;b&gt;" in footer("<b>x</b>")
 
 
 # ----------------------------------------------------------------------- the stylesheet
+
 
 def test_the_stylesheet_is_served_to_anyone(server, examined):
     """With sign-in on and no session -- the sign-in page links it."""
     base, _ = server
     from onetrace_console.viewer.page import CSS, FRAME_CSS
     from onetrace_console.viewer.tokens import root_css
+
     old = Handler.config
     Handler.config = Config(sign_in={"enabled": True})
     try:
@@ -234,8 +268,12 @@ def test_the_stylesheet_is_served_to_anyone(server, examined):
     text = body.decode("utf-8")
     for part in (root_css(), CSS, FRAME_CSS):
         assert part.strip() in text
-    fonts = sorted(p.name for p in (Path(__file__).resolve().parent.parent / "src"
-                                    / "onetrace_console" / "static" / "fonts").glob("*.woff2"))
+    fonts = sorted(
+        p.name
+        for p in (Path(__file__).resolve().parent.parent / "src" / "onetrace_console" / "static" / "fonts").glob(
+            "*.woff2"
+        )
+    )
     assert sorted(re.findall(r"url\(/static/fonts/([\w-]+\.woff2)\)", text)) == fonts
 
 
@@ -267,8 +305,11 @@ def test_the_sign_in_page_links_the_stylesheet_and_has_no_navigation(server, exa
 
 #: Anything a browser fetches by itself: an attribute naming another host (or scheme-relative),
 #: a CSS url() or @import doing the same.
-EXTERNAL = re.compile(r'(?:\b(?:src|href|action)\s*=\s*["\']?\s*(?:[a-z][a-z0-9+.-]*:)?//)'
-                      r'|(?:url\(\s*["\']?\s*(?:[a-z][a-z0-9+.-]*:)?//)|@import', re.I)
+EXTERNAL = re.compile(
+    r'(?:\b(?:src|href|action)\s*=\s*["\']?\s*(?:[a-z][a-z0-9+.-]*:)?//)'
+    r'|(?:url\(\s*["\']?\s*(?:[a-z][a-z0-9+.-]*:)?//)|@import',
+    re.I,
+)
 
 
 def test_no_page_or_stylesheet_asks_another_host_for_anything(onedoor, examined):
@@ -284,22 +325,27 @@ def test_no_page_or_stylesheet_asks_another_host_for_anything(onedoor, examined)
 
 def test_the_external_request_scan_catches_what_it_looks_for(examined):
     examined(5, "probes")
-    for probe in ('<link href="https://fonts.example/x.css">', "src='//cdn.example/x.js'",
-                  "url(https://x.example/f.woff2)", '@import "a.css";',
-                  '<img src = "http://x.example/a.png">'):
+    for probe in (
+        '<link href="https://fonts.example/x.css">',
+        "src='//cdn.example/x.js'",
+        "url(https://x.example/f.woff2)",
+        '@import "a.css";',
+        '<img src = "http://x.example/a.png">',
+    ):
         assert EXTERNAL.search(probe), probe
     assert not EXTERNAL.search('<a href="/executions-all.html">Runs</a>')
 
 
 # ------------------------------------------------------------------------ sealed pages
 
+
 def _sealed(store_root: Path, run_key: str) -> list[str]:
     """Every page on disk that carries a fingerprint -- found by its slot, not listed by hand, so
     a sealed page added later is held too. Asserted to include a run's two pages and a list."""
     from onetrace_console.viewer.slot import OPEN
+
     pages = store_root / PAGES_DIRNAME
-    rels = sorted(p.relative_to(pages).as_posix() for p in pages.rglob("*.html")
-                  if OPEN.encode() in p.read_bytes())
+    rels = sorted(p.relative_to(pages).as_posix() for p in pages.rglob("*.html") if OPEN.encode() in p.read_bytes())
     for rel in (f"runs/{run_key}/answer.html", f"runs/{run_key}/case.html", "executions-all.html"):
         assert rel in rels, rel
     return rels
@@ -308,12 +354,14 @@ def _sealed(store_root: Path, run_key: str) -> list[str]:
 def _render_sealed(checked, store, store_root) -> None:
     """Render as the console does at start-up, under the configuration it now has."""
     from onetrace_console.serve import _render_startup_pages
+
     Handler.store = store
     _render_startup_pages(store, store_root, Handler.config)
 
 
 def _check_sealed(base, store_root, rels, headers, footer_text) -> None:
     from onetrace_console.viewer import fingerprint
+
     for rel in rels:
         status, body, _, _ = _get(base, f"/{rel}", headers=headers)
         assert status == 200, rel
@@ -325,8 +373,7 @@ def _check_sealed(base, store_root, rels, headers, footer_text) -> None:
         assert "alice" not in _nav(body), f"a user named in a sealed page's frame: {rel}"
 
 
-def test_a_sealed_page_is_served_as_written_and_checks_in_local_mode(checked, store, server,
-                                                                       examined):
+def test_a_sealed_page_is_served_as_written_and_checks_in_local_mode(checked, store, server, examined):
     base, store_root = server
     old = Handler.store
     try:
@@ -338,21 +385,34 @@ def test_a_sealed_page_is_served_as_written_and_checks_in_local_mode(checked, st
         Handler.store = old
 
 
-def test_a_sealed_page_is_served_as_written_and_checks_signed_in(checked, store, server,
-                                                                   examined):
+def test_a_sealed_page_is_served_as_written_and_checks_signed_in(checked, store, server, examined):
     base, store_root = server
-    saved = {n: getattr(Handler, n) for n in ("config", "store", "account_store", "session_store",
-                                              "token_store", "rate_limit_per_account",
-                                              "rate_limit_per_client",
-                                              "rate_limit_concurrent_hashes")}
+    saved = {
+        n: getattr(Handler, n)
+        for n in (
+            "config",
+            "store",
+            "account_store",
+            "session_store",
+            "token_store",
+            "rate_limit_per_account",
+            "rate_limit_per_client",
+            "rate_limit_concurrent_hashes",
+        )
+    }
     try:
         _sign_in_on(store_root)
         _render_sealed(checked, store, store_root)
         rels = _sealed(store_root, checked.key)
         cookie, _ = _sign_in(base)
         examined(len(rels), "sealed pages served, signed in as alice")
-        _check_sealed(base, store_root, rels, {"Cookie": f"onetrace_session={cookie}"},
-                      f"Sign-in required onetrace-console {__version__}")
+        _check_sealed(
+            base,
+            store_root,
+            rels,
+            {"Cookie": f"onetrace_session={cookie}"},
+            f"Sign-in required onetrace-console {__version__}",
+        )
         #: The same session's unsealed page does name its user.
         home = _get(base, "/", headers={"Cookie": f"onetrace_session={cookie}"})[1]
         assert _footer_text(home) == f"Signed in as alice onetrace-console {__version__}"
@@ -364,6 +424,7 @@ def test_a_sealed_page_is_served_as_written_and_checks_signed_in(checked, store,
 def test_a_sealed_page_drawn_outside_a_console_has_no_frame(checked, store, examined):
     """`render_execution` called with no console around it -- the viewer's own drawing."""
     from onetrace_console.pages import ANSWER, CASE, render_execution
+
     pages = render_execution(checked, store, generated_at="2026-10-01T12:00:00+00:00").pages
     examined(2, "pages")
     for name in (ANSWER, CASE):
@@ -378,12 +439,13 @@ def _sign_in_on(store_root: Path) -> None:
     from onetrace_console.rate_limit import ConcurrencyLimiter, RateLimiter
     from onetrace_console.serve import ACCOUNTS_DIRNAME, TOKENS_DIRNAME
     from onetrace_console.sessions import SessionStore
+
     Handler.config = Config(sign_in={"enabled": True}, extensions=dict(Handler.config.extensions))
     Handler.account_store = AccountStore(store_root / ACCOUNTS_DIRNAME)
     try:
         Handler.account_store.create("alice", b"correct horse battery staple")
     except AccountError:
-        pass                                  # made by an earlier call in the same test
+        pass  # made by an earlier call in the same test
     Handler.token_store = TokenStore(store_root / TOKENS_DIRNAME)
     Handler.session_store = SessionStore(idle_timeout_seconds=1800, absolute_timeout_seconds=43200)
     Handler.rate_limit_per_account = RateLimiter(max_attempts=100, window_seconds=60)
@@ -395,6 +457,7 @@ def test_this_modules_console_keeps_its_store_in_memory_where_there_is_one(serve
     """Its requests wait on the console's writes; a stalled sync on a slow disk timed them out, so this
     module's console keeps its store on tmpfs where the platform has one (Linux's /dev/shm)."""
     from tests.conftest import tmpfs_root
+
     _base, root = server
     fast = tmpfs_root()
     examined(1, "the console's store folder")

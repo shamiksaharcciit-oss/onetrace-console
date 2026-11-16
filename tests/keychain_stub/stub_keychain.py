@@ -5,6 +5,7 @@ read and write raise keyring's own `KeyringLocked`, as a locked keychain does.
 Named to keyring as `PYTHON_KEYRING_BACKEND=stub_keychain.FolderKeychain`, with this folder on the import
 path, so the console in the test and the onetrace-explain command it runs read the same entries.
 """
+
 from __future__ import annotations
 
 import json

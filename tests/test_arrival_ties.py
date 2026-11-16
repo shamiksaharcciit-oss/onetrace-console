@@ -13,6 +13,7 @@ Each test gives the ordering the same tied runs in two different orders, with ke
 opposite way to the names, and requires one answer: a missing tie-break, or the key used first,
 shows every time, not by chance. A sabotage puts the key-first tie-break back.
 """
+
 from __future__ import annotations
 
 from dataclasses import replace
@@ -35,14 +36,15 @@ def _given_in_order(monkeypatch, store, runs) -> None:
 
 
 def test_pipelines_tied_on_arrival_are_labelled_by_run_name_whatever_order_they_are_given(
-        ten_runs, monkeypatch, examined):  # noqa: F811
+    ten_runs, monkeypatch, examined
+):  # noqa: F811
     from onetrace_console.overview import pipelines
+
     store, made = ten_runs
     #: A second pipeline whose run_id sorts after every other run's, so the store's own order
     #: (run_id descending) and its reverse would put different pipelines first.
     other = _fake_run(store, made[0], run_id="zz-other-pipeline", verdict=HOLDS)
-    store.put_run(replace(other, declared_stages=("fetch", "answer"), stage_count=2,
-                          recorded_count=2))
+    store.put_run(replace(other, declared_stages=("fetch", "answer"), stage_count=2, recorded_count=2))
     runs = _all_at_one_second(store)
     examined(len(runs), "runs stored in one second, across two pipelines")
     first_by_name = min(runs, key=lambda r: (r.run_id, r.key))
@@ -82,6 +84,7 @@ def name_order_problems(listed: list) -> list[str]:
 
 def _attention(monkeypatch, store, given) -> list:
     from onetrace_console import overview
+
     _given_in_order(monkeypatch, store, given)
     #: Every run one kind, so only the arrival tie-break orders them.
     monkeypatch.setattr(overview, "attention_kind", lambda run, store: "contradicts")
@@ -89,8 +92,10 @@ def _attention(monkeypatch, store, given) -> list:
 
 
 def test_needs_attention_tied_on_arrival_lists_each_kind_by_run_name_whatever_order_given(
-        ten_runs, monkeypatch, examined):  # noqa: F811
+    ten_runs, monkeypatch, examined
+):  # noqa: F811
     from onetrace_console.overview import needs_attention
+
     store, _ = ten_runs
     runs = _all_at_one_second(store)
     listed = []
@@ -108,12 +113,13 @@ def test_needs_attention_tied_on_arrival_lists_each_kind_by_run_name_whatever_or
 
 def test_sabotage_the_key_first_tie_break_is_caught(ten_runs, monkeypatch, examined):  # noqa: F811
     from onetrace_console import store as store_module
+
     store, _ = ten_runs
     swapped = _keys_against_names(_all_at_one_second(store))
 
     def key_first(runs, *, newest_first):
-        return sorted(sorted(runs, key=lambda r: r.key), key=lambda r: r.received_at,
-                      reverse=newest_first)
+        return sorted(sorted(runs, key=lambda r: r.key), key=lambda r: r.received_at, reverse=newest_first)
+
     monkeypatch.setattr(store_module, "arrival_order", key_first)
     examined(1, "planted key-first tie-break")
     assert name_order_problems(_attention(monkeypatch, store, swapped)) != []
@@ -127,11 +133,11 @@ class _ListedBackwards(type(Path())):
         return reversed(list(super().glob(pattern)))
 
 
-def test_store_runs_tied_on_arrival_are_by_run_name_then_key_whatever_the_listing(
-        ten_runs, examined):  # noqa: F811
+def test_store_runs_tied_on_arrival_are_by_run_name_then_key_whatever_the_listing(ten_runs, examined):  # noqa: F811
     store, made = ten_runs
     #: Two runs sharing a run_id (a reused one) and an arrival second: only the key separates them.
     from onetrace_console.store import run_key
+
     twin_a = _fake_run(store, made[0], run_id="twin", verdict=HOLDS)
     other_head = "sha256:" + "f" * 64
     store.put_run(replace(twin_a, chain_head=other_head, key=run_key("twin", other_head)))
@@ -149,14 +155,14 @@ def test_store_runs_tied_on_arrival_are_by_run_name_then_key_whatever_the_listin
 # ---------------------------------------------------------------------------------------------
 # The product's own tiebreak, on two real runs ingested in one second.
 
-README_LINE = ("Runs that arrive in the same second are ordered by run name, and two with the same "
-               "name by run key")
+README_LINE = "Runs that arrive in the same second are ordered by run name, and two with the same name by run key"
 
 
 def _unlabelled(html: str) -> str:
     """The page without the narrow screen's column labels (`words.labelled`), so a table reads as
     its cells were drawn before them; nothing else changes."""
     import re as _re
+
     return _re.sub(r' data-label="[^"]*"', "", html)
 
 
@@ -164,13 +170,16 @@ def _pipeline_rows(home: str) -> list[tuple[str, str]]:
     """(label, declared stages) for each row of the Overview's pipelines table, as rendered."""
     import re
     from html import unescape
-    return [(label, unescape(stages)) for label, stages in re.findall(
-        r'<tr data-pipeline="[^"]*"><td>([^<]*)</td><td data-words="record">([^<]*)</td>',
-        _unlabelled(home))]
+
+    return [
+        (label, unescape(stages))
+        for label, stages in re.findall(
+            r'<tr data-pipeline="[^"]*"><td>([^<]*)</td><td data-words="record">([^<]*)</td>', _unlabelled(home)
+        )
+    ]
 
 
-def test_two_runs_ingested_in_one_second_p1_is_the_first_run_name_across_renders_and_a_restart(
-        tmp_path, examined):
+def test_two_runs_ingested_in_one_second_p1_is_the_first_run_name_across_renders_and_a_restart(tmp_path, examined):
     """Two real runs from different pipelines -- the committed r11 run and an SDK-made one --
     ingested with the same arrival second. P1 goes to the pipeline of the first run name, and the
     labels are the same on every render and after a restart (a fresh store over the same folder,
@@ -183,16 +192,16 @@ def test_two_runs_ingested_in_one_second_p1_is_the_first_run_name_across_renders
     from onetrace_console.store import Store
     from tests.conftest import REPO, _delivery_paths, make_tar
     from tests.test_checks import FIXED_RAN_AT, _require_installed
-    from tests.test_home_and_diff import GENERATED_AT
     from tests.test_diff_sdk_text_layer import _forged_pair
+    from tests.test_home_and_diff import GENERATED_AT
     from tests.test_unreadable import _resummed
+
     _require_installed()
 
     root = tmp_path / "console"
     store = Store(root / "store")
     r11 = REPO / "tests" / "fixtures" / "r11" / "two-minimal-nodes"
-    r11_files = _resummed({p.relative_to(r11).as_posix(): p.read_bytes()
-                           for p in _delivery_paths(r11)})
+    r11_files = _resummed({p.relative_to(r11).as_posix(): p.read_bytes() for p in _delivery_paths(r11)})
     (tmp_path / "held").mkdir()
     sdk_run, _ = _forged_pair(tmp_path / "held")
     stored = {}
@@ -222,5 +231,6 @@ def test_two_runs_ingested_in_one_second_p1_is_the_first_run_name_across_renders
 
 def test_the_operator_readme_says_how_same_second_runs_are_ordered():
     from tests.conftest import REPO
+
     text = " ".join((REPO / "OPERATOR_README.md").read_text(encoding="utf-8").split())
     assert README_LINE in text

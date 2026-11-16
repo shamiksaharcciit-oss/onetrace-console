@@ -1,0 +1,5 @@
+{"action_type":"pay","decision":"executed","request_id":"auth-permitted/pay/1"}
+{"action_type":"pay","decision":"denied","request_id":"auth-denied-not-run/pay/1"}
+{"action_type":"pay","decision":"denied","request_id":"auth-denied-ran/pay/1"}
+{"action_type":"pay","decision":"proposed","request_id":"auth-held-then-approved/pay/1"}
+{"action_type":"pay","decision":"executed","request_id":"auth-held-then-approved/pay/2"}

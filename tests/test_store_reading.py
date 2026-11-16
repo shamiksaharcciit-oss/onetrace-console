@@ -14,6 +14,7 @@ read fresh. Held here, each with a sabotage that the check names:
 4. the public build, as the shared demo is built, reads each record a bounded number of times;
 5. a run another hand writes after a request read the store is on the next request's pages.
 """
+
 from __future__ import annotations
 
 import json
@@ -31,14 +32,15 @@ EXAM = Path(__file__).resolve().parent.parent / ".sdk-fixtures" / "exam" / "fixt
 #: are (a new preview delivery is refused since 0.2.0).
 pytestmark = pytest.mark.usefixtures("preview_stored_directly")
 
+
 @pytest.fixture
 def server(tmp_path):
     """As conftest's `server`, with the console's store on tmpfs where the platform has one: this module's
     requests wait on the console's writes, and a stalled sync on a slow disk timed them out."""
     from tests.conftest import in_memory, serving
+
     with in_memory(tmp_path) as folder, serving(folder) as served:
         yield served
-
 
 
 @contextmanager
@@ -55,6 +57,7 @@ def counting(monkeypatch):
     def forgot(self):
         seen["since_write"] = 0
         return real_forget(self)
+
     monkeypatch.setattr(StoredRun, "from_json", staticmethod(counted))
     monkeypatch.setattr(Store, "_forget", forgot)
     try:
@@ -87,8 +90,10 @@ def _ingested(base, names) -> dict[str, str]:
 
 # ------------------------------------------------------------------ 1. the reading
 
+
 def test_a_reading_reads_each_record_once_and_a_write_or_its_end_reads_afresh(server, monkeypatch, examined):
     from onetrace_console.serve import Handler
+
     base, _root = server
     _ingested(base, ["run_C", "run_C_poppler24"])
     store = Handler.store
@@ -104,6 +109,7 @@ def test_a_reading_reads_each_record_once_and_a_write_or_its_end_reads_afresh(se
             def elsewhere():
                 with store.reading():
                     other.append(store.runs())
+
             t = threading.Thread(target=elsewhere)
             t.start()
             t.join()
@@ -116,6 +122,7 @@ def test_a_reading_reads_each_record_once_and_a_write_or_its_end_reads_afresh(se
 
 
 # ------------------------------------------------------------------ 2. a Compare press
+
 
 def press_reads(base, monkeypatch, a, b) -> int:
     """The run records one press read after its last write to the store: what its pages read."""
@@ -142,8 +149,10 @@ def test_sabotage_a_press_without_its_reading_is_named(server, monkeypatch, exam
 
 # ------------------------------------------------------------------ 3. drawing every page
 
+
 def drawing_reads(server, monkeypatch) -> tuple[int, int]:
     from onetrace_console.serve import Handler, _render_startup_pages
+
     base, root = server
     keys = _ingested(base, ["run_B", "run_C", "run_C_poppler24"])
     status, body = _post(base, f"/compare?a={keys['run_C']}&b={keys['run_C_poppler24']}")
@@ -182,10 +191,12 @@ def test_the_public_build_reads_each_run_record_a_bounded_number_of_times(shared
 
 # ------------------------------------------------------------------ 5. another hand's run
 
+
 def runs_page_keys(root) -> set[str]:
     import re
+
     page = (root / "pages" / "executions-all.html").read_text(encoding="utf-8")
-    return set(re.findall(r'runs/([0-9a-f]{64})/case\.html', page))
+    return set(re.findall(r"runs/([0-9a-f]{64})/case\.html", page))
 
 
 def test_a_run_written_after_a_request_read_the_store_is_on_the_next_requests_pages(server, examined):
@@ -193,6 +204,7 @@ def test_a_run_written_after_a_request_read_the_store_is_on_the_next_requests_pa
     same folder -- stores a run; the next request draws the pages again, and lists it."""
     from onetrace_console.ingest import accept
     from onetrace_console.serve import Handler
+
     base, root = server
     keys = _ingested(base, ["run_C", "run_C_poppler24"])
     status, body = _post(base, f"/compare?a={keys['run_C']}&b={keys['run_C_poppler24']}")
@@ -213,6 +225,7 @@ def test_this_modules_console_keeps_its_store_in_memory_where_there_is_one(serve
     """Its requests wait on the console's writes; a stalled sync on a slow disk timed them out, so this
     module's console keeps its store on tmpfs where the platform has one (Linux's /dev/shm)."""
     from tests.conftest import tmpfs_root
+
     _base, root = server
     fast = tmpfs_root()
     examined(1, "the console's store folder")

@@ -9,6 +9,7 @@
 
 Each check has its sabotage.
 """
+
 from __future__ import annotations
 
 import re
@@ -22,9 +23,20 @@ from tests.test_shared_style import _tokens, ratio
 def _drawn(labels, tags=(), quoted=(), tone=""):
     from onetrace_console.viewer.graph import GraphNode, lay_out, svg
     from onetrace_console.viewer.page import escape
-    nodes = [GraphNode(node_id=f"n{i}", name=f"n{i}", index=i, href=f"#step-{i}", label=lb,
-                       tags=tuple(tags), quoted=tuple(quoted), tone=tone)
-             for i, lb in enumerate(labels, start=1)]
+
+    nodes = [
+        GraphNode(
+            node_id=f"n{i}",
+            name=f"n{i}",
+            index=i,
+            href=f"#step-{i}",
+            label=lb,
+            tags=tuple(tags),
+            quoted=tuple(quoted),
+            tone=tone,
+        )
+        for i, lb in enumerate(labels, start=1)
+    ]
     return svg(lay_out(nodes, None, wrap_labels=True), esc=escape)
 
 
@@ -52,6 +64,7 @@ def test_a_name_is_drawn_whole_on_as_many_lines_as_it_takes(examined):
 
 def test_sabotage_a_name_cut_short_is_named(monkeypatch, examined):
     from onetrace_console.viewer import graph
+
     monkeypatch.setattr(graph, "_label_lines", lambda label: [graph._short(label)])
     examined(1, "names cut")
     assert any("ellipsis" in p for p in name_problems(_drawn(LONG), LONG))
@@ -68,8 +81,14 @@ def test_the_first_state_is_a_chip_in_the_box_s_tone(examined):
 
 #: Each tone's chip in the graph: its words' colour and its fill, as the stylesheet sets them.
 #: "ca" is outlined, its fill the box's own surface.
-GRAPH_CHIPS = {"ok": ("ok-ink", "ok-bg"), "bad": ("bad-ink", "bad-bg"), "cc": ("cc-ink", "cc-bg"),
-               "neu": ("neu-ink", "neu-bg"), "fd": ("page", "cc-ink"), "ca": ("cc-ink", "surface")}
+GRAPH_CHIPS = {
+    "ok": ("ok-ink", "ok-bg"),
+    "bad": ("bad-ink", "bad-bg"),
+    "cc": ("cc-ink", "cc-bg"),
+    "neu": ("neu-ink", "neu-bg"),
+    "fd": ("page", "cc-ink"),
+    "ca": ("cc-ink", "surface"),
+}
 HTML_CHIPS = {"fd": ("page", "cc-ink"), "ca": ("cc-ink", "surface"), "dec": ("accent", "surface")}
 
 
@@ -92,12 +111,14 @@ def chip_problems(css: str, theme: str) -> list[str]:
 @pytest.mark.parametrize("theme", ["light", "dark"])
 def test_every_chip_s_words_read_on_its_fill(theme, examined):
     from tests.test_shared_style import _sheet
+
     examined(len(GRAPH_CHIPS) + len(HTML_CHIPS), f"chips, {theme}")
     assert chip_problems(_sheet(), theme) == []
 
 
 def test_sabotage_a_dim_chip_is_named(examined):
     from tests.test_shared_style import _sheet
+
     sheet = _sheet().replace("[data-tone=fd] text.chip{fill:var(--page)}", "[data-tone=fd] text.chip{fill:var(--hl)}")
     examined(1, "planted chip")
     assert any(p.startswith("fd:") for p in chip_problems(sheet, "light"))

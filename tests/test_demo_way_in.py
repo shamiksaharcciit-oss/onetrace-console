@@ -24,6 +24,7 @@ demo builder breaks on purpose, each tagged and with its true reading, then all 
 
 Each check is a function returning the problems it finds; each has its sabotage.
 """
+
 from __future__ import annotations
 
 import html
@@ -38,11 +39,13 @@ DEMO: dict = {}
 def demo(shared_demo):
     from onetrace_console.store import Store
     from tests.test_checks import _require_installed
+
     _require_installed()
     folder = shared_demo["folder"]
     pages = folder / "store" / "pages"
-    DEMO.update(store=Store(folder / "store" / "store"), pages=pages,
-                home=(pages / "home.html").read_text(encoding="utf-8"))
+    DEMO.update(
+        store=Store(folder / "store" / "store"), pages=pages, home=(pages / "home.html").read_text(encoding="utf-8")
+    )
     return DEMO
 
 
@@ -52,6 +55,7 @@ def _text(fragment: str) -> str:
 
 def planted_problems(specs, lines) -> list[str]:
     from onetrace_console.demo_store import planted
+
     broken = {s.folder for s in specs if planted(s)}
     out = [f"{f}: planted, and no line says what was done" for f in sorted(broken - set(lines))]
     out += [f"{f}: a line, and no planted run" for f in sorted(set(lines) - broken)]
@@ -63,12 +67,14 @@ def _first(store):
     """The pipeline the rule picks: most runs, every run's records agree, ties by id."""
     from onetrace_console import records
     from onetrace_console.overview import pipelines
+
     clean = [p for p in pipelines(store) if all(records.state(r, store) == records.YES for r in p.runs)]
     return max(clean, key=lambda p: (len(p.runs), -int(p.label[1:])), default=None)
 
 
 def first_problems(page: str, store) -> list[str]:
     from onetrace_console.pipeline_pages import count_line, page_href
+
     want = _first(store)
     m = re.search(r'<section data-section="way-in" data-pipeline="(P\d+)">(.*?)</section>', page, re.S)
     if not m:
@@ -100,11 +106,11 @@ def order_problems(page: str) -> list[str]:
     if not at["way-in"] < at["planted"]:
         out.append("the guide blocks are not in their order")
     #: Directly after the four count cards: no other section between them and the way in.
-    between = page[at["cards"]:at["way-in"]]
+    between = page[at["cards"] : at["way-in"]]
     others = [s for s in re.findall(r'<section data-section="([^"]+)"', between) if s != "cards"]
     if others:
         out.append(f"between the count cards and the guide blocks: {others}")
-    tiles = re.findall(r'data-card="([^"]+)"', page[at["cards"]:])
+    tiles = re.findall(r'data-card="([^"]+)"', page[at["cards"] :])
     if tiles[:4] != ["pipelines", "runs", "records-agree", "need-attention"]:
         out.append(f"the four count cards are not first: {tiles[:4]}")
     return out
@@ -115,8 +121,12 @@ def _flagged(run, store) -> bool:
     from onetrace_console import records
     from onetrace_console.overview import attention_kind
     from onetrace_console.pages import run_answers
-    return (records.state(run, store) != records.YES or run_answers(run, store)["signed"] != "yes"
-            or attention_kind(run, store) is not None)
+
+    return (
+        records.state(run, store) != records.YES
+        or run_answers(run, store)["signed"] != "yes"
+        or attention_kind(run, store) is not None
+    )
 
 
 COLUMNS = ("Run", "What was done to it", "What its page reads")
@@ -138,14 +148,15 @@ def _group(page: str, name: str) -> list[str]:
 def split_problems(page: str, store) -> list[str]:
     from onetrace_console import demo_store
     from onetrace_console.pipeline_pages import NOT_FLAGGED_HEAD
+
     by_id = {r.run_id: r for r in store.runs()}
     by_key = {r.key: r for r in store.runs()}
     planted = [by_id[s.run_id or s.folder] for s in demo_store.runs() if demo_store.planted(s)]
     caught, quiet = _group(page, "caught"), _group(page, "not-flagged")
-    out = [f"{by_key[k].run_id}: under the heading, and nothing flags it" for k in caught
-           if not _flagged(by_key[k], store)]
-    out += [f"{by_key[k].run_id}: not flagged, and something flags it" for k in quiet
-            if _flagged(by_key[k], store)]
+    out = [
+        f"{by_key[k].run_id}: under the heading, and nothing flags it" for k in caught if not _flagged(by_key[k], store)
+    ]
+    out += [f"{by_key[k].run_id}: not flagged, and something flags it" for k in quiet if _flagged(by_key[k], store)]
     for run in planted:
         n = caught.count(run.key) + quiet.count(run.key)
         if n != 1:
@@ -174,7 +185,9 @@ def table_problems(page: str) -> list[str]:
             if len(cells) != 3:
                 out.append(f"{key[:12]}: {len(cells)} cells, not 3")
                 continue
-            if f'href="runs/{key}/case.html"' not in cells[0] or re.search(r"data-reading|data-signed", cells[0] + cells[1]):
+            if f'href="runs/{key}/case.html"' not in cells[0] or re.search(
+                r"data-reading|data-signed", cells[0] + cells[1]
+            ):
                 out.append(f"{key[:12]}: the first two cells are not the run's link and the builder's line")
             if not cells[2].startswith('<span data-reading="') or '<svg class="mark"' not in cells[2]:
                 out.append(f"{key[:12]}: the last cell does not start with the badge")
@@ -197,6 +210,7 @@ def noise_problems(page: str) -> list[str]:
 def caught_problems(page: str, store) -> list[str]:
     from onetrace_console import demo_store, records
     from onetrace_console.pages import run_answers
+
     m = re.search(r'<section data-section="planted">(.*?)</section>', page, re.S)
     if not m:
         return ["no planted runs section"]
@@ -240,6 +254,7 @@ def all_problems(page: str) -> list[str]:
 
 def test_every_planted_run_has_its_line_and_every_line_a_run():
     from onetrace_console import demo_store
+
     assert planted_problems(demo_store.runs(), demo_store.PLANTED) == []
 
 
@@ -271,6 +286,7 @@ def test_no_chip_and_no_needs_attention_in_the_section(demo, examined):
 def test_the_signing_result_only_on_the_signing_plants(demo, examined):
     """Read from the plant data: at least one plant about signing, and at least one not."""
     from onetrace_console import demo_store
+
     signing = {s.sign != "trusted" for s in demo_store.runs() if demo_store.planted(s)}
     assert signing == {True, False}, "the demo has plants about signing and plants not"
     by_id = {r.run_id: r.key for r in demo["store"].runs()}
@@ -287,16 +303,23 @@ def test_then_a_link_to_all_pipelines(demo):
 
 def test_a_local_console_has_no_way_in(demo):
     from onetrace_console.render import render_home
+
     local = render_home(demo["store"], generated_at="2026-01-01T00:00:00+00:00")
-    for part in ('data-section="way-in"', 'data-section="planted"', "planted for the demo",
-                 'data-section="all-pipelines"'):
+    for part in (
+        'data-section="way-in"',
+        'data-section="planted"',
+        "planted for the demo",
+        'data-section="all-pipelines"',
+    ):
         assert part not in local, part
 
 
 # ------------------------------------------------------------------------------- sabotages
 
+
 def test_sabotage_a_planted_line_dropped_or_an_orphan_line_is_named():
     from onetrace_console import demo_store
+
     lines = dict(demo_store.PLANTED)
     gone = lines.pop("p7-41-cold-chain-decision-tampered")
     assert any("no line" in p for p in planted_problems(demo_store.runs(), lines))
@@ -327,8 +350,10 @@ def test_sabotage_the_pipeline_cards_between_the_counts_and_the_guide_blocks_are
     assert grid is None, "the pipeline cards already sit between the counts and the guide blocks"
     end = page.index("</section>", page.index('<section data-section="cards"')) + len("</section>")
     planted = '<section data-section="pipeline-cards"><p>planted</p></section>'
-    assert any(p.startswith("between the count cards and the guide blocks")
-               for p in order_problems(page[:end] + planted + page[end:]))
+    assert any(
+        p.startswith("between the count cards and the guide blocks")
+        for p in order_problems(page[:end] + planted + page[end:])
+    )
 
 
 def test_sabotage_the_wrong_pipeline_first_is_named(demo):
@@ -338,8 +363,13 @@ def test_sabotage_the_wrong_pipeline_first_is_named(demo):
 
 def test_sabotage_a_planted_run_shown_as_records_agree_or_dropped_is_named(demo):
     page = demo["home"]
-    shown = re.sub(r'(<span data-reading=")no(">)(?:<svg.*?</svg>)?[^<]*(</span>)', r"\1yes\2Records agree\3",
-                   page, count=1, flags=re.S)
+    shown = re.sub(
+        r'(<span data-reading=")no(">)(?:<svg.*?</svg>)?[^<]*(</span>)',
+        r"\1yes\2Records agree\3",
+        page,
+        count=1,
+        flags=re.S,
+    )
     assert shown != page
     assert any("reads" in p for p in caught_problems(shown, demo["store"]))
     dropped = re.sub(r'<tr data-planted="[0-9a-f]{64}">.*?</tr>', "", page, count=1, flags=re.S)
@@ -355,14 +385,13 @@ def test_sabotage_an_unsigned_planted_run_shown_as_signed_is_named(demo):
 def _with_reading(row: str, extra: str) -> str:
     """A planted row with `extra` after the last cell's readings."""
     assert row.endswith("</td>"), row[-40:]
-    return row[:-len("</td>")] + extra + "</td>"
+    return row[: -len("</td>")] + extra + "</td>"
 
 
 def test_sabotage_a_signing_result_on_a_plant_not_about_signing_is_named(demo):
     page = demo["home"]
     row = next(body for _, body in _rows(page, "caught") if "data-signed=" not in body)
-    bad = page.replace(row, _with_reading(row, ' · <span data-signed="yes">Signed by a known recorder: '
-                                               "Yes</span>"), 1)
+    bad = page.replace(row, _with_reading(row, ' · <span data-signed="yes">Signed by a known recorder: Yes</span>'), 1)
     assert bad != page
     assert any("not about signing" in p for p in caught_problems(bad, demo["store"]))
 
@@ -377,11 +406,13 @@ def test_sabotage_the_signing_result_dropped_from_a_signing_plant_is_named(demo)
 def test_sabotage_the_chip_or_needs_attention_back_is_named(demo):
     page = demo["home"]
     key, row = _rows(page, "caught")[0]
-    chip = page.replace(row, re.sub(r"^(<td\b[^>]*>)", r'\1<span class="pill neu">planted for the demo</span> ',
-                                    row), 1)
+    chip = page.replace(
+        row, re.sub(r"^(<td\b[^>]*>)", r'\1<span class="pill neu">planted for the demo</span> ', row), 1
+    )
     assert chip != page and any("chip" in p for p in noise_problems(chip))
-    need = page.replace(row, _with_reading(row, ' · <span data-needs="contradicts">Needs attention: '
-                                                "Contradicts itself</span>"), 1)
+    need = page.replace(
+        row, _with_reading(row, ' · <span data-needs="contradicts">Needs attention: Contradicts itself</span>'), 1
+    )
     assert need != page and any("Needs attention" in p for p in noise_problems(need))
 
 
@@ -401,8 +432,9 @@ def test_sabotage_a_run_nothing_flags_moved_under_the_heading_is_named(demo):
 
 def test_sabotage_a_row_of_two_cells_or_a_column_renamed_is_named(demo):
     page = demo["home"]
-    joined = re.sub(r'(<tr data-planted="[0-9a-f]{64}"><td\b[^>]*>.*?)</td><td\b[^>]*>', r"\1 ", page,
-                    count=1, flags=re.S)
+    joined = re.sub(
+        r'(<tr data-planted="[0-9a-f]{64}"><td\b[^>]*>.*?)</td><td\b[^>]*>', r"\1 ", page, count=1, flags=re.S
+    )
     assert joined != page and any("cells, not 3" in p for p in table_problems(joined))
     renamed = page.replace(">What its page reads<", ">Status<", 1)
     assert renamed != page and any("columns are" in p for p in table_problems(renamed))

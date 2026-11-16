@@ -11,6 +11,7 @@ no close`.
 What is read is kept with the run when it is checked (`checks.derived_from`, the run's `ending`), so
 its page, its row in the runs list and its head say the same.
 """
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -35,6 +36,7 @@ def ending_of(folder: Path) -> dict:
     it (`viewer.record.read_record`): the close receipt's own `onetrace.ended_by`, or the last
     step's name where there is no close receipt."""
     from onetrace_console.viewer.record import read_record
+
     record = read_record(folder)
     if record.close is not None:
         constants = (record.close.data.get("assertions") or {}).get("constants") or {}
@@ -85,4 +87,3 @@ def html(kept: str) -> str:
 def _marked(words: str, slot: str, value: str) -> str:
     before, after = words.split(slot, 1)
     return f'{escape(before)}<span class="mono" data-words="record">{escape(value)}</span>{escape(after)}'
-

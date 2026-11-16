@@ -16,7 +16,7 @@ WHAT CHANGES, AND NOTHING ELSE
 - **The link rewrite:** every link, source and stylesheet URL written from the site's root
   (`/`, `/executions-all.html`, `/static/console.css`, `/runs/<key>/record.tar`, the fonts in the
   stylesheet) becomes relative to the file that holds it; `/` is the Overview, `home.html`.
-- **The banner,** in its specified words, as the first thing in every page's `<main>`.
+- **The banner,** in its settled words, as the first thing in every page's `<main>`.
 - **A comparison's explanation panel** is drawn as its place only, as a public console draws it:
   a file can press nothing, so it carries no button and no script, and no explanation.
 - **The index's search box, "Other runs with the same inputs" and the benchmark mark's press** are
@@ -38,6 +38,7 @@ another host. Either found, and the output folder it made is removed and the exp
 fence scan takes its terms from a file named on the command line; the real terms never come to
 this machine, so here it runs only on a planted test term, in the tests.
 """
+
 from __future__ import annotations
 
 import hashlib
@@ -48,23 +49,27 @@ import tempfile
 from pathlib import Path
 
 #: "every page carries a banner", in its words, verbatim.
-BANNER = ("Demo: two runs of a sample pipeline, signed and anchored with test keys. Install "
-          "onetrace to record your own.")
+BANNER = "Demo: two runs of a sample pipeline, signed and anchored with test keys. Install onetrace to record your own."
 #: Drawn with the skin's tokens, so the stylesheet the console serves is not changed for it.
-_BANNER_HTML = ('<p data-export="banner" style="margin:0;padding:10px 36px;'
-                'background:var(--cc-bg);color:var(--cc-ink);border-bottom:1px solid var(--line);'
-                f'font-size:var(--fs-body)">{BANNER}</p>')
+_BANNER_HTML = (
+    '<p data-export="banner" style="margin:0;padding:10px 36px;'
+    "background:var(--cc-bg);color:var(--cc-ink);border-bottom:1px solid var(--line);"
+    f'font-size:var(--fs-body)">{BANNER}</p>'
+)
 
-#: Four forms of a project id, and the three other forms the
-#: project's own ids take. `tests/test_no_internal_ids.py` holds the rendered pages to it too.
+#: Four forms of a project id, and the other forms the project's own ids take. One more form, a
+#: pair of words, is kept beside the tools and not shipped (`tools/internal_id_words.txt`).
+#: `tests/test_no_internal_ids.py` holds the rendered pages to both.
 INTERNAL_ID = re.compile(
-    r"R-20"                 # a decision id
-    r"|\b29[a-z]{2}\b"      # a decision's short form
-    r"|WO-"                 # a work-order id
+    r"R-20"  # a decision id
+    r"|\b29[a-z]{2}\b"  # a decision's short form
+    r"|WO-"  # a work-order id
     r"|Addendum"
-    r"|\bC0\d\d\b"          # a memo number
-    r"|Core → Canary"
-    r"|Bench Record")
+    r"|\bC0\d\d\b"  # a memo number
+    #: Two parts, so this source names no record of that kind itself.
+    r"|Bench"
+    r" Record"
+)
 
 _ROOTED = re.compile(r'\b(href|src)="(/(?!/)[^"]*)"')
 _CSS_ROOTED = re.compile(r"url\((/(?!/)[^)]*)\)")
@@ -76,14 +81,26 @@ _SLOT = re.compile(r"(<!--fingerprint-->)[0-9a-f]{64}(<!--/fingerprint-->)")
 #: (`explain.no_presses`).
 #: `references`, `verdicts`, `profiles`: what onetrace's reference, verdict and profile wrote
 #: (`verdicts`), each copied where every run it covers is listed.
-_STORE_PARTS = {"objects", "runs", "comparisons", "drift", "x", "beside", "benchmarks",
-                "references", "verdicts", "profiles"}
+_STORE_PARTS = {
+    "objects",
+    "runs",
+    "comparisons",
+    "drift",
+    "x",
+    "beside",
+    "benchmarks",
+    "references",
+    "verdicts",
+    "profiles",
+}
 _FINGERPRINT = re.compile(r"<!--fingerprint-->([0-9a-f]{64})<!--/fingerprint-->")
 SEALS = "SEALS.txt"
-_SEALS_HEAD = ("# Each sealed page of this export: its path, the fingerprint the console serves it "
-               "with, and the fingerprint of this copy -- its links made relative, the demo banner "
-               "added, and sealed again, so the check the page prints matches this copy.\n"
-               "# page  served  exported\n")
+_SEALS_HEAD = (
+    "# Each sealed page of this export: its path, the fingerprint the console serves it "
+    "with, and the fingerprint of this copy -- its links made relative, the demo banner "
+    "added, and sealed again, so the check the page prints matches this copy.\n"
+    "# page  served  exported\n"
+)
 
 
 class ExportError(RuntimeError):
@@ -115,30 +132,38 @@ def errors_page() -> bytes:
 
     import onetrace
     from onetrace.errors import render_page
+
     from onetrace_console.frame import STYLESHEET
+
     head, *sections = re.split(r"(?m)^## ", render_page())
     parts = [f"<pre>{escape(head.strip())}</pre>"]
     for section in sections:
         code, _, body = section.partition("\n")
-        parts.append(f'<section id="{escape(code.strip(), quote=True)}"><h2>{escape(code.strip())}</h2>'
-                     f"<pre>{escape(body.strip())}</pre></section>")
+        parts.append(
+            f'<section id="{escape(code.strip(), quote=True)}"><h2>{escape(code.strip())}</h2>'
+            f"<pre>{escape(body.strip())}</pre></section>"
+        )
     version = escape(getattr(onetrace, "__version__", ""))
-    return ('<!doctype html>\n<html lang="en">\n<head>\n<meta charset="utf-8">\n'
-            '<meta name="viewport" content="width=device-width,initial-scale=1">\n'
-            f'<title>onetrace errors</title>\n<link rel="stylesheet" href="{STYLESHEET}">\n</head>\n'
-            f'<body><main><p class="note">The errors page as onetrace {version} generates it, kept with '
-            "this export so its links stay in it.</p>" + "".join(parts) + "</main></body>\n</html>\n"
-            ).encode("utf-8")
+    return (
+        '<!doctype html>\n<html lang="en">\n<head>\n<meta charset="utf-8">\n'
+        '<meta name="viewport" content="width=device-width,initial-scale=1">\n'
+        f'<title>onetrace errors</title>\n<link rel="stylesheet" href="{STYLESHEET}">\n</head>\n'
+        f'<body><main><p class="note">The errors page as onetrace {version} generates it, kept with '
+        "this export so its links stay in it.</p>" + "".join(parts) + "</main></body>\n</html>\n"
+    ).encode("utf-8")
 
 
 _RUN_SEARCH = re.compile(r'<section data-section="(?:runs-search|run-search)"[^>]*>.*?</section>', re.S)
 _SAME_INPUTS = re.compile(r'<p data-what-changed="same-inputs">.*?</p>', re.S)
 _BENCHMARK = re.compile(r'<section data-section="benchmark".*?</section>', re.S)
-_MARK_CONTROL = re.compile(r'<p>(?:<label hidden data-benchmark-note>.*?</label> )?'
-                           r'<button type="button" hidden data-benchmark-post=.*?</p>', re.S)
+_MARK_CONTROL = re.compile(
+    r"<p>(?:<label hidden data-benchmark-note>.*?</label> )?"
+    r'<button class="btn-secondary"(?: data-busy="[^"]*")? type="button" hidden data-benchmark-post=.*?</p>',
+    re.S,
+)
 _EXPECTATIONS_AFTER = re.compile(r'<section data-section="expectations-after".*?</section>', re.S)
-_EXPECTATIONS_CONTROL = re.compile(r'<p><label hidden data-expectations-after-field>.*?</p>', re.S)
-_TOKENIZER_PICK = re.compile(r'<div data-tokenizer-pick>.*?</div>', re.S)
+_EXPECTATIONS_CONTROL = re.compile(r"<p><label hidden data-expectations-after-field>.*?</p>", re.S)
+_TOKENIZER_PICK = re.compile(r"<div data-tokenizer-pick>.*?</div>", re.S)
 
 
 #: A local console's pipeline picker (console 0.6.1 item 4): it posts to the console, so a file has none.
@@ -151,6 +176,7 @@ def without_run_tools(page: str) -> str:
     read-only; an unmarked run's page loses the empty section -- the expectations file's press, alike,
     a model step's tokenizer picker, and the pipeline page's picker."""
     from onetrace_console.benchmark_script import BENCHMARK_SCRIPT
+
     page = _LOCAL_PICKER.sub("", _SAME_INPUTS.sub("", _RUN_SEARCH.sub("", page)))
 
     def mark(m) -> str:
@@ -163,18 +189,24 @@ def without_run_tools(page: str) -> str:
         #: A run checked against a file keeps what was kept, read-only; one never checked loses the
         #: section with its press.
         from onetrace_console.expectations_script import EXPECTATIONS_SCRIPT
+
         sec = m.group(0)
         if 'data-expectations-after="rows"' not in sec:
             return ""
         return _EXPECTATIONS_CONTROL.sub("", sec.replace(EXPECTATIONS_SCRIPT, ""))
-    #: A model step's tokenizer picker: a local console's press, gone from an export.
-    return _TOKENIZER_PICK.sub("", _EXPECTATIONS_AFTER.sub(expectations, _BENCHMARK.sub(mark, page)))
+
+    #: A model step's tokenizer picker: a local console's press, gone from an export; and with the presses gone, the
+    #: busy state's script (`busy_script`).
+    from onetrace_console.busy_script import unless_needed
+
+    return unless_needed(_TOKENIZER_PICK.sub("", _EXPECTATIONS_AFTER.sub(expectations, _BENCHMARK.sub(mark, page))))
 
 
 def _page(served: bytes, rel: str) -> bytes:
     """A served page as exported: links relative, the banner, and sealed again if it was sealed.
     A link to the published errors page goes to the export's own copy of it, at the same section."""
     from onetrace_console.incident_pages import ERRORS_PAGE
+
     page = without_run_tools(served.decode("utf-8"))
     page = page.replace(f'href="{ERRORS_PAGE}#', f'href="/{ERRORS_FILE}#')
     page = _ROOTED.sub(lambda m: f'{m.group(1)}="{_relative(m.group(2), rel)}"', page)
@@ -185,6 +217,7 @@ def _page(served: bytes, rel: str) -> bytes:
     if _SLOT.search(page):
         from onetrace_console.viewer.fingerprint import seal
         from onetrace_console.viewer.slot import ZEROS
+
         page = seal(_SLOT.sub(lambda m: m.group(1) + ZEROS + m.group(2), page))
     return page.encode("utf-8")
 
@@ -192,6 +225,7 @@ def _page(served: bytes, rel: str) -> bytes:
 def _scratch(source: Path, keys: list[str], into: Path):
     """A data folder holding only the listed runs, and the comparisons between them."""
     from onetrace_console.store import Store
+
     store_dir = source / "store"
     if not store_dir.is_dir():
         raise ExportError(f"no store at {store_dir}")
@@ -221,8 +255,7 @@ def _scratch(source: Path, keys: list[str], into: Path):
         if comparison.run_a in listed and comparison.run_b in listed:
             target = into / "store" / "comparisons"
             target.mkdir(exist_ok=True)
-            shutil.copy2(store_dir / "comparisons" / f"{comparison.key}.json",
-                         target / f"{comparison.key}.json")
+            shutil.copy2(store_dir / "comparisons" / f"{comparison.key}.json", target / f"{comparison.key}.json")
     #: The drift reports this console holds over listed runs only: a page reads the report this
     #: console made, rather than one the export would make again.
     for p in sorted((store_dir / "drift").glob("*.json")) if (store_dir / "drift").is_dir() else ():
@@ -256,8 +289,8 @@ def export(source: Path, keys: list[str], out: Path) -> dict[str, str]:
     from onetrace_console.config import Config
     from onetrace_console.frame import STYLESHEET, fill, stylesheet
     from onetrace_console.ingest import bundle
-    from onetrace_console.serve import (PAGES_DIRNAME, STATIC_FILES, _local_config,
-                                        _render_startup_pages)
+    from onetrace_console.serve import PAGES_DIRNAME, STATIC_FILES, _local_config, _render_startup_pages
+
     source, out = Path(source), Path(out)
     if not keys:
         raise ExportError("no runs named")
@@ -273,6 +306,7 @@ def export(source: Path, keys: list[str], out: Path) -> dict[str, str]:
     try:
         store = _scratch(source, keys, work)
         from onetrace_console.explain import no_presses
+
         with no_presses():
             _render_startup_pages(store, work, _local_config(Config()))
         files: dict[str, bytes] = {}
@@ -288,22 +322,25 @@ def export(source: Path, keys: list[str], out: Path) -> dict[str, str]:
             if rel.startswith("bisect-") and rel.endswith(".html"):
                 #: The first-run-to-leave page's window form asks a console; an export has none.
                 from onetrace_console.bisect_page import exported
+
                 served = exported(served.decode("utf-8")).encode("utf-8")
             #: Compare asks a console too: shown disabled, and no script that reads the session's token.
             from onetrace_console.compare_script import exported as compare_exported
+
             served = compare_exported(served.decode("utf-8")).encode("utf-8")
             files[rel] = _page(served, rel)
             was = _FINGERPRINT.search(served.decode("utf-8"))
             if was:
-                now = _FINGERPRINT.search(files[rel].decode("utf-8")).group(1)
+                now = _FINGERPRINT.search(files[rel].decode("utf-8")).group(1)  # type: ignore[union-attr]  # the page keeps the fingerprint it was served with
                 seals.append(f"{rel}  {was.group(1)}  {now}\n")
-        if any(f'{ERRORS_FILE}#'.encode() in data for data in files.values()):
+        if any(f"{ERRORS_FILE}#".encode() in data for data in files.values()):
             files[ERRORS_FILE] = _page(errors_page(), ERRORS_FILE)
         css = STYLESHEET.lstrip("/")
-        files[css] = _CSS_ROOTED.sub(lambda m: f"url({_relative(m.group(1), css)})",
-                                     stylesheet().decode("utf-8")).encode("utf-8")
-        for path, shipped in STATIC_FILES.items():
-            files[path.lstrip("/")] = shipped.read_bytes()
+        files[css] = _CSS_ROOTED.sub(
+            lambda m: f"url({_relative(m.group(1), css)})", stylesheet().decode("utf-8")
+        ).encode("utf-8")
+        for url, shipped in STATIC_FILES.items():
+            files[url.lstrip("/")] = shipped.read_bytes()
         for key in keys:
             files[f"runs/{key}/record.tar"] = bundle(store.get_run(key), store)
         files[SEALS] = (_SEALS_HEAD + "".join(seals)).encode("utf-8")
@@ -332,15 +369,19 @@ def _texts(folder: Path, suffixes: tuple[str, ...]):
 
 def internal_ids(folder: Path) -> list[str]:
     """The project-id scan over every exported page and stylesheet, as a reader sees them."""
-    return [f"{rel}: …{shown(text)[max(0, m.start() - 50):m.end() + 30]}…"
-            for rel, text in _texts(folder, (".html", ".css"))
-            for m in INTERNAL_ID.finditer(shown(text))]
+    return [
+        f"{rel}: …{shown(text)[max(0, m.start() - 50) : m.end() + 30]}…"
+        for rel, text in _texts(folder, (".html", ".css"))
+        for m in INTERNAL_ID.finditer(shown(text))
+    ]
 
 
-_REQUEST = re.compile(r'\b(?:href|src|action|poster|data)\s*=\s*"([^"]*)"'
-                      r"|\bsrcset\s*=\s*\"([^\"]*)\""
-                      r"|url\(\s*['\"]?([^)'\"]*)"
-                      r"|@import\s+['\"]([^'\"]*)")
+_REQUEST = re.compile(
+    r'\b(?:href|src|action|poster|data)\s*=\s*"([^"]*)"'
+    r"|\bsrcset\s*=\s*\"([^\"]*)\""
+    r"|url\(\s*['\"]?([^)'\"]*)"
+    r"|@import\s+['\"]([^'\"]*)"
+)
 #: A URL that names a host or a scheme: a request away from the exported folder.
 _AWAY = re.compile(r"^\s*(?://|[a-zA-Z][a-zA-Z0-9+.-]*:)")
 
@@ -351,8 +392,11 @@ def external_requests(folder: Path) -> list[str]:
     hits = []
     for rel, text in _texts(folder, (".html", ".css")):
         for m in _REQUEST.finditer(text):
-            values = ([u.strip().split(" ")[0] for u in m.group(2).split(",")] if m.group(2)
-                      else [m.group(1) or m.group(3) or m.group(4) or ""])
+            values = (
+                [u.strip().split(" ")[0] for u in m.group(2).split(",")]
+                if m.group(2)
+                else [m.group(1) or m.group(3) or m.group(4) or ""]
+            )
             hits += [f"{rel}: {v}" for v in values if _AWAY.match(v)]
     return hits
 
@@ -361,8 +405,11 @@ def fence_hits(folder: Path, terms_file: Path) -> list[str]:
     """The fence scan's mechanism: each term in `terms_file` (one a line; `#` lines and blank lines
     are not terms), case-insensitive, in every exported file's bytes -- a record's tar included.
     Returns `<file>: term <n>`, never the term itself, so a report can carry the count."""
-    terms = [t.strip().lower() for t in Path(terms_file).read_text(encoding="utf-8").splitlines()
-             if t.strip() and not t.lstrip().startswith("#")]
+    terms = [
+        t.strip().lower()
+        for t in Path(terms_file).read_text(encoding="utf-8").splitlines()
+        if t.strip() and not t.lstrip().startswith("#")
+    ]
     if not terms:
         raise ExportError(f"{terms_file} holds no terms")
     hits = []

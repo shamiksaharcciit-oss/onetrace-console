@@ -6,6 +6,7 @@ when the declining step is the last declared one too, as the demo's pump run ask
 outside the maintenance window is. "What the evidence establishes" keeps counting rung 3 as each
 run's own page reads it, so its row still counts each run once.
 """
+
 from __future__ import annotations
 
 import re
@@ -27,13 +28,18 @@ def _runs(store):
 def stopped_problems(store) -> list[str]:
     """Every run whose last recorded attempt was declined is listed as stopped at a step."""
     from onetrace_console.overview import declined, needs_attention
+
     listed = {r.key for kind, r in needs_attention(store) if kind == "stopped-at-a-step"}
-    return [f"{r.run_id} declined at {declined(r)['stage']} but not listed as stopped"
-            for r in store.runs() if declined(r) is not None and r.key not in listed]
+    return [
+        f"{r.run_id} declined at {declined(r)['stage']} but not listed as stopped"
+        for r in store.runs()
+        if declined(r) is not None and r.key not in listed
+    ]
 
 
 def test_the_last_step_decline_is_listed_as_stopped(demo, examined):  # noqa: F811
     from onetrace_console.overview import attention_kind, declined
+
     _folder, store = demo
     run = _runs(store)[LAST]
     examined(1, "run")
@@ -43,6 +49,7 @@ def test_the_last_step_decline_is_listed_as_stopped(demo, examined):  # noqa: F8
 
 def test_every_declined_run_is_listed_as_stopped(demo, examined):  # noqa: F811
     from onetrace_console.overview import declined
+
     _folder, store = demo
     found = [r for r in store.runs() if declined(r) is not None]
     examined(len(found), "declined runs")
@@ -61,6 +68,7 @@ def test_the_needs_attention_list_holds_it_declined(demo, examined):  # noqa: F8
 
 def test_the_evidence_row_still_counts_each_run_once(demo, examined):  # noqa: F811
     from onetrace_console.home import tallies
+
     _folder, store = demo
     by = {t.slug: t for t in tallies(store)}
     examined(1, "evidence row")
@@ -70,6 +78,7 @@ def test_the_evidence_row_still_counts_each_run_once(demo, examined):  # noqa: F
 
 def test_sabotage_the_old_rule_misses_the_last_step_decline(demo, examined, monkeypatch):  # noqa: F811
     from onetrace_console import overview
+
     _folder, store = demo
     examined(1, "planted rule")
     monkeypatch.setattr(overview, "stopped_at_a_step", lambda run: run.nothing_missing == overview.NOT_REACHED)

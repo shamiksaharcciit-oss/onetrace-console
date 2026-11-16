@@ -1,12 +1,12 @@
 """A deny or a propose raises a derived incident, in the same store and
 with the same rules (machinery) as the existing derived incidents.
 """
+
 from __future__ import annotations
 
 import pytest
 
 from onetrace_console.incident_pages import render_incidents, render_rule_list, rule_href
-from onetrace_console.incidents import RULES
 from onetrace_console.onedoor_ext.decision_incidents import RULE, derive_decision_incidents
 from onetrace_console.onedoor_ext.decisions import accept_export
 from onetrace_console.onedoor_ext.policy_pages import all_decisions
@@ -17,8 +17,7 @@ from tests.test_upload_hardening import _member, _tar
 def ingested(onedoor_fixture_dir, store):
     jsonl = (onedoor_fixture_dir / "onedoor-export.jsonl").read_bytes()
     sidecar = (onedoor_fixture_dir / "onedoor-export.jsonl.sha256").read_bytes()
-    archive = _tar(_member("onedoor-export.jsonl", jsonl),
-                   _member("onedoor-export.jsonl.sha256", sidecar))
+    archive = _tar(_member("onedoor-export.jsonl", jsonl), _member("onedoor-export.jsonl.sha256", sidecar))
     accept_export(archive, store)
     return store
 
@@ -33,11 +32,12 @@ def test_the_decision_incident_pages_pass_the_prohibitions(ingested, examined):
     found = derive_decision_incidents(ingested)
     totals = {"decision": len(all_decisions(ingested))}
     pages = {
-        INCIDENTS: render_incidents(ingested, generated_at="now", extra_rules=(RULE,),
-                                    extra_incidents=found, extra_totals=totals),
-        rule_href(RULE.id): render_rule_list(ingested, RULE.id, generated_at="now",
-                                             extra_rules=(RULE,), extra_incidents=found,
-                                             extra_totals=totals),
+        INCIDENTS: render_incidents(
+            ingested, generated_at="now", extra_rules=(RULE,), extra_incidents=found, extra_totals=totals
+        ),
+        rule_href(RULE.id): render_rule_list(
+            ingested, RULE.id, generated_at="now", extra_rules=(RULE,), extra_incidents=found, extra_totals=totals
+        ),
     }
     examined(len(found), "onedoor incidents on the pages checked against the prohibitions")
     for name, page in pages.items():
@@ -45,14 +45,15 @@ def test_the_decision_incident_pages_pass_the_prohibitions(ingested, examined):
         assert_the_prohibitions(name, page)
 
 
-def test_a_deny_and_a_propose_each_raise_one_incident_the_executed_row_does_not(
-        ingested, examined):
+def test_a_deny_and_a_propose_each_raise_one_incident_the_executed_row_does_not(ingested, examined):
     incidents = derive_decision_incidents(ingested)
     examined(len(incidents), "incidents derived from the real fixture's 5 decisions")
     assert len(incidents) == 2
     request_ids = {i.subject for i in incidents}
-    assert request_ids == {"395fa044-08d1-4b41-a649-619f1e3731a3",   # denied
-                          "dd52541b-6972-457f-a26d-ef8b5230ad65"}   # proposed
+    assert request_ids == {
+        "395fa044-08d1-4b41-a649-619f1e3731a3",  # denied
+        "dd52541b-6972-457f-a26d-ef8b5230ad65",
+    }  # proposed
     #: The permit (2 rows), its resumption (2 rows), and the observe-mode row all
     #: raise nothing -- 5 distinct request_ids, exactly 2 incidents.
 
@@ -79,8 +80,9 @@ def test_the_incidents_carry_no_severity_score_or_rank(ingested, examined):
 def test_the_incidents_page_shows_the_onedoor_rule_when_merged_in(ingested, examined):
     decision_incidents = derive_decision_incidents(ingested)
     totals = {"decision": len(all_decisions(ingested))}
-    html = render_incidents(ingested, generated_at="now", extra_rules=(RULE,),
-                            extra_incidents=decision_incidents, extra_totals=totals)
+    html = render_incidents(
+        ingested, generated_at="now", extra_rules=(RULE,), extra_incidents=decision_incidents, extra_totals=totals
+    )
     examined(1, "renders of the merged Incidents page")
     assert "I-ONEDOOR-DECISION" in html
     assert "onedoor decision" in html
@@ -99,7 +101,13 @@ def test_a_disabled_console_s_incidents_page_is_unaffected(store, examined):
 def test_the_rule_list_page_for_the_onedoor_rule_renders(ingested, examined):
     decision_incidents = derive_decision_incidents(ingested)
     totals = {"decision": len(all_decisions(ingested))}
-    html = render_rule_list(ingested, RULE.id, generated_at="now", extra_rules=(RULE,),
-                            extra_incidents=decision_incidents, extra_totals=totals)
+    html = render_rule_list(
+        ingested,
+        RULE.id,
+        generated_at="now",
+        extra_rules=(RULE,),
+        extra_incidents=decision_incidents,
+        extra_totals=totals,
+    )
     examined(1, "renders of the onedoor rule's own list page")
     assert "denied" in html or "proposed" in html or RULE.id in html

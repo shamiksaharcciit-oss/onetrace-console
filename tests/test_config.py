@@ -3,6 +3,7 @@
 Per-organisation configuration is one configuration file, mounted read-only, with its
 keys documented. The only environment variable allowed is the path to that file.
 """
+
 from __future__ import annotations
 
 import json
@@ -41,7 +42,8 @@ def test_the_shipped_default_config_matches_configs_own_defaults(examined):
     rest_default = {k: v for k, v in asdict(Config()).items() if k != "store_root"}
     assert rest_shipped == rest_default, (
         f"config/default.json (minus store_root, sign_in.enabled) does not match "
-        f"Config()'s own defaults:\n  shipped: {rest_shipped}\n  Config(): {rest_default}")
+        f"Config()'s own defaults:\n  shipped: {rest_shipped}\n  Config(): {rest_default}"
+    )
 
 
 def test_an_unset_env_var_uses_built_in_defaults(monkeypatch, examined):
@@ -163,8 +165,7 @@ def test_sign_in_must_itself_be_an_object(tmp_path, examined):
 
 def test_a_non_integer_session_timeout_is_refused(tmp_path, examined):
     path = tmp_path / "config.json"
-    path.write_text(json.dumps({"sign_in": {"session_idle_timeout_seconds": "30m"}}),
-                    encoding="utf-8")
+    path.write_text(json.dumps({"sign_in": {"session_idle_timeout_seconds": "30m"}}), encoding="utf-8")
     examined(1, "config files with a non-integer session timeout")
     with pytest.raises(ConfigError, match="must be an integer"):
         load(path)
@@ -174,8 +175,7 @@ def test_a_bool_is_refused_where_an_integer_belongs(tmp_path, examined):
     """`bool` is an `int` subclass in Python -- checked explicitly so `true`/`false`
     typed where a count belongs is refused, not silently read as 1/0."""
     path = tmp_path / "config.json"
-    path.write_text(json.dumps({"sign_in": {"rate_limit_window_seconds": True}}),
-                    encoding="utf-8")
+    path.write_text(json.dumps({"sign_in": {"rate_limit_window_seconds": True}}), encoding="utf-8")
     examined(1, "a bool given where an integer sign_in value belongs")
     with pytest.raises(ConfigError, match="must be an integer"):
         load(path)
@@ -191,8 +191,7 @@ def test_a_non_string_tls_path_is_refused(tmp_path, examined):
 
 def test_tls_cert_and_key_must_be_set_together(tmp_path, examined):
     path = tmp_path / "config.json"
-    path.write_text(json.dumps({"sign_in": {"tls_cert_path": "/certs/a.pem"}}),
-                    encoding="utf-8")
+    path.write_text(json.dumps({"sign_in": {"tls_cert_path": "/certs/a.pem"}}), encoding="utf-8")
     examined(1, "config files naming a TLS cert path with no key path")
     with pytest.raises(ConfigError, match="must be set together"):
         load(path)
@@ -200,9 +199,9 @@ def test_tls_cert_and_key_must_be_set_together(tmp_path, examined):
 
 def test_tls_cert_and_key_together_is_accepted(tmp_path, examined):
     path = tmp_path / "config.json"
-    path.write_text(json.dumps({"sign_in": {"tls_cert_path": "/certs/a.pem",
-                                            "tls_key_path": "/certs/a.key"}}),
-                    encoding="utf-8")
+    path.write_text(
+        json.dumps({"sign_in": {"tls_cert_path": "/certs/a.pem", "tls_key_path": "/certs/a.key"}}), encoding="utf-8"
+    )
     examined(1, "config files naming both a TLS cert and key path")
     got = load(path)
     assert got.sign_in["tls_cert_path"] == "/certs/a.pem"

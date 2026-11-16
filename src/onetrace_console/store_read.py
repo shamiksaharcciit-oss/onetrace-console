@@ -16,6 +16,7 @@ with the reason, never read as if it were one this version knows; an earlier for
 writes it again, in the search page's own two sentences. `VERSION` names the interface; it
 changes when an answer's shape does. docs/store_read.md says the same for a reader of the docs.
 """
+
 from __future__ import annotations
 
 import json
@@ -40,6 +41,7 @@ class Refused(Exception):
 @dataclass(frozen=True)
 class Found:
     """One run's answer: the run, the step that matched, and what the record says there."""
+
     run_key: str
     run_id: str
     pipeline: str
@@ -53,32 +55,39 @@ class Found:
     nearness: float | None = None
 
 
-def open_store(store_root) -> "Reader":
+def open_store(store_root) -> Reader:
     """The reader over a store root. Refused where the root holds no run index, or one of a format
     this version does not read; an earlier format with its own reason, a local console's and a public
     one's, as the search page says them."""
     root = Path(store_root)
     path = root / run_index.FILE_NAME
     if not path.is_file():
-        raise Refused(f"{root} holds no run index ({run_index.FILE_NAME}): the console writes it when it "
-                      f"draws its pages, so start the console on this store once")
+        raise Refused(
+            f"{root} holds no run index ({run_index.FILE_NAME}): the console writes it when it "
+            f"draws its pages, so start the console on this store once"
+        )
     try:
         index = load_json_bounded(path.read_text(encoding="utf-8"), run_index.FILE_NAME)
     except OSError as e:
         from onetrace_console.oserror import said
+
         raise Refused(f"{path} cannot be read as a run index: {said(e)}") from None
     except (ValueError, UnicodeDecodeError, RecursionError) as e:
         raise Refused(f"{path} cannot be read as a run index: {e}") from None
     found = index.get("format") if isinstance(index, dict) else None
     if found not in INDEX_FORMATS and isinstance(found, str) and run_index.earlier(found):
         from onetrace_console import __version__, search_page
-        raise Refused(f"{path} is {json.dumps(found)}, an earlier format than the {', '.join(INDEX_FORMATS)} this "
-                      f"interface ({VERSION}) reads. On a local console: "
-                      f"{search_page.EARLIER_LOCAL.format(found=found)} On a public console: "
-                      f"{search_page.EARLIER_PUBLIC.format(found=found, version=__version__)}")
+
+        raise Refused(
+            f"{path} is {json.dumps(found)}, an earlier format than the {', '.join(INDEX_FORMATS)} this "
+            f"interface ({VERSION}) reads. On a local console: "
+            f"{search_page.EARLIER_LOCAL.format(found=found)} On a public console: "
+            f"{search_page.EARLIER_PUBLIC.format(found=found, version=__version__)}"
+        )
     if found not in INDEX_FORMATS:
-        raise Refused(f"{path} is {json.dumps(found)}, and this interface ({VERSION}) reads "
-                      f"{', '.join(INDEX_FORMATS)} only")
+        raise Refused(
+            f"{path} is {json.dumps(found)}, and this interface ({VERSION}) reads {', '.join(INDEX_FORMATS)} only"
+        )
     return Reader(root, index)
 
 
@@ -99,8 +108,9 @@ class Reader:
             for s in r.get("steps", []):
                 digest = (s.get("instrument") or {}).get("config_digest", "")
                 if digest and digest == config_digest and step in ("*", s.get("name")):
-                    out.append(Found(r["key"], r.get("run_id", ""), r.get("pipeline_label", ""),
-                                     s.get("name", ""), digest))
+                    out.append(
+                        Found(r["key"], r.get("run_id", ""), r.get("pipeline_label", ""), s.get("name", ""), digest)
+                    )
         return out
 
     def runs_by_model_files(self, files_digest: str) -> list[Found]:
@@ -112,8 +122,16 @@ class Reader:
                 for call in s.get("model_calls", []):
                     field = (call.get("fields") or {}).get(FILES_FIELD) or {}
                     if field.get("status") in FILES_STATES and field.get("value") == files_digest:
-                        out.append(Found(r["key"], r.get("run_id", ""), r.get("pipeline_label", ""),
-                                         s.get("name", ""), files_digest, state=field["status"]))
+                        out.append(
+                            Found(
+                                r["key"],
+                                r.get("run_id", ""),
+                                r.get("pipeline_label", ""),
+                                s.get("name", ""),
+                                files_digest,
+                                state=field["status"],
+                            )
+                        )
         return out
 
     def neighbours(self, run_key: str) -> list[Found]:
@@ -121,22 +139,36 @@ class Reader:
         run's page lists them. Refused where neighbours by input is not on for this store."""
         from onetrace_console import neighbours
         from onetrace_console.store import Store
+
         if not neighbours.installed():
-            raise Refused("neighbours by input is not installed here: pip install \"onetrace-console[neighbours]\"")
+            raise Refused('neighbours by input is not installed here: pip install "onetrace-console[neighbours]"')
         if not all((self.root / "store" / d).is_dir() for d in ("objects", "runs")):
             raise Refused(f"{self.root} holds no store folder (store/objects and store/runs)")
         store = Store(self.root / "store")
         if not neighbours.active(store):
-            raise Refused("neighbours by input is not turned on for this store: a person turns it on at "
-                          "/neighbours/setup on a local console")
+            raise Refused(
+                "neighbours by input is not turned on for this store: a person turns it on at "
+                "/neighbours/setup on a local console"
+            )
         run = store.get_run(run_key)
         if run is None:
             raise Refused(f"this store holds no run {run_key}")
         from onetrace_console.neighbours import nearness
+
         with store.reading():
             got = nearness.suggestions(run, store)
         if got is None:
             raise Refused("this store holds no embedded vectors for the embedder in use yet")
         label = {r["key"]: (r.get("run_id", ""), r.get("pipeline_label", "")) for r in self._runs()}
-        return [Found(row.other.key, *label.get(row.other.key, (row.other.run_id, "")), row.step, "",
-                      state=row.near.how, name=row.name, nearness=row.near.value) for row in got.rows]
+        return [
+            Found(  # type: ignore[call-arg,misc]  # each label is a pair: run_id and pipeline
+                row.other.key,
+                *label.get(row.other.key, (row.other.run_id, "")),
+                row.step,
+                "",
+                state=row.near.how,
+                name=row.name,
+                nearness=row.near.value,
+            )
+            for row in got.rows
+        ]

@@ -14,6 +14,7 @@ Every check reports what it examined. The real run pairs come from
 the SDK's own exam fixtures in the pinned clone, so the comparisons are over records the SDK
 itself ships as its bench.
 """
+
 from __future__ import annotations
 
 import hashlib
@@ -26,13 +27,21 @@ from pathlib import Path
 
 import pytest
 
-from onetrace_console.compare import (COMPARISON_FORMAT, DIFF, LOCALIZE, TIMED_OUT,
-                                      StoredComparison, compare, comparison_key,
-                                      report_json, report_text, sdk_version)
+from onetrace_console.compare import (
+    COMPARISON_FORMAT,
+    DIFF,
+    LOCALIZE,
+    TIMED_OUT,
+    StoredComparison,
+    compare,
+    comparison_key,
+    report_json,
+    report_text,
+    sdk_version,
+)
 from onetrace_console.ingest import SUMS_NAME, accept, bundle
+from onetrace_console.partners import MATCHABLE, NO_DECLARED_FIELD, candidates, shared_fields
 from onetrace_console.preview import PREVIEW_FORMAT
-from onetrace_console.partners import (MATCHABLE, NO_DECLARED_FIELD, Candidate, candidates,
-                                       shared_fields)
 from onetrace_console.store import digest
 from tests.conftest import preview_veto_off
 from tests.test_checks import _require_installed
@@ -58,7 +67,8 @@ def _require_exam():
         pytest.fail(
             f"the SDK's exam fixtures are not there: {missing} under {EXAM}\n"
             f"    python tools/fetch_sdk_fixtures.py\n"
-            f"This refuses rather than skips: these checks exist to compare real records.")
+            f"This refuses rather than skips: these checks exist to compare real records."
+        )
 
 
 def _deliver(folder: Path, store, *, outputs: bool = False):
@@ -72,9 +82,9 @@ def _deliver(folder: Path, store, *, outputs: bool = False):
         for p in sorted((folder / "artifacts").rglob("*")):
             if p.is_file():
                 files[p.relative_to(folder).as_posix()] = p.read_bytes()
-    files[SUMS_NAME] = ("\n".join(
-        f"{hashlib.sha256(b).hexdigest()}  {p}"
-        for p, b in files.items()) + "\n").encode("utf-8")
+    files[SUMS_NAME] = ("\n".join(f"{hashlib.sha256(b).hexdigest()}  {p}" for p, b in files.items()) + "\n").encode(
+        "utf-8"
+    )
     buf = io.BytesIO()
     with tarfile.open(fileobj=buf, mode="w") as tar:
         for path, blob in files.items():
@@ -104,6 +114,7 @@ def pair(store):
 
 # --------------------------------------------------- the runner keeps what the SDK wrote
 
+
 def test_a_comparison_stores_the_reports_the_sdk_wrote(pair, store, examined):
     a, b = pair
     c = compare(a, b, store, ran_at=FIXED_AT)
@@ -111,6 +122,7 @@ def test_a_comparison_stores_the_reports_the_sdk_wrote(pair, store, examined):
     examined(len(c.verbs), "verb runs stored")
     #: The text diff is a stored run of its own beside diff and localize.
     from onetrace_console.compare import TEXT_DIFF
+
     assert {v.verb for v in c.verbs} == {DIFF, LOCALIZE, TEXT_DIFF}
 
     total_reports = 0
@@ -126,8 +138,7 @@ def test_a_comparison_stores_the_reports_the_sdk_wrote(pair, store, examined):
     assert f"{DIFF}.json" in c.verb(DIFF).report_names
 
 
-def test_the_stored_report_is_byte_identical_to_running_diff_by_hand(pair, store, tmp_path,
-                                                                    examined):
+def test_the_stored_report_is_byte_identical_to_running_diff_by_hand(pair, store, tmp_path, examined):
     """Step 1's first check, and the comparison is made by a separate process.
 
     `diff` is run by hand over the same two materialised folders, and its `diff.txt` and
@@ -149,23 +160,23 @@ def test_the_stored_report_is_byte_identical_to_running_diff_by_hand(pair, store
     #: As the runner runs it: from the work folder, every folder named relative to it, the
     #: verifier its copy beside the runs.
     out = work / "byhand"
-    proc = subprocess.run([sys.executable, "-m", "onetrace", DIFF, "a", "b", "--verifier", "verifier",
-                           "--out", "byhand"], capture_output=True, cwd=work)
+    proc = subprocess.run(
+        [sys.executable, "-m", "onetrace", DIFF, "a", "b", "--verifier", "verifier", "--out", "byhand"],
+        capture_output=True,
+        cwd=work,
+    )
     assert c.verb(DIFF).command[4:] == ("a", "b", "--verifier", "verifier", "--out", "out-diff")
     assert out.is_dir(), f"diff wrote nothing by hand: {proc.stderr[-400:]!r}"
 
-    by_hand = {p.relative_to(out).as_posix(): p.read_bytes()
-               for p in sorted(out.rglob("*")) if p.is_file()}
+    by_hand = {p.relative_to(out).as_posix(): p.read_bytes() for p in sorted(out.rglob("*")) if p.is_file()}
     examined(len(by_hand), "report files produced by hand")
     stored = {name: store.get(key) for name, key in c.verb(DIFF).reports}
-    assert set(stored) == set(by_hand), (
-        f"stored {sorted(stored)} against by-hand {sorted(by_hand)}")
+    assert set(stored) == set(by_hand), f"stored {sorted(stored)} against by-hand {sorted(by_hand)}"
     for name in sorted(by_hand):
         assert stored[name] == by_hand[name], f"{name} differs from the by-hand run"
 
 
-def test_the_converter_difference_is_shown_exactly_as_the_sdk_annotates_it(pair, store,
-                                                                          examined):
+def test_the_converter_difference_is_shown_exactly_as_the_sdk_annotates_it(pair, store, examined):
     """Step 1's second check. The SDK's words, not a sentence of ours about config.
 
     Worth stating what the SDK actually says, because it is not what a reader might expect:
@@ -187,7 +198,8 @@ def test_the_converter_difference_is_shown_exactly_as_the_sdk_annotates_it(pair,
     #: The console must not have turned an annotation into a verdict.
     assert "diff: identical" in text, (
         "the SDK no longer calls this pair identical; if its verdicts moved, the page's "
-        "wording follows it rather than this test being relaxed")
+        "wording follows it rather than this test being relaxed"
+    )
 
 
 def test_the_two_runs_really_do_differ_only_in_their_converter(pair, store, examined):
@@ -204,6 +216,7 @@ def test_the_two_runs_really_do_differ_only_in_their_converter(pair, store, exam
 
 
 # ----------------------------------------------------------------- the key, and caching
+
 
 def test_a_repeated_request_returns_the_stored_comparison(pair, store, examined):
     a, b = pair
@@ -222,8 +235,7 @@ def test_the_key_carries_the_sdks_build_identity(pair, store, examined):
 
     a, b = pair
     c = compare(a, b, store, ran_at=FIXED_AT)
-    parts = (digest(bundle(a, store)), digest(bundle(b, store)),
-             sdk_distribution_version(), sdk_build_digest())
+    parts = (digest(bundle(a, store)), digest(bundle(b, store)), sdk_distribution_version(), sdk_build_digest())
     examined(len(parts), "components of the comparison key")
     assert c.key == comparison_key(*parts)
     assert c.bundle_sha_a == parts[0] and c.bundle_sha_b == parts[1]
@@ -249,11 +261,14 @@ def test_the_build_digest_names_which_kind_of_identity_it_is(examined):
         f"the SDK is now identified as {kind!r}, not 'wheel'. The console pins onetrace by hash "
         f"from PyPI and removes the PYTHONPATH clone; a 'commit' result here means the "
         f"install report is missing or the SDK is still on PYTHONPATH — install with "
-        f"`python tools/install_pinned.py`, not a bare `pip install` or a clone.")
+        f"`python tools/install_pinned.py`, not a bare `pip install` or a clone."
+    )
     from tests.test_pins import ONETRACE_WHL_SHA256
+
     assert value == ONETRACE_WHL_SHA256, (
         f"the wheel hash is {value!r}, not the pinned onetrace wheel's {ONETRACE_WHL_SHA256} — "
-        f"requirements.lock and this assertion have drifted apart")
+        f"requirements.lock and this assertion have drifted apart"
+    )
 
 
 def test_the_distribution_version_is_readable_since_the_sdk_is_installed(examined):
@@ -269,8 +284,10 @@ def test_the_distribution_version_is_readable_since_the_sdk_is_installed(examine
     assert got != "", (
         "sdk_distribution_version() is empty, so importlib.metadata cannot see `onetrace` "
         "as an installed distribution — install with `python tools/install_pinned.py`, not "
-        "PYTHONPATH against a clone.")
+        "PYTHONPATH against a clone."
+    )
     from tests.test_pins import PINNED_SDK_VERSION
+
     assert got == PINNED_SDK_VERSION, f"distribution version is {got!r}, not the pinned {PINNED_SDK_VERSION}"
 
 
@@ -310,8 +327,7 @@ def test_the_order_of_the_pair_changes_the_key(pair, store, examined):
     assert forward.key != backward.key
 
 
-def test_a_stored_comparison_whose_build_digest_disagrees_with_the_key_is_recomputed(
-        pair, store, examined):
+def test_a_stored_comparison_whose_build_digest_disagrees_with_the_key_is_recomputed(pair, store, examined):
     """The `other_build` branch, exercised directly rather than assumed correct alongside
     its sibling `unkeyed` branch above.
 
@@ -335,13 +351,16 @@ def test_a_stored_comparison_whose_build_digest_disagrees_with_the_key_is_recomp
     store.put_comparison(forged)
     examined(1, "stored comparison whose build digest disagrees with the current build")
     assert store.get_comparison(first.key).sdk_build_digest != first.sdk_build_digest, (
-        "the forged record and the real one must actually differ, or this proves nothing")
+        "the forged record and the real one must actually differ, or this proves nothing"
+    )
 
     again = compare(a, b, store, ran_at="2026-09-28T00:00:00+00:00")
     assert again.ran_at != forged.ran_at, (
-        "a comparison whose build digest disagreed with the current build was handed back")
+        "a comparison whose build digest disagreed with the current build was handed back"
+    )
     assert again.sdk_build_digest == first.sdk_build_digest, (
-        "the recomputed comparison should report the REAL current build, not the forged one")
+        "the recomputed comparison should report the REAL current build, not the forged one"
+    )
 
 
 def test_the_sdk_version_now_moves_with_the_release(examined):
@@ -361,11 +380,14 @@ def test_the_sdk_version_now_moves_with_the_release(examined):
     version = sdk_version()
     examined(1, "SDK version read")
     from tests.test_pins import PINNED_SDK_VERSION
+
     assert version == PINNED_SDK_VERSION, (
-        f"the SDK reports {version!r}, not the pinned build's own version {PINNED_SDK_VERSION}")
+        f"the SDK reports {version!r}, not the pinned build's own version {PINNED_SDK_VERSION}"
+    )
 
 
 # ------------------------------------------------- a refusal is stored, not retried
+
 
 def test_a_refusal_is_stored_and_shown_in_the_sdk_s_own_words(store, tmp_path, examined):
     """Step 1's third check. Two runs of different shapes cannot be aligned.
@@ -387,8 +409,7 @@ def test_a_refusal_is_stored_and_shown_in_the_sdk_s_own_words(store, tmp_path, e
 
     shown = {v.verb: report_text(c, v.verb, store) for v in c.verbs}
     for verb, text in shown.items():
-        examined(len([ln for ln in text.splitlines() if ln.strip()]),
-                 f"lines the SDK wrote for {verb}")
+        examined(len([ln for ln in text.splitlines() if ln.strip()]), f"lines the SDK wrote for {verb}")
         assert text.strip(), f"{verb} produced nothing at all, so nothing is shown"
 
     #: Whatever the SDK decided, it is recorded verbatim and the runner added no verdict.
@@ -408,8 +429,7 @@ def test_a_refusal_is_not_re_run_on_a_repeat(store, examined):
     assert second.ran_at == first.ran_at, "the refusal was re-run instead of returned"
 
 
-def test_a_timeout_is_the_runners_failure_and_never_a_verdict(pair, store, monkeypatch,
-                                                              examined):
+def test_a_timeout_is_the_runners_failure_and_never_a_verdict(pair, store, monkeypatch, examined):
     """A timeout means no answer was obtained. It must not read as the SDK saying anything."""
     import onetrace_console.compare as mod
 
@@ -434,6 +454,7 @@ def test_a_timeout_is_the_runners_failure_and_never_a_verdict(pair, store, monke
 
 
 # --------------------------------------------- step 2: candidates from declared fields
+
 
 def test_candidates_share_at_least_one_declared_field(pair, store, examined):
     a, b = pair
@@ -461,16 +482,15 @@ def test_no_candidate_is_offered_that_shares_no_declared_field(store, examined):
     examined(len(pairs), "directions checked")
     for one, other in pairs:
         assert shared_fields(one, other) == (), (
-            f"{one.run_id} and {other.run_id} are held to share "
-            f"{shared_fields(one, other)}")
+            f"{one.run_id} and {other.run_id} are held to share {shared_fields(one, other)}"
+        )
         offered = [c.run.run_id for c in candidates(one, store)]
         assert other.run_id not in offered, (
-            f"{other.run_id} was offered as a candidate for {one.run_id} while sharing "
-            f"no declared field")
+            f"{other.run_id} was offered as a candidate for {one.run_id} while sharing no declared field"
+        )
 
 
-def test_a_run_alone_in_the_store_gets_no_candidates_and_an_absence_sentence(store,
-                                                                            examined):
+def test_a_run_alone_in_the_store_gets_no_candidates_and_an_absence_sentence(store, examined):
     _require_installed()
     _require_exam()
     a = _deliver(RUN_C, store)
@@ -487,6 +507,7 @@ def test_a_field_both_runs_leave_empty_is_not_a_match(pair, store, examined):
     relatives — and it is the same shape as the blank-versus-absence rule.
     """
     from dataclasses import replace
+
     a, b = pair
     blanked_a = replace(a, pipeline="", declared_stages=(), run_id="x")
     blanked_b = replace(b, pipeline="", declared_stages=(), run_id="y")
@@ -516,16 +537,16 @@ def test_candidates_are_not_ordered_by_how_much_they_share(pair, store, examined
     store.put_run(replace(a, key="f" * 64))
     store.put_run(replace(a, key="e" * 64, run_id=one_field))
 
-    found = [c for c in candidates(a, store)
-             if c.run.key in ("f" * 64, "e" * 64)]
+    found = [c for c in candidates(a, store) if c.run.key in ("f" * 64, "e" * 64)]
     examined(len(found), "candidates whose order is checked")
     assert len(found) >= 2, (
-        f"only {len(found)} candidate(s); with fewer than two, any order is sorted and this "
-        f"test cannot fail")
+        f"only {len(found)} candidate(s); with fewer than two, any order is sorted and this test cannot fail"
+    )
     counts = {c.run.run_id: len(c.shared) for c in found}
     assert len(set(counts.values())) > 1, (
         f"every candidate shares the same number of fields ({counts}), so a share-count "
-        f"ordering is indistinguishable from an id ordering here")
+        f"ordering is indistinguishable from an id ordering here"
+    )
 
     ids = [c.run.run_id for c in found]
     assert ids == sorted(ids), f"candidates are not in run-id order: {ids}"
@@ -543,7 +564,7 @@ def test_the_matchable_fields_are_all_declared_by_the_emitter(examined):
     #: `pipeline` left the set: the stored field stays unread.
     assert set(MATCHABLE) == {"run_id", "declared_stages"}
     assert "received_at" not in MATCHABLE
-    for field, label in MATCHABLE.items():
+    for _field, label in MATCHABLE.items():
         assert "score" not in label.lower() and "%" not in label
         assert label.startswith("the same "), label
 

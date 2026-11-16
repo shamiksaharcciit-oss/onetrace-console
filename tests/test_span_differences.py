@@ -8,6 +8,7 @@
 4. On recorded runs with their exports given, the comparison page carries the section, and no
    verdict on it changes.
 """
+
 from __future__ import annotations
 
 import html
@@ -43,13 +44,26 @@ def planted(side: str, base: int = S0, at=lambda ms: ms) -> list:
     model = [("gen_ai.request.model", "example-model")]
     tool = [("gen_ai.tool.name", "price_lookup")]
     if side == "baseline":
-        return [root, _sp(MODEL_B, "chat", at(10), 100, base, attrs=model),
-                _sp(TOOL_B, "execute_tool", at(200), 400, base, attrs=tool)]
-    return [root, _sp(MODEL_B, "chat", at(10), 300, base, attrs=model),
-            _sp(TOOL_B, "execute_tool", at(400), 3100, base, attrs=tool,
-                status={"code": 2, "message": "price service unavailable"},
-                events=[("retry", at(1000)), ("retry", at(2000))]),
-            _sp(ONLY, "audit log", at(3600), 100, base)]
+        return [
+            root,
+            _sp(MODEL_B, "chat", at(10), 100, base, attrs=model),
+            _sp(TOOL_B, "execute_tool", at(200), 400, base, attrs=tool),
+        ]
+    return [
+        root,
+        _sp(MODEL_B, "chat", at(10), 300, base, attrs=model),
+        _sp(
+            TOOL_B,
+            "execute_tool",
+            at(400),
+            3100,
+            base,
+            attrs=tool,
+            status={"code": 2, "message": "price service unavailable"},
+            events=[("retry", at(1000)), ("retry", at(2000))],
+        ),
+        _sp(ONLY, "audit log", at(3600), 100, base),
+    ]
 
 
 def _tree(spans):
@@ -83,7 +97,7 @@ def test_sabotage_ranked_by_time_alone_the_slow_span_comes_first(monkeypatch, ex
 def test_two_trees_that_differ_in_none_of_these_say_so(examined):
     page = span_tree.difference_section((_baseline(), _baseline()))
     examined(1, "pair")
-    assert span_tree.DIFF_NONE in _text(page) and 'data-span-side' in page
+    assert span_tree.DIFF_NONE in _text(page) and "data-span-side" in page
     for line in span_tree.NON_CLAIMS:
         assert line in _text(page)
 
@@ -104,13 +118,15 @@ def test_a_run_with_no_tree_says_which_and_what_is_missing(word, examined):
 def compared(tmp_path_factory):
     """Two runs recorded inside the app's span, with their exports given: the candidate's planted."""
     import os
+
     from onetrace_console import beside
     from onetrace_console.checks import run_and_record
     from onetrace_console.compare import compare
     from onetrace_console.store import Store
-    from tests.model_call_runs import record_run
+    from tests.model_call_runs import record_run, step_receipt
     from tests.test_checks import FIXED_RAN_AT
     from tests.test_compare import _deliver
+
     folder = tmp_path_factory.mktemp("span-diffs")
     before = os.environ.get("TRACEPARENT")
     os.environ["TRACEPARENT"] = f"00-{T}-{ROOT}-01"
@@ -121,7 +137,7 @@ def compared(tmp_path_factory):
     store = Store(folder / "store")
     runs = [run_and_record(_deliver(m, store, outputs=True), store, ran_at=FIXED_RAN_AT) for m in made]
     for m, run, side in zip(made, runs, ("baseline", "candidate")):
-        receipt = json.loads(next((m / "receipts").glob("*.json")).read_bytes())
+        receipt = json.loads(step_receipt(m).read_bytes())
         s0 = span_tree._ns(receipt["time"]["started"])
         beside.keep(store, run.key, trace=_export(*planted(side, s0, at=lambda ms: 0)), trace_source=beside.GIVEN)
     return store, compare(runs[0], runs[1], store, ran_at=FIXED_RAN_AT)
@@ -130,6 +146,7 @@ def compared(tmp_path_factory):
 def _diff_page(store, c) -> str:
     from onetrace_console.frame import rendering
     from onetrace_console.render import render_diff
+
     with rendering(onedoor=False, sign_in=False, public=True):
         return render_diff(c, store, generated_at="2026-11-02T06:00:00+00:00")
 
@@ -140,7 +157,9 @@ def test_the_comparison_page_carries_the_section_and_nothing_else_changes(compar
     section = re.search(r'<section data-section="span-differences".*?</section>', page, re.S).group(0)
     examined(1, "comparison page")
     first = re.search(r'<li data-rank="([a-z]+)">([^<]*)</li>', section)
-    assert first.group(1) == "status" and first.group(2).startswith("candidate: 2 retries on price_lookup, status error")
+    assert first.group(1) == "status" and first.group(2).startswith(
+        "candidate: 2 retries on price_lookup, status error"
+    )
     #: The page without the spans is the same page, less the section: no verdict, line or count moves.
     monkeypatch.setattr(span_tree, "found_at", lambda *a, **k: "absent")
     assert _diff_page(store, c) == page.replace(section, "")

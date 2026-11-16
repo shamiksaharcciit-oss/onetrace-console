@@ -6,6 +6,7 @@ it: the parser took only the text form, though its own comment credited `sha256s
 are read; the `*` is the mode, never part of the path. Anything else is still refused, naming
 the line.
 """
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -22,14 +23,13 @@ SUMS = REPO / "tests" / "fixtures" / "sums"
 #: The run folder's five files, and their sha256 as the committed r11 sums file records them.
 EXPECTED = {
     line.split("  ", 1)[1]: line.split("  ", 1)[0]
-    for line in (REPO / "tests" / "fixtures" / "r11" / "SHA256SUMS").read_text(
-        encoding="utf-8").splitlines() if line.strip()
+    for line in (REPO / "tests" / "fixtures" / "r11" / "SHA256SUMS").read_text(encoding="utf-8").splitlines()
+    if line.strip()
 }
 
 
 def _run_files() -> dict[str, bytes]:
-    return {p.relative_to(RUN).as_posix(): p.read_bytes()
-            for p in sorted(RUN.rglob("*")) if p.is_file()}
+    return {p.relative_to(RUN).as_posix(): p.read_bytes() for p in sorted(RUN.rglob("*")) if p.is_file()}
 
 
 def test_the_two_files_are_the_two_forms_the_tool_wrote(examined):
@@ -128,6 +128,7 @@ def test_the_onedoor_side_car_fixture_still_parses(examined):
     """The onedoor side-car shares the parser and so the rule; its committed files
     still read: both its SHA256SUMS and the export's own `.sha256`."""
     from onetrace_console.onedoor_ext import decisions
+
     assert decisions.parse_sums is parse_sums, "the side-car no longer shares the parser"
     onedoor = REPO / "tests" / "fixtures" / "onedoor"
     sums = parse_sums((onedoor / "SHA256SUMS").read_bytes())

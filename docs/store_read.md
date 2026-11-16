@@ -9,9 +9,9 @@ neighbours extra's stored vectors.
 from onetrace_console import store_read
 
 reader = store_read.open_store("path/to/store-root")
-reader.runs_by_config("retrieve", "sha256:...")   # a stage's exact configuration
-reader.runs_by_model_files("sha256:...")          # a model-call record's model files
-reader.neighbours(run_key)                        # near kept inputs, where the extra is on
+reader.runs_by_config("retrieve", "sha256:...")  # a stage's exact configuration
+reader.runs_by_model_files("sha256:...")  # a model-call record's model files
+reader.neighbours(run_key)  # near kept inputs, where the extra is on
 ```
 
 The store root is the folder the console keeps its store in: it holds the store's own `store/`

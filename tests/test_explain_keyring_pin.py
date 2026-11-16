@@ -1,6 +1,7 @@
 """The pin (console 0.7.0): the console depends on neither onetrace-explain nor keyring, and its docs and
 install line name `onetrace-explain[keyring]>=0.3` beside the console: the README's install sentence, and
 the Set up Explain page's step 3."""
+
 from __future__ import annotations
 
 import re
@@ -22,8 +23,10 @@ NAMES = re.compile(r"onetrace[-_.]explain|\bkeyring\b", re.I)
 
 
 def test_the_console_depends_on_neither(examined):
-    files = {n: (REPO / n).read_text(encoding="utf-8")
-             for n in ("pyproject.toml", "requirements.lock", "src/onetrace_console/requirements.lock")}
+    files = {
+        n: (REPO / n).read_text(encoding="utf-8")
+        for n in ("pyproject.toml", "requirements.lock", "src/onetrace_console/requirements.lock")
+    }
     examined(len(files), "dependency files")
     assert [n for n, t in files.items() if NAMES.search(t)] == []
 

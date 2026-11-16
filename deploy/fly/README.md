@@ -14,6 +14,8 @@ The files here:
   cache folder and bounds, and `Fly-Client-IP` as the header that names a visitor's address).
 - `fly.toml`: the Fly.io service: port 8080, HTTPS only, the `/health` check, and machines that
   stop when idle.
+- `postdeploy_080.ps1`: the demo's checks after a deploy, read-only.
+- `captures/`: the capture store's own app (below): its `fly.toml` and its checks after a deploy.
 
 Nothing here names an app, a region, an organisation, a token or a domain. Those are set by
 whoever deploys, on their own machine.
@@ -69,3 +71,34 @@ Fly.io names. To keep one machine always on, change the two lines `fly.toml` mar
 
 The machine's size is yours to choose when you deploy. One comparison measured a peak of about
 71 MB for the console and the commands it runs, and two run at once at most.
+
+## The capture store's app
+
+The capture store (P10's runs whose model calls are captured at L3 and L2, example data) is served by
+a second app, beside the demo: the same image, built with the capture store in place of the demo
+(`deploy/fly/captures/fly.toml` sets the build argument `ONETRACE_DEMO_STORE = "captures"`), served
+read-only as the demo is, its build record checked at start. Its name and its domain are yours, as
+the demo's are: nothing here names them.
+
+The two apps link to each other, read-only, by an address each is given at deploy: the demo's
+comparisons page has the line "Token-level examples (L2 and L3): <the capture store's address>"
+(`ONETRACE_CONSOLE_CAPTURES_URL`), and the capture store's Overview one line back to the demo
+(`ONETRACE_CONSOLE_DEMO_URL`). Without its address, an app draws no line.
+
+Deploy the capture store's app first, then the demo, so the demo's line answers once it is drawn.
+From the repository root:
+
+```
+fly apps create <captures-app-name>
+fly deploy --config deploy/fly/captures/fly.toml --dockerfile deploy/fly/Dockerfile -a <captures-app-name> --env ONETRACE_CONSOLE_DEMO_URL=https://<the demo's address>
+.\deploy\fly\captures\postdeploy_080_captures.ps1 -Base https://<the capture store's address> -Demo https://<the demo's address>
+fly deploy --config deploy/fly/fly.toml --dockerfile deploy/fly/Dockerfile -a <app-name> --env ONETRACE_CONSOLE_CAPTURES_URL=https://<the capture store's address>
+fly ssh sftp get /srv/onetrace-demo/BUILD_RECORD.json .\BUILD_RECORD.json -a <app-name>
+.\deploy\fly\postdeploy_080.ps1 -Base https://<the demo's address> -BuildRecord .\BUILD_RECORD.json -SiteLinks .\deploy\fly\site_links.txt -Captures https://<the capture store's address>
+```
+
+The demo's checks read their counts (its comparisons, its kept explanations, its closed and not closed runs) from
+the build record of the build deployed, copied out of the app as above; none is written in the script.
+
+Its custom domain is added as the demo's is, with `fly certs add <its domain> -a <captures-app-name>`
+and the DNS record Fly.io names.

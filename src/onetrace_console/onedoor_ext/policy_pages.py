@@ -11,25 +11,26 @@ commit: `exec_result` if present, else `exec_intent`, else a plain `decision`, e
 last row written. Reused as a documented reading, not invented here; every row is
 still stored and shown in the detail view, `exec_intent`/`exec_result` included.
 """
+
 from __future__ import annotations
 
-from onetrace_console.words import escape, generated_footer
-
-from onetrace_console.onedoor_ext.decisions import (CheckedRow, DecisionRow,
-                                                    StoredDecisionExport, check_store)
+from onetrace_console.onedoor_ext.decisions import CheckedRow, DecisionRow, StoredDecisionExport, check_store
 from onetrace_console.store import Store
+from onetrace_console.words import escape, generated_footer
 
 POLICY = "policy.html"
 
 
 def _document(title: str, body: str) -> str:
     from onetrace_console.render import _document as core_document
+
     #: In `.cp`, as every page the console draws itself, so the one style reaches it.
     return core_document(title, f'<div class="cp">\n{body}\n</div>')
 
 
 def _limit_sentence() -> str:
     from onetrace_console.render import _limit_sentence as core_limit
+
     return core_limit()
 
 
@@ -48,16 +49,19 @@ class Decision:
         self.held = held
         distinct: dict[str, DecisionRow] = {}
         for h in held:
-            distinct.setdefault(h.delivered.raw_line, h.delivered)
+            if h.delivered is not None:
+                distinct.setdefault(h.delivered.raw_line, h.delivered)
         self.rows = tuple(distinct.values())
+        #: The held rows whose delivery couldn't be read: each drawn as that, never read for a line.
+        self.unreadable = tuple(h for h in held if h.delivered is None)
 
     def holders(self, row: DecisionRow) -> tuple[CheckedRow, ...]:
-        return tuple(h for h in self.held if h.delivered.raw_line == row.raw_line)
+        return tuple(h for h in self.held if h.delivered is not None and h.delivered.raw_line == row.raw_line)
 
     def changed_copies(self, row: DecisionRow) -> tuple[str, ...]:
         """The "couldn't check" sentence of every stored copy of `row` that does not
         match its delivery, each naming its export and position."""
-        return tuple(h.couldnt_check for h in self.holders(row) if h.problem)
+        return tuple(h.couldnt_check for h in self.holders(row) if h.problem)  # type: ignore[misc]  # a row with a problem says it
 
     def couldnt_check(self, row: DecisionRow) -> str | None:
         """None when every stored copy of `row` matches its delivery; otherwise the
@@ -65,7 +69,7 @@ class Decision:
 
         One edited copy withholds the row, even when another export holds it intact.
         The alternative -- show a row any one copy of which checks, naming the changed
-        copies -- was raised for review as a choice."""
+        copies -- is the other choice, not taken."""
         changed = self.changed_copies(row)
         return changed[0] if changed else None
 
@@ -82,8 +86,7 @@ class Decision:
     @property
     def representative(self) -> DecisionRow:
         by_kind = {r.kind: r for r in self.rows}
-        return (by_kind.get("exec_result") or by_kind.get("exec_intent")
-                or by_kind.get("decision") or self.rows[-1])
+        return by_kind.get("exec_result") or by_kind.get("exec_intent") or by_kind.get("decision") or self.rows[-1]
 
     @property
     def shown(self) -> bool:
@@ -111,14 +114,17 @@ def checked_rows(store: Store) -> tuple[CheckedRow, ...]:
 
 
 def couldnt_check_sentence(store: Store) -> str:
-    """"K of T stored rows couldn't be checked: <each, named>", or nothing when K is 0."""
+    """ "K of T stored rows couldn't be checked: <each, named>", or nothing when K is 0."""
     every = checked_rows(store)
     bad = [c for c in every if c.problem]
     if not bad:
         return ""
     names = "; ".join(escape(c.couldnt_check) for c in bad)
-    return (f'<p data-section="couldnt-check">{len(bad)} of {len(every)} stored rows '
-            f"couldn't be checked: {names}.</p>")
+    return f'<p data-section="couldnt-check">{len(bad)} of {len(every)} stored rows couldn\'t be checked: {names}.</p>'
+
+
+#: A held row whose delivery couldn't be read, on its decision's page.
+DELIVERY_NOT_READABLE = "delivery not readable"
 
 
 def all_decisions(store: Store) -> tuple[Decision, ...]:
@@ -142,26 +148,38 @@ def _decision_href(request_id: str) -> str:
     return f"policy/{safe}.html"
 
 
+#: A decision's request-id cell where the decision has none: no link, as no page is written for it.
+NO_REQUEST_ID = "no request id"
+
+
+def _request_cell(d: Decision) -> str:
+    """A decision's first cell: its request id, linking to its own page; where it has none, "no request id" and no
+    link (`render_policy_pages` writes no page for it)."""
+    if d.request_id is None:
+        return f'<td data-state="no-request-id">{escape(NO_REQUEST_ID)}</td>'
+    return f'<td><a href="{escape(_decision_href(d.request_id), quote=True)}">{escape(d.request_id)}</a></td>'
+
+
 def _decision_row_html(d: Decision) -> str:
     rep = d.representative
     if not d.shown:
         return (
             f'<tr data-request-id="{escape(d.request_id or "", quote=True)}">'
-            f'<td><a href="{escape(_decision_href(d.request_id), quote=True)}">'
-            f'{escape(d.request_id or "")}</a></td>'
+            f"{_request_cell(d)}"
             f'<td colspan="4" data-state="couldnt-check">'
-            f"{escape(d.couldnt_check(rep))}</td></tr>")
+            f"{escape(d.couldnt_check(rep))}</td></tr>"
+        )
     rule = d.rule_or_policy or ""
     issuer = d.issuer or ""
     return (
         f'<tr data-request-id="{escape(d.request_id or "", quote=True)}">'
-        f'<td><a href="{escape(_decision_href(d.request_id), quote=True)}">'
-        f'{escape(d.request_id or "")}</a></td>'
+        f"{_request_cell(d)}"
         f"<td>{escape(rep.fields.get('created_at') or '')}</td>"
         f'<td data-verdict="{escape(d.verdict or "", quote=True)}">{escape(d.verdict or "")}</td>'
         f"<td>{escape(rule)}</td>"
         f"<td>{escape(issuer)}</td>"
-        f"</tr>")
+        f"</tr>"
+    )
 
 
 def render_policy(store: Store, *, generated_at: str) -> str:
@@ -172,17 +190,20 @@ def render_policy(store: Store, *, generated_at: str) -> str:
     issuers = sorted({d.issuer for d in decisions if d.issuer})
     filters = []
     if verdicts:
-        filters.append("<p>By verdict: " + ", ".join(
-            f'<a href="{escape(_verdict_href(v), quote=True)}">{escape(v)}</a>'
-            for v in verdicts) + "</p>")
+        filters.append(
+            "<p>By verdict: "
+            + ", ".join(f'<a href="{escape(_verdict_href(v), quote=True)}">{escape(v)}</a>' for v in verdicts)
+            + "</p>"
+        )
     if issuers:
-        filters.append("<p>By issuer: " + ", ".join(
-            f'<a href="{escape(_issuer_href(i), quote=True)}">{escape(i)}</a>'
-            for i in issuers) + "</p>")
+        filters.append(
+            "<p>By issuer: "
+            + ", ".join(f'<a href="{escape(_issuer_href(i), quote=True)}">{escape(i)}</a>' for i in issuers)
+            + "</p>"
+        )
     unshown = sum(1 for d in decisions if not d.shown)
     if unshown:
-        filters.append(f'<p>Couldn\'t check: <a href="{COULDNT_CHECK}">{unshown} of '
-                       f"{len(decisions)} decisions</a></p>")
+        filters.append(f'<p>Couldn\'t check: <a href="{COULDNT_CHECK}">{unshown} of {len(decisions)} decisions</a></p>')
 
     body = [
         "<h1>Policy</h1>",
@@ -191,10 +212,11 @@ def render_policy(store: Store, *, generated_at: str) -> str:
         "computes no verdict of its own.</p>",
         couldnt_check_sentence(store),
         "".join(filters),
-        '<table><thead><tr><th>request id</th><th>time</th><th>verdict</th>'
+        "<table><thead><tr><th>request id</th><th>time</th><th>verdict</th>"
         "<th>rule / policy</th><th>issuer</th></tr></thead>"
-        f"<tbody>{rows}</tbody></table>" if decisions else
-        '<p data-section="none">No decisions have been ingested.</p>',
+        f"<tbody>{rows}</tbody></table>"
+        if decisions
+        else '<p data-section="none">No decisions have been ingested.</p>',
         f'<p class="limit" data-section="limit">{escape(_limit_sentence())}</p>',
         generated_footer(generated_at),
     ]
@@ -217,18 +239,18 @@ def _issuer_href(issuer: str) -> str:
 COULDNT_CHECK = "policy-couldnt-check.html"
 
 
-def render_policy_filtered(decisions: tuple[Decision, ...], title: str,
-                          *, generated_at: str, note: str = "") -> str:
+def render_policy_filtered(decisions: tuple[Decision, ...], title: str, *, generated_at: str, note: str = "") -> str:
     """`note` is the couldn't-check sentence: every filter page names the rows it cannot
     show, since any of them might have belonged on it."""
     rows = "".join(_decision_row_html(d) for d in decisions)
     body = [
         f"<h1>{escape(title)}</h1>",
         note,
-        '<table><thead><tr><th>request id</th><th>time</th><th>verdict</th>'
+        "<table><thead><tr><th>request id</th><th>time</th><th>verdict</th>"
         "<th>rule / policy</th><th>issuer</th></tr></thead>"
-        f"<tbody>{rows}</tbody></table>" if decisions else
-        '<p data-section="none">No decisions match this filter.</p>',
+        f"<tbody>{rows}</tbody></table>"
+        if decisions
+        else '<p data-section="none">No decisions match this filter.</p>',
         '<p><a href="policy.html">all decisions</a></p>',
         f'<p class="limit" data-section="limit">{escape(_limit_sentence())}</p>',
         generated_footer(generated_at),
@@ -247,32 +269,41 @@ def render_decision_detail(d: Decision, store: Store, *, generated_at: str) -> s
     its delivery shows nothing of itself -- no kind, no fields, no digest, no verdict --
     only "couldn't check: stored record changed since delivery" and the changed copy's name.
     """
+
     def couldnt_check_line(sentence: str) -> str:
         return f'<p data-state="couldnt-check">{escape(sentence)}</p>'
 
     rep_problem = d.couldnt_check(d.representative)
     top_line = (
-        couldnt_check_line(rep_problem) if rep_problem is not None else
-        f'<p data-verdict="{escape(d.verdict or "", quote=True)}">verdict (onedoor\'s own '
-        f"word): {escape(d.verdict or '')}</p>")
+        couldnt_check_line(rep_problem)
+        if rep_problem is not None
+        else f'<p data-verdict="{escape(d.verdict or "", quote=True)}">verdict (onedoor\'s own '
+        f"word): {escape(d.verdict or '')}</p>"
+    )
 
     sections = []
     for row in d.rows:
         problem = d.couldnt_check(row)
         if problem is not None:
-            sections.append(f'<section data-state="couldnt-check">'
-                            f"{couldnt_check_line(problem)}</section>")
+            sections.append(f'<section data-state="couldnt-check">{couldnt_check_line(problem)}</section>')
             continue
         fields_html = "".join(
             f"<tr><td>{escape(str(k))}</td><td><code>{escape(str(v))}</code></td></tr>"
-            for k, v in sorted(row.fields.items()))
+            for k, v in sorted(row.fields.items())
+        )
         sections.append(
             f'<section data-kind="{escape(row.kind or "", quote=True)}">'
             f"<h2>{escape(row.kind or '(no kind)')}</h2>"
             f'<p data-section="digest">decision_digest: '
             f'<span class="mono">{escape(row.decision_digest)}</span></p>'
             f"<table><tbody>{fields_html}</tbody></table>"
-            "</section>")
+            "</section>"
+        )
+    #: A held row whose delivery couldn't be read: named, and said as that.
+    sections += [
+        f'<section data-state="delivery-not-readable"><p>{escape(h.name)}: {escape(DELIVERY_NOT_READABLE)}</p></section>'
+        for h in d.unreadable
+    ]
     body = [
         f"<h1>Decision {escape(d.request_id or '')}</h1>",
         top_line,
@@ -291,19 +322,21 @@ def render_policy_pages(store: Store, *, generated_at: str) -> dict[str, str]:
     for d in decisions:
         if d.request_id is None:
             continue
-        pages[_decision_href(d.request_id)] = render_decision_detail(
-            d, store, generated_at=generated_at)
+        pages[_decision_href(d.request_id)] = render_decision_detail(d, store, generated_at=generated_at)
     note = couldnt_check_sentence(store)
     for v in sorted({d.verdict for d in decisions if d.verdict}):
         mine = tuple(d for d in decisions if d.verdict == v)
         pages[_verdict_href(v)] = render_policy_filtered(
-            mine, f"Policy — verdict: {v}", generated_at=generated_at, note=note)
+            mine, f"Policy — verdict: {v}", generated_at=generated_at, note=note
+        )
     for i in sorted({d.issuer for d in decisions if d.issuer}):
         mine = tuple(d for d in decisions if d.issuer == i)
         pages[_issuer_href(i)] = render_policy_filtered(
-            mine, f"Policy — issuer: {i}", generated_at=generated_at, note=note)
+            mine, f"Policy — issuer: {i}", generated_at=generated_at, note=note
+        )
     unshown = tuple(d for d in decisions if not d.shown)
     if unshown:
         pages[COULDNT_CHECK] = render_policy_filtered(
-            unshown, "Policy — couldn't check", generated_at=generated_at, note=note)
+            unshown, "Policy — couldn't check", generated_at=generated_at, note=note
+        )
     return pages

@@ -90,7 +90,7 @@ class GraphNode:
     #: Empty means as recorded. Matching is always on `node_id`, never on these.
     label: str = ""
     shown: str = ""
-    #: Item 3: short lines the page states about this node (its verdict, its settings), in the
+    #: Short lines the page states about this node (its verdict, its settings), in the
     #: page's own words; and a mark (e.g. "first") a stylesheet can outline. Nothing here
     #: decides either: the caller reads them from the report it holds.
     tags: tuple[str, ...] = ()
@@ -479,7 +479,7 @@ def render(nodes, edges, *, recorded_order_href: str = "", heading: str = "",
     the link to the recorded order, and "Show as table". `heading` is HTML, already escaped.
     `region` is the sentence key naming the drawing's scroll region (the comparison page's own).
 
-    A page that already carries the nodes' table (item 3: the compare page's changes table, its
+    A page that already carries the nodes' table (the compare page's changes table, its
     "Show as table") passes `own_table=False`; a page whose order is not a run's recorded order
     (the comparison's order is the SDK's) passes `recorded_order=False`."""
     layout = lay_out(nodes, edges, wrap=wrap, wrap_labels=wrap_labels, tag_lines=tag_lines)

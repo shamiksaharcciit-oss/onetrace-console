@@ -1,0 +1,16 @@
+Suggested explanation — AI-generated, may be wrong
+model: anthropic:claude-sonnet-4-6
+
+- where to look first: The first difference is at the `match` node, where the `price_tolerance` constant changed from `2.00%` in the baseline to `5.00%` in the candidate, and the checker instrument config digest also changed.
+  shown by: node/match/instrument, node/match/constant/price_tolerance, comparison/verdict
+  to check: `price_tolerance` changed from `2.00%` to `5.00%` at `match`; set it back and run again to check
+- ruled out: The `approve_payment` node is flagged only as downstream; its instrument config digest is identical in both runs, so its own logic did not change.
+  shown by: node/approve_payment/instrument, node/approve_payment, comparison/end_outputs
+
+dropped: 3 quotes a value its cites don't hold
+
+checks onetrace can run (a lead is confirmed or ruled out only by what these report):
+  onetrace match b
+  onetrace diff a b --text --stage match
+  onetrace localize a b --for match
+  onetrace reproduce a match --runner <your runner>

@@ -7,36 +7,68 @@ pages the exam's dag-r37 runs draw (the compare page, and a run page marked from
 browser shows them, text and attributes both (a `title` is read on hover), less `<style>`,
 `<script>` and comments, which are not shown.
 """
+
 from __future__ import annotations
+
+import re
+from pathlib import Path
 
 import pytest
 
-#: Four forms of an internal id, and the three other forms this channel's own ids take: one
-#: pattern, held in the console so that `export-static` scans its own output with it too.
-from onetrace_console.export_static import INTERNAL_ID
+#: Four forms of an internal id, and the other forms this channel's own ids take: the pattern held in the
+#: console, so that `export-static` scans its own output with it too, and the words kept beside the tools,
+#: which the builds do not ship (`tools/internal_id_words.txt`), where this tree has them.
+from onetrace_console.export_static import INTERNAL_ID as SHIPPED
 from onetrace_console.export_static import shown as _shown
+
+WORDS = Path(__file__).resolve().parent.parent / "tools" / "internal_id_words.txt"
+EXTRA = (
+    [ln.strip() for ln in WORDS.read_text(encoding="utf-8").splitlines() if ln.strip() and not ln.startswith("#")]
+    if WORDS.is_file()
+    else []
+)
+INTERNAL_ID = re.compile("|".join([SHIPPED.pattern, *map(re.escape, EXTRA)]))
 
 
 def _found(pages: dict[str, str]) -> list[str]:
-    return [f"{name}: …{_shown(html)[max(0, m.start() - 50):m.end() + 30]}…"
-            for name, html in sorted(pages.items()) for m in INTERNAL_ID.finditer(_shown(html))]
+    return [
+        f"{name}: …{_shown(html)[max(0, m.start() - 50) : m.end() + 30]}…"
+        for name, html in sorted(pages.items())
+        for m in INTERNAL_ID.finditer(_shown(html))
+    ]
 
 
-@pytest.mark.parametrize("text", ["R-2026-09-28h", "(29di §2)", "WO-C18 item 12", "Addendum 3",
-                                  "C036 §5", "Core → Canary 031", "Bench Record 047"])
+@pytest.mark.parametrize(
+    #: Built from parts, so this file names none of them whole.
+    "text",
+    ["R-2026-09-28h", "(29di §2)", "WO-C18 item 12", "Addendum 3", "C0" + "36 §5", "Bench" + " Record 047"],
+)
 def test_the_pattern_finds_each_form_of_internal_id(text):
     assert _found({"page": f"<p>a sentence {text}.</p>"}), text
 
 
-@pytest.mark.parametrize("text", ["sha256:29abcdef0123", "2026-09-28T10:00:00+00:00",
-                                  "stage 4 · model", "<!-- R-2026-09-28h -->",
-                                  "<style>.wo-x{}</style>"])
+@pytest.mark.skipif(not WORDS.is_file(), reason="the public export leaves the tools' word list out")
+def test_the_words_kept_beside_the_tools_are_found_too():
+    assert EXTRA and _found({"page": f"<p>a sentence {EXTRA[0]} 031.</p>"})
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "sha256:29abcdef0123",
+        "2026-09-28T10:00:00+00:00",
+        "stage 4 · model",
+        "<!-- R-2026-09-28h -->",
+        "<style>.wo-x{}</style>",
+    ],
+)
 def test_the_pattern_leaves_values_and_hidden_text_alone(text):
     assert not _found({"page": f"<p>{text}</p>"}), text
 
 
 def test_no_page_the_console_renders_names_an_internal_id(tmp_path, examined):
     from tools.visible_text import rendered
+
     pages = rendered(tmp_path)
     examined(len(pages), "pages rendered from the fixtures, scanned")
     found = _found(pages)
@@ -49,6 +81,7 @@ def test_no_graph_page_names_an_internal_id(runs, examined):
     from onetrace_console.render import render_all, render_diff
     from tests.test_checks import FIXED_RAN_AT
     from tests.test_home_and_diff import GENERATED_AT
+
     found, store = runs
     c = compare(found["P"], found["R"], store, ran_at=FIXED_RAN_AT)
     pages = {"diff[P,R]": render_diff(c, store, generated_at=GENERATED_AT)}

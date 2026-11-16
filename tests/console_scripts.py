@@ -4,6 +4,7 @@ the platform (`<name>.exe` on Windows). A venv's scripts sit beside its Python; 
 keeps them in `Scripts\\`, not beside `python.exe`, so a path built as the interpreter's folder and the
 bare name finds nothing there.
 """
+
 from __future__ import annotations
 
 import os
@@ -23,14 +24,16 @@ def console_script(name: str) -> Path | None:
     return Path(found) if found else None
 
 
-def required_script(name: str, *, python: str | Path | None = None, scripts: str | Path | None = None,
-                    windows: bool | None = None) -> Path:
+def required_script(
+    name: str, *, python: str | Path | None = None, scripts: str | Path | None = None, windows: bool | None = None
+) -> Path:
     """The installed command `name` a test runs: in the interpreter's scripts folder
     (`sysconfig.get_path("scripts")`) first, then in the interpreter's own folder, by its name on the
     platform (`<name>.exe` on Windows). Never PATH, and never a skip: where neither folder holds it, the
     test fails, naming both folders. `python`, `scripts` and `windows` stand in for this interpreter's own,
     for the helper's tests."""
     import pytest
+
     windows = os.name == "nt" if windows is None else windows
     python = Path(sys.executable if python is None else python)
     if scripts is None and python == Path(sys.executable):
@@ -40,5 +43,7 @@ def required_script(name: str, *, python: str | Path | None = None, scripts: str
     for folder in folders:
         if (folder / file).is_file():
             return folder / file
-    pytest.fail(f"{file} is in neither this interpreter's scripts folder nor its own folder: "
-                f"{', '.join(str(f) for f in folders)}. Install it into this environment (see PINS.md).")
+    pytest.fail(
+        f"{file} is in neither this interpreter's scripts folder nor its own folder: "
+        f"{', '.join(str(f) for f in folders)}. Install it into this environment (see PINS.md)."
+    )

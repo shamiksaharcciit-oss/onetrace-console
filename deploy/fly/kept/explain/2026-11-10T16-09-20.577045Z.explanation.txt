@@ -1,0 +1,15 @@
+Suggested explanation — AI-generated, may be wrong
+model: anthropic:claude-sonnet-4-6
+
+- where to look first: The first difference is at the `calibrate` node; all upstream data (`readings.json`) is identical between runs, so the divergence originates inside `calibrate` itself.
+  shown by: comparison/verdict, node/calibrate/input/readings.json, node/readings/output/readings.json
+- ruled out: The `readings` node is identical in both runs (same instrument, same input, same output), so no investigation is needed there.
+  shown by: node/readings, node/readings/instrument, node/readings/input/readings.csv, node/readings/output/readings.json
+
+dropped: 4 quotes a value its cites don't hold
+
+checks onetrace can run (a lead is confirmed or ruled out only by what these report):
+  onetrace match b
+  onetrace diff a b --text --stage calibrate
+  onetrace diff a b --text --stage calibrate
+  onetrace reproduce b calibrate --runner <your runner>

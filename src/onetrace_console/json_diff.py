@@ -17,6 +17,7 @@ by position. Where either side is not JSON, nothing is added and the text diff s
 
 It shows members, not meaning: a member that differs is named, never what it stands for.
 """
+
 from __future__ import annotations
 
 import hashlib
@@ -62,8 +63,15 @@ def parse(data: bytes | None):
     if data is None:
         return False, None
     try:
-        return True, load_json_bounded(data.decode("utf-8"), "an output", "show", object_pairs_hook=_pairs,
-                                       parse_constant=_constant, parse_float=Number, parse_int=Number)
+        return True, load_json_bounded(
+            data.decode("utf-8"),
+            "an output",
+            "show",
+            object_pairs_hook=_pairs,
+            parse_constant=_constant,
+            parse_float=Number,
+            parse_int=Number,
+        )
     except (ValueError, UnicodeDecodeError, RecursionError):
         return False, None
 
@@ -89,6 +97,7 @@ def _step(path: str, key) -> str:
 
 def members(a, b, path: str = "") -> list[tuple[str, str, object, object]]:
     """[(added | removed | changed, path, baseline value, candidate value)], in a stable order."""
+    out: list[tuple[str, str, object, object]]
     if isinstance(a, dict) and isinstance(b, dict):
         out = []
         for key in sorted(a.keys() | b.keys()):
@@ -114,35 +123,44 @@ def members(a, b, path: str = "") -> list[tuple[str, str, object, object]]:
 
 def _shown(v) -> str:
     from onetrace.escaping import escaped
+
     said = text(v)
     if len(said) <= LIMIT:
-        return f'<code>{escape(escaped(said))}</code>'
+        return f"<code>{escape(escaped(said))}</code>"
     d = hashlib.sha256(said.encode("utf-8")).hexdigest()
-    return (f'<span class="mono" data-json-digest title="sha256:{d}">sha256:{d[:12]}…</span> '
-            f'({len(said)} characters)')
+    return f'<span class="mono" data-json-digest title="sha256:{d}">sha256:{d[:12]}…</span> ({len(said)} characters)'
 
 
 def _path(p: str) -> str:
     from onetrace.escaping import escaped
-    return f'<code data-json-path>{escape(escaped(p))}</code>' if p else escape(ROOT)
+
+    return f"<code data-json-path>{escape(escaped(p))}</code>" if p else escape(ROOT)
 
 
 def render(found: list) -> str:
     """The view, under an output's text diff."""
-    head = (f'<div data-json-diff><p class="label">{escape(HEADING)}</p>'
-            f'<p data-json-numbers>{escape(NUMBERS)}</p>')
+    head = f'<div data-json-diff><p class="label">{escape(HEADING)}</p><p data-json-numbers>{escape(NUMBERS)}</p>'
     if not found:
-        return f'{head}<p data-json-none>{escape(NONE_DIFFER)}</p></div>'
+        return f"{head}<p data-json-none>{escape(NONE_DIFFER)}</p></div>"
     n = {op: sum(f[0] == op for f in found) for op in ("added", "removed", "changed")}
     rows = []
     for op, path, old, new in found[:MAX_MEMBERS]:
-        said = {"added": lambda: f"added: {_shown(new)}", "removed": lambda: f"removed: {_shown(old)}",
-                "changed": lambda: f"changed: {_shown(old)} → {_shown(new)}"}[op]()
+        if op == "added":
+            said = f"added: {_shown(new)}"
+        elif op == "removed":
+            said = f"removed: {_shown(old)}"
+        elif op == "changed":
+            said = f"changed: {_shown(old)} → {_shown(new)}"
+        else:
+            raise KeyError(op)
         rows.append(f'<li data-json-op="{op}">{_path(path)} {said}</li>')
-    more = (f'<p data-json-more>{escape(MORE.format(n=len(found) - MAX_MEMBERS))}</p>'
-            if len(found) > MAX_MEMBERS else "")
-    return (f'{head}<p data-json-counts>{escape(COUNTS.format(**n))}</p>'
-            f'<ul class="plain" data-json-members>{"".join(rows)}</ul>{more}</div>')
+    more = (
+        f"<p data-json-more>{escape(MORE.format(n=len(found) - MAX_MEMBERS))}</p>" if len(found) > MAX_MEMBERS else ""
+    )
+    return (
+        f"{head}<p data-json-counts>{escape(COUNTS.format(**n))}</p>"
+        f'<ul class="plain" data-json-members>{"".join(rows)}</ul>{more}</div>'
+    )
 
 
 def _bytes(side, node: str, name: str) -> bytes | None:
@@ -150,7 +168,9 @@ def _bytes(side, node: str, name: str) -> bytes | None:
     from pathlib import PurePosixPath
 
     from onetrace import canonical
+
     from onetrace_console.kept_inputs import _receipt_for
+
     if side is None:
         return None
     step = _receipt_for(side[0], node)
@@ -166,7 +186,7 @@ def _bytes(side, node: str, name: str) -> bytes | None:
 def for_node(node: dict, sides) -> dict:
     """{output name: its members} for each output of `node` the text diff shows on both sides
     where both read as JSON."""
-    out = {}
+    out: dict[str, list[tuple[str, str, object, object]]] = {}
     if sides is None or None in sides:
         return out
     for o in node.get("outputs") or []:

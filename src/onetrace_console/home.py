@@ -22,20 +22,20 @@ supply is usually the one that flatters.
 NO SCORE, AND WHERE THAT BITES
 ------------------------------
 There is deliberately no percentage anywhere here, not even one beside its counts, which
-the design note's prohibitions would allow. Two counts and a denominator say everything a
+the console's five prohibitions would allow. Two counts and a denominator say everything a
 percentage would, and a percentage is the shape a score arrives in. `MOST_RECENT` is a
 list and not a ranking: it is ordered by arrival, which is a fact about the delivery
 rather than a judgement about the run.
 """
+
 from __future__ import annotations
 
-import json
-from onetrace_console.bounded_json import load_json_bounded
 from dataclasses import dataclass
 
-from onetrace_console.checks import CONTRADICTS, COULD_NOT_CHECK, HOLDS, shown_note
+from onetrace_console.bounded_json import load_json_bounded
+from onetrace_console.checks import shown_note
 from onetrace_console.ingest import RUN_ID_REUSED
-from onetrace_console.store import StoredRun, Store
+from onetrace_console.store import Store, StoredRun
 
 #: How many of the most recent runs Home lists. A list, not a ranking.
 MOST_RECENT = 5
@@ -65,6 +65,7 @@ class Tally:
     reasons behind a count where the count alone would be useless -- "could not be checked:
     4" tells a reader nothing they can act on.
     """
+
     slug: str
     label: str
     runs: tuple[StoredRun, ...]
@@ -110,6 +111,7 @@ def _envelope(run: StoredRun, store: Store) -> dict | None:
     if not run.check_report:
         return None
     from onetrace_console.store import StoreError
+
     try:
         envelope = load_json_bounded(store.get(run.check_report).decode("utf-8"), "the check report")
     except (ValueError, UnicodeDecodeError, StoreError, RecursionError):
@@ -139,16 +141,23 @@ def artifacts_required(run: StoredRun, store: Store) -> bool:
 
 #: The Overview's anchoring forms, in their fixed order and words: the stored reading
 #: (`StoredRun.anchored`), and what the row says of it.
-ANCHOR_FORMS = (("yes", "yes"), ("couldnt-check", "couldn't check"),
-                ("failed", "the check failed"), ("not-anchored", "not anchored"))
+ANCHOR_FORMS = (
+    ("yes", "yes"),
+    ("couldnt-check", "couldn't check"),
+    ("failed", "the check failed"),
+    ("not-anchored", "not anchored"),
+)
 #: The Overview's signing forms, in their fixed order and words: (slug, the stored
 #: readings it counts, what the row says). Not checked is every run its page reads Not checked --
 #: the extra wanted, or no own check -- as the page's rung does.
-SIGNATURE_FORMS = (("yes", ("yes",), "yes"), ("untrusted", ("untrusted",), "key not trusted"),
-                   ("failed", ("failed",), "the check failed"),
-                   ("unsigned", ("unsigned",), "unsigned"),
-                   ("couldnt-check", ("couldnt-check", "unreadable"), "couldn't check"),
-                   ("not-checked", ("not-installed", ""), "not checked"))
+SIGNATURE_FORMS = (
+    ("yes", ("yes",), "yes"),
+    ("untrusted", ("untrusted",), "key not trusted"),
+    ("failed", ("failed",), "the check failed"),
+    ("unsigned", ("unsigned",), "unsigned"),
+    ("couldnt-check", ("couldnt-check", "unreadable"), "couldn't check"),
+    ("not-checked", ("not-installed", ""), "not checked"),
+)
 
 
 def tallies(store: Store) -> tuple[Tally, ...]:
@@ -165,10 +174,11 @@ def tallies(store: Store) -> tuple[Tally, ...]:
 
     #: "Records agree", rung 1, one count per state (`records.state`), each opening exactly its runs.
     from onetrace_console import records
+
     for state in records.STATES:
         slug, label = RECORDS_TALLY[state]
         matched = records.runs_in(runs, store, state)
-        reasons = ()
+        reasons: tuple[str, ...] = ()
         if state == records.COULDNT:
             #: The reason, because the count alone is not actionable. Distinct reasons only,
             #: in first-seen order, and never summarised into one.
@@ -182,74 +192,143 @@ def tallies(store: Store) -> tuple[Tally, ...]:
             #: Where the check held without the run's output files required, that is the reason.
             reasons = tuple(dict.fromkeys(w for r in matched if (w := records.why(r, store))))
         out.append(Tally(slug=slug, label=label, runs=matched, denominator=total, reasons=reasons))
-    out.append(Tally(slug="run-id-reused", label="whose run id was already used by a stored run",
-                     runs=tuple(r for r in runs if RUN_ID_REUSED in r.flags),
-                     denominator=total))
+    out.append(
+        Tally(
+            slug="run-id-reused",
+            label="whose run id was already used by a stored run",
+            runs=tuple(r for r in runs if RUN_ID_REUSED in r.flags),
+            denominator=total,
+        )
+    )
 
     #: The most recent, as a list. `store.runs()` is newest delivery first.
-    out.append(Tally(slug="most-recent", label=f"most recent {MOST_RECENT} by arrival",
-                     runs=runs[:MOST_RECENT], denominator=total))
+    out.append(
+        Tally(
+            slug="most-recent",
+            label=f"most recent {MOST_RECENT} by arrival",
+            runs=runs[:MOST_RECENT],
+            denominator=total,
+        )
+    )
 
     #: The Overview's counts. Tallies like the rest, so each opens exactly the
     #: runs it counted and states its denominator. See `onetrace_console.overview` for what
     #: "pipeline" and "baseline" can mean in a store whose records name neither.
-    from onetrace_console.overview import (NOTHING_MISSING, missing_a_declared_stage,
-                                           needs_attention, nothing_missing_not_established,
-                                           pipelines, vs_baseline)
-    out.append(Tally(slug="changed-vs-baseline",
-                     label="changed vs baseline, each the candidate of a stored comparison "
-                           "that found a first difference",
-                     runs=tuple(r for r in runs if vs_baseline(r, store)[0] == "changed"),
-                     denominator=total))
+    from onetrace_console.overview import (
+        NOTHING_MISSING,
+        missing_a_declared_stage,
+        needs_attention,
+        nothing_missing_not_established,
+        pipelines,
+        vs_baseline,
+    )
+
+    out.append(
+        Tally(
+            slug="changed-vs-baseline",
+            label="changed vs baseline, each the candidate of a stored comparison that found a first difference",
+            runs=tuple(r for r in runs if vs_baseline(r, store)[0] == "changed"),
+            denominator=total,
+        )
+    )
     from onetrace_console.overview import declined
     from onetrace_console.viewer.sentences import template
-    out.append(Tally(slug="stopped-by-a-step",
-                     label=template("declined.overview")
-                     + ": a step declined by its own rule, and the run ended there",
-                     runs=tuple(r for r in runs if declined(r) is not None), denominator=total))
-    out.append(Tally(slug="needs-attention",
-                     label="needing attention first, in the order stated on the Overview",
-                     runs=tuple(r for _, r in needs_attention(store)), denominator=total))
+
+    out.append(
+        Tally(
+            slug="stopped-by-a-step",
+            label=template("declined.overview") + ": a step declined by its own rule, and the run ended there",
+            runs=tuple(r for r in runs if declined(r) is not None),
+            denominator=total,
+        )
+    )
+    out.append(
+        Tally(
+            slug="needs-attention",
+            label="needing attention first, in the order stated on the Overview",
+            runs=tuple(r for _, r in needs_attention(store)),
+            denominator=total,
+        )
+    )
     #: Rung 3 across runs, as each run's own page decides it: no declared stage
     #: missing, one missing, or neither established -- three counts, and each opens its runs.
-    out.append(Tally(slug="nothing-missing",
-                     label="with no declared stage missing, as each run's own page says",
-                     runs=tuple(r for r in runs if r.nothing_missing == NOTHING_MISSING),
-                     denominator=total))
-    out.append(Tally(slug="missing-a-declared-stage", label="missing a declared stage",
-                     runs=tuple(r for r in runs if missing_a_declared_stage(r)),
-                     denominator=total))
+    out.append(
+        Tally(
+            slug="nothing-missing",
+            label="with no declared stage missing, as each run's own page says",
+            runs=tuple(r for r in runs if r.nothing_missing == NOTHING_MISSING),
+            denominator=total,
+        )
+    )
+    out.append(
+        Tally(
+            slug="missing-a-declared-stage",
+            label="missing a declared stage",
+            runs=tuple(r for r in runs if missing_a_declared_stage(r)),
+            denominator=total,
+        )
+    )
     #: Rung 3's own reading, so the row's counts stay one per run: a run declined at its last
     #: declared step reads nothing missing here, and is listed as stopped in Needs attention.
     from onetrace_console.overview import NOT_REACHED
-    out.append(Tally(slug="stopped-at-a-step",
-                     label="stopped at a step: the declared steps after it not reached",
-                     runs=tuple(r for r in runs if r.nothing_missing == NOT_REACHED), denominator=total))
-    out.append(Tally(slug="missing-not-established",
-                     label="whose declared stages could not be established as all recorded",
-                     runs=tuple(r for r in runs if nothing_missing_not_established(r)),
-                     denominator=total))
+
+    out.append(
+        Tally(
+            slug="stopped-at-a-step",
+            label="stopped at a step: the declared steps after it not reached",
+            runs=tuple(r for r in runs if r.nothing_missing == NOT_REACHED),
+            denominator=total,
+        )
+    )
+    out.append(
+        Tally(
+            slug="missing-not-established",
+            label="whose declared stages could not be established as all recorded",
+            runs=tuple(r for r in runs if nothing_missing_not_established(r)),
+            denominator=total,
+        )
+    )
     #: "Committed by a known time?" across runs, as each run's own page reads its own check
     #: Each form, and the runs without that check, over all runs
     #: stored like every other count. Each count opens exactly the runs it counted.
     for reading, words in ANCHOR_FORMS:
-        out.append(Tally(slug=f"anchored-{reading}",
-                         label=f"committed by a known time: {words}, as each run's own page says",
-                         runs=tuple(r for r in runs if r.anchored == reading),
-                         denominator=total))
-    out.append(Tally(slug="anchored-not-checked",
-                     label="committed by a known time: not checked, with no check of this "
-                           "console's whose rows the run's page reads",
-                     runs=tuple(r for r in runs if not r.anchored), denominator=total))
+        out.append(
+            Tally(
+                slug=f"anchored-{reading}",
+                label=f"committed by a known time: {words}, as each run's own page says",
+                runs=tuple(r for r in runs if r.anchored == reading),
+                denominator=total,
+            )
+        )
+    out.append(
+        Tally(
+            slug="anchored-not-checked",
+            label="committed by a known time: not checked, with no check of this "
+            "console's whose rows the run's page reads",
+            runs=tuple(r for r in runs if not r.anchored),
+            denominator=total,
+        )
+    )
     #: "Signed by a known recorder?" across runs: each form over all runs
     #: stored, as each run's own page reads it; each count opens exactly the runs it counted.
     for slug, readings, words in SIGNATURE_FORMS:
-        out.append(Tally(slug=f"signed-{slug}",
-                         label=f"signed by a known recorder: {words}, as each run's own page says",
-                         runs=tuple(r for r in runs if r.signed in readings), denominator=total))
+        out.append(
+            Tally(
+                slug=f"signed-{slug}",
+                label=f"signed by a known recorder: {words}, as each run's own page says",
+                runs=tuple(r for r in runs if r.signed in readings),
+                denominator=total,
+            )
+        )
     for p in pipelines(store):
-        out.append(Tally(slug=f"pipeline-{p.label.lower()}",
-                         label=f"declaring {p.label}'s stages", runs=p.runs, denominator=total))
+        out.append(
+            Tally(
+                slug=f"pipeline-{p.label.lower()}",
+                label=f"declaring {p.label}'s stages",
+                runs=p.runs,
+                denominator=total,
+            )
+        )
     return tuple(out)
 
 
@@ -281,9 +360,14 @@ def incident_tallies(store: Store) -> tuple[Tally, ...]:
         #: The incident count carries a denominator in its own unit, every
         #: incident the rules raised from the stored runs (every built-in incident is per run).
         word = "incident" if len(mine) == 1 else "incidents"
-        out.append(Tally(slug=rule.id.lower(), label=f"runs raising {rule.id}",
-                         runs=touched, denominator=len(runs),
-                         reasons=tuple(f"{len(mine)} {word} of {len(every)} raised from "
-                                       f"stored runs" for _ in (0,) if mine),
-                         href_override=rule_href(rule.id)))
+        out.append(
+            Tally(
+                slug=rule.id.lower(),
+                label=f"runs raising {rule.id}",
+                runs=touched,
+                denominator=len(runs),
+                reasons=tuple(f"{len(mine)} {word} of {len(every)} raised from stored runs" for _ in (0,) if mine),
+                href_override=rule_href(rule.id),
+            )
+        )
     return tuple(out)

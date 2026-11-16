@@ -13,12 +13,11 @@ The resolver below reads the `:root` rules of a stylesheet as a browser applies 
 rule's selector against the page's `data-theme`, each `@media` block against the system's setting
 or print, and the later of two equally specific rules winning -- and answers with the page colour.
 """
+
 from __future__ import annotations
 
-import json
 import re
 import shutil
-import subprocess
 
 import pytest
 
@@ -76,11 +75,13 @@ def resolve(css: str, theme: str | None, system: str, printing: bool = False) ->
 
 def _sheets() -> dict[str, str]:
     from onetrace_console.viewer import page
+
     return {"console": frame.stylesheet().decode("utf-8"), "viewer": page._style()}
 
 
 def _light_dark() -> tuple[str, str]:
     from onetrace_console.viewer.tokens import dark_palette, palette
+
     return palette()["--page"], dark_palette()["page"]
 
 
@@ -94,11 +95,17 @@ def test_with_no_choice_and_without_scripts_the_page_is_dark(where, system, exam
 
 
 @pytest.mark.parametrize("where", ["console", "viewer"])
-@pytest.mark.parametrize("theme, system, want", [
-    ("light", "light", "light"), ("light", "dark", "light"),
-    ("dark", "light", "dark"), ("dark", "dark", "dark"),
-    ("system", "light", "light"), ("system", "dark", "dark"),
-])
+@pytest.mark.parametrize(
+    "theme, system, want",
+    [
+        ("light", "light", "light"),
+        ("light", "dark", "light"),
+        ("dark", "light", "dark"),
+        ("dark", "dark", "dark"),
+        ("system", "light", "light"),
+        ("system", "dark", "dark"),
+    ],
+)
 def test_a_chosen_theme_is_drawn_as_chosen(where, theme, system, want, examined):
     light, dark = _light_dark()
     examined(1, f"the {where} stylesheet")
@@ -111,6 +118,7 @@ def test_a_chosen_theme_is_drawn_as_chosen(where, theme, system, want, examined)
 @pytest.mark.parametrize("theme", [None, "light", "dark", "system"])
 def test_printing_stays_light(where, theme, examined):
     from onetrace_console.viewer.tokens import palette
+
     examined(1, f"the {where} stylesheet")
     drawn = resolve(_sheets()[where], theme, "dark", printing=True)
     for role in ("page", "surface", "ink", "ink-muted"):
@@ -121,6 +129,7 @@ def test_no_page_sets_a_theme_of_its_own(examined):
     """The default is the stylesheet's, so a page read without scripts is dark: no page carries a
     theme in its markup (the theme switch's tests read every framed page for this)."""
     from tests.test_theme_switch import switch_problems
+
     page = "<html><body><footer>" + frame.THEME_SWITCH + frame.THEME_SCRIPT + "</footer></body></html>"
     examined(1, "page")
     assert switch_problems(page) == []
@@ -137,24 +146,36 @@ def test_the_sidebar_help_names_dark_as_the_default(examined):
 #: links and the declined chip's outline (the accent), the amber, red, green and neutral chips on
 #: their own grounds and on the page's, and the navigation.
 GROUNDS = ("page", "surface", "surface-alt", "surface-sunk")
-PAIRS = ([(fg, bg) for fg in ("ink", "ink-soft", "ink-muted", "ink-faint", "accent", "cc-ink",
-                              "bad-ink", "ok-ink", "neu-ink") for bg in GROUNDS]
-         + [("ok-ink", "ok-bg"), ("cc-ink", "cc-bg"), ("bad-ink", "bad-bg"), ("neu-ink", "neu-bg"),
-            ("accent-ink", "accent"), ("nav-ink", "nav-bg"), ("nav-ink-faint", "nav-bg"),
-            ("nav-on-ink", "nav-on-bg"), ("cc-ink", "hl"), ("page", "cc-ink")])
+PAIRS = [
+    (fg, bg)
+    for fg in ("ink", "ink-soft", "ink-muted", "ink-faint", "accent", "cc-ink", "bad-ink", "ok-ink", "neu-ink")
+    for bg in GROUNDS
+] + [
+    ("ok-ink", "ok-bg"),
+    ("cc-ink", "cc-bg"),
+    ("bad-ink", "bad-bg"),
+    ("neu-ink", "neu-bg"),
+    ("accent-ink", "accent"),
+    ("nav-ink", "nav-bg"),
+    ("nav-ink-faint", "nav-bg"),
+    ("nav-on-ink", "nav-on-bg"),
+    ("cc-ink", "hl"),
+    ("page", "cc-ink"),
+]
 
 
 def test_every_dark_text_and_status_colour_reads_at_4_5_to_1(examined):
     from tests.test_shared_style import _tokens, ratio
+
     tokens = _tokens("dark")
     examined(len(PAIRS), "dark colour pairs")
-    low = [f"--{fg} on --{bg}: {ratio(fg, bg, tokens):.2f}:1" for fg, bg in PAIRS
-           if ratio(fg, bg, tokens) < 4.5]
+    low = [f"--{fg} on --{bg}: {ratio(fg, bg, tokens):.2f}:1" for fg, bg in PAIRS if ratio(fg, bg, tokens) < 4.5]
     assert low == []
 
 
 def test_sabotage_a_dim_accent_is_named(examined):
     from tests.test_shared_style import _tokens, ratio
+
     dim = dict(_tokens("dark"), accent="#334155")
     examined(1, "planted accent")
     assert any(ratio(fg, bg, dim) < 4.5 for fg, bg in PAIRS if "accent" in (fg, bg))
@@ -168,12 +189,14 @@ needs_node = pytest.mark.skipif(NODE is None, reason="node is not installed here
 
 def _run(stored, steps=(), dark=False):
     from tests.test_theme_switch import _run as run
+
     return run(stored, steps, dark=dark)
 
 
 @needs_node
-@pytest.mark.parametrize("stored, theme", [("dark", "dark"), ("light", "light"), ("system", "system"),
-                                           (None, None), ("blue", None)])
+@pytest.mark.parametrize(
+    "stored, theme", [("dark", "dark"), ("light", "light"), ("system", "system"), (None, None), ("blue", None)]
+)
 def test_the_head_script_sets_each_saved_choice(stored, theme, examined):
     examined(1, "head script run")
     assert _run(stored)[0] == {"theme": theme}
@@ -201,11 +224,16 @@ def test_each_press_is_kept_and_follow_the_system_is_saved_as_a_choice(examined)
 
 
 @needs_node
-@pytest.mark.parametrize("stored, system, switch", [
-    ("light", True, "Switch to dark theme"), ("dark", False, "Switch to light theme"),
-    ("system", True, "Switch to light theme"), ("system", False, "Switch to dark theme")])
+@pytest.mark.parametrize(
+    "stored, system, switch",
+    [
+        ("light", True, "Switch to dark theme"),
+        ("dark", False, "Switch to light theme"),
+        ("system", True, "Switch to light theme"),
+        ("system", False, "Switch to dark theme"),
+    ],
+)
 def test_a_saved_choice_is_honoured_on_the_next_page(stored, system, switch, examined):
     seen = _run(stored, dark=system)
     examined(1, "page")
-    assert seen[1] == {"theme": stored, "stored": stored, "switch": switch,
-                       "system": stored != "system"}
+    assert seen[1] == {"theme": stored, "stored": stored, "switch": switch, "system": stored != "system"}

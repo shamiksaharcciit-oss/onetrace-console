@@ -7,6 +7,7 @@ two fields side by side where they fit and stacked where they don't, Compare at 
 the same form. The browser check of the layout, at 1280, 1024 and 390 px in both themes, is the round's
 rendered check; here, the markup and the stylesheet's rules.
 """
+
 from __future__ import annotations
 
 import re
@@ -15,12 +16,17 @@ from types import SimpleNamespace
 from onetrace_console import pipeline_pages, visitor_compare
 from onetrace_console.frame import PAGE_CSS, rendering
 
-RUNS = [SimpleNamespace(run_id=f"p1-0{i}-run", key=f"{i:064x}", received_at=f"2026-11-07T10:0{i}:00+00:00")
-        for i in range(1, 4)]
+RUNS = [
+    SimpleNamespace(run_id=f"p1-0{i}-run", key=f"{i:064x}", received_at=f"2026-11-07T10:0{i}:00+00:00")
+    for i in range(1, 4)
+]
 PIPELINE = SimpleNamespace(label="P1", runs=RUNS)
 
-FIELD = re.compile(r'<label class="compare-field"><span class="compare-label">([^<]+)</span>'
-                   r'<select name="([ab])"[^>]*>.*?</select></label>', re.S)
+FIELD = re.compile(
+    r'<label class="compare-field"><span class="compare-label">([^<]+)</span>'
+    r'<select name="([ab])"[^>]*>.*?</select></label>',
+    re.S,
+)
 
 
 def _forms() -> dict[str, str]:

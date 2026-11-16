@@ -10,6 +10,7 @@ request from another origin. The independent review of the first version found b
 
 Everything here runs `serve.main()` itself, or a real HTTP server with local mode on.
 """
+
 from __future__ import annotations
 
 import json
@@ -18,9 +19,9 @@ import urllib.request
 from dataclasses import replace
 
 import pytest
-from tests.http_limits import limit
 
 from onetrace_console.config import ENV_VAR, Config
+from tests.http_limits import limit
 
 
 class _Stop(Exception):
@@ -31,6 +32,7 @@ class _FakeServer:
     """Records the address `main()` binds, then stops `main()` where it would serve. Also
     records what stderr had said by the time it was constructed, so a banner printed before
     the bind is caught."""
+
     address = None
     said_before_bind = None
     capture = None
@@ -52,13 +54,23 @@ def local_main(tmp_path, monkeypatch):
     """`serve.main` with the config variable absent, a clean working directory, and a
     stand-in server. Returns a runner that gives (bound address, stderr, stdout)."""
     import onetrace_console.serve as serve_module
+
     monkeypatch.delenv(ENV_VAR, raising=False)
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr(serve_module, "ConsoleServer", _FakeServer)
     _FakeServer.address = None
-    saved = {n: getattr(serve_module.Handler, n, None) for n in
-             ("account_store", "session_store", "token_store", "rate_limit_per_account",
-              "rate_limit_per_client", "rate_limit_concurrent_hashes", "local_port")}
+    saved = {
+        n: getattr(serve_module.Handler, n, None)
+        for n in (
+            "account_store",
+            "session_store",
+            "token_store",
+            "rate_limit_per_account",
+            "rate_limit_per_client",
+            "rate_limit_concurrent_hashes",
+            "local_port",
+        )
+    }
 
     def run(capsys, argv=()):
         _FakeServer.capture, _FakeServer.said_before_bind = capsys, None
@@ -75,9 +87,11 @@ def local_main(tmp_path, monkeypatch):
 
 # ------------------------------------------------------------------- the forcing itself
 
+
 def test_local_config_forces_loopback_and_no_sign_in_whatever_the_base_says():
     """The forcing, tested on its own: whatever `Config()` defaults to now or later."""
     from onetrace_console.serve import LOCAL_HOST, _local_config
+
     base = Config(host="0.0.0.0", port=9000, sign_in={**Config().sign_in, "enabled": True})
     forced = _local_config(base)
     assert (forced.host, forced.port) == (LOCAL_HOST, 9000)
@@ -88,8 +102,11 @@ def test_local_config_forces_loopback_and_no_sign_in_whatever_the_base_says():
 def test_main_uses_the_forcing(local_main, capsys, monkeypatch):
     """`main()` goes through `_local_config`: a sabotaged one moves the listener."""
     serve_module, run = local_main
-    monkeypatch.setattr(serve_module, "_local_config", lambda base: replace(
-        base, host="10.9.8.7", sign_in={**base.sign_in, "enabled": False}))
+    monkeypatch.setattr(
+        serve_module,
+        "_local_config",
+        lambda base: replace(base, host="10.9.8.7", sign_in={**base.sign_in, "enabled": False}),
+    )
     address, _, _ = run(capsys)
     assert address[0] == "10.9.8.7", "main() does not route local mode through _local_config"
 
@@ -97,20 +114,32 @@ def test_main_uses_the_forcing(local_main, capsys, monkeypatch):
 def test_with_no_config_file_the_console_starts_in_local_mode(local_main, capsys):
     serve_module, run = local_main
     #: Placeholders in the six sign-in slots, so "None afterwards" proves main() reset them.
-    for name in ("account_store", "session_store", "token_store", "rate_limit_per_account",
-                 "rate_limit_per_client", "rate_limit_concurrent_hashes"):
+    for name in (
+        "account_store",
+        "session_store",
+        "token_store",
+        "rate_limit_per_account",
+        "rate_limit_per_client",
+        "rate_limit_concurrent_hashes",
+    ):
         setattr(serve_module.Handler, name, object())
     address, err, out = run(capsys)
     assert address == ("127.0.0.1", 8080)
     assert not serve_module.Handler.config.sign_in.get("enabled")
-    for name in ("account_store", "session_store", "token_store", "rate_limit_per_account",
-                 "rate_limit_per_client", "rate_limit_concurrent_hashes"):
+    for name in (
+        "account_store",
+        "session_store",
+        "token_store",
+        "rate_limit_per_account",
+        "rate_limit_per_client",
+        "rate_limit_concurrent_hashes",
+    ):
         assert getattr(serve_module.Handler, name) is None, name
     assert serve_module.Handler.local_port == 8080
 
 
 def test_the_banner_says_the_address_and_the_store_after_binding(local_main, capsys, tmp_path):
-    """Review finding 3: the port and the store in the one message, printed once the socket
+    """A review asked for the port and the store in the one message, printed once the socket
     is bound -- not before, so a failed bind is never preceded by "listens on"."""
     _, run = local_main
     _, err, _ = run(capsys)
@@ -121,9 +150,8 @@ def test_the_banner_says_the_address_and_the_store_after_binding(local_main, cap
     assert "read and write" in err, "the banner says callers can write, not only read"
 
 
-def test_a_variable_set_but_blank_refuses_rather_than_falling_into_local_mode(
-        local_main, capsys, monkeypatch):
-    """Review finding 2: a blank value is a mistake by someone who meant to name a file."""
+def test_a_variable_set_but_blank_refuses_rather_than_falling_into_local_mode(local_main, capsys, monkeypatch):
+    """A review noted a blank value is a mistake by someone who meant to name a file."""
     serve_module, _ = local_main
     for blank in ("", " "):
         monkeypatch.setenv(ENV_VAR, blank)
@@ -152,6 +180,7 @@ def test_local_mode_refuses_a_store_that_was_set_up_with_sign_in(local_main, cap
 
 # --------------------------------------------------------- config-file mode, at main()
 
+
 def _config_file(tmp_path, monkeypatch, **fields):
     path = tmp_path / "config.json"
     body = {"host": "127.0.0.1", "port": 8080, "store_root": (tmp_path / "s").as_posix()}
@@ -161,8 +190,9 @@ def _config_file(tmp_path, monkeypatch, **fields):
 
 
 def test_config_file_mode_still_refuses_plain_http_beyond_loopback_with_sign_in(
-        local_main, capsys, tmp_path, monkeypatch):
-    """Review finding 4: `refuse_if_insecure` inside `main()` was tested only on its own. Now
+    local_main, capsys, tmp_path, monkeypatch
+):
+    """A review found `refuse_if_insecure` inside `main()` was tested only on its own. Now
     the refusal is printed with its fix and exits 1, never a traceback."""
     serve_module, _ = local_main
     _config_file(tmp_path, monkeypatch, host="0.0.0.0", sign_in={"enabled": True})
@@ -172,8 +202,7 @@ def test_config_file_mode_still_refuses_plain_http_beyond_loopback_with_sign_in(
     assert _FakeServer.address is None, "it never listened"
 
 
-def test_config_file_mode_with_sign_in_off_warns_and_is_not_local_mode(
-        local_main, capsys, tmp_path, monkeypatch):
+def test_config_file_mode_with_sign_in_off_warns_and_is_not_local_mode(local_main, capsys, tmp_path, monkeypatch):
     serve_module, run = local_main
     _config_file(tmp_path, monkeypatch, sign_in={"enabled": False})
     _, err, _ = run(capsys)
@@ -184,12 +213,14 @@ def test_config_file_mode_with_sign_in_off_warns_and_is_not_local_mode(
 
 # ------------------------------------------------ over real HTTP: the browser guard
 
+
 @pytest.fixture
 def local_server(server):
     """The suite's real server, with local mode's guard switched on for its own port."""
     from urllib.parse import urlsplit
 
     from onetrace_console.serve import Handler
+
     base, store_root = server
     saved = Handler.local_port
     Handler.local_port = urlsplit(base).port
@@ -200,8 +231,7 @@ def local_server(server):
 
 
 def _call(base, path, *, method="GET", body=None, headers=None):
-    request = urllib.request.Request(base + path, data=body, method=method,
-                                     headers=headers or {})
+    request = urllib.request.Request(base + path, data=body, method=method, headers=headers or {})
     try:
         with urllib.request.urlopen(request, timeout=limit(10)) as r:
             return r.status, r.read(), dict(r.headers)
@@ -224,21 +254,23 @@ def test_a_cross_site_write_is_refused_and_stores_nothing(local_server, files, e
     """A web page the local user opens posting a run: refused by Origin, and by the
     browser's own Sec-Fetch-Site where Origin is absent."""
     from tests.conftest import make_tar
+
     base, store_root = local_server
     examined(2, "cross-site POSTs to /v1/runs")
-    for headers in ({"Origin": "https://evil.example", "Content-Type": "text/plain"},
-                    {"Sec-Fetch-Site": "cross-site", "Content-Type": "text/plain"}):
-        status, _, _ = _call(base, "/v1/runs", method="POST", body=make_tar(files),
-                             headers=headers)
+    for headers in (
+        {"Origin": "https://evil.example", "Content-Type": "text/plain"},
+        {"Sec-Fetch-Site": "cross-site", "Content-Type": "text/plain"},
+    ):
+        status, _, _ = _call(base, "/v1/runs", method="POST", body=make_tar(files), headers=headers)
         assert status == 403, headers
     assert not list((store_root / "store" / "runs").glob("*")), "nothing was stored"
 
 
 def test_a_same_origin_write_is_accepted(local_server, files):
     from tests.conftest import make_tar
+
     base, _ = local_server
-    status, body, _ = _call(base, "/v1/runs", method="POST", body=make_tar(files),
-                            headers={"Origin": base})
+    status, body, _ = _call(base, "/v1/runs", method="POST", body=make_tar(files), headers={"Origin": base})
     assert status == 200, body[:200]
 
 
@@ -247,7 +279,6 @@ def test_local_mode_serves_no_sign_in_and_sets_no_cookie(local_server):
     status, _, headers = _call(base, "/signin")
     assert status == 404
     assert "Set-Cookie" not in headers
-
 
 
 def test_a_file_in_accounts_that_is_not_an_account_does_not_refuse(local_main, capsys, tmp_path):
@@ -263,10 +294,12 @@ def test_a_file_in_accounts_that_is_not_an_account_does_not_refuse(local_main, c
 
 # ------------------------------------------------- the guard's header hygiene, and more
 
+
 def _raw(base, lines: list[str], body: bytes = b"") -> tuple[int, bytes]:
     """A request written by hand, for header shapes urllib will not send."""
     import socket
     from urllib.parse import urlsplit
+
     u = urlsplit(base)
     with socket.create_connection((u.hostname, u.port), timeout=10) as s:
         s.sendall(("\r\n".join(lines) + "\r\n\r\n").encode("latin-1") + body)
@@ -284,10 +317,20 @@ def test_duplicate_guard_headers_are_refused(local_server, examined):
     own = f"127.0.0.1:{port}"
     cases = [
         ["GET / HTTP/1.1", f"Host: {own}", "Host: evil.example"],
-        ["POST /v1/runs HTTP/1.1", f"Host: {own}", f"Origin: http://{own}",
-         "Origin: https://evil.example", "Content-Length: 0"],
-        ["POST /v1/runs HTTP/1.1", f"Host: {own}", "Sec-Fetch-Site: same-origin",
-         "Sec-Fetch-Site: cross-site", "Content-Length: 0"],
+        [
+            "POST /v1/runs HTTP/1.1",
+            f"Host: {own}",
+            f"Origin: http://{own}",
+            "Origin: https://evil.example",
+            "Content-Length: 0",
+        ],
+        [
+            "POST /v1/runs HTTP/1.1",
+            f"Host: {own}",
+            "Sec-Fetch-Site: same-origin",
+            "Sec-Fetch-Site: cross-site",
+            "Content-Length: 0",
+        ],
     ]
     examined(len(cases), "requests with a guard header twice")
     for lines in cases:
@@ -298,11 +341,9 @@ def test_duplicate_guard_headers_are_refused(local_server, examined):
 def test_an_absolute_form_target_must_name_this_listener_too(local_server):
     base, _ = local_server
     port = base.rsplit(":", 1)[1]
-    status, _ = _raw(base, [f"GET http://evil.example:{port}/home.html HTTP/1.1",
-                            f"Host: 127.0.0.1:{port}"])
+    status, _ = _raw(base, [f"GET http://evil.example:{port}/home.html HTTP/1.1", f"Host: 127.0.0.1:{port}"])
     assert status == 421
-    status, _ = _raw(base, [f"GET http://127.0.0.1:{port}/health HTTP/1.1",
-                            f"Host: 127.0.0.1:{port}"])
+    status, _ = _raw(base, [f"GET http://127.0.0.1:{port}/health HTTP/1.1", f"Host: 127.0.0.1:{port}"])
     assert status == 200
 
 
@@ -326,6 +367,7 @@ def test_a_refused_host_is_told_the_address_that_works(local_server):
 def test_config_file_mode_carries_no_local_guard_headers(server):
     """The guard and its headers are local mode's alone."""
     from onetrace_console.serve import Handler
+
     assert Handler.local_port is None
     base, _ = server
     _, _, headers = _call(base, "/health")

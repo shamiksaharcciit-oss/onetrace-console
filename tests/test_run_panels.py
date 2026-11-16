@@ -14,10 +14,10 @@ which record them. Each held on the public demo as built, with a sabotage the ch
    its runs and trust file;
 7. "What changed?": the rule's choice named, and on a public demo no comparison offered to make.
 """
+
 from __future__ import annotations
 
 import html
-import json
 import re
 import shutil
 
@@ -38,9 +38,13 @@ READINGS = {
     "pz-54-agent-amount-changed-subagent": "yes",
 }
 #: The verifier's own `decisions:` rows each P8 run's check holds, in its order.
-ROWS = ("decisions: gated steps cite a decision", "decisions: references are well formed",
-        "decisions: a step that acted cites a permitting decision",
-        "decisions: the permit covers the recorded action", "decisions: the decision is in the export")
+ROWS = (
+    "decisions: gated steps cite a decision",
+    "decisions: references are well formed",
+    "decisions: a step that acted cites a permitting decision",
+    "decisions: the permit covers the recorded action",
+    "decisions: the decision is in the export",
+)
 DECISION_ROWS = {
     "p8-42-invoice-tolerance-2pct": ("PASS", "PASS", "PASS", "PASS", "PASS"),
     "p8-43-invoice-tolerance-5pct": ("PASS", "PASS", "PASS", "PASS", "PASS"),
@@ -49,8 +53,12 @@ DECISION_ROWS = {
     "p8-49-invoice-paid-on-deny": ("PASS", "PASS", "FAIL", "NOT-RUN", "PASS"),
     "p8-50-invoice-permit-other-amount": ("PASS", "PASS", "PASS", "FAIL", "PASS"),
 }
-AGENT, SUB, AGENT_B, SUB_B = ("pz-51-agent-baseline", "pz-52-agent-baseline-subagent",
-                              "pz-53-agent-amount-changed", "pz-54-agent-amount-changed-subagent")
+AGENT, SUB, AGENT_B, SUB_B = (
+    "pz-51-agent-baseline",
+    "pz-52-agent-baseline-subagent",
+    "pz-53-agent-amount-changed",
+    "pz-54-agent-amount-changed-subagent",
+)
 DESCENT = f"inside agent_step, into run {SUB} at settle"
 
 
@@ -67,6 +75,7 @@ def _section(page: str, name: str) -> str:
 @pytest.fixture(scope="module")
 def demo(shared_demo):
     from onetrace_console.store import Store
+
     folder = shared_demo["folder"]
     store = Store(folder / "store" / "store")
     return folder, store, {r.run_id: r for r in store.runs()}
@@ -86,6 +95,7 @@ def _rung(pages: dict[str, str]) -> str | None:
 
 
 # ------------------------------------------------------- 1. rows about the run as a whole
+
 
 def reading_problems(folder, store, runs) -> list[str]:
     """Each run's rung 1 on its page, against the table and the reading kept at its check."""
@@ -111,6 +121,7 @@ def test_sabotage_rows_about_the_whole_run_read_as_strays_make_the_report_unread
     whole report, so every gated or nested run read "Couldn't check"."""
     from onetrace_console.pages import render_execution
     from onetrace_console.viewer import model
+
     folder, store, runs = demo
     monkeypatch.setattr(model, "WHOLE_RUN", frozenset({model.RUN_SUBJECT, ""}))
     examined(2, "runs drawn with the earlier whole-run subjects")
@@ -122,6 +133,7 @@ def test_sabotage_rows_about_the_whole_run_read_as_strays_make_the_report_unread
 
 # ------------------------------------------------------- 2. gated steps and decisions
 
+
 def onedoor_problems(folder, runs) -> list[str]:
     """P8's runs each show the gated step (on the case page, or on Proof where the record is in
     question) and the verifier's decision rows as the table holds them; no other run shows either."""
@@ -129,8 +141,11 @@ def onedoor_problems(folder, runs) -> list[str]:
     for name, run in runs.items():
         pages = _pages(folder, run)
         gated = any(_section(p, "onedoor") for p in pages.values())
-        rows = re.findall(r'<li data-onedoor-row="([A-Z-]+)">.*?</span> ([^<]*?) <span class="reason">',
-                          _section(pages.get("case.html", ""), "onedoor-rows"), re.S)
+        rows = re.findall(
+            r'<li data-onedoor-row="([A-Z-]+)">.*?</span> ([^<]*?) <span class="reason">',
+            _section(pages.get("case.html", ""), "onedoor-rows"),
+            re.S,
+        )
         if name in DECISION_ROWS:
             if not gated:
                 out.append(f"{name} shows no gated step")
@@ -156,20 +171,27 @@ def test_sabotage_a_decision_row_lost_from_a_page_is_named(demo, tmp_path, exami
     copy = tmp_path / "pages" / "store" / "pages" / "runs" / run.key
     shutil.copytree(folder / "store" / "pages" / "runs" / run.key, copy)
     case = (copy / "case.html").read_text(encoding="utf-8")
-    (copy / "case.html").write_text(case.replace('data-onedoor-row="FAIL"', 'data-onedoor-row="PASS"'), encoding="utf-8")
+    (copy / "case.html").write_text(
+        case.replace('data-onedoor-row="FAIL"', 'data-onedoor-row="PASS"'), encoding="utf-8"
+    )
     examined(1, "planted page")
     assert onedoor_problems(tmp_path / "pages", {run.run_id: run}) == [
-        f"{run.run_id}'s decision rows read {list(zip(('PASS',) * 5, ROWS))}"]
+        f"{run.run_id}'s decision rows read {list(zip(('PASS',) * 5, ROWS))}"
+    ]
 
 
 def test_a_gated_step_with_no_decision_says_so_and_a_permit_shows_its_payload(examined):
     from onetrace_console import onedoor_panel as o
     from onetrace_console.demo_store.onedoor_demo import ISSUER, Issuer
+
     issuer = Issuer()
     action = {"action_type": "pay", "amount": "1200.00"}
     ref = issuer.decide("req-1", "permit")
-    receipt = {"authorization": {"decisions": [{"ref": ref, "permit": issuer.permit(action),
-                                                "action_digest": "sha256:" + "a" * 64}]}}
+    receipt = {
+        "authorization": {
+            "decisions": [{"ref": ref, "permit": issuer.permit(action), "action_digest": "sha256:" + "a" * 64}]
+        }
+    }
     examined(5, "step panels drawn")
     assert o.NONE_RECORDED in o.step_block("approve_payment", {}, True)
     assert o.step_block("match", {}, False) == ""
@@ -178,15 +200,25 @@ def test_a_gated_step_with_no_decision_says_so_and_a_permit_shows_its_payload(ex
     assert "until 20" in shown and "subject not stated in the permit" in shown
     bad = {"authorization": {"decisions": [{"ref": ref, "permit": "not.a.jws!"}]}}
     assert "Permit: the permit's header or payload cannot be read" in _text(o.step_block("s", bad, True))
-    other = {"authorization": {"decisions": [{**receipt["authorization"]["decisions"][0],
-                                              "permit": issuer.permit({**action, "amount": "9.00"})}]}}
-    assert (o.differs(receipt, receipt), o.differs(receipt, other), o.differs(receipt, {})) == ("", "permit", "decision")
+    other = {
+        "authorization": {
+            "decisions": [
+                {**receipt["authorization"]["decisions"][0], "permit": issuer.permit({**action, "amount": "9.00"})}
+            ]
+        }
+    }
+    assert (o.differs(receipt, receipt), o.differs(receipt, other), o.differs(receipt, {})) == (
+        "",
+        "permit",
+        "decision",
+    )
 
 
 def beside_problems(store, runs) -> list[str]:
     """The decision files are given to the verifier for P8's gated runs only, named relative to the
     run's folder."""
     from onetrace_console.home import _envelope
+
     out = []
     for name, run in runs.items():
         command = str((_envelope(run, store) or {}).get("rows_json", {}).get("command", ""))
@@ -206,11 +238,19 @@ def test_the_decision_files_go_to_gated_runs_checks_only(demo, examined):
 
 def test_sabotage_decision_files_given_to_a_run_with_no_gated_step_are_named(demo, examined):
     from onetrace_console import home
+
     folder, store, runs = demo
     run = runs["p1-01-baseline-set1"]
     real = home._envelope(run, store)
-    planted = {**real, "rows_json": {**real["rows_json"], "command": str(
-        ["onetrace-verify", "--json", "--decisions", "../beside/decisions.jsonl", "--permit-issuers", "x"])}}
+    planted = {
+        **real,
+        "rows_json": {
+            **real["rows_json"],
+            "command": str(
+                ["onetrace-verify", "--json", "--decisions", "../beside/decisions.jsonl", "--permit-issuers", "x"]
+            ),
+        },
+    }
     examined(1, "planted command")
     orig = home._envelope
     try:
@@ -222,6 +262,7 @@ def test_sabotage_decision_files_given_to_a_run_with_no_gated_step_are_named(dem
 
 # ------------------------------------------------------- 3. span context and the trace panel
 
+
 def test_each_run_page_shows_its_span_context_without_a_link_on_a_public_demo(demo, examined):
     folder, store, runs = demo
     examined(len(runs), "runs' pages read for their span context")
@@ -230,8 +271,11 @@ def test_each_run_page_shows_its_span_context_without_a_link_on_a_public_demo(de
         pages = _pages(folder, run)
         if not any(_section(p, "span-context") for p in pages.values()):
             #: The demo's runs broken on purpose lose a receipt or a byte of one.
-            if name not in ("p1-14-candidate-set3-byte-changed", "p1-15-candidate-set4-file-deleted",
-                            "p7-41-cold-chain-decision-tampered"):
+            if name not in (
+                "p1-14-candidate-set3-byte-changed",
+                "p1-15-candidate-set4-file-deleted",
+                "p7-41-cold-chain-decision-tampered",
+            ):
                 missing.append(name)
         for page in pages.values():
             if "Open in your tracing tool" in page:
@@ -245,13 +289,16 @@ def test_the_span_context_says_what_its_ids_are_for_and_where_they_lead(demo, ex
     """One sentence under the lead: the ids point into the app's own tracing tool; with a tool
     configured, its link opens it; without one, none does; a public console links to none, and says so."""
     import html as _html
+
     from onetrace_console import trace_panel
+
     tid, sid = "0af7651916cd43dd8448eb211c80319c", "b7ad6b7169203331"
     manifest = {"traceparent": f"00-{tid}-{sid}-01"}
     steps = [{"receipt": {"stage": {"name": "a"}, "trace": {"trace_id": tid, "span_id": sid}}}]
 
     def said(section):
         return [_html.unescape(x) for x in re.findall(r"<p data-span-for>(.*?)</p>", section)]
+
     cases = {
         "configured": trace_panel.run_section(manifest, steps, "https://tracing.example/t/{trace_id}"),
         "none": trace_panel.run_section(manifest, steps, ""),
@@ -265,28 +312,41 @@ def test_the_span_context_says_what_its_ids_are_for_and_where_they_lead(demo, ex
     assert "pointers into the app's own tracing tool" in trace_panel.SPAN_FOR
     #: On the public demo's own pages: every run page with a span context says it links to none.
     folder, store, runs = demo
-    pages = [p for run in runs.values() for p in _pages(folder, run).values() if 'data-section="span-context" class="span-context"><h2>' in p]
+    pages = [
+        p
+        for run in runs.values()
+        for p in _pages(folder, run).values()
+        if 'data-section="span-context" class="span-context"><h2>' in p
+    ]
     assert pages and all(trace_panel.SPAN_PUBLIC in _html.unescape(p) for p in pages)
 
 
 def test_the_link_is_the_configured_pattern_with_the_ids_and_none_without_one(examined):
     from onetrace_console import trace_panel
+
     tid, sid = "0af7651916cd43dd8448eb211c80319c", "b7ad6b7169203331"
     examined(4, "links made")
-    assert trace_panel.link("https://tracing.example/t/{trace_id}?span={span_id}", tid, sid) == \
-        f"https://tracing.example/t/{tid}?span={sid}"
+    assert (
+        trace_panel.link("https://tracing.example/t/{trace_id}?span={span_id}", tid, sid)
+        == f"https://tracing.example/t/{tid}?span={sid}"
+    )
     assert trace_panel.link("", tid, sid) == "" and trace_panel.link(None, tid, sid) == ""
     assert trace_panel.OPEN in trace_panel.run_section(
-        {"traceparent": f"00-{tid}-{sid}-01"}, [{"receipt": {"stage": {"name": "a"}, "trace": {
-            "trace_id": tid, "span_id": sid}}}], "https://tracing.example/t/{trace_id}")
+        {"traceparent": f"00-{tid}-{sid}-01"},
+        [{"receipt": {"stage": {"name": "a"}, "trace": {"trace_id": tid, "span_id": sid}}}],
+        "https://tracing.example/t/{trace_id}",
+    )
     assert trace_panel.OPEN not in trace_panel.run_section(
-        {"traceparent": f"00-{tid}-{sid}-01"}, [{"receipt": {"stage": {"name": "a"}, "trace": {
-            "trace_id": tid, "span_id": sid}}}], "")
+        {"traceparent": f"00-{tid}-{sid}-01"},
+        [{"receipt": {"stage": {"name": "a"}, "trace": {"trace_id": tid, "span_id": sid}}}],
+        "",
+    )
 
 
 def test_a_comparison_with_a_first_difference_shows_the_spans_there(demo, examined):
     """The panel where the comparison names a first difference, and not where it names none."""
     from onetrace_console import trace_panel
+
     folder, store, runs = demo
     names = {r.key: r.run_id for r in store.runs()}
     examined(len(store.comparisons()), "comparison pages")
@@ -295,7 +355,8 @@ def test_a_comparison_with_a_first_difference_shows_the_spans_there(demo, examin
         page = (folder / "store" / "pages" / "diff" / f"{c.key}.html").read_text(encoding="utf-8")
         has = bool(_section(page, "trace-panel"))
         first = "First difference" in _text(_section(page, "short-answer")) or "first differ" in _text(
-            _section(page, "short-answer"))
+            _section(page, "short-answer")
+        )
         if has != first:
             wrong.append((names[c.run_a], names[c.run_b], has))
         if has and trace_panel.PANEL_LEAD not in _text(page):
@@ -304,6 +365,7 @@ def test_a_comparison_with_a_first_difference_shows_the_spans_there(demo, examin
 
 
 # ------------------------------------------------------- 4. runs inside steps
+
 
 def test_the_agent_s_page_links_its_sub_agent_s_run(demo, examined):
     folder, store, runs = demo
@@ -316,6 +378,7 @@ def test_the_agent_s_page_links_its_sub_agent_s_run(demo, examined):
 
 def test_sabotage_a_sub_agent_run_not_held_reads_not_loaded(examined):
     from onetrace_console import nesting_view
+
     receipt = {"stage": {"name": "agent_step"}, "inputs": [{"name": f"run:{SUB}", "digest": "sha256:" + "b" * 64}]}
     examined(1, "nesting drawn with no run held")
     got = nesting_view.run_section([{"receipt": receipt}], {})
@@ -324,6 +387,7 @@ def test_sabotage_a_sub_agent_run_not_held_reads_not_loaded(examined):
 
 def test_the_comparison_descends_into_the_sub_agent_in_the_sdk_s_words(demo, examined):
     from onetrace_console import nesting_view
+
     folder, store, runs = demo
     c = next(c for c in store.comparisons() if (c.run_a, c.run_b) == (runs[AGENT].key, runs[AGENT_B].key))
     page = (folder / "store" / "pages" / "diff" / f"{c.key}.html").read_text(encoding="utf-8")
@@ -337,8 +401,10 @@ def test_the_comparison_descends_into_the_sub_agent_in_the_sdk_s_words(demo, exa
 
 # ------------------------------------------------------- 5. the "i" notes
 
-_NOTE = re.compile(r'<span class="value" data-words="value">(\d+)</span> checks? made — (?:all hold|it holds)\.'
-                   r'<span class="info"[^>]*aria-label="([^"]*)"')
+_NOTE = re.compile(
+    r'<span class="value" data-words="value">(\d+)</span> checks? made — (?:all hold|it holds)\.'
+    r'<span class="info"[^>]*aria-label="([^"]*)"'
+)
 
 
 def note_problems(pages: dict[str, dict[str, str]]) -> list[str]:
@@ -364,15 +430,18 @@ def test_each_note_adds_up_to_the_number_beside_it(demo, examined):
 
 def test_sabotage_a_note_that_does_not_add_up_is_named(examined):
     from onetrace_console import info_mark
+
     rows = [{"name": "receipts/01-a.json: chain", "result": "PASS"}, {"name": "manifest: m", "result": "PASS"}]
-    page = ('<span class="value" data-words="value">3</span> checks made — all hold.'
-            + info_mark.mark(info_mark.checks_note(rows, 3)))
+    page = '<span class="value" data-words="value">3</span> checks made — all hold.' + info_mark.mark(
+        info_mark.checks_note(rows, 3)
+    )
     examined(1, "planted note")
     assert "(The line shows 3.)" in info_mark.checks_note(rows, 3)
     assert note_problems({"x": {"case.html": page}}) == ["x: 3 beside a note adding up to 2"]
 
 
 # ------------------------------------------------------- 6. paths and builds
+
 
 def path_problems(root, needles: list[str]) -> list[str]:
     out = []
@@ -386,6 +455,7 @@ def path_problems(root, needles: list[str]) -> list[str]:
 def test_a_built_store_names_no_path_of_the_machine_that_built_it(demo, examined):
     import sys
     from pathlib import Path
+
     folder, store, runs = demo
     needles = [str(folder.resolve()), str(Path(sys.executable).resolve().parent), str(Path.home())]
     examined(sum(1 for p in (folder / "store").rglob("*") if p.is_file()), "built store files scanned")
@@ -400,6 +470,7 @@ def test_sabotage_a_planted_path_is_named(tmp_path, examined):
 
 def test_a_build_from_an_earlier_one_reads_only_its_runs_and_trust_file(demo, tmp_path, examined):
     from onetrace_console.demo_store import BUILD_RECORD, RUNS_DIRNAME, TRUST_NAME, build_from, check_build_record
+
     folder, store, runs = demo
     earlier = tmp_path / "earlier"
     shutil.copytree(folder / RUNS_DIRNAME, earlier / RUNS_DIRNAME)
@@ -430,6 +501,7 @@ CHOICES = {
 
 def test_what_changed_names_its_rule_and_offers_only_held_comparisons_on_a_public_demo(demo, examined):
     from onetrace_console import what_changed
+
     folder, store, runs = demo
     examined(len(runs), "runs' What changed? sections")
     for name, want in CHOICES.items():
@@ -453,32 +525,47 @@ def test_what_changed_names_its_rule_and_offers_only_held_comparisons_on_a_publi
 
 def test_sabotage_a_local_console_offers_the_comparison_to_make(demo, examined):
     from onetrace_console import what_changed
+
     folder, store, runs = demo
     run = runs["p1-02-baseline-set2"]
     examined(1, "section drawn as a local console draws it")
     sec = what_changed.section(run, store, public=False)
     other = what_changed.choose(run, store)[0]
-    assert f"data-compare-post=\"/compare?a={other.key}&amp;b={run.key}\"" in sec
+    assert f'data-compare-post="/compare?a={other.key}&amp;b={run.key}"' in sec
 
 
 def test_the_runs_page_says_what_changed_under_each_run_whose_comparison_is_held(demo, examined):
     """A line under the run, across the table, where the rule's comparison is held; none elsewhere."""
     from onetrace_console import what_changed
+
     folder, store, runs = demo
     page = (folder / "store" / "pages" / "executions-all.html").read_text(encoding="utf-8")
     from onetrace_console.pages import RUN_COLUMNS
-    lines = dict(re.findall(r'<tr class="what-changed-row" data-what-changed-of="([0-9a-f]{64})">'
-                            rf'<td colspan="{len(RUN_COLUMNS)}" data-answer="what-changed">What changed: (.*?)</td></tr>', page))
+
+    lines = dict(
+        re.findall(
+            r'<tr class="what-changed-row" data-what-changed-of="([0-9a-f]{64})">'
+            rf'<td colspan="{len(RUN_COLUMNS)}" data-answer="what-changed">What changed: (.*?)</td></tr>',
+            page,
+        )
+    )
     examined(len(runs), "runs on the Runs page")
     #: The demo is a public console's: each line against the first candidate it holds.
-    want = {r.key: what_changed.runs_line(r, store, public=True) for r in runs.values()
-            if what_changed.runs_line(r, store, public=True) != what_changed.NOT_COMPARED}
+    want = {
+        r.key: what_changed.runs_line(r, store, public=True)
+        for r in runs.values()
+        if what_changed.runs_line(r, store, public=True) != what_changed.NOT_COMPARED
+    }
     assert want and {k: html.unescape(re.sub(r"<[^>]+>", "", v)) for k, v in lines.items()} == {
-        k: v.replace("`", "") for k, v in want.items()}
+        k: v.replace("`", "") for k, v in want.items()
+    }
     #: Each line right after its run's own row.
     for key in lines:
-        assert re.search(rf'<tr data-run="[^"]*" data-key="{key}">.*?</tr><tr class="what-changed-row" '
-                         rf'data-what-changed-of="{key}">', page), key
+        assert re.search(
+            rf'<tr data-run="[^"]*" data-key="{key}">.*?</tr><tr class="what-changed-row" '
+            rf'data-what-changed-of="{key}">',
+            page,
+        ), key
 
 
 #: A count of checks the viewer states: run and step, as `info_mark` finds them.
@@ -490,18 +577,25 @@ def test_every_count_of_checks_has_its_note(demo, examined):
     pages = {name: _pages(folder, run) for name, run in runs.items()}
     counts = sum(len(_COUNT.findall(p)) for by in pages.values() for p in by.values())
     examined(counts, "counts of checks")
-    bare = [(name, page) for name, by in pages.items() for page, html_ in by.items()
-            for m in _COUNT.finditer(html_) if not html_.startswith('<span class="info"', m.end())]
+    bare = [
+        (name, page)
+        for name, by in pages.items()
+        for page, html_ in by.items()
+        for m in _COUNT.finditer(html_)
+        if not html_.startswith('<span class="info"', m.end())
+    ]
     assert counts and bare == []
 
 
 # ------------------------------------------------------- 8. a public console picks a comparison it holds
+
 
 def test_what_changed_on_a_public_console_takes_the_first_candidate_it_holds_and_says_so(demo, examined):
     """On p1-13: a local console's rule picks the benchmark p1-02 (same inputs), which the demo never
     compared with it, and offers to make it; a public console walks on to the first candidate it
     holds, p1-01, and says it is one the demo compared."""
     from onetrace_console import what_changed
+
     folder, store, runs = demo
     run = runs["p1-13-baseline-set1-again"]
     examined(2, "consoles' picks")
@@ -510,8 +604,9 @@ def test_what_changed_on_a_public_console_takes_the_first_candidate_it_holds_and
     assert what_changed.held(store, local[0].key, run.key) is None
     assert (public[0].run_id, public[1], public[2]) == ("p1-01-baseline-set1", 2, True)
     sec = _section(_pages(folder, run)["case.html"], "what-changed")
-    assert ("Compared with p1-01-baseline-set1, the nearest earlier run with the same inputs that this demo "
-            "compared.") in _text(sec)
+    assert (
+        "Compared with p1-01-baseline-set1, the nearest earlier run with the same inputs that this demo compared."
+    ) in _text(sec)
     assert 'data-what-changed="open"' in sec and "data-held-only" in sec
     assert "data-compare-post" in what_changed.section(run, store, public=False)
     assert "that this demo compared" not in _text(what_changed.section(run, store, public=False))
@@ -519,12 +614,14 @@ def test_what_changed_on_a_public_console_takes_the_first_candidate_it_holds_and
 
 # ------------------------------------------------------- 9. steps inside steps in the ladder and the graph
 
+
 def _children_run(folder):
     """A run with two steps called inside a third (`plan`), as onetrace 0.5 records them: the
     children's receipts first, each naming `plan` its parent; `plan` naming them in call order."""
     import os
     import subprocess
     import sys
+
     code = folder / "kids.py"
     code.write_text(
         "import os, sys\nimport onetrace as ot\nfrom onetrace.emit import Instrument\n"
@@ -535,10 +632,12 @@ def _children_run(folder):
         "@ot.stage('pay', instrument=i)\ndef pay(x): return {'ok': x}\n"
         "@ot.run(run_dir=sys.argv[1] + '/{run_id}', stages=['plan', 'price_lookup', 'tax', 'pay'], "
         "manifest=__file__, anchor_reason='a test')\ndef run(): return pay(plan('1'))\nrun()\n",
-        encoding="utf-8")
+        encoding="utf-8",
+    )
     env = {**os.environ, "ONETRACE_RUN_ID": "kids-1"}
-    subprocess.run([sys.executable, str(code), str(folder / "runs")], check=True, capture_output=True, env=env,
-                   cwd=folder)
+    subprocess.run(
+        [sys.executable, str(code), str(folder / "runs")], check=True, capture_output=True, env=env, cwd=folder
+    )
     return folder / "runs" / "kids-1"
 
 
@@ -550,6 +649,7 @@ def children(tmp_path_factory):
     from onetrace_console.store import Store
     from tests.test_checks import FIXED_RAN_AT
     from tests.test_home_and_diff import _deliver
+
     folder = tmp_path_factory.mktemp("children")
     store = Store(folder / "store")
     run = run_and_record(_deliver(_children_run(folder), store), store, ran_at=FIXED_RAN_AT)
@@ -560,7 +660,12 @@ def children(tmp_path_factory):
 def ladder_problems(page: str) -> list[str]:
     """The table of steps: plan's children under it, in call order, each marked and saying so."""
     order = re.findall(r'<tr data-step="(\d+)"( data-child-of="([^"]*)")?', page)
-    want = [("3", "", ""), ("1", ' data-child-of="plan"', "plan"), ("2", ' data-child-of="plan"', "plan"), ("4", "", "")]
+    want = [
+        ("3", "", ""),
+        ("1", ' data-child-of="plan"', "plan"),
+        ("2", ' data-child-of="plan"', "plan"),
+        ("4", "", ""),
+    ]
     out = [] if order == want else [f"the steps are drawn {order}"]
     if len(re.findall(r'<div class="inside">inside <code>plan</code></div>', page)) != 2:
         out.append("a child does not say it is inside plan")
@@ -584,6 +689,7 @@ def test_sabotage_children_drawn_in_the_chain_s_order_are_named(children, examin
 def test_a_run_with_no_steps_inside_steps_is_drawn_as_it_was(demo, examined):
     from onetrace_console.nesting_ladder import run_ladder
     from onetrace_console.stage_pages import _steps
+
     folder, store, runs = demo
     examined(len(runs), "runs' tables of steps")
     for name, run in runs.items():
@@ -601,11 +707,16 @@ def test_a_nested_run_is_a_row_under_its_calling_step_on_the_run_and_the_compari
     diff = (folder / "store" / "pages" / "diff" / f"{c.key}.html").read_text(encoding="utf-8")
     examined(3, "pages with a nested run")
     row = re.search(rf'<tr data-nested-run="{SUB}" data-child-of="agent_step" data-depth="1">.*?</tr>', case, re.S)
-    assert row and f'href="../{runs[SUB].key}/case.html"' in row.group(0) and "its head recorded as" in _text(row.group(0))
+    assert (
+        row and f'href="../{runs[SUB].key}/case.html"' in row.group(0) and "its head recorded as" in _text(row.group(0))
+    )
     assert re.search(r'<tr data-step="1">.*?</tr><tr data-nested-run=', case, re.S)
     assert "2 steps inside" in case
-    sides = re.findall(r'<tr data-nested-run="([^"]+)" data-child-of="agent_step" data-depth="1"><td colspan="6">'
-                       r'(baseline|candidate): ', diff)
+    sides = re.findall(
+        r'<tr data-nested-run="([^"]+)" data-child-of="agent_step" data-depth="1"><td colspan="6">'
+        r"(baseline|candidate): ",
+        diff,
+    )
     assert sides == [(SUB, "baseline"), (SUB_B, "candidate")]
     assert f'href="../runs/{runs[SUB].key}/case.html"' in diff
 
@@ -622,6 +733,7 @@ def test_an_inner_run_s_page_names_the_run_and_step_that_started_it(demo, examin
 
 def test_an_inner_run_whose_parent_is_not_held_says_not_loaded(examined):
     from onetrace_console.nesting_view import NOT_LOADED, parent_section
+
     examined(1, "parent not held")
     got = parent_section({"parent_run": "elsewhere-1", "parent_stage": "plan"}, {})
     assert NOT_LOADED in _text(got) and "href" not in got

@@ -8,6 +8,7 @@
 A stand-in verifier writes both as Windows and the real verifier do: \\r\\n line endings, and rows whose
 names hold a backslash and a control character, escaped in its text and raw in its --json.
 """
+
 from __future__ import annotations
 
 import copy
@@ -19,7 +20,7 @@ from onetrace_console.viewer.report import capture_cli, parse, verifier_escaped
 
 NAMES = ["--trust C:\\Users\\runner\\trust.json", "receipts/01-x\u0007.json: receipt format"]
 
-_STANDIN = '''
+_STANDIN = """
 import json, sys
 names = %s
 args = sys.argv[1:]
@@ -32,7 +33,7 @@ else:
     out += "\\r\\n%%d pass, 0 fail, 0 not-run  ->  PASS\\r\\n" %% len(rows)
     sys.stdout.buffer.write(out.encode("utf-8"))
 sys.exit(0)
-'''
+"""
 
 
 @pytest.fixture
@@ -40,11 +41,16 @@ def windows_like(tmp_path, monkeypatch):
     import inspect
 
     from onetrace_console.viewer import report
+
     pkg = tmp_path / "mods"
     pkg.mkdir()
-    escaper = inspect.getsource(report._verifier_escape_char) + "\n_E = __import__('re').compile(" + \
-        repr(report._VERIFIER_ESCAPED.pattern) + ")\ndef esc(t):\n    return _E.sub(lambda m: " \
+    escaper = (
+        inspect.getsource(report._verifier_escape_char)
+        + "\n_E = __import__('re').compile("
+        + repr(report._VERIFIER_ESCAPED.pattern)
+        + ")\ndef esc(t):\n    return _E.sub(lambda m: "
         "_verifier_escape_char(m.group()), t.replace('\\\\', '\\\\\\\\'))\n"
+    )
     (pkg / "win_verify.py").write_text(escaper + _STANDIN % (json.dumps(NAMES), "esc"), encoding="utf-8")
     monkeypatch.setenv("PYTHONPATH", str(pkg))
     run = tmp_path / "run"
@@ -57,8 +63,10 @@ def test_the_stand_in_writes_as_windows_does(windows_like):
     """The premise: \\r\\n endings, and the names escaped in the text, raw in --json."""
     import subprocess
     import sys
-    out = subprocess.run([sys.executable, "-m", "win_verify", "MANIFEST.json"], cwd=windows_like,
-                         capture_output=True).stdout
+
+    out = subprocess.run(
+        [sys.executable, "-m", "win_verify", "MANIFEST.json"], cwd=windows_like, capture_output=True
+    ).stdout
     assert b"\r\n" in out and b"C:\\\\Users\\\\runner" in out and b"\\u0007" in out
 
 
@@ -83,4 +91,5 @@ def test_a_report_stored_with_crlf_reads_as_one_stored_since(windows_like):
 
 def test_a_lone_cr_is_kept():
     from onetrace_console.viewer.report import _lf
+
     assert _lf("a\r\nb\rc\n") == "a\nb\rc\n"

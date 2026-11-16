@@ -2,7 +2,7 @@
 
 Every state on the page is resolved here into a key of the translation table
 (`viewer/sentences.py`), and every number is produced by a function in this module and
-labelled with the state it came from (019 §5). `page.py` renders what this module carries
+labelled with the state it came from. `page.py` renders what this module carries
 and decides nothing.
 
 This module computes no fingerprint. Whether a step's bytes are what the record says is the
@@ -18,7 +18,7 @@ into its own sentence as if it had written it, and never shows an unfilled place
 
 THE VERDICT STRIP, AND WHAT MAY NEVER STAND ALONE
 --------------------------------------------------
-Three states from 019 §2.1, chosen in this order:
+Three states, chosen in this order:
 
 1. any finding **contradicted** → *the record contradicts itself at step N*;
 2. any finding **not run** for a reason other than originality → *one step could not be
@@ -26,8 +26,8 @@ Three states from 019 §2.1, chosen in this order:
 3. otherwise → *every step checks out*.
 
 A record that is not anchored gets its originality sentence **beside** the strip in every
-state. Verifier specification §4.6: "a verifier that lets a green chain imply originality
-is lying by omission" — and a page is no better placed than a verifier to omit it. No
+state. A green chain says nothing of when a record was made, and a verifier that let it imply
+originality would be lying by omission; a page is no better placed than a verifier to omit it. No
 report, or an unreadable one, gets a strip that says so and shows no checkmark.
 """
 from __future__ import annotations
@@ -47,7 +47,7 @@ from onetrace_console.viewer.verbs import (DagNode, Failure, LadderRow, Reproduc
 GENERATOR = f"onetrace-console {_console_version}"
 
 #: At most this many items of any one list are drawn on a page, then
-#: "…and N more". Round 4 found a 3.9 KB upload drawing a million gaps, 39 MB of run pages.
+#: "…and N more". Without it, a 3.9 KB upload drew a million gaps, 39 MB of run pages.
 LIST_CAP = 100
 #: The same finding's other half: a text shown verbatim -- a receipt's bytes, the check's output
 #: -- is one item, not a list, and a million gaps made it 44 MB of page. At most this many
@@ -148,8 +148,8 @@ class StepView:
 class Detail:
     """A value beside a sentence: the label's key (empty for none), and whose words it is.
 
-    An empty label is not an oversight. 030 §3's frames already carry the verb's reason inside
-    the sentence, and several 019 rows are a sentence followed by a quotation with nothing to
+    An empty label is not an oversight. The verbs' frames already carry the verb's reason inside
+    the sentence, and several of the table's rows are a sentence followed by a quotation with nothing to
     call it — the refusal's reason, the instrument's own words. Inventing a label for those
     would add a word nobody decided.
     """
@@ -341,7 +341,7 @@ def _run_line(f: Finding) -> Line:
 
 def count_steps(report: Report, outcome: str, steps: dict,
                 exclude_property: str | None = None) -> int:
-    """How many distinct steps have at least one finding of an outcome (023 §3 Q2)."""
+    """How many distinct steps have at least one finding of an outcome."""
     return len({f.subject for f in report.findings
                 if f.outcome == outcome and f.subject in steps
                 and (exclude_property is None or f.property != exclude_property)})
@@ -358,7 +358,7 @@ def missing_stages(record: Record) -> tuple[str, ...]:
 
     `coverage.completeness` is **per receipt and cumulative**: in the SDK's own runs, steps
     1-3 read `incomplete` because not every declared stage had emitted *yet*, and the last
-    step reads `complete`. Read per step it says nothing about the run, so 019 §4's sentence
+    step reads `complete`. Read per step it says nothing about the run, so the settled sentence
     — *"Part of this run wasn't recorded"* — is a claim about the run and is decided here,
     from the whole record: a declared stage that appears in no receipt's emitting list.
     Taking any one step's `incomplete` for the run's state said that three times over a run
@@ -366,7 +366,7 @@ def missing_stages(record: Record) -> tuple[str, ...]:
     """
     declared: list[str] = []
     #: A lookup set beside the ordered list: `not in` a list made this quadratic, and 20,000
-    #: declared names (a 48 KB upload) took 38 s per page (round 4, B3).
+    #: declared names (a 48 KB upload) took 38 s per page.
     seen: set[str] = set()
     emitting: set[str] = set()
     for s in record.receipts:
@@ -429,12 +429,12 @@ def _items(entries) -> tuple[Item, ...]:
 
 
 def _recorded_reason(oc: dict) -> tuple[str, str]:
-    """The reason a refusal states, or C030 §3's words when it states none (C034 §2 R1).
+    """The reason a refusal states, or the frame's own words when it states none.
 
-    019 §2.2's sentence promises the record "says why". Where the record says nothing, the
+    The settled sentence promises the record "says why". Where the record says nothing, the
     page said `says why: .` — it asserted a reason existed and rendered an empty placeholder
-    with a dangling stop. C030 §3 had already fixed that shape for the verbs' frames; C034 §2
-    R1 puts a recorded refusal under the same rule. The words are the page's, not the
+    with a dangling stop. That shape was already fixed for the verbs' frames, and a recorded
+    refusal is under the same rule. The words are the page's, not the
     record's, and are marked as the page's so no quotation claims the record wrote them.
     """
     words = str(oc.get("reason", "") or "")
@@ -443,9 +443,9 @@ def _recorded_reason(oc: dict) -> tuple[str, str]:
 
 
 def _error_is_whole(oc: dict) -> bool:
-    """Whether a recorded error carries the two fields its ruled sentence names.
+    """Whether a recorded error carries the two fields its agreed sentence names.
 
-    019 §4's sentence is *"Failed — {status}: {body}."* and §3.2's is *"failed — {status}:
+    The settled sentence is *"Failed — {status}: {body}."* and the timeline's is *"failed — {status}:
     {body}"*. Both placeholders are the record's; neither is optional, and the delivered format
     agrees — `rejection/R06-error-without-body.json` is a vector a conforming verifier **must
     refuse**, for the stated reason: *"an HTTP error without its body is a status code wearing
@@ -453,7 +453,7 @@ def _error_is_whole(oc: dict) -> bool:
 
     Where the record cannot fill them, the page does not fill them for it and does not quietly
     drop the step either (the three-outcome rule: malformed is surfaced, never skipped). It
-    falls through to `outcome.unknown` — ruled wording — which shows the outcome exactly as
+    falls through to `outcome.unknown` — agreed wording — which shows the outcome exactly as
     recorded, so the reader sees the status code and sees that nothing explains it.
     """
     return bool(str(oc.get("status", "") or "").strip()
@@ -472,19 +472,19 @@ def _outcome_lines(step: Step) -> tuple[Line, Line]:
     if cls == "error" and _error_is_whole(oc):
         status, body = (str(oc["status"]), "record"), (str(oc["body"]), "record")
         origin = str(oc.get("origin", "") or "").strip()
-        # Bench Record 047 ruled a third field into the card's sentence, for the state where
-        # the record names an origin. Where it does not, 019 §4's two-field sentence keeps its
+        # The card's sentence gained a third field, for the state where
+        # the record names an origin. Where it does not, the settled two-field sentence keeps its
         # state: the format requires a body (rejection/R06) and requires no origin, so an
         # error without one is conforming and must not lose its sentence — nor be given a
-        # field the page composed. 047 ruled on `outcome.error` alone; §3.2's timeline form
+        # field the page composed. That change is to `outcome.error` alone; the timeline's form
         # is untouched, and carries status and body in both states.
         card = (line("outcome.error_origin", status=status, body=body,
                      origin=(origin, "record"))
                 if origin else line("outcome.error", status=status, body=body))
         return card, line("timeline.error", status=status, body=body)
-    # An error missing the status or the body its ruled sentence names falls through here:
+    # An error missing the status or the body its agreed sentence names falls through here:
     # the record is shown exactly as recorded, rather than rendered into a sentence whose
-    # placeholders the record cannot fill. See `_error_is_whole` (C034 §2 R12, F14).
+    # placeholders the record cannot fill. See `_error_is_whole`.
     shown = Text(json.dumps(oc, ensure_ascii=False, sort_keys=True), "record")
     unknown = line("outcome.unknown") + (Text(" "), shown)
     return unknown, unknown
@@ -685,7 +685,7 @@ def _unchecked(record: Record, report: Report | None) -> tuple[tuple[Line, ...],
                               step=_stage_shown(s)),) + named)
     optional_only = _completeness_passed(report)
     incomplete = bool(missing_stages(record)) and optional_only is None
-    # 023 §4: "Every step that was declared left a receipt; nothing is missing from the trail."
+    # The table's sentence: "Every step that was declared left a receipt; nothing is missing from the trail."
     # True only when no step records a gap AND no step says the run was partly unrecorded:
     # shown beside "Part of this run wasn't recorded", it would contradict it.
     if not any(count_gaps(s) for s in record.steps) and not incomplete:
@@ -706,10 +706,10 @@ def _unchecked(record: Record, report: Report | None) -> tuple[tuple[Line, ...],
 
 
 def reproduce_said(row: ReproduceRow) -> VerbSaid:
-    """029 §6: one re-check row onto its sentence, with the report's own words beside it.
+    """One re-check row onto its sentence, with the report's own words beside it.
 
     The five outcomes are kept apart exactly as the report keeps them. `declared` is the record
-    telling the truth about itself and gets 019 §4's model-step sentence; `unavailable` is this
+    telling the truth about itself and gets the settled model-step sentence; `unavailable` is this
     reader's reach and gets the access-problem sentence, whose "what would resolve it" is the
     report's `reason`; `mismatch` has no decided row and carries proposed wording.
     """
@@ -723,11 +723,11 @@ def reproduce_said(row: ReproduceRow) -> VerbSaid:
                                                            sort_keys=True), "record")))
         return VerbSaid(line("reproduce.fail"), tuple(details), row.index)
     if row.category == "declared":
-        # 019's sentence, then the instrument's own words. No label, by design.
+        # The settled sentence, then the instrument's own words. No label, by design.
         words = (Detail("", Text(row.declared, "record")),) if row.declared else ()
         return VerbSaid(line("rederivable.false"), words, row.index)
     if row.category == "unavailable":
-        # 019's row ends "here is what would resolve it", and 029 §6 says the reason is it.
+        # The settled row ends "here is what would resolve it", and the report's reason is it.
         why = (Detail("", Text(row.reason, "check")),) if row.reason else ()
         return VerbSaid(line("reproduce.not_run.unavailable"), why, row.index)
     return VerbSaid(line("reproduce.not_run.mismatch"), mismatch_digests(row), row.index)
@@ -739,7 +739,7 @@ _DIGEST = re.compile(r"sha256:[0-9a-f]{64}")
 
 
 def mismatch_digests(row: ReproduceRow) -> tuple[Detail, ...]:
-    """030 §1: beneath the sentence, the two digests labelled *ran* and *available here*,
+    """Beneath the sentence, the two digests labelled *ran* and *available here*,
     "nothing else".
 
     If the reason does not carry exactly two, the reason is shown unchanged instead — the page
@@ -753,24 +753,24 @@ def mismatch_digests(row: ReproduceRow) -> tuple[Detail, ...]:
             Detail("field.available_here", Text(found[1], "check")))
 
 
-#: 030 §3: when an envelope requires a reason and the report carries none, the frame renders
+#: When an envelope requires a reason and the report carries none, the frame renders
 #: with these words. The page does not write the reason the verb should have written — and the
 #: report goes upstream as a finding.
 NO_REASON = "(no reason given)"
 
 
 def _framed(key: str, slot: str, words: str | None) -> VerbSaid:
-    """One of 030 §3's fixed frames, filled with the verb's own words, set as the verb's."""
+    """One of the verbs' fixed frames, filled with the verb's own words, set as the verb's."""
     given = bool(words and words.strip())
     return VerbSaid(line(key, **{slot: (words if given else NO_REASON,
                                         "check" if given else "page")}))
 
 
 def _envelope_reason(report: TwoRun) -> str | None:
-    """The reason a no-result frame is filled with (030 §3, corrected by 031 §2).
+    """The reason a no-result frame is filled with.
 
-    C029 §2 said the envelope's `reason` is set whenever the envelope is not identical or
-    diverged. 031 §2 corrects that for the boundary case: at `c325c94` a `could not check`
+    The format's draft said the envelope's `reason` is set whenever the envelope is not identical or
+    diverged. A later correction says otherwise for the boundary case: at `c325c94` a `could not check`
     caused by a declared boundary carries `reason: null`, and the verb's words live in the
     ladder rows, whose reason begins `declared boundary '<name>'`. So the frame fills from the
     first COULD NOT CHECK row rather than saying no reason was given — the words exist in the
@@ -786,9 +786,9 @@ def _envelope_reason(report: TwoRun) -> str | None:
 
 
 def _dag_said(report: SingleRunDag) -> tuple[VerbSaid, ...]:
-    """R11 as ruled: the set of minimal unclean nodes, sorted by node id, never a first node.
+    """The set of minimal unclean nodes, sorted by node id, never a first node.
 
-    `Core_Ruling_C034_R11_Corrected_Wording_2026-09-25.md` — the page renders *every node the
+    The page renders *every node the
     report names, as one set*, labelled as a set and not as a list with an implied order, and no
     sentence chooses one node as "the" answer.
 
@@ -796,9 +796,9 @@ def _dag_said(report: SingleRunDag) -> tuple[VerbSaid, ...]:
     `dag-r37/run_R` deliberately makes the reverse of the id order. Sorting is the page's act.
 
     **One sentence, not one per node.** A set is one answer. Where the set has a single member,
-    019 §4's `localize.located` already fits it exactly — a set of one *is* a located step — so
+    the settled `localize.located` already fits it exactly — a set of one *is* a located step — so
     nothing new is worded for that case. The plural takes `localize.located_set`, which is this
-    channel's wording and provisional (024 §4), and whose second clause denies the ordering a
+    channel's wording and provisional, and whose second clause denies the ordering a
     reader would otherwise supply.
 
     **Each node carries the report's own words, quoted.** The node id and the kind are the
@@ -824,7 +824,7 @@ def _dag_node_words(node: DagNode) -> str:
 
 
 def changed_said(report) -> tuple[VerbSaid, ...]:
-    """What a `diff` or `localize` report lets the page say (029 §6, 030 §§1-3)."""
+    """What a `diff` or `localize` report lets the page say."""
     if isinstance(report, Failure):
         return (_framed("verb.did_not_start", "reason", report.reason),)
     if isinstance(report, SingleRunDag):
@@ -843,7 +843,7 @@ def changed_said(report) -> tuple[VerbSaid, ...]:
         return (_framed("localize.could_not_check", "words", report.words or report.stage),)
     assert isinstance(report, TwoRun)
     if report.envelope == "identical":
-        # 029 §6: "and only that" — a ladder with reconverged rows is diverged, and this
+        # The format's "and only that": a ladder with reconverged rows is diverged, and this
         # sentence must not appear for it.
         return (VerbSaid(line("diff.pass")),)
     if report.envelope == "diverged" and report.first_difference:
@@ -874,7 +874,7 @@ def changed_said(report) -> tuple[VerbSaid, ...]:
                 f"{blast.get('documents_whose_chunk_set_moved')} of {blast.get('documents')} "
                 f"documents moved; {blast.get('documents_unmoved')} unmoved", "check")))
         return (VerbSaid(line("localize.located"), tuple(details)),)
-    # 030 §3: the envelope's own frame first; 019's per-row boundary sentence still governs
+    # The envelope's own frame first; the settled per-row boundary sentence still governs
     # the ladder rows beneath it.
     frames = {"not comparable": "comparison.not_comparable", "refused": "comparison.refused",
               "could not check": "comparison.could_not_check"}
@@ -893,7 +893,7 @@ def changed_said(report) -> tuple[VerbSaid, ...]:
 def _verb_states(verbs: dict | None) -> tuple[tuple[VerbSaid, ...], tuple[VerbSaid, ...], tuple[str, ...]]:
     """(where it changed, what was re-checked, the step indices a boundary covers).
 
-    031 §3: both sections are on the page, so a section that received no report renders its one
+    Both sections are on the page, so a section that received no report renders its one
     fixed sentence of absence. Blank would now mean the section is not there at all.
     """
     if not verbs:
@@ -990,8 +990,8 @@ def _checked_lists(record: Record, report: Report) -> tuple[tuple[CheckCount, ..
 #
 # A rung reads yes only when its evidence establishes it. Absent evidence ("not checked"),
 # evidence this page cannot read or cannot tie to this run ("couldn't check") and evidence
-# against ("no") are kept apart, and none of them is a yes -- the three-outcome rule, which
-# the independent review of the first version held this to, finding by finding.
+# against ("no") are kept apart, and none of them is a yes -- the three-outcome rule, held for
+# every rung.
 
 _YES, _NO = ("yes", "rung.state.yes"), ("no", "rung.state.no")
 #: Rung 3 for a run stopped at a step's own rule: the declared steps after it were not reached.
@@ -1016,11 +1016,11 @@ def _rung(key: str, state: tuple[str, str], *evidence: Line) -> Rung:
 
 def _records_agree(record: Record, report: Report | None, strip: Strip,
                    problem: str | None, own_check: bool) -> Rung:
-    """Rung 1: the strip's own finding, in the strip's ruled sentence -- and a yes only when
+    """Rung 1: the strip's own finding, in the strip's agreed sentence -- and a yes only when
     the report says something that held about every step AND the list of steps.
 
     A report that says nothing about part of the run still reads "holds" on the strip (that is
-    the strip's ruled behaviour, and not this rung's to change); here it is couldn't-check. A
+    the strip's agreed behaviour, and not this rung's to change); here it is couldn't-check. A
     report that could not be read is couldn't-check too, never the same as no report.
 
     **Only the page's own run of the check sets this rung**. A report
@@ -1136,7 +1136,7 @@ def _nothing_missing(record: Record, report: Report | None = None) -> Rung:
     A field a receipt does not carry is "not checked" (there is nothing to say "nothing is
     missing" from); a field with a shape the format does not give it is "couldn't check", and
     whatever a receipt does carry is shape-checked even beside a field it lacks. Only then are
-    the record's own statements read, with the sentences already ruled for them: a declared
+    the record's own statements read, with the sentences already agreed for them: a declared
     stage no receipt emitted, a declared stage with no receipt in the list of steps, a last
     receipt that is incomplete or whose own lists leave a declared stage unemitted, a gap.
     """
@@ -1362,7 +1362,7 @@ def _anchored(record: Record) -> Rung:
     """Rung 6, from every receipt's anchor and the list of steps' own.
 
     **Never a yes in this release.** Nothing here verifies an anchor, and an anchor the record
-    declares is not one anybody checked (X-8: anchor only what you have re-verified), so the
+    declares is not one anybody checked (anchor only what you have re-verified), so the
     most a declared anchor gets is "not checked". Any step or the list saying unanchored is a
     no; a value this page has no words for is couldn't-check; silence is said as silence.
     """
@@ -1624,7 +1624,7 @@ def no_paths_observed(manifest) -> bool:
 
 def ran_as_approved(manifest: dict, check: CheckRows | None, *, own_check: bool,
                     verifier: str | None) -> Approval:
-    """The plan rung's state, from the page's own check only (as "Records agree", 29x §3 item 2).
+    """The plan rung's state, from the page's own check only (as "Records agree" is).
 
     In order:
     - no check, or one handed to the page: not checked;
@@ -1893,7 +1893,7 @@ def _graph_nodes(record: Record, boundary_steps: tuple[str, ...]) -> tuple:
                       and i["name"].startswith("receipt:"))
         nodes.append(GraphNode(
             node_id=node_id, name=name, index=index,
-            #: In-page links are `#step-N` only, as ruled: a step whose manifest index
+            #: In-page links are `#step-N` only: a step whose manifest index
             #: is not a number gets no link rather than a link of another shape.
             href=f"#step-{s.manifest_index}" if s.manifest_index.isdigit() else "",
             label=name_shown(node_id), shown=name_shown(name),

@@ -26,6 +26,7 @@ Accepted, rejected, refused as unreadable, or raising something nobody predicted
 directory goes in a `finally`. A staging area that survives a crash is a staging area that
 accumulates other people's unverified records on someone's disk.
 """
+
 from __future__ import annotations
 
 import shutil
@@ -36,8 +37,8 @@ from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 
-from onetrace_console.store import create_exclusively
 from onetrace_console.child import utf8_env
+from onetrace_console.store import create_exclusively
 
 #: Where a staging directory is made. `None` means the OS temp root, which is outside the
 #: store by construction. A caller may name somewhere else; it is checked, not trusted.
@@ -58,6 +59,7 @@ class VerifierSaid:
     `rows` is the FAIL lines, for deciding which pre-store check failed; the deciding never
     rewrites the words.
     """
+
     text: str
     exit_status: str
     rows: tuple[str, ...]
@@ -78,8 +80,7 @@ def staging(root: Path | None = None):
     a staging area that silently failed to delete is the thing this module exists to
     prevent, and swallowing the error is how it would go unnoticed.
     """
-    base = Path(root) if root is not None else (
-        Path(DEFAULT_STAGING_ROOT) if DEFAULT_STAGING_ROOT else None)
+    base = Path(root) if root is not None else (Path(DEFAULT_STAGING_ROOT) if DEFAULT_STAGING_ROOT else None)
     if base is not None:
         base.mkdir(parents=True, exist_ok=True)
     path = Path(tempfile.mkdtemp(prefix=PREFIX, dir=str(base) if base else None))
@@ -87,11 +88,12 @@ def staging(root: Path | None = None):
         yield path
     finally:
         shutil.rmtree(path, ignore_errors=True)
-        if path.exists():                                    # pragma: no cover - defensive
+        if path.exists():  # pragma: no cover - defensive
             raise StagingError(
                 f"the staging area could not be deleted: {path}. The design requires it "
                 f"gone after every upload, and a silent failure here leaves someone "
-                f"else's unverified records on this disk.")
+                f"else's unverified records on this disk."
+            )
 
 
 def write_delivery(files: dict[str, bytes], dest: Path) -> Path:
@@ -116,13 +118,17 @@ def ask_the_verifier(folder: Path, *, timeout: int = 180) -> VerifierSaid:
     """Run the shipped verifier over the staged folder and keep what it said, verbatim.
 
     Invoked through `sys.executable` and never the name `python3`, and the exit
-    status is the process's own rather than a shell pipeline's (R29).
+    status is the process's own rather than a shell pipeline's, so a failure is never hidden by a pipe.
     """
     from onetrace_console.checks import shipped_verifier
 
     verifier = shipped_verifier()
-    proc = subprocess.run([sys.executable, str(verifier), "MANIFEST.json"],
-                          cwd=str(folder), capture_output=True, timeout=timeout, env=utf8_env())
+    proc = subprocess.run(
+        [sys.executable, str(verifier), "MANIFEST.json"],
+        cwd=str(folder),
+        capture_output=True,
+        timeout=timeout,
+        env=utf8_env(),
+    )
     text = proc.stdout.decode("utf-8", errors="replace")
-    return VerifierSaid(text=text, exit_status=str(proc.returncode),
-                        rows=tuple(text.splitlines()))
+    return VerifierSaid(text=text, exit_status=str(proc.returncode), rows=tuple(text.splitlines()))

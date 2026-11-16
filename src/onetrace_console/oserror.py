@@ -4,6 +4,7 @@ Python's own words for an `OSError` quote its file name with `repr`, so a Window
 every backslash doubled there: `[Errno 13] Permission denied: 'C:\\data\\x.json'`. A message
 quotes `said(e)` instead: the reason, then each path the error names, as written.
 """
+
 from __future__ import annotations
 
 import os
@@ -24,4 +25,5 @@ def shown(text) -> str:
     shows it, and the rest -- a Windows path's backslashes among it -- as written (`words.path_text`,
     without the HTML). `said` leaves a path unchanged; whatever prints it shows it through this."""
     from onetrace_console.viewer.page import _UNSHOWN
+
     return _UNSHOWN.sub(lambda m: f"\\u{ord(m.group(0)):04x}", str(text))

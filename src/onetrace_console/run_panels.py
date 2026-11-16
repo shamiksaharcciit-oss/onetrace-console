@@ -7,6 +7,7 @@ The decisions, the span context and the nesting are read from the record's conte
 whose records contradict themselves they go to "Proof" with the steps (`views.RUN_READ_FROM`). The
 verifier's own decision rows are a check, not the record's contents: they stay on "What changed".
 """
+
 from __future__ import annotations
 
 from onetrace_console import auto_panel, expectations, model_call, nesting_view, onedoor_panel, span_tree, trace_panel
@@ -18,6 +19,7 @@ BEFORE = '<section data-section="reproduce"'
 
 def manifest_of(run, store) -> dict:
     from onetrace_console.stage_pages import _files, _read
+
     raw = _read(_files(run, store), store, "MANIFEST.json")
     try:
         m = load_json_bounded(raw.decode("utf-8"), "MANIFEST.json") if raw else {}
@@ -37,27 +39,38 @@ def sections(run, store) -> str:
     from onetrace_console.frame import rendering_public, tracing_link
     from onetrace_console.home import _envelope
     from onetrace_console.stage_pages import _steps
+
     manifest, steps = manifest_of(run, store), _steps(run, store)
     gated = onedoor_panel.run_section(manifest, steps)
     rows = ""
     if gated:
         #: The decisions themselves, then the verifier's rows about them in a section of their own.
-        rows = (f'<section data-section="onedoor-rows" class="onedoor"><h2>{onedoor_panel.ROWS_HEADING}</h2>'
-                f'{onedoor_panel.rows_block(onedoor_panel.decision_rows(_envelope(run, store)))}</section>')
+        rows = (
+            f'<section data-section="onedoor-rows" class="onedoor"><h2>{onedoor_panel.ROWS_HEADING}</h2>'
+            f"{onedoor_panel.rows_block(onedoor_panel.decision_rows(_envelope(run, store)))}</section>"
+        )
     held = held_runs(store)
     #: A zero-configuration run's hooks, boundaries and gaps (onetrace-auto, format 0.4), read from the
     #: manifest and every receipt, the close receipt's too, with the verifier's `auto:` rows.
     from onetrace_console.stage_pages import _receipts
+
     auto = auto_panel.run_section(manifest, [r["receipt"] for r in _receipts(run, store)], _envelope(run, store))
     #: Each step's declared expectations, with the verifier's row for each (onetrace 0.7).
     expected = expectations.run_section([s["receipt"] for s in steps], _envelope(run, store))
     #: And those declared after the run, from a file the person names: apart, and labelled so.
     from onetrace_console import expectations_after
+
     expected += expectations_after.section(run, store, public=rendering_public())
-    return (auto + expected + nesting_view.parent_section(manifest, held) + gated + rows
-            + trace_panel.run_section(manifest, steps, tracing_link(), public=rendering_public())
-            + span_tree.run_section(span_tree.for_run(run, store), [s["receipt"] for s in steps])
-            + nesting_view.run_section(steps, held))
+    return (
+        auto
+        + expected
+        + nesting_view.parent_section(manifest, held)
+        + gated
+        + rows
+        + trace_panel.run_section(manifest, steps, tracing_link(), public=rendering_public())
+        + span_tree.run_section(span_tree.for_run(run, store), [s["receipt"] for s in steps])
+        + nesting_view.run_section(steps, held)
+    )
 
 
 def with_sections(case_html: str, run, store) -> str:
@@ -68,13 +81,24 @@ def with_sections(case_html: str, run, store) -> str:
         return case_html
     at = case_html.find(BEFORE)
     if at < 0:
-        raise ValueError("cannot place the run's decisions, span context or nesting: the case page "
-                         "has no \"What could be re-checked\" section")
+        raise ValueError(
+            "cannot place the run's decisions, span context or nesting: the case page "
+            'has no "What could be re-checked" section'
+        )
     return case_html[:at] + added + case_html[at:]
 
 
-def step_blocks(manifest: dict, receipt: dict, run_has_spans: bool, held: dict[str, str],
-                receipt_file: str = "", read_file=None, same_files=None, spans=None, searched=None) -> str:
+def step_blocks(
+    manifest: dict,
+    receipt: dict,
+    run_has_spans: bool,
+    held: dict[str, str],
+    receipt_file: str = "",
+    read_file=None,
+    same_files=None,
+    spans=None,
+    searched=None,
+) -> str:
     """One step's page: its decisions, its span ids (or "ran outside any span", where the run has a
     span context) and the app's spans joined to it (`spans`: the run's trace file read, `span_tree`),
     its children and nested runs, and its model-call records (`read_file(path)`: the run's stored
@@ -82,6 +106,7 @@ def step_blocks(manifest: dict, receipt: dict, run_has_spans: bool, held: dict[s
     files; `searched`: the inputs a decoded word is searched for in, `token_text`)."""
     from onetrace_console.frame import tracing_link
     from onetrace_console.words import escape
+
     name = nesting_view._name(receipt)
     out = onedoor_panel.step_block(name, receipt, name in onedoor_panel.gated_stages(manifest))
     if out:
@@ -89,16 +114,22 @@ def step_blocks(manifest: dict, receipt: dict, run_has_spans: bool, held: dict[s
     t = trace_panel.trace_of(receipt)
     if t is not None:
         link = trace_panel.link(tracing_link(), t["trace_id"], t["span_id"])
-        out += (f'<section data-section="span-context" class="span-context"><p class="reported">'
-                f'{escape(trace_panel.SPAN_LEAD)}</p><ul class="plain">'
-                + trace_panel._id("trace id", t["trace_id"], link) + trace_panel._id("span id", t["span_id"], "")
-                + "</ul></section>")
+        out += (
+            f'<section data-section="span-context" class="span-context"><p class="reported">'
+            f'{escape(trace_panel.SPAN_LEAD)}</p><ul class="plain">'
+            + trace_panel._id("trace id", t["trace_id"], link)
+            + trace_panel._id("span id", t["span_id"], "")
+            + "</ul></section>"
+        )
     elif run_has_spans:
-        out += (f'<section data-section="span-context" class="span-context"><p>This step '
-                f'{escape(trace_panel.OUTSIDE)}.</p></section>')
+        out += (
+            f'<section data-section="span-context" class="span-context"><p>This step '
+            f"{escape(trace_panel.OUTSIDE)}.</p></section>"
+        )
     if read_file is not None:
         out += span_tree.step_section(spans, receipt, receipt_file, read_file)
     nest = nesting_view.run_section([{"receipt": receipt}], held)
-    calls = (model_call.step_section(receipt, receipt_file, read_file, same_files, searched)
-             if read_file is not None else "")
+    calls = (
+        model_call.step_section(receipt, receipt_file, read_file, same_files, searched) if read_file is not None else ""
+    )
     return out + nest + calls

@@ -3,20 +3,22 @@ gives every body cell its column's header as `data-label`, and leaves a table wi
 (a key and its value, row by row) as it is. The stylesheet shows the label above the value, and
 lets nothing in a stacked row scroll or be cut off (`tools/layout_check.py` holds the pages).
 """
+
 from __future__ import annotations
 
 import re
 
 from onetrace_console.words import labelled, scroll_region
 
-TABLE = ('<table><thead><tr><th>Run</th><th>When <em>it</em> ran</th><th></th></tr></thead>'
-         '<tbody><tr data-x="1"><td>a</td><td class="v">b</td><td>c</td></tr>'
-         '<tr><td>d</td><td>e</td><td>f</td></tr></tbody></table>')
+TABLE = (
+    "<table><thead><tr><th>Run</th><th>When <em>it</em> ran</th><th></th></tr></thead>"
+    '<tbody><tr data-x="1"><td>a</td><td class="v">b</td><td>c</td></tr>'
+    "<tr><td>d</td><td>e</td><td>f</td></tr></tbody></table>"
+)
 
 
 def label_problems(html: str, table: str) -> list[str]:
-    heads = [" ".join(re.sub(r"<[^>]+>", " ", h).split())
-             for h in re.findall(r"<th>(.*?)</th>", table)]
+    heads = [" ".join(re.sub(r"<[^>]+>", " ", h).split()) for h in re.findall(r"<th>(.*?)</th>", table)]
     out = []
     for row in re.findall(r"<tr\b[^>]*>(.*?)</tr>", re.search(r"<tbody>(.*?)</tbody>", html).group(1)):
         cells = re.findall(r"<td\b([^>]*)>", row)
@@ -55,6 +57,7 @@ def test_sabotage_a_missing_or_wrong_label_is_named(examined):
 
 def test_the_console_stacks_regions_on_a_narrow_screen(examined):
     from onetrace_console.frame import stylesheet
+
     css = stylesheet().decode("utf-8")
     blocks = re.findall(r"@media \(max-width:760px\)\{\n(.*?)\n\}\n", css, re.S)
     examined(1, "stylesheet")

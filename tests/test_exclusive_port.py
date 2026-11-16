@@ -11,6 +11,7 @@ there instead, and `main()` turns a port it cannot take into a clear refusal. El
 kernel already refuses a second listener on the same address, so the same tests hold on every
 platform and fail on Windows alone without the fix.
 """
+
 from __future__ import annotations
 
 import json
@@ -55,24 +56,35 @@ def test_the_listener_asks_for_the_port_as_the_platform_needs(first):
         assert ConsoleServer.allow_reuse_address
 
 
-def test_a_second_console_on_the_same_port_refuses_with_a_clear_message(first, tmp_path,
-                                                                       monkeypatch, capsys):
+def test_a_second_console_on_the_same_port_refuses_with_a_clear_message(first, tmp_path, monkeypatch, capsys):
     from onetrace_console import serve
+
     port = first.server_address[1]
     config = tmp_path / "config.json"
-    config.write_text(json.dumps({"host": "127.0.0.1", "port": port,
-                                  "store_root": (tmp_path / "data").as_posix(),
-                                  "sign_in": {"enabled": False}}), encoding="utf-8")
+    config.write_text(
+        json.dumps(
+            {
+                "host": "127.0.0.1",
+                "port": port,
+                "store_root": (tmp_path / "data").as_posix(),
+                "sign_in": {"enabled": False},
+            }
+        ),
+        encoding="utf-8",
+    )
     monkeypatch.setenv(ENV_VAR, str(config))
 
     def listened(self):
         raise RuntimeError("the second console took the port and listened")
+
     monkeypatch.setattr(serve.ConsoleServer, "serve_forever", listened)
     assert serve.main([]) == 1
     err = capsys.readouterr().err
     assert f"refusing to start: cannot listen on 127.0.0.1:{port}" in err
     assert "another process" in err
     #: 0.1.1: the fix names the command-line flag too, not only the configuration file.
-    assert "fix: stop that process, or give this console another port: --port N on the command " \
-           "line, or port in its configuration file." in err
+    assert (
+        "fix: stop that process, or give this console another port: --port N on the command "
+        "line, or port in its configuration file." in err
+    )
     assert "Traceback" not in err

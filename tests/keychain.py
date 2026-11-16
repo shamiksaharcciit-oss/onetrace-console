@@ -1,9 +1,10 @@
-"""What the tests of the Set up Explain form share: keyring and onetrace-explain 0.3.0, each installed from
+"""What the tests of the Set up Explain form share: keyring and onetrace-explain 0.3.1, each installed from
 the local wheel cache by its pinned hash into a folder of its own (never this environment, never a
 dependency of the console); a keychain in a folder of the test's own (`keychain_stub`), never the
 machine's; and a model server on this machine's loopback that keeps every request it is sent and answers
 as the test asks. No model is called.
 """
+
 from __future__ import annotations
 
 import json
@@ -26,11 +27,29 @@ MODULES = ("keyring", "jaraco", "more_itertools", "stub_keychain")
 
 def _install(target: Path, pins: dict) -> None:
     from tools import fetch_wheel_cache as w
+
     req = target.parent / f"{target.name}-requirements.txt"
     req.write_text("".join(f"{r} --hash=sha256:{sha}\n" for r, (_, sha) in pins.items()), encoding="utf-8")
-    done = subprocess.run([sys.executable, "-m", "pip", "install", "--no-deps", "--no-index", "--find-links",
-                           str(w.CACHE), "--require-hashes", "--target", str(target), "-r", str(req)],
-                          capture_output=True, text=True, timeout=300)
+    done = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "pip",
+            "install",
+            "--no-deps",
+            "--no-index",
+            "--find-links",
+            str(w.CACHE),
+            "--require-hashes",
+            "--target",
+            str(target),
+            "-r",
+            str(req),
+        ],
+        capture_output=True,
+        text=True,
+        timeout=300,
+    )
     assert done.returncode == 0, done.stdout + done.stderr
 
 
@@ -38,9 +57,11 @@ def _install(target: Path, pins: dict) -> None:
 def keyring_lib(tmp_path_factory) -> Path:
     """keyring and what it needs, from the wheel cache by hash, in a folder of its own."""
     from tools import fetch_wheel_cache as w
+
     if not w.check():
-        pytest.fail(f"the local wheel cache is not there or does not match: {w.CACHE}\n"
-                    f"    python tools/fetch_wheel_cache.py")
+        pytest.fail(
+            f"the local wheel cache is not there or does not match: {w.CACHE}\n    python tools/fetch_wheel_cache.py"
+        )
     lib = tmp_path_factory.mktemp("keyring") / "lib"
     _install(lib, w.KEYCHAIN)
     return lib
@@ -48,18 +69,20 @@ def keyring_lib(tmp_path_factory) -> Path:
 
 @pytest.fixture(scope="session")
 def explain03(tmp_path_factory) -> tuple[Path, Path]:
-    """onetrace-explain 0.3.0, from the wheel cache by its pinned hash (`ONE_ENVIRONMENT`, as on PyPI), in a
+    """onetrace-explain 0.3.1, from the wheel cache by its pinned hash (`ONE_ENVIRONMENT`, as on PyPI), in a
     folder of its own: (its command, its library folder)."""
     from onetrace_console import explain as e
     from tools import fetch_wheel_cache as w
+
     if not w.check():
-        pytest.fail(f"the local wheel cache is not there or does not match: {w.CACHE}\n"
-                    f"    python tools/fetch_wheel_cache.py")
+        pytest.fail(
+            f"the local wheel cache is not there or does not match: {w.CACHE}\n    python tools/fetch_wheel_cache.py"
+        )
     root = tmp_path_factory.mktemp("onetrace-explain-0.3")
     lib = root / "lib"
     _install(lib, {k: v for k, v in w.ONE_ENVIRONMENT.items() if k.startswith("onetrace-explain==")})
     scripts = next((lib / d for d in ("Scripts", "bin") if (lib / d).is_dir()), None)
-    found = e.find(os.name == "nt", str(scripts) if scripts else None, str(root / "no-python"), lambda n: None)
+    found = e.find(os.name == "nt", str(scripts) if scripts else None, str(root / "no-python"))
     assert found is not None and found.parent == scripts, (found, scripts)
     return found, lib
 
@@ -81,10 +104,12 @@ def keychain(keyring_lib, tmp_path, monkeypatch) -> Path:
     monkeypatch.syspath_prepend(str(keyring_lib))
     monkeypatch.setenv("ONETRACE_TEST_KEYCHAIN", str(folder))
     monkeypatch.setenv("PYTHON_KEYRING_BACKEND", BACKEND)
-    monkeypatch.setenv("PYTHONPATH", os.pathsep.join(filter(None, [str(keyring_lib), str(STUB),
-                                                                  os.environ.get("PYTHONPATH")])))
+    monkeypatch.setenv(
+        "PYTHONPATH", os.pathsep.join(filter(None, [str(keyring_lib), str(STUB), os.environ.get("PYTHONPATH")]))
+    )
     import keyring
     import stub_keychain
+
     keyring.set_keyring(stub_keychain.FolderKeychain())
     yield folder
     #: The test's own patches first (one may have set `sys.modules["keyring"]` aside), then keyring forgotten.
@@ -94,9 +119,10 @@ def keychain(keyring_lib, tmp_path, monkeypatch) -> Path:
 
 @pytest.fixture
 def explain03_installed(explain03, keychain, monkeypatch) -> Path:
-    """The console finds onetrace-explain 0.3.0: its library folder first on the command's import path,
+    """The console finds onetrace-explain 0.3.1: its library folder first on the command's import path,
     keyring and the test keychain after it."""
     from onetrace_console import explain as e
+
     found, lib = explain03
     monkeypatch.setattr(e, "command", lambda: found)
     monkeypatch.setenv("PYTHONPATH", os.pathsep.join([str(lib), os.environ["PYTHONPATH"]]))

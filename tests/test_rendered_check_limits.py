@@ -9,6 +9,7 @@ not start, a step that failed -- is said on its summary line, on its output, and
 Held with a stand-in for the console's Python that never starts a console (a POSIX shell script, so
 these run where there is one).
 """
+
 from __future__ import annotations
 
 import subprocess
@@ -33,22 +34,39 @@ def never_starts(tmp_path) -> Path:
 
 
 def _run(tool: str, *args: str) -> tuple[subprocess.CompletedProcess, float]:
+    from tests.export_tree import tool as tool_path
+
+    #: A public export leaves the gate's own tools out: there the test skips; here a missing one fails.
+    tool_path(tool)
     start = time.monotonic()
-    done = subprocess.run([sys.executable, "-B", f"tools/{tool}", *args], cwd=REPO, capture_output=True, text=True,
-                          timeout=180)
+    done = subprocess.run(
+        [sys.executable, "-B", f"tools/{tool}", *args], cwd=REPO, capture_output=True, text=True, timeout=180
+    )
     return done, time.monotonic() - start
 
 
-@pytest.mark.parametrize("tool, name, extra", [
-    ("layout_check.py", "layout check", []),
-    ("explain_look_check.py", "explain look check", ["--local-python"]),
-])
+@pytest.mark.parametrize(
+    "tool, name, extra",
+    [
+        ("layout_check.py", "layout check", []),
+        ("explain_look_check.py", "explain look check", ["--local-python"]),
+    ],
+)
 def test_a_check_stops_at_its_own_limit_and_says_so_on_its_summary_line(never_starts, tool, name, extra, examined):
-    args = ["--console-python", str(never_starts), "--browser-python", str(never_starts), "--theme", "dark",
-            "--timeout", "5"] + ([extra[0], str(never_starts)] if extra else [])
+    args = [
+        "--console-python",
+        str(never_starts),
+        "--browser-python",
+        str(never_starts),
+        "--theme",
+        "dark",
+        "--timeout",
+        "5",
+    ] + ([extra[0], str(never_starts)] if extra else [])
     done, took = _run(tool, *args)
     examined(1, f"{name} run against a console that never starts")
     assert done.returncode == 2, (done.returncode, done.stdout[-1500:], done.stderr[-1500:])
+    assert done.stdout.strip(), f"{name} printed nothing on stdout; its stderr: {done.stderr[-1500:]}"
     last = done.stdout.strip().splitlines()[-1]
     assert last.startswith(f"{name} (dark): no page views judged, FAILED: "), done.stdout[-1500:]
     assert "5 s" in last, last

@@ -23,21 +23,20 @@ The console makes no claim of its own about content. Text past the viewer's verb
 its own "…and N more" sentence and the run's record offered, as everywhere: the SDK's own
 `--text` cap arrives with 0.2.0.
 """
+
 from __future__ import annotations
 
 import hashlib
-from onetrace_console.bounded_json import load_json_bounded
 import json
 
+from onetrace_console.bounded_json import load_json_bounded
 from onetrace_console.store import Store, StoredRun
-from onetrace_console.words import (escape, generated_footer, named, record_href, run_named,
-                                     scroll_region, verbatim)
+from onetrace_console.words import escape, generated_footer, named, record_href, run_named, scroll_region, verbatim
 
 STAGE_PAGE = "stage-{n}.html"
 
 #: "The banner states it plainly".
-BANNER = ("Outputs are stored and shown after checking; inputs from outside the run are "
-          "fingerprinted, not stored.")
+BANNER = "Outputs are stored and shown after checking; inputs from outside the run are fingerprinted, not stored."
 VERIFIED = "Verified"
 MISMATCH = "does not match its receipt, not shown"
 FINGERPRINT_ONLY = "fingerprint only"
@@ -53,8 +52,10 @@ SHOWN = "What is shown:"
 INPUT_COLUMNS = ("Recorded as", "What's kept")
 #: A `receipt:<stage>` input's recorded name, as its link to that stage's page says it.
 RECORDED_OUTPUT = "{stage}'s recorded output"
-INPUTS_NOTE = ("A fingerprint shows whether an input changed between runs. This page shows an "
-               "input's content only where its bytes match a stored output of an earlier stage.")
+INPUTS_NOTE = (
+    "A fingerprint shows whether an input changed between runs. This page shows an "
+    "input's content only where its bytes match a stored output of an earlier stage."
+)
 INSTRUMENT = "Recorded with the stage: instrument"
 CONFIG = "its configuration's fingerprint"
 DIFFERS_FROM = "Differs from {run}"
@@ -62,11 +63,13 @@ DIFFERS_FROM = "Differs from {run}"
 #: "This step in the other runs": the same step as each other run of the pipeline recorded it.
 OTHER_RUNS = "This step in the other runs"
 OTHER_RUNS_COLUMNS = ("Run", "Outcome", "Settings", "Instrument", "Outputs")
-OTHER_RUNS_NOTE = ("Each other run of {pipeline}, newest first, with this step as its own receipt "
-                   "records it; where a run recorded the step more than once, its last attempt. "
-                   "\"Same as this run\" marks a value equal to this run's, by exact equality. "
-                   "Inputs are not compared across runs: an input that is an earlier step's receipt "
-                   "holds that run's own receipt, so it differs in every run.")
+OTHER_RUNS_NOTE = (
+    "Each other run of {pipeline}, newest first, with this step as its own receipt "
+    "records it; where a run recorded the step more than once, its last attempt. "
+    '"Same as this run" marks a value equal to this run\'s, by exact equality. '
+    "Inputs are not compared across runs: an input that is an earlier step's receipt "
+    "holds that run's own receipt, so it differs in every run."
+)
 OTHER_RUNS_SHOWN = 50
 OTHER_RUNS_MORE = "The newest {shown} of {total} other runs in {pipeline} are shown."
 NO_OTHER_RUNS = "No other run in {pipeline}."
@@ -88,12 +91,14 @@ def stage_page(manifest_index: str) -> str:
 def _files(run: StoredRun, store: Store) -> dict[str, str]:
     """{path as delivered, normalised: object key} for every file the run's delivery held."""
     from onetrace_console.ingest import same_file
+
     return {same_file(p): k for p, k in run.listing}
 
 
 def _read(files: dict[str, str], store: Store, path: str) -> bytes | None:
     from onetrace_console.ingest import same_file
     from onetrace_console.store import StoreError
+
     key = files.get(same_file(path))
     if key is None:
         return None
@@ -107,6 +112,7 @@ def _steps(run: StoredRun, store: Store) -> list[dict]:
     """The chain's steps in order: [{index, file, receipt}] -- only receipts the run holds, and not
     the close receipt that ends a 0.4 chain, which is not a step (`viewer.record.is_close`)."""
     from onetrace_console.viewer.record import is_close
+
     out = _receipts(run, store)
     return out[:-1] if len(out) > 1 and is_close(out[-1]["receipt"]) else out
 
@@ -114,7 +120,9 @@ def _steps(run: StoredRun, store: Store) -> list[dict]:
 def _receipts(run: StoredRun, store: Store) -> list[dict]:
     """The chain's receipts in order: [{index, file, receipt}] -- only receipts the run holds."""
     files = _files(run, store)
-    manifest = load_json_bounded((_read(files, store, "MANIFEST.json") or b"{}").decode("utf-8"), "MANIFEST.json", "show")
+    manifest = load_json_bounded(
+        (_read(files, store, "MANIFEST.json") or b"{}").decode("utf-8"), "MANIFEST.json", "show"
+    )
     out = []
     for entry in manifest.get("chain") or []:
         if not isinstance(entry, dict) or not isinstance(entry.get("file"), str):
@@ -125,8 +133,7 @@ def _receipts(run: StoredRun, store: Store) -> list[dict]:
         except (UnicodeDecodeError, ValueError, RecursionError):
             receipt = None
         if isinstance(receipt, dict):
-            out.append({"index": str(entry.get("index", "")), "file": entry["file"],
-                        "receipt": receipt})
+            out.append({"index": str(entry.get("index", "")), "file": entry["file"], "receipt": receipt})
     return out
 
 
@@ -150,6 +157,7 @@ def _content(blob: bytes, media_type: str, href: str) -> str:
     verbatim cap with its own sentence. Binary content: never here."""
     from onetrace_console.viewer.model import TEXT_CAP
     from onetrace_console.viewer.page import _t
+
     text = blob.decode("utf-8", errors="backslashreplace")
     if media_type == "application/json":
         try:
@@ -158,8 +166,11 @@ def _content(blob: bytes, media_type: str, href: str) -> str:
             pass
     shown = verbatim(text[:TEXT_CAP])
     if len(text) > TEXT_CAP:
-        shown += ("\n" + _t("text.more", n=str(len(text) - TEXT_CAP))
-                  + f' <a href="{escape(href)}" download>{escape("the run\'s record")}</a>')
+        shown += (
+            "\n"
+            + _t("text.more", n=str(len(text) - TEXT_CAP))
+            + f' <a href="{escape(href)}" download>{escape("the run's record")}</a>'
+        )
     return f'<pre data-content="verified">{shown}</pre>'
 
 
@@ -169,7 +180,8 @@ def _is_text(media_type: str) -> bool:
 
 def _fingerprint(item: dict) -> str:
     from onetrace_console.viewer.page import fingerprint_html
-    return f'{fingerprint_html(item.get("digest", ""))} · {escape(str(item.get("bytes", "")))} bytes'
+
+    return f"{fingerprint_html(item.get('digest', ''))} · {escape(str(item.get('bytes', '')))} bytes"
 
 
 #: The chunk view's words, and how many chunks it draws (the rest counted, never dropped silently).
@@ -189,9 +201,11 @@ def chunk_list(blob: bytes, media_type: str) -> list[dict] | None:
     except (ValueError, UnicodeDecodeError):
         return None
     chunks = data.get("chunks") if isinstance(data, dict) else None
-    if not (isinstance(chunks, list) and chunks and all(
-            isinstance(c, dict) and isinstance(c.get("id"), str) and isinstance(c.get("text"), str)
-            for c in chunks)):
+    if not (
+        isinstance(chunks, list)
+        and chunks
+        and all(isinstance(c, dict) and isinstance(c.get("id"), str) and isinstance(c.get("text"), str) for c in chunks)
+    ):
         return None
     return chunks
 
@@ -201,31 +215,53 @@ def _chunk_view(chunks: list[dict], raw: str, n: int) -> str:
     length in characters, with the list's counts), each chunk's text, and the raw output -- plain
     links to the three parts, no script. Chunks past CHUNKS_SHOWN are counted, not drawn."""
     from onetrace_console.viewer.page import _t
+
     shown = chunks[:CHUNKS_SHOWN]
     docs = len({c.get("doc") for c in chunks if isinstance(c.get("doc"), str)})
     ids = [f"output-{n}-{k}" for k in ("index", "text", "raw")]
-    tabs = ('<nav class="tabs" aria-label="This output\'s views">'
-            + " ".join(f'<a href="#{i}">{escape(t)}</a>' for i, t in zip(ids, CHUNK_TABS)) + "</nav>")
-    rows = "".join(f'<tr><td class="mono">{named(c["id"])}</td>'
-                   f'<td class="mono">{named(c["doc"]) if isinstance(c.get("doc"), str) else ""}</td>'
-                   f'<td class="value">{len(c["text"])}</td></tr>' for c in shown)
-    more = (f'<p class="note">{escape(_t("list.more", n=str(len(chunks) - len(shown))))}</p>'
-            if len(chunks) > len(shown) else "")
-    counts = (f"{len(chunks)} chunk{'s' if len(chunks) != 1 else ''}"
-              + (f" · {docs} document{'s' if docs != 1 else ''}" if docs else ""))
-    index = (f'<section data-chunks="index"><span id="{ids[0]}"></span><h3>{escape(CHUNK_TABS[0])}</h3>'
-             f'<p data-chunk-counts>{escape(counts)}</p>'
-             + scroll_region('<table class="board"><thead><tr><th>Chunk</th><th>Document</th>'
-                             f'<th>Length</th></tr></thead><tbody>{rows}</tbody></table>',
-                             "Chunk index", f"chunks-{n}")
-             + more + "</section>")
-    text = (f'<section data-chunks="text"><span id="{ids[1]}"></span><h3>{escape(CHUNK_TABS[1])}</h3>'
-            + "".join(f'<details data-chunk="{escape(c["id"], quote=True)}"><summary class="mono">'
-                      f'{named(c["id"])}</summary><pre data-content="verified">{verbatim(c["text"])}'
-                      "</pre></details>" for c in shown)
-            + more + "</section>")
-    rawpart = (f'<section data-chunks="raw"><span id="{ids[2]}"></span><h3>{escape(CHUNK_TABS[2])}</h3>'
-               f"{raw}</section>")
+    tabs = (
+        '<nav class="tabs" aria-label="This output\'s views">'
+        + " ".join(f'<a href="#{i}">{escape(t)}</a>' for i, t in zip(ids, CHUNK_TABS))
+        + "</nav>"
+    )
+    rows = "".join(
+        f'<tr><td class="mono">{named(c["id"])}</td>'
+        f'<td class="mono">{named(c["doc"]) if isinstance(c.get("doc"), str) else ""}</td>'
+        f'<td class="value">{len(c["text"])}</td></tr>'
+        for c in shown
+    )
+    more = (
+        f'<p class="note">{escape(_t("list.more", n=str(len(chunks) - len(shown))))}</p>'
+        if len(chunks) > len(shown)
+        else ""
+    )
+    counts = f"{len(chunks)} chunk{'s' if len(chunks) != 1 else ''}" + (
+        f" · {docs} document{'s' if docs != 1 else ''}" if docs else ""
+    )
+    index = (
+        f'<section data-chunks="index"><span id="{ids[0]}"></span><h3>{escape(CHUNK_TABS[0])}</h3>'
+        f"<p data-chunk-counts>{escape(counts)}</p>"
+        + scroll_region(
+            '<table class="board"><thead><tr><th>Chunk</th><th>Document</th>'
+            f"<th>Length</th></tr></thead><tbody>{rows}</tbody></table>",
+            "Chunk index",
+            f"chunks-{n}",
+        )
+        + more
+        + "</section>"
+    )
+    text = (
+        f'<section data-chunks="text"><span id="{ids[1]}"></span><h3>{escape(CHUNK_TABS[1])}</h3>'
+        + "".join(
+            f'<details data-chunk="{escape(c["id"], quote=True)}"><summary class="mono">'
+            f'{named(c["id"])}</summary><pre data-content="verified">{verbatim(c["text"])}'
+            "</pre></details>"
+            for c in shown
+        )
+        + more
+        + "</section>"
+    )
+    rawpart = f'<section data-chunks="raw"><span id="{ids[2]}"></span><h3>{escape(CHUNK_TABS[2])}</h3>{raw}</section>'
     return tabs + index + text + rawpart
 
 
@@ -236,9 +272,9 @@ def _output(step: dict, out: dict, files, store, href: str, n: int = 1) -> str:
     head = f'<span class="mono">{named(name)}</span> · {_fingerprint(out)}'
     #: A model-call record's output links to the record as this page's panel reads it (board 7).
     from onetrace_console import model_call
+
     if model_call.NAME.fullmatch(name):
-        head += (f' · <a href="#{model_call.anchor(name)}" data-model-call-link>'
-                 f"{escape(model_call.RECORD_LINK)}</a>")
+        head += f' · <a href="#{model_call.anchor(name)}" data-model-call-link>{escape(model_call.RECORD_LINK)}</a>'
     if blob is None:
         said = f"<p>{escape(FINGERPRINT_ONLY)}</p>"
     elif not _verified(blob, digest):
@@ -248,14 +284,19 @@ def _output(step: dict, out: dict, files, store, href: str, n: int = 1) -> str:
     else:
         content = _content(blob, media, href)
         chunks = chunk_list(blob, media)
-        said = (f'<p><span class="pill ok">{VERIFIED}</span></p>'
-                + (_chunk_view(chunks, content, n) if chunks else content))
-    return (f'<li data-output="{escape(name, quote=True)}"><span id="output-{escape(str(n))}"></span>'
-            f"{head}{said}</li>")
+        said = f'<p><span class="pill ok">{VERIFIED}</span></p>' + (
+            _chunk_view(chunks, content, n) if chunks else content
+        )
+    return f'<li data-output="{escape(name, quote=True)}"><span id="output-{escape(str(n))}"></span>{head}{said}</li>'
 
 
-def _input(item: dict, upstream: dict[str, tuple[str, str, bytes | None]], href: str,
-           receipts: dict[str, tuple[str, str, bytes]] | None = None, kept=None) -> str:
+def _input(
+    item: dict,
+    upstream: dict[str, tuple[str, str, bytes | None]],
+    href: str,
+    receipts: dict[str, tuple[str, str, bytes]] | None = None,
+    kept=None,
+) -> str:
     """One row of the inputs table: "Recorded as" -- the input's recorded name and its trust class,
     both read from the receipt and nothing else (a `receipt:<stage>` whose stored receipt matches
     links to that stage's page, as "<stage>'s recorded output"); and what is kept -- what was
@@ -272,14 +313,18 @@ def _input(item: dict, upstream: dict[str, tuple[str, str, bytes | None]], href:
         said = kept[0]
     elif receipt is not None and _verified(receipt[2], digest) and receipt[1].isdigit():
         stage, index, _ = receipt
-        said = (f'<p><span class="pill ok">{VERIFIED}</span> '
-                f"{escape(MATCHES_RECEIPT.format(stage=stage))}</p>")
-        recorded = (f'<a href="{stage_page(index)}" class="mono" data-recorded-name="{escape(name, quote=True)}">'
-                    f"{escape(RECORDED_OUTPUT.format(stage=stage))}</a>")
+        said = f'<p><span class="pill ok">{VERIFIED}</span> {escape(MATCHES_RECEIPT.format(stage=stage))}</p>'
+        recorded = (
+            f'<a href="{stage_page(index)}" class="mono" data-recorded-name="{escape(name, quote=True)}">'
+            f"{escape(RECORDED_OUTPUT.format(stage=stage))}</a>"
+        )
     elif match is not None and _verified(match[2], digest) and _is_text(match[1]):
         stage, media, blob = match
-        said = (f'<p><span class="pill ok">{VERIFIED}</span> '
-                f"{escape(MATCHES.format(stage=stage))}</p>" + _content(blob, media, href))
+        said = f'<p><span class="pill ok">{VERIFIED}</span> {escape(MATCHES.format(stage=stage))}</p>' + _content(
+            blob,  # type: ignore[arg-type]  # a verified match holds its bytes
+            media,
+            href,
+        )
     elif kept is not None:
         said = kept[0]
     else:
@@ -287,17 +332,19 @@ def _input(item: dict, upstream: dict[str, tuple[str, str, bytes | None]], href:
     if not (receipt is not None and _verified(receipt[2], digest) and receipt[1].isdigit()):
         recorded = f'<span class="mono" data-recorded-name="{escape(name, quote=True)}">{named(name)}</span>'
     trust = escape(str(item.get("trust_class", "")))
-    return (f'<tr data-input="{escape(name, quote=True)}"><td>{recorded} · '
-            f'<span data-trust-class>{trust}</span></td>'
-            f'<td>{said}<div class="fp">{_fingerprint(item)}</div></td></tr>')
+    return (
+        f'<tr data-input="{escape(name, quote=True)}"><td>{recorded} · '
+        f"<span data-trust-class>{trust}</span></td>"
+        f'<td>{said}<div class="fp">{_fingerprint(item)}</div></td></tr>'
+    )
 
 
 def _verdicts(run: StoredRun, store: Store) -> tuple[str, dict[str, str]] | None:
     """(the baseline as a page names it, {stage name: verdict}) from the run's latest comparison
     as the candidate, or None where there is none that reads."""
+    from onetrace_console.pages import _strict_diff_report, latest_as_candidate
     from onetrace_console.viewer.verbs import TwoRunDag
 
-    from onetrace_console.pages import _strict_diff_report, latest_as_candidate
     comparison = latest_as_candidate(run, store)
     if comparison is None:
         return None
@@ -314,28 +361,34 @@ def _verdicts(run: StoredRun, store: Store) -> tuple[str, dict[str, str]] | None
 #: The badges, asked in the run ladder's own fixed questions, each stating the run's
 #: own rung in the run page's words, from the same model the run's pages are drawn from: signing, the
 #: "Signed by a known recorder" rung; anchoring, the viewer's `anchor_badge`
-#: 
+#:
 _BADGES = ("Signed by a known recorder", "Committed by a known time")
 
 
 def _chip(rung) -> str:
     """ "State · evidence", the state word a chip of the one chip family; the words unchanged."""
     from onetrace_console.receipt_page import _rung_said
+
     state, said = _rung_said(rung)
-    return f"<span>{state}</span>{said[len(state):]}"
+    return f"<span>{state}</span>{said[len(state) :]}"
 
 
 def _badges(anchored, signed) -> str:
-    from onetrace_console.receipt_page import _rung_said
+
     signing, question = _BADGES
-    table = ('<table class="rungs"><tbody>'
-             f'<tr data-badge="1" data-state="{escape(signed.state)}"><td>{escape(signing)}</td>'
-             f"<td>{_chip(signed)}</td></tr>"
-             f'<tr data-badge="2" data-state="{escape(anchored.state)}"><td>{escape(question)}</td>'
-             f"<td>{_chip(anchored)}</td></tr>"
-             "</tbody></table>")
-    return ('<section data-section="badges">'
-            + scroll_region(table, "Signed and anchored, scrolls sideways", "badges") + "</section>")
+    table = (
+        '<table class="rungs"><tbody>'
+        f'<tr data-badge="1" data-state="{escape(signed.state)}"><td>{escape(signing)}</td>'
+        f"<td>{_chip(signed)}</td></tr>"
+        f'<tr data-badge="2" data-state="{escape(anchored.state)}"><td>{escape(question)}</td>'
+        f"<td>{_chip(anchored)}</td></tr>"
+        "</tbody></table>"
+    )
+    return (
+        '<section data-section="badges">'
+        + scroll_region(table, "Signed and anchored, scrolls sideways", "badges")
+        + "</section>"
+    )
 
 
 def _instrument(receipt: dict) -> str:
@@ -346,13 +399,16 @@ def _instrument(receipt: dict) -> str:
     if not isinstance(inst, dict) or not isinstance(inst.get("id"), str):
         return ""
     kind, version = inst.get("kind"), inst.get("version")
-    said = (f'<span class="mono">{named(inst["id"])}</span>'
-            + (f" ({escape(kind)})" if isinstance(kind, str) and kind else "")
-            + (f" {escape(version)}" if isinstance(version, str) and version else ""))
+    said = (
+        f'<span class="mono">{named(inst["id"])}</span>'
+        + (f" ({escape(kind)})" if isinstance(kind, str) and kind else "")
+        + (f" {escape(version)}" if isinstance(version, str) and version else "")
+    )
     config = inst.get("config_digest")
     if isinstance(config, str) and config:
         from onetrace_console.viewer.page import fingerprint_html
-        said += f' · {escape(CONFIG)} {fingerprint_html(config)}'
+
+        said += f" · {escape(CONFIG)} {fingerprint_html(config)}"
     #: A block, not a paragraph: the fingerprint's fold cannot sit inside a <p>.
     return f'<div data-section="instrument">{escape(INSTRUMENT)} {said}</div>'
 
@@ -360,29 +416,38 @@ def _instrument(receipt: dict) -> str:
 def _crumbs(run: StoredRun, store: Store) -> str:
     from onetrace_console.overview import pipelines
     from onetrace_console.viewer.page import _named
+
     label = next((p.label for p in pipelines(store) for r in p.runs if r.key == run.key), "")
-    return (f'<p class="crumbs" data-section="crumbs"><a href="../../executions-all.html">Runs</a>'
-            f' / <a href="case.html"><span class="mono" data-words="record">{_named(run.run_id)}</span>'
-            + (f" · {escape(label)}" if label else "") + f"</a> / {escape(CRUMB)}</p>")
+    return (
+        f'<p class="crumbs" data-section="crumbs"><a href="../../executions-all.html">Runs</a>'
+        f' / <a href="case.html"><span class="mono" data-words="record">{_named(run.run_id)}</span>'
+        + (f" · {escape(label)}" if label else "")
+        + f"</a> / {escape(CRUMB)}</p>"
+    )
 
 
-def _inputs(inputs: list[dict], upstream, href: str, receipts, kept=None, unlisted: int = 0,
-            inputs_note: str = INPUTS_NOTE) -> str:
+def _inputs(
+    inputs: list[dict], upstream, href: str, receipts, kept=None, unlisted: int = 0, inputs_note: str = INPUTS_NOTE
+) -> str:
     """`kept`: {input name: (reading, listed)} for a receipt that declares kept inputs.
     `unlisted`: how many files under the run's inputs/ no step lists as kept."""
     from onetrace_console.kept_inputs import unlisted_note
-    note = (f'<p class="note" data-section="unlisted-inputs">{escape(unlisted_note(unlisted))}</p>'
-            if unlisted else "")
+
+    note = f'<p class="note" data-section="unlisted-inputs">{escape(unlisted_note(unlisted))}</p>' if unlisted else ""
     kept = kept or {}
     if not inputs:
         return f'<section data-section="inputs"><h2>Inputs</h2><p>none recorded</p>{note}</section>'
     head = "".join(f"<th>{escape(c)}</th>" for c in INPUT_COLUMNS)
-    table = (f'<table class="board" data-section="inputs-table"><thead><tr>{head}</tr></thead><tbody>'
-             + "".join(_input(i, upstream, href, receipts, kept.get(str(i.get("name", ""))))
-                       for i in inputs) + "</tbody></table>")
-    return ('<section data-section="inputs"><h2>Inputs</h2>'
-            + scroll_region(table, "Inputs, scrolls sideways", "inputs")
-            + f'<p class="note">{escape(inputs_note)}</p>{note}</section>')
+    table = (
+        f'<table class="board" data-section="inputs-table"><thead><tr>{head}</tr></thead><tbody>'
+        + "".join(_input(i, upstream, href, receipts, kept.get(str(i.get("name", "")))) for i in inputs)
+        + "</tbody></table>"
+    )
+    return (
+        '<section data-section="inputs"><h2>Inputs</h2>'
+        + scroll_region(table, "Inputs, scrolls sideways", "inputs")
+        + f'<p class="note">{escape(inputs_note)}</p>{note}</section>'
+    )
 
 
 def _outputs(step: dict, outputs: list[dict], files, store, href: str) -> str:
@@ -390,12 +455,20 @@ def _outputs(step: dict, outputs: list[dict], files, store, href: str) -> str:
         return '<section data-section="outputs"><h2>Outputs</h2><p>none recorded</p></section>'
     tabs = ""
     if len(outputs) > 1:
-        tabs = ('<nav class="tabs" aria-label="This stage\'s outputs">'
-                + " ".join(f'<a href="#output-{n}">{named(str(o.get("name", "")))}</a>'
-                           for n, o in enumerate(outputs, start=1)) + "</nav>")
-    return ('<section data-section="outputs"><h2>Outputs</h2>' + tabs + '<ul class="plain">'
-            + "".join(_output(step, o, files, store, href, n) for n, o in enumerate(outputs, start=1))
-            + "</ul></section>")
+        tabs = (
+            '<nav class="tabs" aria-label="This stage\'s outputs">'
+            + " ".join(
+                f'<a href="#output-{n}">{named(str(o.get("name", "")))}</a>' for n, o in enumerate(outputs, start=1)
+            )
+            + "</nav>"
+        )
+    return (
+        '<section data-section="outputs"><h2>Outputs</h2>'
+        + tabs
+        + '<ul class="plain">'
+        + "".join(_output(step, o, files, store, href, n) for n, o in enumerate(outputs, start=1))
+        + "</ul></section>"
+    )
 
 
 def _other_runs(run: StoredRun, store: Store) -> tuple[str, list[tuple[StoredRun, list[dict] | None]], int]:
@@ -403,11 +476,15 @@ def _other_runs(run: StoredRun, store: Store) -> tuple[str, list[tuple[StoredRun
     where the store is missing part of it)] newest first, at most OTHER_RUNS_SHOWN of them, and
     how many other runs the pipeline holds)."""
     from onetrace_console.overview import pipelines
+
     for p in pipelines(store):
         if any(r.key == run.key for r in p.runs):
             others = [r for r in reversed(p.runs) if r.key != run.key]
-            return p.label, [(r, None if store.missing(r) else _steps(r, store))
-                             for r in others[:OTHER_RUNS_SHOWN]], len(others)
+            return (
+                p.label,
+                [(r, None if store.missing(r) else _steps(r, store)) for r in others[:OTHER_RUNS_SHOWN]],
+                len(others),
+            )
     return "", [], 0
 
 
@@ -418,68 +495,94 @@ def _recorded(receipt: dict) -> tuple[dict, tuple, dict]:
     constants = assertions.get("constants") if isinstance(assertions, dict) else None
     inst = receipt.get("instrument")
     inst = inst if isinstance(inst, dict) else {}
-    outputs = {str(o.get("name", "")): str(o.get("digest", ""))
-               for o in receipt.get("outputs") or [] if isinstance(o, dict)}
-    return (constants if isinstance(constants, dict) else {},
-            (inst.get("id"), inst.get("version"), inst.get("config_digest")), outputs)
+    outputs = {
+        str(o.get("name", "")): str(o.get("digest", "")) for o in receipt.get("outputs") or [] if isinstance(o, dict)
+    }
+    return (
+        constants if isinstance(constants, dict) else {},
+        (inst.get("id"), inst.get("version"), inst.get("config_digest")),
+        outputs,
+    )
 
 
 def _value(value, href: str) -> str:
     """A recorded value in a cell: a fingerprint short, its whole value one fold away; anything
     else as recorded, within the page's cap."""
-    from onetrace_console.viewer.page import fingerprint_html, _FINGERPRINT
+    from onetrace_console.viewer.page import _FINGERPRINT, fingerprint_html
+
     text = value if isinstance(value, str) else json.dumps(value, ensure_ascii=False, sort_keys=True)
-    return (fingerprint_html(text) if _FINGERPRINT.fullmatch(text)
-            else f'<span data-words="record">{named(text, href)}</span>')
+    return (
+        fingerprint_html(text)
+        if _FINGERPRINT.fullmatch(text)
+        else f'<span data-words="record">{named(text, href)}</span>'
+    )
 
 
 def _same(equal: bool) -> str:
     return f' <span class="note" data-same="this-run">{escape(SAME_AS_THIS)}</span>' if equal else ""
 
 
-def _other_row(store: Store, other: StoredRun, steps: list[dict] | None, stage: str,
-               mine: tuple[dict, tuple, dict]) -> str:
+def _other_row(
+    store: Store, other: StoredRun, steps: list[dict] | None, stage: str, mine: tuple[dict, tuple, dict]
+) -> str:
     who = run_named(store, other.key)
     if steps is None:
-        return (f'<tr data-run="{escape(other.key)}" data-outcome="not-read"><td>{who}</td>'
-                f"<td>{escape(NOT_READ)}</td><td></td><td></td><td></td></tr>")
+        return (
+            f'<tr data-run="{escape(other.key)}" data-outcome="not-read"><td>{who}</td>'
+            f"<td>{escape(NOT_READ)}</td><td></td><td></td><td></td></tr>"
+        )
     tries = [s for s in steps if _stage_name(s["receipt"]) == stage]
     if not tries:
-        return (f'<tr data-run="{escape(other.key)}" data-outcome="no-receipt"><td>{who}</td>'
-                f"<td>{escape(NO_RECEIPT)}</td><td></td><td></td><td></td></tr>")
+        return (
+            f'<tr data-run="{escape(other.key)}" data-outcome="no-receipt"><td>{who}</td>'
+            f"<td>{escape(NO_RECEIPT)}</td><td></td><td></td><td></td></tr>"
+        )
     from types import SimpleNamespace
 
     from onetrace_console.viewer.model import _outcome_lines
     from onetrace_console.viewer.page import _line, fingerprint_html
+
     last, href = tries[-1], record_href(other)
     receipt = last["receipt"]
     if last["index"].isdigit():
         who = f'<a href="../{escape(other.key)}/{stage_page(last["index"])}">{who}</a>'
     outcome = receipt.get("outcome")
-    said = _line(_outcome_lines(SimpleNamespace(data=receipt))[1])
+    said = _line(_outcome_lines(SimpleNamespace(data=receipt))[1])  # type: ignore[arg-type]  # reads only .data, as of a Step
     if len(tries) > 1:
         said += f' <span class="note">({escape(LAST_OF.format(n=len(tries)))})</span>'
     constants, (iid, version, config), outputs = _recorded(receipt)
-    settings = ("; ".join(f'<span class="mono" data-words="record">{named(k, href)}</span> {_value(v, href)}'
-                          for k, v in constants.items()) or escape(NONE_RECORDED)) + _same(
-        bool(constants) and constants == mine[0])
+    settings = (
+        "; ".join(
+            f'<span class="mono" data-words="record">{named(k, href)}</span> {_value(v, href)}'
+            for k, v in constants.items()
+        )
+        or escape(NONE_RECORDED)
+    ) + _same(bool(constants) and constants == mine[0])
     instrument = ""
     if isinstance(iid, str):
-        instrument = (f'<span class="mono" data-words="record">{named(iid, href)}</span>'
-                      + (f' <span data-words="record">{escape(version)}</span>'
-                         if isinstance(version, str) and version else "")
-                      + (f"<div>{fingerprint_html(config)}</div>" if isinstance(config, str) and config else "")
-                      + _same((iid, version, config) == mine[1]))
-    shown = "".join(f'<div><span class="mono" data-words="record">{named(n, href)}</span> {_value(d, href)}'
-                    + _same(mine[2].get(n) == d) + "</div>" for n, d in outputs.items())
+        instrument = (
+            f'<span class="mono" data-words="record">{named(iid, href)}</span>'
+            + (f' <span data-words="record">{escape(version)}</span>' if isinstance(version, str) and version else "")
+            + (f"<div>{fingerprint_html(config)}</div>" if isinstance(config, str) and config else "")
+            + _same((iid, version, config) == mine[1])
+        )
+    shown = "".join(
+        f'<div><span class="mono" data-words="record">{named(n, href)}</span> {_value(d, href)}'
+        + _same(mine[2].get(n) == d)
+        + "</div>"
+        for n, d in outputs.items()
+    )
     cls = outcome.get("class") if isinstance(outcome, dict) else None
-    return (f'<tr data-run="{escape(other.key)}" data-outcome="{escape(cls if isinstance(cls, str) else "unknown")}">'
-            f"<td>{who}</td><td>{said}</td><td>{settings}</td><td>{instrument}</td>"
-            f"<td>{shown or escape(NONE_RECORDED)}</td></tr>")
+    return (
+        f'<tr data-run="{escape(other.key)}" data-outcome="{escape(cls if isinstance(cls, str) else "unknown")}">'
+        f"<td>{who}</td><td>{said}</td><td>{settings}</td><td>{instrument}</td>"
+        f"<td>{shown or escape(NONE_RECORDED)}</td></tr>"
+    )
 
 
-def _in_other_runs(store: Store, stage: str, receipt: dict, label: str,
-                   others: list[tuple[StoredRun, list[dict] | None]], total: int) -> str:
+def _in_other_runs(
+    store: Store, stage: str, receipt: dict, label: str, others: list[tuple[StoredRun, list[dict] | None]], total: int
+) -> str:
     """The section: one row per other run of the pipeline, newest first. Nothing where the run
     is in no pipeline the store groups."""
     if not label:
@@ -489,24 +592,33 @@ def _in_other_runs(store: Store, stage: str, receipt: dict, label: str,
         return head + f"<p>{escape(NO_OTHER_RUNS.format(pipeline=label))}</p></section>"
     mine = _recorded(receipt)
     cols = "".join(f"<th>{escape(c)}</th>" for c in OTHER_RUNS_COLUMNS)
-    table = (f'<table class="board" data-section="other-runs-table"><thead><tr>{cols}</tr></thead><tbody>'
-             + "".join(_other_row(store, r, steps, stage, mine) for r, steps in others)
-             + "</tbody></table>")
-    more = (f'<p class="note">{escape(OTHER_RUNS_MORE.format(shown=len(others), total=total, pipeline=label))}</p>'
-            if total > len(others) else "")
-    return (head + f'<p class="note">{escape(OTHER_RUNS_NOTE.format(pipeline=label))}</p>'
-            + scroll_region(table, "This step in the other runs, scrolls sideways", "other-runs")
-            + more + "</section>")
+    table = (
+        f'<table class="board" data-section="other-runs-table"><thead><tr>{cols}</tr></thead><tbody>'
+        + "".join(_other_row(store, r, steps, stage, mine) for r, steps in others)
+        + "</tbody></table>"
+    )
+    more = (
+        f'<p class="note">{escape(OTHER_RUNS_MORE.format(shown=len(others), total=total, pipeline=label))}</p>'
+        if total > len(others)
+        else ""
+    )
+    return (
+        head
+        + f'<p class="note">{escape(OTHER_RUNS_NOTE.format(pipeline=label))}</p>'
+        + scroll_region(table, "This step in the other runs, scrolls sideways", "other-runs")
+        + more
+        + "</section>"
+    )
 
 
-def render_stage_pages(run: StoredRun, store: Store, *, generated_at: str,
-                       anchored, signed) -> dict[str, str]:
+def render_stage_pages(run: StoredRun, store: Store, *, generated_at: str, anchored, signed) -> dict[str, str]:
     """Every stage page of the run: {stage-<n>.html: page}. Unsealed console pages, framed when
     served, like the Diff page. `anchored`: the anchoring badge, the viewer's `anchor_badge` from
     the model the run's pages are drawn from; `signed`, the signing badge, that
     model's "Signed by a known recorder" rung."""
     from onetrace_console import kept_inputs
     from onetrace_console.render import _document
+
     files = _files(run, store)
     steps = _steps(run, store)
     href = record_href(run)
@@ -519,34 +631,39 @@ def render_stage_pages(run: StoredRun, store: Store, *, generated_at: str,
     #: onetrace 0.5's records, per step (`run_panels`).
     from onetrace_console.run_panels import held_runs, manifest_of, step_blocks
     from onetrace_console.trace_panel import trace_of, traceparent
+
     manifest = manifest_of(run, store)
     has_spans = bool(traceparent(manifest)) or any(trace_of(s["receipt"]) for s in steps)
     from onetrace_console import span_tree
+
     spans = span_tree.for_run(run, store) if has_spans else None
     held = held_runs(store)
     #: The other runs naming a record's model files, looked up once per value for this run's pages.
     from onetrace_console import model_call as _mc
+
     found: dict[str, list] = {}
 
     def same_files(value: str) -> list:
         if value not in found:
             found[value] = _mc.same_files(store, run.key, value)
         return found[value]
+
     unlisted = kept_inputs.unlisted_count(files, steps)
     #: The inputs each step's decoded words are searched for in (`token_text`).
     #: Read only where a local console names a tokenizer: elsewhere no word is decoded to search for.
     from onetrace_console import token_text
     from onetrace_console.frame import tokenizers
-    searched = (token_text.searched_inputs(steps, lambda path: _read(files, store, path), version)
-                if tokenizers() else {})
+
+    searched = (
+        token_text.searched_inputs(steps, lambda path: _read(files, store, path), version) if tokenizers() else {}
+    )
     for position, step in enumerate(steps):
         receipt, stage = step["receipt"], _stage_name(step["receipt"])
         inputs = [i for i in receipt.get("inputs") or [] if isinstance(i, dict)]
         listed = kept_inputs.listed(receipt) if kept_inputs.honoured(version) else []
         kept = {}
         for i in inputs:
-            cell = kept_inputs.reading(i, receipt, step["file"], lambda path: _read(files, store, path),
-                                       version)
+            cell = kept_inputs.reading(i, receipt, step["file"], lambda path: _read(files, store, path), version)
             if cell is not None:
                 kept[str(i.get("name", ""))] = (cell, str(i.get("name", "")) in listed)
         keeps = kept_inputs.declares(receipt) and kept_inputs.honoured(version)
@@ -556,39 +673,47 @@ def render_stage_pages(run: StoredRun, store: Store, *, generated_at: str,
         verdict = ""
         if compared is not None and stage in compared[1]:
             v = compared[1][stage]
-            words = (DIFFERS_FROM if v in _DIFFERS else SAME_IN if v in _SAME else "")
+            words = DIFFERS_FROM if v in _DIFFERS else SAME_IN if v in _SAME else ""
             if words:
                 verdict = f'<p data-section="compared">{words.format(run=compared[0])}</p>'
         title = escape(TITLE).replace("{stage}", f'<span class="mono">{named(stage)}</span>')
         body = (
-            '<div class="cp" data-view="stage">'
-            + _crumbs(run, store)
-            + f"<h1>{title}</h1>"
+            '<div class="cp" data-view="stage">' + _crumbs(run, store) + f"<h1>{title}</h1>"
             f'<p data-section="run">step {escape(step["index"])} of {len(steps)} · '
             f"{run_named(store, run.key)}</p>"
             + _instrument(receipt)
             + f'<p data-section="banner" class="notice"><strong>{escape(SHOWN)}</strong> '
             f"{escape(banner)}</p>"
             f"{verdict}"
-            + step_blocks(manifest, receipt, has_spans, held, step["file"],
-                          lambda path: _read(files, store, path), same_files, spans, searched.get(position))
+            + step_blocks(
+                manifest,
+                receipt,
+                has_spans,
+                held,
+                step["file"],
+                lambda path: _read(files, store, path),
+                same_files,
+                spans,
+                searched.get(position),
+            )
             + '<div class="io">'
             + _inputs(inputs, upstream, href, receipts, kept, unlisted, inputs_note)
             + _outputs(step, outputs, files, store, href)
             + "</div>"
             + _in_other_runs(store, stage, receipt, label, others, total)
             + _badges(anchored, signed)
-            + f'<p data-section="back"><a href="case.html">The run, step by step</a></p>'
+            + '<p data-section="back"><a href="case.html">The run, step by step</a></p>'
             + generated_footer(generated_at)
-            + "</div>")
+            + "</div>"
+        )
         if step["index"].isdigit():
             pages[stage_page(step["index"])] = _document(stage or "stage", body)
         stored = _read(files, store, step["file"])
         if stored is not None:
-            receipts.setdefault("sha256:" + hashlib.sha256(stored).hexdigest(),
-                                (stage, step["index"], stored))
+            receipts.setdefault("sha256:" + hashlib.sha256(stored).hexdigest(), (stage, step["index"], stored))
         for o in outputs:
             path = _artifact_path(step["file"], str(o.get("name", "")))
-            upstream.setdefault(str(o.get("digest", "")),
-                                (stage, str(o.get("media_type", "")), _read(files, store, path)))
+            upstream.setdefault(
+                str(o.get("digest", "")), (stage, str(o.get("media_type", "")), _read(files, store, path))
+            )
     return pages

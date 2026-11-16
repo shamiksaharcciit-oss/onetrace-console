@@ -12,6 +12,7 @@ line is shortened with its whole text in its own title and in the page's table.
 
 Each check is a function returning the problems it finds; each has its sabotage.
 """
+
 from __future__ import annotations
 
 import html
@@ -27,26 +28,36 @@ from onetrace_console.viewer.graph import BOX_W, GraphNode, lay_out, svg
 MONO_12PX = 7.2
 
 #: The longest kind of reading a box shows: the check's words where the record contradicts itself.
-LONG = ("Checked — and the record contradicts itself here: output artifact 'decision.json' matches "
-        "— expected sha256:ef859d7a959e… , found sha256:aa79bfb8d85c… .")
+LONG = (
+    "Checked — and the record contradicts itself here: output artifact 'decision.json' matches "
+    "— expected sha256:ef859d7a959e… , found sha256:aa79bfb8d85c… ."
+)
 
 
 def _boxes(drawing: str) -> list[tuple[str, int, int, list[tuple[int, str]]]]:
     """(title, top, height, [(y, own line)]) for each box: its own state lines, not quoted ones."""
     out = []
-    for m in re.finditer(r'<rect class="node" x="\d+" y="(\d+)" width="\d+" height="(\d+)"[^>]*/>'
-                         r"<title>([^<]*)</title>(.*?)(?=</a>|</g>)", drawing, re.S):
-        own = [(int(y), html.unescape(t)) for y, t in
-               re.findall(r'<text class="state" x="\d+" y="(\d+)">([^<]*)</text>', m.group(4))]
+    for m in re.finditer(
+        r'<rect class="node" x="\d+" y="(\d+)" width="\d+" height="(\d+)"[^>]*/>'
+        r"<title>([^<]*)</title>(.*?)(?=</a>|</g>)",
+        drawing,
+        re.S,
+    ):
+        own = [
+            (int(y), html.unescape(t))
+            for y, t in re.findall(r'<text class="state" x="\d+" y="(\d+)">([^<]*)</text>', m.group(4))
+        ]
         out.append((html.unescape(m.group(3)), int(m.group(1)), int(m.group(2)), own))
     return out
 
 
 def quoted_problems(drawing: str) -> list[str]:
     """A quoted line, shortened, still fits its box: its whole text is in its own title."""
-    return [f"a quoted line wider than its box: {html.unescape(t)!r}" for t in
-            re.findall(r'<text class="state" data-words="report" x="\d+" y="\d+">([^<]*)<title>', drawing)
-            if len(html.unescape(t)) * MONO_12PX > BOX_W - 20]
+    return [
+        f"a quoted line wider than its box: {html.unescape(t)!r}"
+        for t in re.findall(r'<text class="state" data-words="report" x="\d+" y="\d+">([^<]*)<title>', drawing)
+        if len(html.unescape(t)) * MONO_12PX > BOX_W - 20
+    ]
 
 
 def whole_problems(drawing: str, words: dict[str, str]) -> list[str]:
@@ -70,14 +81,19 @@ def whole_problems(drawing: str, words: dict[str, str]) -> list[str]:
 
 
 def test_a_quoted_line_fits_its_box_with_its_whole_text_in_its_title():
-    node = GraphNode(node_id="model", name="model", index=1, href="#step-1", tags=("Changed",),
-                     quoted=("instrument config_digest differs: sha256:aaaa -> sha256:bbbb",))
+    node = GraphNode(
+        node_id="model",
+        name="model",
+        index=1,
+        href="#step-1",
+        tags=("Changed",),
+        quoted=("instrument config_digest differs: sha256:aaaa -> sha256:bbbb",),
+    )
     assert quoted_problems(svg(lay_out([node], None))) == []
 
 
 def test_a_long_reading_is_drawn_whole_inside_its_box(examined):
-    node = GraphNode(node_id="release", name="release", index=3, href="#step-3",
-                     tags=("1 output file", LONG))
+    node = GraphNode(node_id="release", name="release", index=3, href="#step-3", tags=("1 output file", LONG))
     drawing = svg(lay_out([node], None, tag_lines=3))
     title = f"release · 1 output file · {LONG}"
     assert whole_problems(drawing, {title: LONG}) == []
@@ -99,6 +115,7 @@ def _demo_words(drawing: str) -> dict[str, str]:
 @pytest.fixture(scope="module")
 def demo_graphs(shared_demo):
     from tests.test_checks import _require_installed
+
     _require_installed()
     folder = shared_demo["folder"]
     out = {}
@@ -123,16 +140,15 @@ def test_every_demo_box_draws_its_own_words_whole(demo_graphs, examined):
 
 def test_sabotage_a_reading_cut_at_the_box_s_edge_is_named(monkeypatch):
     from onetrace_console.viewer import graph
+
     monkeypatch.setattr(graph, "_state_lines", lambda text: [graph._short(text, graph.STATE_MAX)])
-    node = GraphNode(node_id="release", name="release", index=3, href="#step-3",
-                     tags=("1 output file", LONG))
+    node = GraphNode(node_id="release", name="release", index=3, href="#step-3", tags=("1 output file", LONG))
     drawing = svg(lay_out([node], None, tag_lines=3))
     assert whole_problems(drawing, {f"release · 1 output file · {LONG}": LONG})
 
 
 def test_sabotage_a_box_too_short_for_its_lines_is_named():
-    node = GraphNode(node_id="release", name="release", index=3, href="#step-3",
-                     tags=("1 output file", LONG))
+    node = GraphNode(node_id="release", name="release", index=3, href="#step-3", tags=("1 output file", LONG))
     drawing = svg(lay_out([node], None, tag_lines=3))
     short = re.sub(r'(<rect class="node" [^>]*height=")(\d+)', r"\g<1>40", drawing, count=1)
     assert any("outside its box" in p for p in whole_problems(short, {f"release · 1 output file · {LONG}": LONG}))

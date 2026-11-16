@@ -10,7 +10,7 @@ code does, rather than what the code was asked to do."* A change to a rule is th
 deliberate change here, which can be reviewed, followed by a change to the code to match.
 
 **There is no digest written into this file.** Digests are computed into documents by tooling
-and never transcribed (X-11), and a digest typed here by hand would be the one number in the
+and never transcribed, and a digest typed here by hand would be the one number in the
 specification that nobody had checked. The digest of the table lives in `RULES.SHA256`, written
 by `tools/rule_digest.py`, and a test asserts it is the digest of the table the code holds —
 which is in turn asserted to match this document.
@@ -96,7 +96,7 @@ written out: `3 incidents across those 2 runs`. Two numbers counting the same un
 too many.
 
 A rule that raised nothing is shown as `0 runs of 11`, **never omitted**. An absent group would
-let a reader conclude the rule does not exist (C031 §3: an absence sentence, never a blank).
+let a reader conclude the rule does not exist: an absence is said in a sentence, never left blank.
 
 ## Derivation and caching
 
@@ -117,7 +117,7 @@ is deliberate. Its own spec addendum:
 
 The closed verdict vocabulary is `same · FIRST DIFFERENCE · downstream · reconverged · COULD NOT
 CHECK`, with no regression among them. Building the rule would mean this console making exactly
-the judgement the SDK reserves for the reader, which C034 §4's *nothing inferred* forbids; a rule
+the judgement the SDK reserves for the reader, which the rule that *nothing is inferred* forbids; a rule
 of that name using a threshold of our own would be a score with an incident id.
 
 This was reviewed and kept. A test asserts the spec still refuses the characterisation and

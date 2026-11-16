@@ -19,6 +19,7 @@ their own; the rows that are the same are folded under "N attributes the same". 
 checked. A span's `onetrace.receipt.digest` is set beside the step's receipt digest: "matches the
 receipt" or "differs from the receipt"; with none, nothing.
 """
+
 from __future__ import annotations
 
 import json
@@ -30,8 +31,10 @@ SPAN_HEADING = "Span context"
 SPAN_LEAD = "The span context the app reported, as the run recorded it. onetrace does not check it."
 OUTSIDE = "ran outside any span"
 #: What the ids are for, said once under the run page's heading: and where they lead from this console.
-SPAN_FOR = ("The traceparent, trace id and span id are pointers into the app's own tracing tool: they are "
-            "how to find this run's spans there.")
+SPAN_FOR = (
+    "The traceparent, trace id and span id are pointers into the app's own tracing tool: they are "
+    "how to find this run's spans there."
+)
 SPAN_OPENS = "This console has a tracing tool configured: each trace id's link opens it there."
 SPAN_NO_TOOL = "This console has no tracing tool configured, so no id links to one."
 SPAN_PUBLIC = "This is a public console: it links to no tracing tool."
@@ -77,7 +80,7 @@ def link(pattern: str | None, trace_id: str, span_id: str = "") -> str:
 
 
 def _id(label: str, value: str, href: str) -> str:
-    a = (f' <a href="{escape(href)}" rel="noreferrer" data-trace-link>{escape(OPEN)}</a>' if href else "")
+    a = f' <a href="{escape(href)}" rel="noreferrer" data-trace-link>{escape(OPEN)}</a>' if href else ""
     return f'<li><span class="k">{escape(label)}</span> <code>{escape(value)}</code>{a}</li>'
 
 
@@ -99,25 +102,31 @@ def run_section(manifest: dict, steps: list[dict], pattern: str | None = None, *
         if t is None:
             rows.append(f'<li data-trace-step="{escape(name)}"><code>{escape(name)}</code>: {escape(OUTSIDE)}</li>')
         else:
-            rows.append(f'<li data-trace-step="{escape(name)}"><code>{escape(name)}</code><ul class="plain">'
-                        + _id("trace id", t["trace_id"], link(pattern, t["trace_id"], t["span_id"]))
-                        + _id("span id", t["span_id"], "") + "</ul></li>")
+            rows.append(
+                f'<li data-trace-step="{escape(name)}"><code>{escape(name)}</code><ul class="plain">'
+                + _id("trace id", t["trace_id"], link(pattern, t["trace_id"], t["span_id"]))
+                + _id("span id", t["span_id"], "")
+                + "</ul></li>"
+            )
     where = SPAN_PUBLIC if public else (SPAN_OPENS if link(pattern, "0" * 32) else SPAN_NO_TOOL)
-    return (f'<section data-section="span-context" class="span-context"><h2>{escape(SPAN_HEADING)}</h2>'
-            f'<p class="reported">{escape(SPAN_LEAD)}</p>'
-            f'<p data-span-for>{escape(SPAN_FOR)} {escape(where)}</p><ul class="plain">{"".join(rows)}</ul></section>')
+    return (
+        f'<section data-section="span-context" class="span-context"><h2>{escape(SPAN_HEADING)}</h2>'
+        f'<p class="reported">{escape(SPAN_LEAD)}</p>'
+        f'<p data-span-for>{escape(SPAN_FOR)} {escape(where)}</p><ul class="plain">{"".join(rows)}</ul></section>'
+    )
 
 
 # ------------------------------------------------------------------ OTLP/JSON
+
 
 class TraceUnreadable(ValueError):
     pass
 
 
-def _value(v: dict):
+def _value(v: object):
     if not isinstance(v, dict) or len(v) != 1:
         return json.dumps(v, sort_keys=True)
-    (k, x), = v.items()
+    ((k, x),) = v.items()
     if k == "arrayValue":
         return [_value(i) for i in (x or {}).get("values", [])]
     return x
@@ -137,24 +146,41 @@ def spans(doc) -> list[dict]:
                     start, end = int(sp.get("startTimeUnixNano", 0)), int(sp.get("endTimeUnixNano", 0))
                 except (TypeError, ValueError):
                     raise TraceUnreadable("a span's times are not whole numbers") from None
-                attrs = {a.get("key"): _value(a.get("value")) for a in sp.get("attributes") or []
-                         if isinstance(a, dict) and isinstance(a.get("key"), str)}
-                out.append({"id": str(sp.get("spanId", "")), "parent": str(sp.get("parentSpanId", "") or ""),
-                            "name": str(sp.get("name", "")), "start": start, "end": end, "attrs": attrs})
+                attrs = {
+                    a.get("key"): _value(a.get("value"))
+                    for a in sp.get("attributes") or []
+                    if isinstance(a, dict) and isinstance(a.get("key"), str)
+                }
+                out.append(
+                    {
+                        "id": str(sp.get("spanId", "")),
+                        "parent": str(sp.get("parentSpanId", "") or ""),
+                        "name": str(sp.get("name", "")),
+                        "start": start,
+                        "end": end,
+                        "attrs": attrs,
+                    }
+                )
     return out
 
 
 def step_spans(all_spans: list[dict], stage: str) -> list[dict]:
     """The step's span (by `onetrace.node`, or `onetrace.stage`, or its name) and its descendants, in
     start order, each with its depth below the step's."""
-    top = [s for s in all_spans if s["attrs"].get("onetrace.node") == stage
-           or s["attrs"].get("onetrace.stage") == stage or s["name"] in (stage, f"onetrace.stage {stage}")]
+    top = [
+        s
+        for s in all_spans
+        if s["attrs"].get("onetrace.node") == stage
+        or s["attrs"].get("onetrace.stage") == stage
+        or s["name"] in (stage, f"onetrace.stage {stage}")
+    ]
     out = []
 
     def walk(s, depth):
         out.append({**s, "depth": depth})
         for c in sorted((c for c in all_spans if c["parent"] == s["id"]), key=lambda c: c["start"]):
             walk(c, depth + 1)
+
     for s in sorted(top, key=lambda s: s["start"]):
         walk(s, 0)
     return out
@@ -165,6 +191,7 @@ def code_or_fold(text: str) -> str:
     shows one); a value holding fingerprints (a list of them, say) as code with each one short and
     the whole ones in a fold after it; anything else as code, as written."""
     from onetrace_console.viewer.page import _FINGERPRINT, fingerprint_html, shortened_in_text
+
     if _FINGERPRINT.fullmatch(text):
         return fingerprint_html(text)
     inline, folded = shortened_in_text(text)
@@ -175,12 +202,21 @@ def _ms(ns: int) -> str:
     return f"{ns / 1e6:.1f} ms"
 
 
-def _rows(sa: dict | None, sb: dict | None, origins: tuple) -> list[tuple[str, str, str, bool]]:
+def _rows(sa: dict | None, sb: dict | None, origins: tuple) -> list[tuple[str, str | None, str | None, bool]]:
     """(attribute, baseline's value, candidate's value, whether they differ), for one span pair: its
     duration, its start offset in its run, then each shown attribute, by name."""
+
     def shown(s):
-        return {k: (v if isinstance(v, str) else json.dumps(v)) for k, v in sorted(s["attrs"].items())
-                if k.startswith(SHOWN)} if s else {}
+        return (
+            {
+                k: (v if isinstance(v, str) else json.dumps(v))
+                for k, v in sorted(s["attrs"].items())
+                if k.startswith(SHOWN)
+            }
+            if s
+            else {}
+        )
+
     out = []
     for name, f in ((DURATION, lambda s, o: _ms(s["end"] - s["start"])), (OFFSET, lambda s, o: _ms(s["start"] - o))):
         va = f(sa, origins[0]) if sa else None
@@ -195,10 +231,13 @@ def _rows(sa: dict | None, sb: dict | None, origins: tuple) -> list[tuple[str, s
 def _row(name: str, va, vb, differs: bool) -> str:
     def cell(v):
         return f"<td>{escape(ABSENT)}</td>" if v is None else f"<td>{code_or_fold(v)}</td>"
+
     mark = ' data-differs="yes"' if differs else ""
     #: Every cell a `td`, so a row stacked at a narrow width labels each by its column (`words.labelled`).
-    return (f'<tr{mark}><td data-attribute><span class="k">{escape(name)}</span></td>{cell(va)}{cell(vb)}'
-            f'<td data-differs-cell>{escape(DIFFERS_WORD) if differs else ""}</td></tr>')
+    return (
+        f'<tr{mark}><td data-attribute><span class="k">{escape(name)}</span></td>{cell(va)}{cell(vb)}'
+        f"<td data-differs-cell>{escape(DIFFERS_WORD) if differs else ''}</td></tr>"
+    )
 
 
 def _span_table(sa: dict | None, sb: dict | None, origins: tuple, receipt_digests: tuple) -> str:
@@ -206,32 +245,51 @@ def _span_table(sa: dict | None, sb: dict | None, origins: tuple, receipt_digest
     rows = _rows(sa, sb, origins)
     first = [r for r in rows if r[3]]
     same = [r for r in rows if not r[3]]
-    named = (sa or sb)["name"]
-    depth = (sa or sb).get("depth", 0)
-    head = "".join(f'<th scope="col">{escape(c)}</th>' for c in COLUMNS) + f'<th scope="col" aria-label="{escape(DIFFERS_COLUMN)}"></th>'
+    named = (sa or sb)["name"]  # type: ignore[index]  # a pair holds a span on one side at least
+    depth = (sa or sb).get("depth", 0)  # type: ignore[union-attr]  # as above
+    head = (
+        "".join(f'<th scope="col">{escape(c)}</th>' for c in COLUMNS)
+        + f'<th scope="col" aria-label="{escape(DIFFERS_COLUMN)}"></th>'
+    )
     said = ""
     for s, digest, role in ((sa, receipt_digests[0], "baseline"), (sb, receipt_digests[1], "candidate")):
         got = s["attrs"].get("onetrace.receipt.digest") if s else None
-        if isinstance(got, str) and digest and s["depth"] == 0:
-            said += (f'<p data-trace-receipt="{"matches" if got == digest else "differs"}">{escape(role)}: '
-                     f'{escape(MATCHES if got == digest else DIFFERS)}</p>')
+        if isinstance(got, str) and digest and s["depth"] == 0:  # type: ignore[index]  # got is read only from a span
+            said += (
+                f'<p data-trace-receipt="{"matches" if got == digest else "differs"}">{escape(role)}: '
+                f"{escape(MATCHES if got == digest else DIFFERS)}</p>"
+            )
     from onetrace_console.words import scroll_region
+
     fold = ""
     if same:
         n = SAME_ONE if len(same) == 1 else SAME.format(n=len(same))
-        fold = (f"<details data-trace-same><summary>{escape(n)}</summary>"
-                + scroll_region(f'<table class="board" data-trace="same"><thead><tr>{head}</tr></thead>'
-                                f'<tbody>{"".join(_row(*r) for r in same)}</tbody></table>', n, "trace-same")
-                + "</details>")
-    return (f'<div data-trace-span data-depth="{depth}"><p><code>{escape(named)}</code></p>'
-            + scroll_region(f'<table class="board" data-trace="spans"><thead><tr>{head}</tr></thead>'
-                            f'<tbody>{"".join(_row(*r) for r in first)}</tbody></table>', named, "trace")
-            + f"{fold}{said}</div>")
+        fold = (
+            f"<details data-trace-same><summary>{escape(n)}</summary>"
+            + scroll_region(
+                f'<table class="board" data-trace="same"><thead><tr>{head}</tr></thead>'
+                f"<tbody>{''.join(_row(*r) for r in same)}</tbody></table>",
+                n,
+                "trace-same",
+            )
+            + "</details>"
+        )
+    return (
+        f'<div data-trace-span data-depth="{depth}"><p><code>{escape(named)}</code></p>'
+        + scroll_region(
+            f'<table class="board" data-trace="spans"><thead><tr>{head}</tr></thead>'
+            f"<tbody>{''.join(_row(*r) for r in first)}</tbody></table>",
+            named,
+            "trace",
+        )
+        + f"{fold}{said}</div>"
+    )
 
 
 def panel(stage: str, docs: tuple, sources: tuple, receipt_digests: tuple, roles=("baseline", "candidate")) -> str:
     """The side-by-side panel for `stage`; `docs` the two OTLP/JSON documents (None where none)."""
-    found, notes = [], []
+    found: list[tuple[list[dict], int] | None] = []
+    notes: list[str] = []
     for doc, role in zip(docs, roles):
         if doc is None:
             found.append(None)
@@ -252,13 +310,16 @@ def panel(stage: str, docs: tuple, sources: tuple, receipt_digests: tuple, roles
         body = "".join(f"<p>{escape(n)}</p>" for n in notes)
         where = " and ".join(dict.fromkeys(WHERE.get(s, s) for s in sources if s)) or WHERE["export"]
         h1, h2 = PANEL_HEADING.split("{step}")
-        return (f'<section data-section="trace-panel" class="trace-panel"><h2>{escape(h1)}<code>{escape(stage)}</code>'
-                f'{escape(h2.format(where=where))}</h2><p class="reported">{escape(PANEL_LEAD)}</p>{body}</section>')
+        return (
+            f'<section data-section="trace-panel" class="trace-panel"><h2>{escape(h1)}<code>{escape(stage)}</code>'
+            f'{escape(h2.format(where=where))}</h2><p class="reported">{escape(PANEL_LEAD)}</p>{body}</section>'
+        )
     #: Paired by name and order within the step.
     keyed = []
     for f in found:
-        seen, out = {}, []
-        for s in (f[0] if f else []):
+        seen: dict[str, int] = {}
+        out: list[tuple[tuple[str, int], dict]] = []
+        for s in f[0] if f else []:
             seen[s["name"]] = seen.get(s["name"], 0) + 1
             out.append(((s["name"], seen[s["name"]]), s))
         keyed.append(out)
@@ -269,6 +330,8 @@ def panel(stage: str, docs: tuple, sources: tuple, receipt_digests: tuple, roles
     where = " and ".join(dict.fromkeys(WHERE.get(s, s) for s in sources if s)) or WHERE["export"]
     h1, h2 = PANEL_HEADING.split("{step}")
     heading = f"<h2>{escape(h1)}<code>{escape(stage)}</code>{escape(h2.format(where=where))}</h2>"
-    return (f'<section data-section="trace-panel" class="trace-panel">{heading}'
-            f'<p class="reported">{escape(PANEL_LEAD)}</p>{"".join(f"<p>{escape(n)}</p>" for n in notes)}'
-            f"{tables}</section>")
+    return (
+        f'<section data-section="trace-panel" class="trace-panel">{heading}'
+        f'<p class="reported">{escape(PANEL_LEAD)}</p>{"".join(f"<p>{escape(n)}</p>" for n in notes)}'
+        f"{tables}</section>"
+    )

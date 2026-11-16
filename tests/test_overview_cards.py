@@ -17,6 +17,7 @@ Checked on the demo's own Overview, as a public console serves it:
 Each check is a function returning the problems it finds; each has its sabotage, a planted page
 or header that must be named.
 """
+
 from __future__ import annotations
 
 import html
@@ -26,8 +27,13 @@ import pytest
 
 #: The Records agree card's states: rung 1's five, each in its own words, as each run's page reads
 #: it -- the demo's one run not checked says why (held without its output files required).
-STATES = ("records agree", "not checked (held without its output files required)", "couldn't check",
-          "contradict their record", "no verdict recorded")
+STATES = (
+    "records agree",
+    "not checked (held without its output files required)",
+    "couldn't check",
+    "contradict their record",
+    "no verdict recorded",
+)
 #: A count and the word that labels it: "28 of 31 runs verified" is (28, "verified"),
 #: "2 incidents" is (2, "incidents"); "runs" or "run" between them is skipped.
 _COUNT = re.compile(r"(?<![\w.])(\d+)(?: of \d+)?(?: runs?\b)?\s+([A-Za-z']+)")
@@ -40,6 +46,7 @@ PAGES: list = []
 @pytest.fixture(scope="module")
 def home(shared_demo) -> str:
     from tests.test_checks import _require_installed
+
     _require_installed()
     folder = shared_demo["folder"]
     PAGES[:] = [folder / "store" / "pages"]
@@ -52,11 +59,16 @@ def _text(fragment: str) -> str:
 
 def subtitle_problems(page: str) -> list[str]:
     from onetrace_console.render import SUBTITLE
+
     out = []
     if re.findall(r'<p data-section="subtitle">(.*?)</p>', page, re.S) != [html.escape(SUBTITLE)]:
         out.append("no one-line subtitle")
-    fold = re.search(r'<details data-section="how"><summary>How these counts work</summary>'
-                     r'<p data-section="what">(.*?)</p></details>', page, re.S)
+    fold = re.search(
+        r'<details data-section="how"><summary>How these counts work</summary>'
+        r'<p data-section="what">(.*?)</p></details>',
+        page,
+        re.S,
+    )
     if not fold or not _text(fold.group(1)).startswith("Every count below carries the number"):
         out.append("the counting rule is not folded under 'How these counts work'")
     return out
@@ -70,11 +82,15 @@ def card_problems(page: str) -> list[str]:
     for name, body in cards:
         if not re.search(r'<p class="lead"><a href="[^"]+"><span class="kpi">\d+</span>', body):
             out.append(f"{name}: no count")
-        lines = re.findall(r'</p>(<p[^>]*>.*?</p>)(?=<p|<details)', body, re.S)
+        lines = re.findall(r"</p>(<p[^>]*>.*?</p>)(?=<p|<details)", body, re.S)
         if not lines:
             out.append(f"{name}: no line under the count")
-        fold = re.search(r'<details class="def"><summary title="What this count means" '
-                         r'aria-label="What this count means">\?</summary>(.*?)</details>', body, re.S)
+        fold = re.search(
+            r'<details class="def"><summary title="What this count means" '
+            r'aria-label="What this count means">\?</summary>(.*?)</details>',
+            body,
+            re.S,
+        )
         if not fold or not _text(fold.group(1)):
             out.append(f"{name}: no definition behind its '?'")
     return out
@@ -82,13 +98,16 @@ def card_problems(page: str) -> list[str]:
 
 def zero_problems(page: str) -> list[str]:
     card = re.search(r'<div data-card="records-agree">(.*?)</div>', page, re.S).group(1)
-    said = re.findall(r'<a href="executions-[a-z-]+\.html">(\d+) of (\d+) ([^<]+)</a>',
-                      re.search(r'<p data-line="states">(.*?)</p>', card, re.S).group(1)
-                      if 'data-line="states"' in card else "")
-    zero_line = re.search(r'<p class="zero" data-line="zero">0 of \d+ in the other states: (.*?)</p>',
-                          card, re.S)
-    zeros = [html.unescape(z) for z in re.findall(r'<a href="executions-[a-z-]+\.html">([^<]+)</a>',
-                                                  zero_line.group(1))] if zero_line else []
+    said = re.findall(
+        r'<a href="executions-[a-z-]+\.html">(\d+) of (\d+) ([^<]+)</a>',
+        re.search(r'<p data-line="states">(.*?)</p>', card, re.S).group(1) if 'data-line="states"' in card else "",
+    )
+    zero_line = re.search(r'<p class="zero" data-line="zero">0 of \d+ in the other states: (.*?)</p>', card, re.S)
+    zeros = (
+        [html.unescape(z) for z in re.findall(r'<a href="executions-[a-z-]+\.html">([^<]+)</a>', zero_line.group(1))]
+        if zero_line
+        else []
+    )
     out = [f"'{html.unescape(w)}' is shown with 0 runs instead of folded" for n, _, w in said if n == "0"]
     named = sorted([html.unescape(w) for _, _, w in said] + zeros)
     if named != sorted(STATES):
@@ -105,8 +124,7 @@ def label_problems(page: str) -> list[str]:
         seen: dict[str, set[int]] = {}
         for count, label in _COUNT.findall(_text(body)):
             seen.setdefault(label.lower(), set()).add(int(count))
-        out += [f"{name}: {sorted(counts)} all labelled {label!r}"
-                for label, counts in seen.items() if len(counts) > 1]
+        out += [f"{name}: {sorted(counts)} all labelled {label!r}" for label, counts in seen.items() if len(counts) > 1]
     return out
 
 
@@ -114,12 +132,13 @@ def rung_problems(page: str, pages) -> list[str]:
     """The Records agree card's counts are the rung's, and each opens exactly its runs."""
     card = re.search(r'<div data-card="records-agree">(.*?)</div>', page, re.S).group(1)
     rung = _text(re.search(r'<tr data-rung="records-agree">(.*?)</tr>', page, re.S).group(1))
-    want = {"records agree": int(re.search(r"(\d+) of \d+", rung).group(1)),
-            "not checked (held without its output files required)":
-                int(re.search(r"(\d+) not checked", rung).group(1)),
-            "couldn't check": int(re.search(r"(\d+) couldn't check", rung).group(1)),
-            "contradict their record": int(re.search(r"(\d+) contradict their record", rung).group(1)),
-            "no verdict recorded": int(re.search(r"(\d+) no verdict recorded", rung).group(1))}
+    want = {
+        "records agree": int(re.search(r"(\d+) of \d+", rung).group(1)),
+        "not checked (held without its output files required)": int(re.search(r"(\d+) not checked", rung).group(1)),
+        "couldn't check": int(re.search(r"(\d+) couldn't check", rung).group(1)),
+        "contradict their record": int(re.search(r"(\d+) contradict their record", rung).group(1)),
+        "no verdict recorded": int(re.search(r"(\d+) no verdict recorded", rung).group(1)),
+    }
     line = re.search(r'<p data-line="states">(.*?)</p>', card, re.S)
     said = re.findall(r'<a href="([^"]+)">(\d+) of \d+ ([^<]+)</a>', line.group(1) if line else "")
     got = {html.unescape(w): int(n) for _, n, w in said}
@@ -133,12 +152,16 @@ def rung_problems(page: str, pages) -> list[str]:
 
 def time_problems(page: str) -> list[str]:
     from onetrace_console.words import RELATIVE_TIME_SCRIPT
+
     out = []
     times = re.findall(r'<time datetime="([^"]+)"[^>]*>([^<]*)</time>', page)
     if not times:
         out.append("no time on the page")
-    out += [f"{v}: shows {t!r}, not its absolute UTC time" for v, t in times
-            if not re.fullmatch(r"\d{4}-\d\d-\d\d \d\d:\d\d:\d\d UTC", t)]
+    out += [
+        f"{v}: shows {t!r}, not its absolute UTC time"
+        for v, t in times
+        if not re.fullmatch(r"\d{4}-\d\d-\d\d \d\d:\d\d:\d\d UTC", t)
+    ]
     if page.count(RELATIVE_TIME_SCRIPT) != 1:
         out.append(f"the relative-time script is there {page.count(RELATIVE_TIME_SCRIPT)} times")
     return out
@@ -181,12 +204,16 @@ def test_a_public_policy_names_the_scripts_hash_and_the_checker_catches_it_missi
     from onetrace_console.viewer.page import PRINT_SCRIPT
     from onetrace_console.words import RELATIVE_TIME_SCRIPT
     from tools import container_check
+
     headers = {k.lower(): v for k, v in security_headers()}
     body = home.encode("utf-8")
     examined(2, "policies")
     assert _script_hash(RELATIVE_TIME_SCRIPT) in content_security_policy()
+
     #: The page as stored, before the server fills its frame: only the policy's findings count.
-    scripts = lambda problems: [p for p in problems if "inline script" in p]
+    def scripts(problems):
+        return [p for p in problems if "inline script" in p]
+
     assert scripts(container_check.page_problems(200, headers, body)) == []
     old = content_security_policy().replace(" " + _script_hash(RELATIVE_TIME_SCRIPT), "")
     assert _script_hash(PRINT_SCRIPT) in old and _script_hash(RELATIVE_TIME_SCRIPT) not in old
@@ -196,6 +223,7 @@ def test_a_public_policy_names_the_scripts_hash_and_the_checker_catches_it_missi
 
 # ------------------------------------------------------------------ the sabotages
 
+
 def test_sabotage_the_subtitle_paragraph_unfolded_is_named(home, examined):
     examined(1, "planted page")
     planted = home.replace('<details data-section="how"><summary>How these counts work</summary>', "", 1)
@@ -204,8 +232,13 @@ def test_sabotage_the_subtitle_paragraph_unfolded_is_named(home, examined):
 
 def test_sabotage_a_definition_left_out_is_named(home, examined):
     examined(1, "planted page")
-    planted = re.sub(r'(<div data-card="need-attention">.*?<summary[^>]*>\?</summary>).*?(</details>)',
-                     r"\1\2", home, count=1, flags=re.S)
+    planted = re.sub(
+        r'(<div data-card="need-attention">.*?<summary[^>]*>\?</summary>).*?(</details>)',
+        r"\1\2",
+        home,
+        count=1,
+        flags=re.S,
+    )
     assert "need-attention: no definition behind its '?'" in card_problems(planted)
 
 
@@ -219,14 +252,17 @@ def test_sabotage_two_counts_under_one_label_are_named_in_each_card(home, examin
     caught = 0
     #: The Records agree card as it was in 0.2.0's candidate: a second count, 29, under the same
     #: label as the line's 28.
-    planted = home.replace('<p data-line="states">',
-                           '<p data-line="states"><a href="x">29 of 31 records agree</a> · ', 1)
+    planted = home.replace(
+        '<p data-line="states">', '<p data-line="states"><a href="x">29 of 31 records agree</a> · ', 1
+    )
     assert any(p.startswith("records-agree:") for p in label_problems(planted))
     caught += 1
-    for name, plant in (("pipelines", "<p>8 pipelines</p>"), ("runs", "<p>30 runs stored</p>"),
-                        ("need-attention", "<p>5 of 31 runs need attention</p>")):
-        planted = re.sub(rf'(<div data-card="{name}">.*?)(<details)', rf"\1{plant}\2", home,
-                         count=1, flags=re.S)
+    for name, plant in (
+        ("pipelines", "<p>8 pipelines</p>"),
+        ("runs", "<p>30 runs stored</p>"),
+        ("need-attention", "<p>5 of 31 runs need attention</p>"),
+    ):
+        planted = re.sub(rf'(<div data-card="{name}">.*?)(<details)', rf"\1{plant}\2", home, count=1, flags=re.S)
         assert any(p.startswith(f"{name}:") for p in label_problems(planted)), name
         caught += 1
     examined(caught, "faults caught")
@@ -234,8 +270,9 @@ def test_sabotage_two_counts_under_one_label_are_named_in_each_card(home, examin
 
 def test_sabotage_a_card_count_off_the_rung_or_off_its_list_is_named(home, examined):
     #: A count changed on the card alone, and a link to the list of another state.
-    off = re.sub(r'(<p data-line="states"><a href="[^"]+">)(\d+)', lambda m: m.group(1) + str(int(m.group(2)) + 1),
-                 home, count=1)
+    off = re.sub(
+        r'(<p data-line="states"><a href="[^"]+">)(\d+)', lambda m: m.group(1) + str(int(m.group(2)) + 1), home, count=1
+    )
     assert any("the card says" in p for p in rung_problems(off, PAGES[0]))
     swapped = re.sub(r'(<p data-line="states"><a href=")[^"]+(">)', r"\1executions-all.html\2", home, count=1)
     assert any("runs on executions-all.html" in p for p in rung_problems(swapped, PAGES[0]))

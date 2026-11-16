@@ -17,6 +17,7 @@ The demo's runs of it: a baseline; a candidate whose camera exposure changed, so
 different level and `classify` still passes the bottle (the comparison comes back the same after
 it); and a candidate whose bottle is filled below the reject line (`classify` rejects it).
 """
+
 from __future__ import annotations
 
 import json
@@ -43,8 +44,7 @@ FRAMES = {
 
 
 def frame_bytes(frame: str) -> bytes:
-    return json.dumps({"rows": [str(r) for r in FRAMES[frame]], "data": EXAMPLE},
-                      sort_keys=True).encode("utf-8")
+    return json.dumps({"rows": [str(r) for r in FRAMES[frame]], "data": EXAMPLE}, sort_keys=True).encode("utf-8")
 
 
 def main(out_dir, run_id: str, frame: str, exposure_tenths: str) -> None:
@@ -53,8 +53,14 @@ def main(out_dir, run_id: str, frame: str, exposure_tenths: str) -> None:
     out.mkdir(parents=True, exist_ok=True)
     frame_path = out / "frame.json"
     frame_path.write_bytes(frame_bytes(frame))
-    rec = Recorder(out_dir, run_id=run_id, declared_stages=STAGES, manifest=Path(__file__),
-                   policy="fail-closed", anchor_reason="a demo record; anchoring is not part of this demo")
+    rec = Recorder(
+        out_dir,
+        run_id=run_id,
+        declared_stages=STAGES,
+        manifest=Path(__file__),
+        policy="fail-closed",
+        anchor_reason="a demo record; anchoring is not part of this demo",
+    )
 
     def measure(ctx):
         data = kept_text(frame_path)
@@ -76,18 +82,30 @@ def main(out_dir, run_id: str, frame: str, exposure_tenths: str) -> None:
     def reject_command(ctx, classified):
         ctx.read_receipt("classify")
         result = ctx.read_json(classified)["result"]
-        return ctx.write_json("command.json", {"command": "reject the bottle" if result == "reject"
-                                               else "none"})
+        return ctx.write_json("command.json", {"command": "reject the bottle" if result == "reject" else "none"})
 
-    measured = rec.run_node("measure", None, Instrument("fill-level-camera", "measurement", "1.0.0",
-                                                        {"exposure_tenths": exposure_tenths,
-                                                         "edge": str(EDGE)}), measure)
-    classified = rec.run_node("classify", None, Instrument("fill-classifier", "rule", "1.0.0",
-                                                           {"reject_line_mm": str(REJECT_LINE_MM)}),
-                              classify, measured)
-    rec.run_node("reject_command", None, Instrument("reject-gate", "command-recorder", "1.0.0",
-                                                    {"records": "the command, never sent"}),
-                 reject_command, classified)
+    measured = rec.run_node(
+        "measure",
+        None,
+        Instrument(
+            "fill-level-camera", "measurement", "1.0.0", {"exposure_tenths": exposure_tenths, "edge": str(EDGE)}
+        ),
+        measure,
+    )
+    classified = rec.run_node(
+        "classify",
+        None,
+        Instrument("fill-classifier", "rule", "1.0.0", {"reject_line_mm": str(REJECT_LINE_MM)}),
+        classify,
+        measured,
+    )
+    rec.run_node(
+        "reject_command",
+        None,
+        Instrument("reject-gate", "command-recorder", "1.0.0", {"records": "the command, never sent"}),
+        reject_command,
+        classified,
+    )
     rec.close()
 
 
@@ -95,6 +113,7 @@ def kept_inputs(args: dict) -> list[bytes]:
     """The bytes of every input a run with `args` keeps: the camera's frame, as `main` writes it
     (invented example data)."""
     return [json.dumps(frame_bytes(args["frame"]).decode("utf-8")).encode("utf-8")]
+
 
 def kept_text(path) -> bytes:
     """A file this pipeline reads from outside the run, as its step reads it and keeps it: a JSON string

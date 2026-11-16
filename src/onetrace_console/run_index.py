@@ -18,6 +18,7 @@ The query is a list of terms, each a field the record names, every term required
 result names the fields that matched, as recorded. A query reads the index and nothing else: it runs
 no check, no comparison and no model.
 """
+
 from __future__ import annotations
 
 import json
@@ -32,12 +33,24 @@ FORMAT = "onetrace-console-run-index/0.2"
 #: The derived file, beside the store's own folder under the store root.
 FILE_NAME = "run_index.json"
 #: The manifest's declarations the index keeps, each as written.
-DECLARATIONS = ("optional_stages", "gated_stages", "outputs_kept", "traceparent", "parent_run",
-                "parent_stage", "repeat_of")
+DECLARATIONS = (
+    "optional_stages",
+    "gated_stages",
+    "outputs_kept",
+    "traceparent",
+    "parent_run",
+    "parent_stage",
+    "repeat_of",
+)
 #: The model-call record's fields the index keeps: (the index's name, the record's field).
-MODEL_FIELDS = (("model", "model.reported"), ("weights", "model.files_digest"),
-                ("engine", "engine.name"), ("engine_version", "engine.version"), ("dtype", "dtype"),
-                ("batch_invariant", "batch.batch_invariant"))
+MODEL_FIELDS = (
+    ("model", "model.reported"),
+    ("weights", "model.files_digest"),
+    ("engine", "engine.name"),
+    ("engine_version", "engine.version"),
+    ("dtype", "dtype"),
+    ("batch_invariant", "batch.batch_invariant"),
+)
 #: What can differ at a comparison's first-difference step, in the short answer's words.
 KINDS = ("setting", "input", "configuration", "output")
 #: The query's term for the console's own pipeline (P1, P2, ...): the index names it `pipeline_label`, as
@@ -70,6 +83,7 @@ class QueryError(ValueError):
 
 # ------------------------------------------------------------------------------- building
 
+
 def _settings(receipt: dict) -> dict:
     assertions = receipt.get("assertions")
     constants = assertions.get("constants") if isinstance(assertions, dict) else None
@@ -88,7 +102,8 @@ def _model_calls(receipt: dict, receipt_file: str, files: dict, store) -> list:
     refused ones say why."""
     from onetrace_console import model_call
     from onetrace_console.stage_pages import _read
-    out = []
+
+    out: list[dict[str, object]] = []
     for o in model_call.outputs(receipt):
         name = str(o["name"])
         try:
@@ -96,7 +111,7 @@ def _model_calls(receipt: dict, receipt_file: str, files: dict, store) -> list:
         except model_call.Refused as e:
             out.append({"file": name, "refused": str(e)})
             continue
-        fields = {}
+        fields: dict[str, dict[str, str]] = {}
         for short, path in MODEL_FIELDS:
             #: model-call-record/1.0 names its fields with dots, flat (`engine.name`).
             v = record.get(path)
@@ -112,18 +127,19 @@ def _check(run, store) -> tuple[str, dict]:
     """The verifier's verdict word and its FAIL and NOT-RUN rows by name, from the stored check."""
     from onetrace_console.info_mark import rows_of
     from onetrace_console.pages import _envelope
+
     try:
         envelope = _envelope(run, store, required=False)
     except Exception:  # noqa: BLE001 - a check that can't be read gives no verdict here
         return "", {}
-    summary = {}
+    summary: dict = {}
     part = envelope.get("rows_json") if isinstance(envelope, dict) else None
     try:
         doc = load_json_bounded(part.get("stdout", ""), "the check's rows") if isinstance(part, dict) else None
-        summary = doc.get("summary") if isinstance(doc, dict) and isinstance(doc.get("summary"), dict) else {}
+        summary = _summary if isinstance(doc, dict) and isinstance(_summary := doc.get("summary"), dict) else {}
     except (ValueError, RecursionError):
         summary = {}
-    rows = {}
+    rows: dict[str, list[str]] = {}
     for row in rows_of(envelope):
         result = str(row.get("result", ""))
         if result in ROW_RESULTS:
@@ -133,10 +149,12 @@ def _check(run, store) -> tuple[str, dict]:
 
 def _run_entry(run, order: int, label: str, store) -> dict:
     from onetrace_console.stage_pages import _files, _read, _steps
+
     files = _files(run, store)
     try:
-        manifest = load_json_bounded((_read(files, store, "MANIFEST.json") or b"{}").decode("utf-8"),
-                                     "MANIFEST.json", "show")
+        manifest = load_json_bounded(
+            (_read(files, store, "MANIFEST.json") or b"{}").decode("utf-8"), "MANIFEST.json", "show"
+        )
     except (ValueError, UnicodeDecodeError, RecursionError):
         manifest = {}
     manifest = manifest if isinstance(manifest, dict) else {}
@@ -147,25 +165,42 @@ def _run_entry(run, order: int, label: str, store) -> dict:
     entries = []
     for s in steps:
         receipt = s["receipt"]
-        stage = receipt.get("stage") if isinstance(receipt.get("stage"), dict) else {}
-        instrument = receipt.get("instrument") if isinstance(receipt.get("instrument"), dict) else {}
-        outcome = receipt.get("outcome") if isinstance(receipt.get("outcome"), dict) else {}
-        entry = {"name": str(stage.get("name", "")), "index": str(s["index"]),
-                 "outcome": str(outcome.get("class", "")),
-                 "instrument": {"id": str(instrument.get("id", "")), "version": str(instrument.get("version", "")),
-                                "config_digest": str(instrument.get("config_digest", ""))},
-                 "settings": _settings(receipt), "inputs": _named(receipt.get("inputs")),
-                 "outputs": _named(receipt.get("outputs"))}
+        stage = _stage if isinstance(_stage := receipt.get("stage"), dict) else {}
+        instrument = _instrument if isinstance(_instrument := receipt.get("instrument"), dict) else {}
+        outcome = _outcome if isinstance(_outcome := receipt.get("outcome"), dict) else {}
+        entry = {
+            "name": str(stage.get("name", "")),
+            "index": str(s["index"]),
+            "outcome": str(outcome.get("class", "")),
+            "instrument": {
+                "id": str(instrument.get("id", "")),
+                "version": str(instrument.get("version", "")),
+                "config_digest": str(instrument.get("config_digest", "")),
+            },
+            "settings": _settings(receipt),
+            "inputs": _named(receipt.get("inputs")),
+            "outputs": _named(receipt.get("outputs")),
+        }
         calls = _model_calls(receipt, s["file"], files, store)
         if calls:
             entry["model_calls"] = calls
         entries.append(entry)
     verdict, rows = _check(run, store)
     from onetrace_console.benchmarks import mark_of
-    return {"key": run.key, "run_id": run.run_id, "pipeline_label": label, "order": order,
-            "chain_head": run.chain_head, "folder": run.folder, "steps": entries,
-            "declared": {k: manifest[k] for k in DECLARATIONS if k in manifest},
-            "verdict": verdict, "rows": rows, "benchmark": mark_of(store, run.key)}
+
+    return {
+        "key": run.key,
+        "run_id": run.run_id,
+        "pipeline_label": label,
+        "order": order,
+        "chain_head": run.chain_head,
+        "folder": run.folder,
+        "steps": entries,
+        "declared": {k: manifest[k] for k in DECLARATIONS if k in manifest},
+        "verdict": verdict,
+        "rows": rows,
+        "benchmark": mark_of(store, run.key),
+    }
 
 
 def first_difference(comparison, store) -> dict | None:
@@ -174,6 +209,7 @@ def first_difference(comparison, store) -> dict | None:
     None where the report cannot be read, and empty steps where nothing differs."""
     from onetrace_console import render, short_answer
     from onetrace_console.viewer.verbs import TwoRunDag
+
     got = render.read_diff(comparison, store)
     if got is None:
         return None
@@ -204,30 +240,46 @@ def first_difference(comparison, store) -> dict | None:
         changed = sorted(n for n in x.keys() | y.keys() if x.get(n) != y.get(n))
         settings += [name for name, _old, _new in named]
         inputs += changed
-        kinds += (["setting"] if named else []) + (["input"] if changed else []) \
+        kinds += (
+            (["setting"] if named else [])
+            + (["input"] if changed else [])
             + (["configuration"] if prints and not named else [])
+        )
     if steps and not kinds:
         kinds = ["output"]
-    return {"steps": [str(s).split("#", 1)[0] for s in steps], "kinds": sorted(set(kinds), key=KINDS.index),
-            "settings": sorted(set(settings)), "inputs": sorted(set(inputs))}
+    return {
+        "steps": [str(s).split("#", 1)[0] for s in steps],
+        "kinds": sorted(set(kinds), key=KINDS.index),
+        "settings": sorted(set(settings)),
+        "inputs": sorted(set(inputs)),
+    }
 
 
 def build(store) -> dict:
     """The index of every run and held comparison the store holds, in the console's order of runs."""
     from onetrace_console.overview import pipelines
     from onetrace_console.store import arrival_order
+
     with store.reading():
         label = {r.key: p.label for p in pipelines(store) for r in p.runs}
-        runs = [_run_entry(r, i, label.get(r.key, ""), store)
-                for i, r in enumerate(arrival_order(store.runs(), newest_first=False))]
+        runs = [
+            _run_entry(r, i, label.get(r.key, ""), store)
+            for i, r in enumerate(arrival_order(store.runs(), newest_first=False))
+        ]
         comparisons = []
         for c in sorted(store.comparisons(), key=lambda c: c.key):
             try:
                 first = first_difference(c, store)
             except Exception:  # noqa: BLE001 - a report that can't be read gives no first difference
                 first = None
-            comparisons.append({"key": c.key, "a": c.run_a, "b": c.run_b,
-                                **({"first_diff": first} if first is not None else {"unread": True})})
+            comparisons.append(
+                {
+                    "key": c.key,
+                    "a": c.run_a,
+                    "b": c.run_b,
+                    **({"first_diff": first} if first is not None else {"unread": True}),
+                }
+            )
     return {"format": FORMAT, "runs": runs, "comparisons": comparisons}
 
 
@@ -238,6 +290,7 @@ def encode(index: dict) -> bytes:
 def write(store, store_root: Path) -> Path:
     """Build the index and write it beside the store, replacing the last one whole."""
     from onetrace_console.store import _atomic_write
+
     path = Path(store_root) / FILE_NAME
     _atomic_write(path, encode(build(store)))
     return path
@@ -255,14 +308,16 @@ def format_of(store_root: Path) -> str | None:
 
 def earlier(said: str) -> bool:
     """Whether `said` is this index's format at an earlier version than the one this console writes."""
+
     def version(f: str) -> tuple[str, tuple[int, ...]] | None:
         name, _, v = f.rpartition("/")
         try:
             return (name, tuple(int(x) for x in v.split(".")))
         except ValueError:
             return None
+
     mine, theirs = version(FORMAT), version(said)
-    return theirs is not None and theirs[0] == mine[0] and theirs[1] < mine[1]
+    return theirs is not None and theirs[0] == mine[0] and theirs[1] < mine[1]  # type: ignore[index]  # FORMAT, this console's own, reads
 
 
 def read(store_root: Path) -> dict | None:
@@ -276,6 +331,7 @@ def read(store_root: Path) -> dict | None:
 
 
 # -------------------------------------------------------------------------------- the query
+
 
 @dataclass(frozen=True)
 class Term:
@@ -349,8 +405,9 @@ def parse(query: str) -> list[Term]:
 def find_run(index: dict, said: str) -> dict:
     """A run named by its run id, its key, or the first 12 or more characters of its key."""
     runs = index.get("runs") or []
-    found = [r for r in runs if r["run_id"] == said] or \
-        [r for r in runs if len(said) >= 12 and r["key"].startswith(said)]
+    found = [r for r in runs if r["run_id"] == said] or [
+        r for r in runs if len(said) >= 12 and r["key"].startswith(said)
+    ]
     if not found:
         raise QueryError(f"no run is named {said!r}: give its run id or its key")
     if len(found) > 1:
@@ -377,8 +434,7 @@ def _differences(index: dict) -> dict[str, list[dict]]:
 
 def _said(c: dict, runs: dict) -> str:
     f = c["first_diff"]
-    what = ([f"setting {s}" for s in f["settings"]] + [f"input {i}" for i in f["inputs"]]
-            or [k for k in f["kinds"]])
+    what = [f"setting {s}" for s in f["settings"]] + [f"input {i}" for i in f["inputs"]] or [k for k in f["kinds"]]
     a = runs.get(c["a"], {}).get("run_id") or c["a"][:12]
     return f"first differs from {a} at {', '.join(f['steps'])}: {', '.join(what)}"
 
@@ -388,12 +444,19 @@ def _match(term: Term, run: dict, index: dict, runs: dict, diffs: dict) -> list[
     f = term.field
     if f == "setting":
         step, name = term.arg.split(".", 1)
-        return [f"setting {s['name']}.{name} = {s['settings'][name]}" for s in run["steps"]
-                if (step == "*" or s["name"] == step) and s["settings"].get(name) == term.value]
+        return [
+            f"setting {s['name']}.{name} = {s['settings'][name]}"
+            for s in run["steps"]
+            if (step == "*" or s["name"] == step) and s["settings"].get(name) == term.value
+        ]
     if f == "input":
         want = term.value if term.value.startswith("sha256:") else "sha256:" + term.value
-        return [f"input {n} = {d} at {s['name']}" for s in run["steps"] for n, d in s["inputs"]
-                if n == term.arg and d == want]
+        return [
+            f"input {n} = {d} at {s['name']}"
+            for s in run["steps"]
+            for n, d in s["inputs"]
+            if n == term.arg and d == want
+        ]
     if f == "inputs":
         other = find_run(index, term.value)
         mine = first_inputs(run)
@@ -442,8 +505,11 @@ def _match(term: Term, run: dict, index: dict, runs: dict, diffs: dict) -> list[
         return [f"arrived after {other['run_id']}"] if run["order"] > other["order"] else []
     if f == "benchmark":
         marked = run.get("benchmark") is not None
-        return [("marked as a benchmark" if marked else "not marked as a benchmark")] \
-            if marked == (term.arg == "yes") else []
+        return (
+            [("marked as a benchmark" if marked else "not marked as a benchmark")]
+            if marked == (term.arg == "yes")
+            else []
+        )
     raise QueryError(f"the index has no field {f!r}")
 
 

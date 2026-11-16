@@ -8,6 +8,7 @@ manifest 5000 deep was refused at ingest on Windows and taken on Linux. Each tes
 input to a measured total depth, exactly `MAX_JSON_DEPTH` (accepted) or one more (refused), and goes
 through the console's own path. The number in every expected message comes from the constant.
 """
+
 from __future__ import annotations
 
 import ast
@@ -16,9 +17,9 @@ from dataclasses import replace
 from pathlib import Path
 
 import pytest
-from onetrace_console.viewer.depth import MAX_JSON_DEPTH, json_depth
 
 from onetrace_console.bounded_json import TooDeep, ingest_refusal, load_json_bounded
+from onetrace_console.viewer.depth import MAX_JSON_DEPTH, json_depth
 from tests.conftest import make_tar
 from tests.test_unreadable import _renamed, _resummed
 
@@ -54,6 +55,7 @@ def _depth_of(raw: bytes | str) -> int:
 
 # --------------------------------------------------------------------- the one door, statically
 
+
 def test_no_json_load_in_the_console_outside_the_helper():
     found = []
     for path in sorted(SRC.rglob("*.py")):
@@ -61,26 +63,34 @@ def test_no_json_load_in_the_console_outside_the_helper():
             continue
         rel = path.relative_to(SRC).as_posix()
         for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
-            if (isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute)
-                    and node.func.attr in ("load", "loads") and isinstance(node.func.value, ast.Name)
-                    and node.func.value.id == "json"):
+            if (
+                isinstance(node, ast.Call)
+                and isinstance(node.func, ast.Attribute)
+                and node.func.attr in ("load", "loads")
+                and isinstance(node.func.value, ast.Name)
+                and node.func.value.id == "json"
+            ):
                 found.append((rel, node.lineno))
-            if isinstance(node, ast.ImportFrom) and node.module == "json" and any(
-                    a.name in ("load", "loads") for a in node.names):
+            if (
+                isinstance(node, ast.ImportFrom)
+                and node.module == "json"
+                and any(a.name in ("load", "loads") for a in node.names)
+            ):
                 found.append((rel, node.lineno))
     bare = [f for f in found if f not in ALLOWED]
-    assert not bare, (f"json.load(s) outside onetrace_console.bounded_json, so outside the depth rule"
-                      f": {bare}")
+    assert not bare, f"json.load(s) outside onetrace_console.bounded_json, so outside the depth rule: {bare}"
     stale = [a for a in ALLOWED if a not in found]
     assert not stale, f"allowances that outlived their line: {stale}"
 
 
 # --------------------------------------------------------------------- the helper
 
+
 def test_the_vendored_limit_is_the_ruled_one():
     assert MAX_JSON_DEPTH == RULED, (
         f"viewer.depth.MAX_JSON_DEPTH is {MAX_JSON_DEPTH}, the decided one is {RULED}: remeasure on all "
-        f"three interpreters before either moves")
+        f"three interpreters before either moves"
+    )
 
 
 def test_the_helper_takes_exactly_the_limit_and_refuses_one_past():
@@ -97,10 +107,12 @@ def test_the_helper_takes_exactly_the_limit_and_refuses_one_past():
 def test_the_ingest_words_are_the_ruled_ones_with_the_number_from_the_constant():
     assert ingest_refusal("receipts/02-rerank.json") == (
         f"Not ingested: receipts/02-rerank.json is nested more than {MAX_JSON_DEPTH} levels deep, "
-        f"past what the console reads.")
+        f"past what the console reads."
+    )
 
 
 # --------------------------------------------------------------------- ingest: the manifest and a receipt
+
 
 def _manifest_at(files, total: int) -> dict[str, bytes]:
     out = _renamed(files)
@@ -129,12 +141,14 @@ def _refusal_row(name: str) -> str:
 
 def test_ingest_takes_a_manifest_exactly_at_the_limit(files, store):
     from onetrace_console.ingest import accept
+
     got = accept(make_tar(_manifest_at(files, AT)), store)
     assert getattr(got, "run", None) is not None, getattr(got, "rows", got)
 
 
 def test_ingest_refuses_a_manifest_one_past_the_limit_in_the_ruled_words(files, store):
     from onetrace_console.ingest import accept
+
     got = accept(make_tar(_manifest_at(files, PAST)), store)
     assert getattr(got, "run", None) is None
     assert _refusal_row("MANIFEST.json") in got.rows, got.rows
@@ -142,6 +156,7 @@ def test_ingest_refuses_a_manifest_one_past_the_limit_in_the_ruled_words(files, 
 
 def test_ingest_takes_a_receipt_exactly_at_the_limit(files, store):
     from onetrace_console.ingest import accept
+
     planted, _ = _receipt_at(files, AT)
     got = accept(make_tar(planted), store)
     assert getattr(got, "run", None) is not None, getattr(got, "rows", got)
@@ -149,6 +164,7 @@ def test_ingest_takes_a_receipt_exactly_at_the_limit(files, store):
 
 def test_ingest_refuses_a_receipt_one_past_the_limit_in_the_ruled_words(files, store):
     from onetrace_console.ingest import accept
+
     planted, rel = _receipt_at(files, PAST)
     got = accept(make_tar(planted), store)
     assert getattr(got, "run", None) is None
@@ -156,6 +172,7 @@ def test_ingest_refuses_a_receipt_one_past_the_limit_in_the_ruled_words(files, s
 
 
 # --------------------------------------------------------------------- the configuration file
+
 
 def _config_at(tmp_path, total: int) -> Path:
     path = tmp_path / "console.json"
@@ -166,6 +183,7 @@ def _config_at(tmp_path, total: int) -> Path:
 
 def test_config_at_the_limit_is_not_refused_for_depth(tmp_path):
     from onetrace_console.config import ConfigError, load
+
     try:
         load(_config_at(tmp_path, AT))
         said = ""
@@ -176,12 +194,14 @@ def test_config_at_the_limit_is_not_refused_for_depth(tmp_path):
 
 def test_config_one_past_the_limit_is_refused_in_its_existing_words(tmp_path):
     from onetrace_console.config import ConfigError, load
+
     path = _config_at(tmp_path, PAST)
     with pytest.raises(ConfigError, match="nested too deeply to read"):
         load(path)
 
 
 # --------------------------------------------------------------------- the access log's own HEAD
+
 
 def _access_log_at(tmp_path, total: int) -> Path:
     root = tmp_path / "access_log"
@@ -194,6 +214,7 @@ def _access_log_at(tmp_path, total: int) -> Path:
 @pytest.mark.parametrize("total,refused", [(AT, False), (PAST, True)], ids=["at", "past"])
 def test_the_access_logs_head_is_judged_by_the_limit(tmp_path, total, refused):
     from onetrace_console.access_log import AccessLog
+
     try:
         AccessLog(_access_log_at(tmp_path, total), max_segment_bytes=1 << 20)
         said = ""
@@ -204,10 +225,12 @@ def test_the_access_logs_head_is_judged_by_the_limit(tmp_path, total, refused):
 
 # --------------------------------------------------------------------- stored reports: check, diff, verb
 
+
 @pytest.fixture
 def held(files, store):
     """A clean run, ingested and checked: a stored check report and a stored diff report to swap."""
     from tests.test_unreadable import _stored
+
     return _stored(_resummed(_renamed(files)), store), store
 
 
@@ -222,6 +245,7 @@ def _report_at(total: int, **fields) -> bytes:
 @pytest.mark.parametrize("total,refused", [(AT, False), (PAST, True)], ids=["at", "past"])
 def test_a_stored_check_report_is_judged_by_the_limit_on_the_run_page_path(held, total, refused):
     from onetrace_console.pages import _envelope
+
     run, store = held
     run = replace(run, check_report=store.put(_report_at(total, command=["onetrace-verify"])))
     if refused:
@@ -235,12 +259,16 @@ def test_a_stored_check_report_is_judged_by_the_limit_on_the_run_page_path(held,
 def test_a_stored_check_report_is_judged_by_the_limit_on_the_overview_count(held, total, counted):
     """Home's count of checks run with --require-artifacts reads the stored report itself."""
     import onetrace_console.home as home
+
     run, store = held
-    run = replace(run, check_report=store.put(_report_at(
-        total, command=["onetrace-verify", "--require-artifacts"])))
-    fn = next(getattr(home, n) for n in dir(home)
-              if callable(getattr(home, n)) and getattr(getattr(home, n), "__code__", None)
-              and "--require-artifacts" in getattr(home, n).__code__.co_consts)
+    run = replace(run, check_report=store.put(_report_at(total, command=["onetrace-verify", "--require-artifacts"])))
+    fn = next(
+        getattr(home, n)
+        for n in dir(home)
+        if callable(getattr(home, n))
+        and getattr(getattr(home, n), "__code__", None)
+        and "--require-artifacts" in getattr(home, n).__code__.co_consts
+    )
     assert fn(run, store) is counted
 
 
@@ -251,6 +279,7 @@ def test_a_stored_diff_report_is_judged_by_the_limit_on_the_overview(store, tota
 
     from onetrace_console.compare import DIFF
     from onetrace_console.overview import _diff_of
+
     key = store.put(_report_at(total, verdict="same"))
     verb_run = SimpleNamespace(note="", reports=(("diff.json", key),))
     comparison = SimpleNamespace(verb=lambda verb: verb_run if verb == DIFF else None)
@@ -297,6 +326,7 @@ def test_ingest_refuses_a_manifest_deeper_than_json_loads_parses_in_the_ruled_wo
     """Before: refused, but as "the manifest is readable JSON -- RecursionError: maximum
     recursion depth exceeded ...", the interpreter's words."""
     from onetrace_console.ingest import accept
+
     out = _renamed(files)
     out["MANIFEST.json"] = _planted_past_json(out["MANIFEST.json"], "note", DEEPER)
     got = accept(make_tar(_resummed(out)), store)
@@ -309,6 +339,7 @@ def test_ingest_refuses_a_receipt_deeper_than_json_loads_parses_in_the_ruled_wor
     """Before: the receipt was skipped as unreadable and the run STORED (201), where one nested
     257 levels is refused: the deeper file got the weaker answer."""
     from onetrace_console.ingest import accept
+
     out = _renamed(files)
     rel = json.loads(out["MANIFEST.json"].decode("utf-8"))["chain"][1]["file"]
     out[rel] = _planted_past_json(out[rel], "assertions", DEEPER)
@@ -318,6 +349,7 @@ def test_ingest_refuses_a_receipt_deeper_than_json_loads_parses_in_the_ruled_wor
 
 
 # --------------------------------------------------------------------- the console's own comparison records
+
 
 def _plant_comparison(store, key: str, levels: int) -> None:
     d = store.root / "comparisons"
@@ -330,6 +362,7 @@ def test_a_stored_comparison_record_too_deep_is_said_as_cannot_be_read(store, le
     """As `get_run` says a run record it cannot read. Before: TooDeep or the parser's
     RecursionError left `get_comparison` bare."""
     from onetrace_console.store import StoreError
+
     key = "ab" * 32
     _plant_comparison(store, key, levels)
     with pytest.raises(StoreError) as e:
@@ -343,6 +376,7 @@ def test_more_lines_of_a_comparison_whose_record_is_too_deep_answers_400_not_500
     traceback in the log."""
     from onetrace_console.store import Store
     from tests.test_serve import _get, _post
+
     base, root = server
     key = "cd" * 32
     _plant_comparison(Store(root / "store"), key, DEEPER)
@@ -354,7 +388,8 @@ def test_more_lines_of_a_comparison_whose_record_is_too_deep_answers_400_not_500
 
 
 def test_comparing_a_pair_whose_stored_comparison_is_too_deep_answers_400_not_500(
-        server, capfd, preview_stored_directly):
+    server, capfd, preview_stored_directly
+):
     """The pair's own key, held and unreadable: said, never 500, and the record is not
     rewritten (a record is never repaired). Before: 500 and a traceback in the log. The pair is
     the exam's preview-format fixtures, stored directly as `test_compare`'s are."""
@@ -362,6 +397,7 @@ def test_comparing_a_pair_whose_stored_comparison_is_too_deep_answers_400_not_50
     from tests.test_checks import _require_installed
     from tests.test_compare import RUN_C, RUN_C_POPPLER24, _require_exam
     from tests.test_serve import _get, _post, _real_delivery
+
     _require_installed()
     _require_exam()
     base, root = server

@@ -12,6 +12,7 @@
 6. Limits as the JSON view's: a long value by its digest, spans past the most counted.
 7. On a recorded run with a trace file given, the step page and the run page carry the view.
 """
+
 from __future__ import annotations
 
 import html
@@ -38,9 +39,15 @@ def _attr(k: str, v) -> dict:
 
 
 def _span(sid, name, start_ms, end_ms, parent="", trace=T, attrs=(), status=None, events=()):
-    sp = {"traceId": trace, "spanId": sid, "parentSpanId": parent, "name": name,
-          "startTimeUnixNano": str(S0 + start_ms * 10**6), "endTimeUnixNano": str(S0 + end_ms * 10**6),
-          "attributes": [_attr(k, v) for k, v in attrs]}
+    sp = {
+        "traceId": trace,
+        "spanId": sid,
+        "parentSpanId": parent,
+        "name": name,
+        "startTimeUnixNano": str(S0 + start_ms * 10**6),
+        "endTimeUnixNano": str(S0 + end_ms * 10**6),
+        "attributes": [_attr(k, v) for k, v in attrs],
+    }
     if status:
         sp["status"] = status
     if events:
@@ -49,21 +56,53 @@ def _span(sid, name, start_ms, end_ms, parent="", trace=T, attrs=(), status=None
 
 
 def _export(*spans) -> bytes:
-    return json.dumps({"resourceSpans": [{"resource": {"attributes": []},
-                                          "scopeSpans": [{"scope": {"name": "app"}, "spans": list(spans)}]}]}).encode()
+    return json.dumps(
+        {
+            "resourceSpans": [
+                {"resource": {"attributes": []}, "scopeSpans": [{"scope": {"name": "app"}, "spans": list(spans)}]}
+            ]
+        }
+    ).encode()
 
 
 def _planted(**extra) -> list:
     return [
         _span(ROOT, "handle request", 50, 950),
-        _span(MODEL, "chat example-model", 120, 400, ROOT,
-              attrs=[("gen_ai.operation.name", "chat"), ("gen_ai.request.model", "example-model"),
-                     ("gen_ai.usage.input_tokens", 120), ("gen_ai.usage.output_tokens", 30)]),
-        _span(TOOL, "execute_tool price_lookup", 420, 800, ROOT,
-              attrs=[("gen_ai.operation.name", "execute_tool"), ("gen_ai.tool.name", "price_lookup")],
-              status={"code": 2, "message": "price service unavailable"}, events=[("retry", 500), ("retry", 600)]),
-        _span(HTTP, "GET", 430, 790, TOOL, attrs=[("http.request.method", "GET"), ("http.request.resend_count", 2),
-                                                  ("http.response.status_code", 503)]),
+        _span(
+            MODEL,
+            "chat example-model",
+            120,
+            400,
+            ROOT,
+            attrs=[
+                ("gen_ai.operation.name", "chat"),
+                ("gen_ai.request.model", "example-model"),
+                ("gen_ai.usage.input_tokens", 120),
+                ("gen_ai.usage.output_tokens", 30),
+            ],
+        ),
+        _span(
+            TOOL,
+            "execute_tool price_lookup",
+            420,
+            800,
+            ROOT,
+            attrs=[("gen_ai.operation.name", "execute_tool"), ("gen_ai.tool.name", "price_lookup")],
+            status={"code": 2, "message": "price service unavailable"},
+            events=[("retry", 500), ("retry", 600)],
+        ),
+        _span(
+            HTTP,
+            "GET",
+            430,
+            790,
+            TOOL,
+            attrs=[
+                ("http.request.method", "GET"),
+                ("http.request.resend_count", 2),
+                ("http.response.status_code", 503),
+            ],
+        ),
         #: The step's own name, in its trace, outside its span: never the join.
         _span(LOOSE, "call", 960, 990),
         _span("6" * 16, "call", 100, 900, trace=OTHER_T),
@@ -71,8 +110,11 @@ def _planted(**extra) -> list:
 
 
 def _receipt(span_id=ROOT, started=STARTED, ended=ENDED) -> dict:
-    return {"stage": {"name": "call"}, "trace": {"trace_id": T, "span_id": span_id},
-            "time": {"started": started, "ended": ended}}
+    return {
+        "stage": {"name": "call"},
+        "trace": {"trace_id": T, "span_id": span_id},
+        "time": {"started": started, "ended": ended},
+    }
 
 
 def _section(spans, receipt=None, reported=()):
@@ -123,14 +165,20 @@ def test_a_step_whose_recorded_span_is_not_in_the_export_is_unjoined(examined):
     spans = span_tree.read_export(_export(*_planted()))
     page = _section(spans, _receipt(span_id="9" * 16))
     examined(1, "step")
-    assert 'data-span-tree="unjoined"' in page and "9" * 16 in page and "data-span-tree=\"waterfall\"" not in page
+    assert 'data-span-tree="unjoined"' in page and "9" * 16 in page and 'data-span-tree="waterfall"' not in page
     assert _section(spans, {**_receipt(), "trace": {"trace_id": "c" * 32, "span_id": ROOT}}) == ""
 
 
-@pytest.mark.parametrize("reported, agree", [([("model_call.json", "example-model")], "agrees"),
-                                             ([("model_call.json", "another-model")], "disagrees"),
-                                             ([("model_call.json", None)], "nothing"), ([], "nothing")],
-                         ids=["the same model", "another model", "a record with no model", "no record"])
+@pytest.mark.parametrize(
+    "reported, agree",
+    [
+        ([("model_call.json", "example-model")], "agrees"),
+        ([("model_call.json", "another-model")], "disagrees"),
+        ([("model_call.json", None)], "nothing"),
+        ([], "nothing"),
+    ],
+    ids=["the same model", "another model", "a record with no model", "no record"],
+)
 def test_the_span_s_model_against_the_step_s_records(reported, agree, examined):
     page = _section(span_tree.read_export(_export(*_planted())), reported=reported)
     examined(1, "model-call span")
@@ -149,8 +197,9 @@ def test_the_step_s_recorded_times_against_its_span_s(examined):
     times = lambda p: re.findall(r'<li data-agree="([a-z]+)">(The step[^<]*recorded times)', p)  # noqa: E731
     assert [k for k, _ in times(inside)] == ["agrees"] and [k for k, _ in times(outside)] == ["disagrees"]
     #: Read to the millisecond the receipts give: a span starting within the step's first millisecond agrees.
-    late = [dict(s, startTimeUnixNano=str(S0 + 100 * 10**6 + 400_000)) if s["spanId"] == ROOT else s
-            for s in _planted()]
+    late = [
+        dict(s, startTimeUnixNano=str(S0 + 100 * 10**6 + 400_000)) if s["spanId"] == ROOT else s for s in _planted()
+    ]
     assert [k for k, _ in times(_section(span_tree.read_export(_export(*late))))] == ["agrees"]
 
 
@@ -185,8 +234,11 @@ def test_an_export_past_the_most_spans_gets_no_view(monkeypatch, examined):
 def test_a_credential_shaped_attribute_is_never_shown(monkeypatch, examined):
     key = "Bearer " + "x" * 20
     spans = _planted()
-    spans[1]["attributes"] += [_attr("http.request.header.authorization", key), _attr("exception.message", key),
-                               _attr("api_key", "plain-value-0000")]
+    spans[1]["attributes"] += [
+        _attr("http.request.header.authorization", key),
+        _attr("exception.message", key),
+        _attr("api_key", "plain-value-0000"),
+    ]
     spans[2]["status"]["message"] = key
     #: Even listed among the names shown, a name shaped like a credential is not.
     monkeypatch.setattr(span_tree, "SHOWN", span_tree.SHOWN + ("api_key", "http.request.header.authorization"))
@@ -196,10 +248,20 @@ def test_a_credential_shaped_attribute_is_never_shown(monkeypatch, examined):
         assert withheld not in page
 
 
-@pytest.mark.parametrize("name, shaped", [("gen_ai.usage.input_tokens", False), ("gen_ai.usage.output_tokens", False),
-                                           ("http.request.header.authorization", True), ("x-api-key", True),
-                                           ("api_key", True), ("db.password", True), ("session.id", True),
-                                           ("gen_ai.request.model", False), ("private_key", True)])
+@pytest.mark.parametrize(
+    "name, shaped",
+    [
+        ("gen_ai.usage.input_tokens", False),
+        ("gen_ai.usage.output_tokens", False),
+        ("http.request.header.authorization", True),
+        ("x-api-key", True),
+        ("api_key", True),
+        ("db.password", True),
+        ("session.id", True),
+        ("gen_ai.request.model", False),
+        ("private_key", True),
+    ],
+)
 def test_a_name_shaped_like_a_credential(name, shaped, examined):
     examined(1, "name")
     assert span_tree.CREDENTIAL_NAME.search(name) is shaped
@@ -207,8 +269,10 @@ def test_a_name_shaped_like_a_credential(name, shaped, examined):
 
 def test_the_value_shape_is_the_verifier_s_own(examined):
     import importlib.util
-    source = open(importlib.util.find_spec("onetrace_verify").submodule_search_locations[0] + "/verify.py",
-                  encoding="utf-8").read()
+
+    source = open(
+        importlib.util.find_spec("onetrace_verify").submodule_search_locations[0] + "/verify.py", encoding="utf-8"
+    ).read()
     got = re.search(r'^_MC_CRED_SHAPE = re\.compile\(r"(.*)"\)$', source, re.M).group(1)
     examined(1, "pattern")
     assert span_tree.CREDENTIAL_VALUE.pattern == got
@@ -236,14 +300,16 @@ def test_no_line_says_what_produced_a_difference(word, examined):
 def recorded(tmp_path_factory):
     """A run recorded inside the app's span, with the app's export given beside it."""
     import os
+
     from onetrace_console import beside
     from onetrace_console.checks import run_and_record
     from onetrace_console.frame import rendering
     from onetrace_console.pages import render_execution
     from onetrace_console.store import Store
-    from tests.model_call_runs import record_run
+    from tests.model_call_runs import record_run, step_receipt
     from tests.test_checks import FIXED_RAN_AT
     from tests.test_compare import _deliver
+
     folder = tmp_path_factory.mktemp("span-tree")
     before = os.environ.get("TRACEPARENT")
     os.environ["TRACEPARENT"] = f"00-{T}-{ROOT}-01"
@@ -251,15 +317,26 @@ def recorded(tmp_path_factory):
         made = record_run(folder / "a", "span-a")
     finally:
         os.environ.pop("TRACEPARENT") if before is None else os.environ.__setitem__("TRACEPARENT", before)
-    receipt = json.loads(next((made / "receipts").glob("*.json")).read_bytes())
+    receipt = json.loads(step_receipt(made).read_bytes())
     s0, s1 = (span_tree._ns(receipt["time"][k]) for k in ("started", "ended"))
-    planted = [dict(_span(ROOT, "handle request", 0, 0), startTimeUnixNano=str(s0 - 10**6),
-                    endTimeUnixNano=str(s1 + 10**6)),
-               dict(_span(MODEL, "chat example-model.reported", 0, 0, ROOT,
-                          attrs=[("gen_ai.response.model", "example-model.reported")]),
-                    startTimeUnixNano=str(s0), endTimeUnixNano=str(s0)),
-               dict(_span(LOOSE, "other work", 0, 0), startTimeUnixNano=str(s1 + 5 * 10**6),
-                    endTimeUnixNano=str(s1 + 6 * 10**6))]
+    planted = [
+        dict(_span(ROOT, "handle request", 0, 0), startTimeUnixNano=str(s0 - 10**6), endTimeUnixNano=str(s1 + 10**6)),
+        dict(
+            _span(
+                MODEL,
+                "chat example-model.reported",
+                0,
+                0,
+                ROOT,
+                attrs=[("gen_ai.response.model", "example-model.reported")],
+            ),
+            startTimeUnixNano=str(s0),
+            endTimeUnixNano=str(s0),
+        ),
+        dict(
+            _span(LOOSE, "other work", 0, 0), startTimeUnixNano=str(s1 + 5 * 10**6), endTimeUnixNano=str(s1 + 6 * 10**6)
+        ),
+    ]
     store = Store(folder / "store")
     run = run_and_record(_deliver(made, store, outputs=True), store, ran_at=FIXED_RAN_AT)
     beside.keep(store, run.key, trace=_export(*planted), trace_source=beside.GIVEN)

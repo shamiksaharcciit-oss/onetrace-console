@@ -6,6 +6,7 @@ for them, and every count over all runs stored, like every other count. Each run
 reads it (`StoredRun.anchored`, from `viewer.model.anchor_reading` at check time), so the row and
 the run pages cannot disagree.
 """
+
 from __future__ import annotations
 
 import json
@@ -16,12 +17,12 @@ import pytest
 
 from onetrace_console.home import ANCHOR_FORMS, tallies
 from onetrace_console.render import HOME, render_all
-from tests.test_home_and_diff import RUN_C, _deliver, _fake_run, _require_exam
 from tests.test_checks import FIXED_RAN_AT, _require_installed
+from tests.test_home_and_diff import RUN_C, _deliver, _fake_run, _require_exam
 from tests.test_overview import _section, _text
 from tests.test_pages import GENERATED_AT
-from tests.test_step3_receipt_anchor import _case_rung, anchored, declared  # noqa: F401
 from tests.test_stage_pages import demo  # noqa: F401
+from tests.test_step3_receipt_anchor import _case_rung, anchored, declared  # noqa: F401
 
 
 def _row(store) -> tuple[str, str]:
@@ -36,13 +37,13 @@ def _row(store) -> tuple[str, str]:
 def mixed(store):
     """One stored run per reading, two not anchored, and one the check runner has not reached."""
     from onetrace_console.checks import run_and_record
+
     _require_installed()
     _require_exam()
     real = run_and_record(_deliver(RUN_C, store), store, ran_at=FIXED_RAN_AT)
     plan = [("y-1", "yes"), ("c-1", "couldnt-check"), ("f-1", "failed"), ("n-1", "not-anchored")]
     for run_id, reading in plan:
-        made = _fake_run(store, real, run_id=run_id, verdict=real.check_verdict,
-                         note=real.check_note)
+        made = _fake_run(store, real, run_id=run_id, verdict=real.check_verdict, note=real.check_note)
         store.put_run(replace(made, anchored=reading))
     _fake_run(store, real, run_id="unchecked-1", verdict="")
     assert len(store.runs()) == 6 and not store.unreadable_runs, "the premise: all six stored"
@@ -57,15 +58,16 @@ def test_the_row_counts_each_form_and_the_runs_without_the_check_inline(mixed, e
     said, markup = _row(store)
     n = t["anchored-not-anchored"].count
     assert n == 2, "the real run and n-1"
-    assert said == (f"Committed by a known time? 1 yes · 1 couldn't check · 1 the check failed · "
-                    f"{n} not anchored · 1 not checked"), said
+    assert said == (
+        f"Committed by a known time? 1 yes · 1 couldn't check · 1 the check failed · {n} not anchored · 1 not checked"
+    ), said
     #: Each count opens exactly the runs it counted.
     for reading, _ in ANCHOR_FORMS + (("not-checked", ""),):
         assert f'href="executions-anchored-{reading}.html"' in markup, reading
 
 
 def test_the_denominator_is_all_runs_stored(mixed):
-    """"of {all stored}", like every other count; the runs with the check are all
+    """ "of {all stored}", like every other count; the runs with the check are all
     stored less the inline "not checked"."""
     store = mixed
     total = len(store.runs())
@@ -99,6 +101,7 @@ def test_each_run_is_counted_as_its_own_page_reads_it(anchored, declared, demo):
 
 def test_a_run_stored_before_is_re_derived_to_the_same_reading(anchored):
     from onetrace_console.checks import DERIVED, rederive
+
     run, store = anchored
     older = replace(run, anchored="", derived="derivation-3")
     store.put_run(older)
@@ -109,6 +112,7 @@ def test_a_run_stored_before_is_re_derived_to_the_same_reading(anchored):
 def test_a_reading_outside_the_four_is_refused_when_read(demo):  # noqa: F811
     """As every field of a stored run is: a record this version does not write is refused."""
     from onetrace_console.store import StoredRun
+
     run, _store = demo
     with pytest.raises(ValueError, match="`anchored` is"):
         StoredRun.from_json(replace(run, anchored="anchored").to_json())
@@ -118,6 +122,7 @@ def test_a_run_whose_report_cannot_be_read_is_not_checked(anchored):
     """No own check the page reads: its rung is what the record declares, so it is counted with
     the runs without the check, never as a form."""
     from onetrace_console.checks import rederive
+
     run, store = anchored
     envelope = json.loads(store.get(run.check_report).decode("utf-8"))
     envelope["stdout"] += "forged: a line after the summary\n"

@@ -8,7 +8,7 @@ backend-path = ["tools/build_backend"]
 
 [project]
 name = "onetrace-console"
-version = "0.7.0"
+version = "0.8.0"
 description = "The onetrace console: every run in one place, read from the reports the verifier and the verbs produced."
 readme = "PYPI_DESCRIPTION.md"     # the README with absolute image links: tools/pypi_description.py
 requires-python = ">=3.12"
@@ -25,8 +25,9 @@ authors = [{ name = "Shamik Saha" }]
 # server is `http.server`, the store is files, the index is `sqlite3`, the tar is
 # `tarfile`, the digests are `hashlib`: all standard library. See DESIGN_GAPS.md.
 dependencies = [
-    "onetrace==0.7.1",                 # the SDK this release was tested with: the verbs
-    "onetrace-verify[crypto]==0.7.1",  # the verifier, with what it needs to check signatures
+    "onetrace==0.8.0",                 # the SDK this release was tested with: the verbs
+    "onetrace-verify[crypto]==0.8.0",  # the verifier, with what it needs to check signatures
+    "pyjwt[crypto]==2.15.1",           # the ID token's checks, for sign-in through Microsoft Entra ID
 ]
 
 # The neighbours extra, `onetrace-console[neighbours]`: the in-process embedder's runtime, with no torch.
@@ -40,7 +41,8 @@ onetrace-console = "onetrace_console.__main__:main"
 
 # The upgrade notes, in the public repository at this release's tag, as the PyPI description links it.
 [project.urls]
-Changelog = "https://github.com/shamiksaharcciit-oss/onetrace-console/blob/v0.7.0/CHANGELOG.md"
+Homepage = "https://oneproof.dev/"
+Changelog = "https://github.com/shamiksaharcciit-oss/onetrace-console/blob/v0.8.0/CHANGELOG.md"
 
 [tool.setuptools.packages.find]
 where = ["src"]
@@ -66,7 +68,56 @@ onetrace_console = ["static/fonts/*.woff2", "static/fonts/OFL.txt", "static/font
 # is named here too: an exclusion that only covers what is committed is an exclusion that
 # stops working the moment someone runs a formatter on a working tree.
 [tool.ruff]
-extend-exclude = ["tests/fixtures", "store", "src/onetrace_console/_received"]
+# After the three folders: the files a standing test holds byte for byte to where they came from (the viewer folder,
+# the SDK's test time-stamp authority, the reference demo's pipeline and the demo store's copy of it).
+extend-exclude = ["tests/fixtures", "store", "src/onetrace_console/_received", "src/onetrace_console/viewer",
+                  "tests/rfc3161_test_tsa.py", "examples/reference-demo/demo.py",
+                  "src/onetrace_console/demo_store/reference_pipeline.py"]
+line-length = 120
+target-version = "py312"
+
+# The rules are named here, family by family, so a ruff release's own default set never decides them.
+#
+#   E4, E7, E9  pycodestyle's errors: imports, statements, syntax.
+#   F           pyflakes: unused and undefined names, repeated keys.
+#   B           bugbear: likely bugs, such as a closure over a loop variable.
+#   UP          pyupgrade: the Python 3.12 spelling of what has one.
+#   I           isort: the order of imports.
+#
+# Ignored, each with its reason:
+#   E741  an ambiguous name such as `l`: a rename everywhere for no defect found.
+#   B905  `zip()` without `strict=`: adding it would raise where a zip now stops at the shorter, a change in
+#         behaviour, not in style.
+# In tests only:
+#   F811  a pytest fixture imported from another test module and named as a parameter reads as a redefinition;
+#         it is how pytest shares a fixture.
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F", "B", "UP", "I"]
+ignore = ["E741", "B905"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["F811"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["onetrace_console", "tests"]
+
+[tool.mypy]
+python_version = "3.12"
+files = ["src/onetrace_console"]
+exclude = ["^tests/fixtures/", "^store/", "^src/onetrace_console/_received/"]
+
+# onetrace and onetrace-verify ship no type information; numpy, tokenizers and onnxruntime are the neighbours'
+# optional extras, read only where installed. The Explain key store's library is named by no dependency file
+# (tests/test_explain_keyring_pin.py): its imports carry their own reason.
+[[tool.mypy.overrides]]
+module = ["onetrace", "onetrace.*", "onetrace_verify", "onetrace_verify.*", "numpy", "numpy.*", "tokenizers",
+          "tokenizers.*", "onnxruntime", "onnxruntime.*"]
+ignore_missing_imports = true
+
+# The byte-for-byte copies (beside ruff's exclusions above): a type finding in them is fixed where they come from.
+[[tool.mypy.overrides]]
+module = ["onetrace_console.viewer.*", "onetrace_console.demo_store.reference_pipeline"]
+ignore_errors = true
 
 [tool.black]
 extend-exclude = "tests/fixtures|store|src/onetrace_console/_received"
@@ -118,3 +169,8 @@ python_files = ["test_*.py"]
 # here and a second on the command line make `-qq`, which prints no tally at all, and counts
 # were once read from runs that reported no total. Not repeated here.
 addopts = "--basetemp=.pytest-basetemp"
+# A passing test keeps no tmp_path folder; a failing one keeps its folder to be read; only the last run's folders are
+# kept. A folder a fixture makes with tmp_path_factory.mktemp stays to the end of the run, as --basetemp is given.
+# Checked by tests/test_tmp_retention.py.
+tmp_path_retention_policy = "failed"
+tmp_path_retention_count = 1

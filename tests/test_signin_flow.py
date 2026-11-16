@@ -1,6 +1,7 @@
 """End to end over real HTTP: the sign-in form, CSRF, rate limiting, sessions,
 sign-out, and the access log recording the real principal with no secrets.
 """
+
 from __future__ import annotations
 
 import re
@@ -8,13 +9,13 @@ import urllib.error
 import urllib.request
 
 import pytest
-from tests.http_limits import limit
 
 from onetrace_console.accounts import AccountStore
 from onetrace_console.config import Config
 from onetrace_console.rate_limit import ConcurrencyLimiter, RateLimiter
 from onetrace_console.serve import ACCOUNTS_DIRNAME, Handler
 from onetrace_console.sessions import SessionStore
+from tests.http_limits import limit
 
 
 class _NoRedirect(urllib.request.HTTPErrorProcessor):
@@ -22,8 +23,10 @@ class _NoRedirect(urllib.request.HTTPErrorProcessor):
     observed directly -- its `Set-Cookie` headers are on THAT response, not
     whatever `urllib` would otherwise silently follow it to.
     """
+
     def http_response(self, request, response):
         return response
+
     https_response = http_response
 
 
@@ -51,8 +54,7 @@ def _get(base, path, headers=None):
 
 
 def _post(base, path, body, headers=None):
-    req = urllib.request.Request(base + path, data=body, method="POST",
-                                 headers=headers or {})
+    req = urllib.request.Request(base + path, data=body, method="POST", headers=headers or {})
     resp = _no_redirect_opener.open(req, timeout=limit(10))
     return resp.status, resp.read(), _headers_dict(resp.headers), resp
 
@@ -86,8 +88,7 @@ def signin_enabled(server, tmp_path):
     Handler.config = Config(sign_in={"enabled": True})
     Handler.account_store = AccountStore(store_root / ACCOUNTS_DIRNAME)
     Handler.account_store.create("alice", b"correct horse battery staple")
-    Handler.session_store = SessionStore(idle_timeout_seconds=1800,
-                                         absolute_timeout_seconds=43200)
+    Handler.session_store = SessionStore(idle_timeout_seconds=1800, absolute_timeout_seconds=43200)
     Handler.rate_limit_per_account = RateLimiter(max_attempts=100, window_seconds=60)
     Handler.rate_limit_per_client = RateLimiter(max_attempts=100, window_seconds=60)
     Handler.rate_limit_concurrent_hashes = ConcurrencyLimiter(max_concurrent=100)
@@ -113,18 +114,18 @@ def _get_signin_form(base):
     return csrf, form_token
 
 
-def test_the_happy_path_signs_in_and_the_access_log_names_the_real_principal(
-        signin_enabled, examined):
+def test_the_happy_path_signs_in_and_the_access_log_names_the_real_principal(signin_enabled, examined):
     base = signin_enabled
     csrf, form_token = _get_signin_form(base)
     assert csrf == form_token
 
     examined(1, "a correct sign-in submission")
     status, body, headers, _ = _post(
-        base, "/signin",
+        base,
+        "/signin",
         f"username=alice&password=correct+horse+battery+staple&csrf_token={form_token}".encode(),
-        headers={"Cookie": f"onetrace_csrf={csrf}",
-                "Content-Type": "application/x-www-form-urlencoded"})
+        headers={"Cookie": f"onetrace_csrf={csrf}", "Content-Type": "application/x-www-form-urlencoded"},
+    )
     assert status == 303
     session_cookie = _cookie_value(headers.get("Set-Cookie"), "onetrace_session")
     assert session_cookie
@@ -140,10 +141,11 @@ def test_a_wrong_password_is_refused(signin_enabled, examined):
     csrf, form_token = _get_signin_form(base)
     examined(1, "an incorrect password submission")
     status, body, headers, _ = _post(
-        base, "/signin",
+        base,
+        "/signin",
         f"username=alice&password=wrong&csrf_token={form_token}".encode(),
-        headers={"Cookie": f"onetrace_csrf={csrf}",
-                "Content-Type": "application/x-www-form-urlencoded"})
+        headers={"Cookie": f"onetrace_csrf={csrf}", "Content-Type": "application/x-www-form-urlencoded"},
+    )
     assert status == 401
     assert b"wrong username or password" in body
 
@@ -154,9 +156,11 @@ def test_a_sign_in_post_without_the_csrf_token_is_refused(signin_enabled, examin
     csrf, _form_token = _get_signin_form(base)
     examined(1, "a sign-in submission missing the CSRF field")
     status, body, headers, _ = _post(
-        base, "/signin", b"username=alice&password=correct+horse+battery+staple",
-        headers={"Cookie": f"onetrace_csrf={csrf}",
-                "Content-Type": "application/x-www-form-urlencoded"})
+        base,
+        "/signin",
+        b"username=alice&password=correct+horse+battery+staple",
+        headers={"Cookie": f"onetrace_csrf={csrf}", "Content-Type": "application/x-www-form-urlencoded"},
+    )
     assert status == 403
 
 
@@ -165,10 +169,11 @@ def test_a_mismatched_csrf_token_is_refused(signin_enabled, examined):
     csrf, _form_token = _get_signin_form(base)
     examined(1, "a sign-in submission whose form token disagrees with its cookie")
     status, body, headers, _ = _post(
-        base, "/signin",
+        base,
+        "/signin",
         b"username=alice&password=correct+horse+battery+staple&csrf_token=not-the-real-one",
-        headers={"Cookie": f"onetrace_csrf={csrf}",
-                "Content-Type": "application/x-www-form-urlencoded"})
+        headers={"Cookie": f"onetrace_csrf={csrf}", "Content-Type": "application/x-www-form-urlencoded"},
+    )
     assert status == 403
 
 
@@ -176,19 +181,25 @@ def test_sign_out_invalidates_the_session_on_the_server(signin_enabled, examined
     base = signin_enabled
     csrf, form_token = _get_signin_form(base)
     _status, _body, headers, _ = _post(
-        base, "/signin",
+        base,
+        "/signin",
         f"username=alice&password=correct+horse+battery+staple&csrf_token={form_token}".encode(),
-        headers={"Cookie": f"onetrace_csrf={csrf}",
-                "Content-Type": "application/x-www-form-urlencoded"})
+        headers={"Cookie": f"onetrace_csrf={csrf}", "Content-Type": "application/x-www-form-urlencoded"},
+    )
     session_cookie = _cookie_value(headers.get("Set-Cookie"), "onetrace_session")
     #: sign-out is itself CSRF-checked now -- the post-auth CSRF
     #: cookie sign-in just set (the session's own token) must be echoed back.
     action_csrf = _cookie_value(headers.get("Set-Cookie"), "onetrace_csrf")
 
     status, _body, _h, _ = _post(
-        base, "/signout", b"",
-        headers={"Cookie": f"onetrace_session={session_cookie}; onetrace_csrf={action_csrf}",
-                "X-CSRF-Token": action_csrf})
+        base,
+        "/signout",
+        b"",
+        headers={
+            "Cookie": f"onetrace_session={session_cookie}; onetrace_csrf={action_csrf}",
+            "X-CSRF-Token": action_csrf,
+        },
+    )
     assert status == 303
 
     #: The SAME cookie, presented again after sign-out, must no longer resolve to
@@ -211,18 +222,24 @@ def test_sign_out_itself_is_logged_under_the_signing_out_principal(signin_enable
     base = signin_enabled
     csrf, form_token = _get_signin_form(base)
     _status, _body, headers, _ = _post(
-        base, "/signin",
+        base,
+        "/signin",
         f"username=alice&password=correct+horse+battery+staple&csrf_token={form_token}".encode(),
-        headers={"Cookie": f"onetrace_csrf={csrf}",
-                "Content-Type": "application/x-www-form-urlencoded"})
+        headers={"Cookie": f"onetrace_csrf={csrf}", "Content-Type": "application/x-www-form-urlencoded"},
+    )
     session_cookie = _cookie_value(headers.get("Set-Cookie"), "onetrace_session")
     action_csrf = _cookie_value(headers.get("Set-Cookie"), "onetrace_csrf")
 
     examined(1, "the access log's own entry for the /signout request itself")
     status, _body, _h, _ = _post(
-        base, "/signout", b"",
-        headers={"Cookie": f"onetrace_session={session_cookie}; onetrace_csrf={action_csrf}",
-                "X-CSRF-Token": action_csrf})
+        base,
+        "/signout",
+        b"",
+        headers={
+            "Cookie": f"onetrace_session={session_cookie}; onetrace_csrf={action_csrf}",
+            "X-CSRF-Token": action_csrf,
+        },
+    )
     assert status == 303
     entries = Handler.access_log.read_all_entries()
     signout_entries = [e for e in entries if e["path"] == "/signout"]
@@ -234,17 +251,18 @@ def test_sign_out_without_a_valid_csrf_token_is_refused(signin_enabled, examined
     base = signin_enabled
     csrf, form_token = _get_signin_form(base)
     _status, _body, headers, _ = _post(
-        base, "/signin",
+        base,
+        "/signin",
         f"username=alice&password=correct+horse+battery+staple&csrf_token={form_token}".encode(),
-        headers={"Cookie": f"onetrace_csrf={csrf}",
-                "Content-Type": "application/x-www-form-urlencoded"})
+        headers={"Cookie": f"onetrace_csrf={csrf}", "Content-Type": "application/x-www-form-urlencoded"},
+    )
     session_cookie = _cookie_value(headers.get("Set-Cookie"), "onetrace_session")
     action_csrf = _cookie_value(headers.get("Set-Cookie"), "onetrace_csrf")
 
     examined(1, "a sign-out POST with no CSRF token at all")
     status, _body, _h, _ = _post(
-        base, "/signout", b"",
-        headers={"Cookie": f"onetrace_session={session_cookie}; onetrace_csrf={action_csrf}"})
+        base, "/signout", b"", headers={"Cookie": f"onetrace_session={session_cookie}; onetrace_csrf={action_csrf}"}
+    )
     assert status == 403
 
     #: The session must still be alive -- a refused sign-out must not have
@@ -272,10 +290,11 @@ def test_rate_limiting_per_account_blocks_further_attempts(server, tmp_path, exa
         for _ in range(3):
             csrf, form_token = _get_signin_form(base)
             status, _body, _headers, _ = _post(
-                base, "/signin",
+                base,
+                "/signin",
                 f"username=bob&password=wrong&csrf_token={form_token}".encode(),
-                headers={"Cookie": f"onetrace_csrf={csrf}",
-                        "Content-Type": "application/x-www-form-urlencoded"})
+                headers={"Cookie": f"onetrace_csrf={csrf}", "Content-Type": "application/x-www-form-urlencoded"},
+            )
             statuses.append(status)
         assert statuses == [401, 401, 429]
     finally:
@@ -284,8 +303,7 @@ def test_rate_limiting_per_account_blocks_further_attempts(server, tmp_path, exa
         Handler.rate_limit_concurrent_hashes = old_rl_concurrent
 
 
-def test_the_access_log_never_contains_a_password_hash_session_id_or_csrf_token(
-        signin_enabled, examined):
+def test_the_access_log_never_contains_a_password_hash_session_id_or_csrf_token(signin_enabled, examined):
     """Extends step 1's own access-log test: search the whole log,
     across a real sign-in, for all four secrets.
     """
@@ -293,10 +311,11 @@ def test_the_access_log_never_contains_a_password_hash_session_id_or_csrf_token(
     csrf, form_token = _get_signin_form(base)
     password = "correct horse battery staple"
     status, body, headers, _ = _post(
-        base, "/signin",
+        base,
+        "/signin",
         f"username=alice&password={password.replace(' ', '+')}&csrf_token={form_token}".encode(),
-        headers={"Cookie": f"onetrace_csrf={csrf}",
-                "Content-Type": "application/x-www-form-urlencoded"})
+        headers={"Cookie": f"onetrace_csrf={csrf}", "Content-Type": "application/x-www-form-urlencoded"},
+    )
     session_cookie = _cookie_value(headers.get("Set-Cookie"), "onetrace_session")
     account = Handler.account_store.get("alice")
 

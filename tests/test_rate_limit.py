@@ -1,4 +1,5 @@
 """rate-limit sign-in attempts, per account and per client."""
+
 from __future__ import annotations
 
 from onetrace_console.rate_limit import ConcurrencyLimiter, RateLimiter
@@ -24,8 +25,8 @@ def test_the_window_rolls_over(examined):
     limiter = RateLimiter(max_attempts=1, window_seconds=10)
     examined(3, "calls straddling a window boundary")
     assert limiter.check_and_record("alice", now=0.0) is True
-    assert limiter.check_and_record("alice", now=5.0) is False   # still inside the window
-    assert limiter.check_and_record("alice", now=11.0) is True   # a new window
+    assert limiter.check_and_record("alice", now=5.0) is False  # still inside the window
+    assert limiter.check_and_record("alice", now=11.0) is True  # a new window
 
 
 def test_reset_clears_the_counter(examined):
@@ -64,9 +65,9 @@ def test_concurrency_limiter_refuses_past_the_cap_and_frees_on_release(examined)
     examined(4, "acquires against a concurrency cap of 2, one release, one retry")
     assert limiter.try_acquire() is True
     assert limiter.try_acquire() is True
-    assert limiter.try_acquire() is False          # the cap is already full
+    assert limiter.try_acquire() is False  # the cap is already full
     limiter.release()
-    assert limiter.try_acquire() is True           # a slot freed by the release
+    assert limiter.try_acquire() is True  # a slot freed by the release
 
 
 def test_concurrency_limiter_a_burst_never_enters_a_patched_hash_function(examined, monkeypatch):
@@ -81,7 +82,7 @@ def test_concurrency_limiter_a_burst_never_enters_a_patched_hash_function(examin
         return b"x"
 
     limiter.try_acquire()
-    limiter.try_acquire()          # the cap (2) is now full
+    limiter.try_acquire()  # the cap (2) is now full
 
     def attempt():
         if not limiter.try_acquire():

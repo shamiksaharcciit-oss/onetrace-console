@@ -26,6 +26,7 @@ FILE lists one page path per line, relative to the pages folder (as `find -name 
 them), or, with --log, is the console's output. Prints one line per check and a RESULT line;
 exits 1 if any check fails.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -41,21 +42,37 @@ import urllib.request
 from urllib.parse import urlsplit
 
 #: The routes that write, and one that does not exist: every one is refused the same way.
-ROUTES = ("/v1/runs", "/text-diff/more?c=0", "/benchmark?run=0&mark=yes", "/expectations?run=0", "/model-tokenizers?digest=x", "/model-tokenizers/remove?digest=x", "/v1/decisions", "/signin",
-          "/signout", "/no-such-route")
+ROUTES = (
+    "/v1/runs",
+    "/text-diff/more?c=0",
+    "/benchmark?run=0&mark=yes",
+    "/expectations?run=0",
+    "/model-tokenizers?digest=x",
+    "/model-tokenizers/remove?digest=x",
+    "/v1/decisions",
+    "/signin",
+    "/signout",
+    "/no-such-route",
+)
 #: The public console's one route that runs something (Compare on a pipeline's own runs): a body
 #: declared past its limit is refused at once, unread.
 COMPARE_ROUTE = "/compare"
 #: The headers every response carries in public mode.
-HEADERS = ("X-Frame-Options", "X-Content-Type-Options", "Cross-Origin-Resource-Policy",
-           "Referrer-Policy", "Strict-Transport-Security", "Content-Security-Policy")
+HEADERS = (
+    "X-Frame-Options",
+    "X-Content-Type-Options",
+    "Cross-Origin-Resource-Policy",
+    "Referrer-Policy",
+    "Strict-Transport-Security",
+    "Content-Security-Policy",
+)
 #: The banner's opening words, and the refusal's.
 BANNER = "A read-only demo of onetrace-console."
 REFUSED = "This is a read-only demo of onetrace-console."
 #: A refusal must arrive well inside the console's 30-second request timeout.
 PROMPT_SECONDS = 5.0
 #: What a POST declares and does not send.
-DECLARED = 10 ** 9
+DECLARED = 10**9
 
 #: The access log's fields, all of them and no others: no client address among them.
 LOG_FIELDS = frozenset({"at", "principal", "method", "path", "status"})
@@ -93,13 +110,14 @@ def page_problems(status: int, headers: dict[str, str], body: bytes) -> list[str
     return out
 
 
-def raw_post(base: str, path: str, declared: int = DECLARED,
-             timeout: float = 30.0) -> tuple[int, bytes, float]:
+def raw_post(base: str, path: str, declared: int = DECLARED, timeout: float = 30.0) -> tuple[int, bytes, float]:
     """A POST that declares `declared` bytes and sends none: (status, body, seconds to answer)."""
     url = urlsplit(base)
     host, port = url.hostname, url.port or 80
-    request = (f"POST {path} HTTP/1.1\r\nHost: {url.netloc}\r\nContent-Type: application/x-tar\r\n"
-               f"Content-Length: {declared}\r\n\r\n").encode("ascii")
+    request = (
+        f"POST {path} HTTP/1.1\r\nHost: {url.netloc}\r\nContent-Type: application/x-tar\r\n"
+        f"Content-Length: {declared}\r\n\r\n"
+    ).encode("ascii")
     started = time.monotonic()
     data = b""
     with socket.create_connection((host, port), timeout=timeout) as s:
@@ -150,9 +168,14 @@ def log_problems(lines: list[str]) -> list[str]:
             entry = json.loads(line)
         except ValueError:
             entry = None
-        if not isinstance(entry, dict) or set(entry) not in (LOG_FIELDS, COMPARE_FIELDS) or (
-                set(entry) == COMPARE_FIELDS and (not isinstance(entry["compare"], dict)
-                                                  or set(entry["compare"]) != {"a", "b"})):
+        if (
+            not isinstance(entry, dict)
+            or set(entry) not in (LOG_FIELDS, COMPARE_FIELDS)
+            or (
+                set(entry) == COMPARE_FIELDS
+                and (not isinstance(entry["compare"], dict) or set(entry["compare"]) != {"a", "b"})
+            )
+        ):
             out.append(f"line {number} is not an access-log entry: {line[:120]}")
     return out
 
@@ -166,8 +189,11 @@ def run(base: str, pages: list[str], say=print) -> bool:
         say(f"{'ok  ' if not problems else 'FAIL'} {what}" + "".join(f"\n       {p}" for p in problems))
 
     status, headers, _ = fetch(base, "/health")
-    report("/health", ([] if status == 200 else [f"status {status}"])
-           + [f"no {n} header" for n in HEADERS if n.lower() not in headers])
+    report(
+        "/health",
+        ([] if status == 200 else [f"status {status}"])
+        + [f"no {n} header" for n in HEADERS if n.lower() not in headers],
+    )
     for rel in pages:
         report(f"/{rel}", page_problems(*fetch(base, "/" + rel)))
     for route in ROUTES:
@@ -184,8 +210,10 @@ def check_log(path: str, say=print) -> bool:
     entries = sum(1 for line in lines if line.startswith("{"))
     for problem in problems:
         say(f"FAIL {problem}")
-    say(f"RESULT: {'all hold' if not problems else 'a line is not the access log'} "
-        f"({len(lines)} lines, {entries} access-log entries, {len(problems)} other lines)")
+    say(
+        f"RESULT: {'all hold' if not problems else 'a line is not the access log'} "
+        f"({len(lines)} lines, {entries} access-log entries, {len(problems)} other lines)"
+    )
     return not problems and entries > 0
 
 

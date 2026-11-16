@@ -24,6 +24,7 @@ files -- they only meet records ingest has already bounded. The console's own re
 itself. So if the console ever reads a run's files from anywhere other than its ingested store (an
 import, or a path given on the command line), that reader needs its own end-to-end pair.
 """
+
 from __future__ import annotations
 
 import json
@@ -49,8 +50,16 @@ class TooDeep(json.JSONDecodeError):
         return (TooDeep, (self.what, self.role))
 
 
-def load_json_bounded(text: str | bytes, what: str, role: str = "read", *, object_pairs_hook=None,
-                      parse_constant=None, parse_float=None, parse_int=None):
+def load_json_bounded(
+    text: str | bytes,
+    what: str,
+    role: str = "read",
+    *,
+    object_pairs_hook=None,
+    parse_constant=None,
+    parse_float=None,
+    parse_int=None,
+):
     """`json.loads(text)`, refused with `TooDeep` when it nests past `MAX_JSON_DEPTH`.
     `what` names the value in the refusal; `role` is "read" or "show", as the site's role is.
     `object_pairs_hook`, `parse_constant`, `parse_float` and `parse_int` are json.loads' own, for a
@@ -58,8 +67,13 @@ def load_json_bounded(text: str | bytes, what: str, role: str = "read", *, objec
     if role not in ROLES:
         raise ValueError(f"role must be one of {ROLES}, not {role!r}")
     try:
-        value = json.loads(text, object_pairs_hook=object_pairs_hook, parse_constant=parse_constant,
-                           parse_float=parse_float, parse_int=parse_int)
+        value = json.loads(
+            text,
+            object_pairs_hook=object_pairs_hook,
+            parse_constant=parse_constant,
+            parse_float=parse_float,
+            parse_int=parse_int,
+        )
     except RecursionError:
         #: Past what the parser reads, so past the limit: json.loads gives out thousands of
         #: levels after MAX_JSON_DEPTH on every interpreter the console runs on.
@@ -71,5 +85,4 @@ def load_json_bounded(text: str | bytes, what: str, role: str = "read", *, objec
 
 def ingest_refusal(what: str) -> str:
     """The words a refused delivery carries, the number from the constant."""
-    return (f"Not ingested: {what} is nested more than {MAX_JSON_DEPTH} levels deep, past what "
-            f"the console reads.")
+    return f"Not ingested: {what} is nested more than {MAX_JSON_DEPTH} levels deep, past what the console reads."

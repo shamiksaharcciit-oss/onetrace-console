@@ -14,6 +14,7 @@ was and removes the file beside it.
 The key is never written here: where one is kept, the table says `key_source = "keyring"` and the key is
 in the keychain (`explain_keychain`).
 """
+
 from __future__ import annotations
 
 import os
@@ -23,8 +24,10 @@ from pathlib import Path
 
 #: The [model] keys the form writes; any other key of the table is kept as written.
 WRITTEN = ("provider", "name", "base_url", "key_env", "key_source")
-BY_HAND = ("The file can't be changed safely here ({why}); nothing was written. Edit its [model] table "
-           "by hand, as in the examples below.")
+BY_HAND = (
+    "The file can't be changed safely here ({why}); nothing was written. Edit its [model] table "
+    "by hand, as in the examples below."
+)
 
 _HEADER = re.compile(r"\s*\[\s*([^\]\[]+?)\s*\]\s*(#.*)?$")
 _KEY = re.compile(r"\s*([A-Za-z0-9_-]+)\s*=")

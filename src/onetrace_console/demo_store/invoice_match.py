@@ -26,6 +26,7 @@ bound to it; the over-limit invoice cites a denial and is not paid. Two more run
 (`plant`): one pays on a denied decision, and one carries a permit for another amount than the payment
 it records. The decisions are made by the builder, never by onedoor: invented example data.
 """
+
 from __future__ import annotations
 
 import json
@@ -44,12 +45,27 @@ APPROVER_LIMIT_CENTS = 250000
 #: Each invoice the demo uses, invented: its number, and its one line (item, quantity, unit price in
 #: cents). The purchase order and goods receipt it is matched against are below, by invoice.
 INVOICES = {
-    "base": {"invoice": "INV-1001", "order": "PO-501", "item": "steel bracket, 40 mm",
-             "quantity": 40, "unit_price_cents": 1280},
-    "quantity-400": {"invoice": "INV-1001", "order": "PO-501", "item": "steel bracket, 40 mm",
-                     "quantity": 400, "unit_price_cents": 1280},
-    "large": {"invoice": "INV-1002", "order": "PO-502", "item": "steel bracket, 40 mm",
-              "quantity": 300, "unit_price_cents": 1280},
+    "base": {
+        "invoice": "INV-1001",
+        "order": "PO-501",
+        "item": "steel bracket, 40 mm",
+        "quantity": 40,
+        "unit_price_cents": 1280,
+    },
+    "quantity-400": {
+        "invoice": "INV-1001",
+        "order": "PO-501",
+        "item": "steel bracket, 40 mm",
+        "quantity": 400,
+        "unit_price_cents": 1280,
+    },
+    "large": {
+        "invoice": "INV-1002",
+        "order": "PO-502",
+        "item": "steel bracket, 40 mm",
+        "quantity": 300,
+        "unit_price_cents": 1280,
+    },
 }
 #: The purchase order's quantity and unit price, and the quantity the goods receipt records.
 ORDERS = {
@@ -69,10 +85,12 @@ def _percent(basis_points: int) -> str:
 def invoice_text(invoice: str) -> str:
     """The invoice's file, a CSV with one line: what was invoiced, how many, at what unit price."""
     inv = INVOICES[invoice]
-    rows = ["# invented example data for this demo",
-            f"# invoice {inv['invoice']}, against purchase order {inv['order']}",
-            "item,quantity,unit_price",
-            f"{inv['item']},{inv['quantity']},{_money(inv['unit_price_cents'])}"]
+    rows = [
+        "# invented example data for this demo",
+        f"# invoice {inv['invoice']}, against purchase order {inv['order']}",
+        "item,quantity,unit_price",
+        f"{inv['item']},{inv['quantity']},{_money(inv['unit_price_cents'])}",  # type: ignore[arg-type]  # each invoice's unit_price_cents is an int
+    ]
     return "\n".join(rows) + "\n"
 
 
@@ -105,9 +123,15 @@ def main(out_dir, run_id: str, invoice: str, tolerance_bp: str, plant: str = "",
     out = Path(out_dir)
     out.mkdir(parents=True, exist_ok=True)
     gated = {"gated_stages": ["approve_payment"]} if issuer is not None else {}
-    rec = Recorder(out_dir, run_id=run_id, declared_stages=STAGES, manifest=Path(__file__),
-                   policy="fail-closed", anchor_reason="a demo record; anchoring is not part of this demo",
-                   **gated)
+    rec = Recorder(
+        out_dir,
+        run_id=run_id,
+        declared_stages=STAGES,
+        manifest=Path(__file__),
+        policy="fail-closed",
+        anchor_reason="a demo record; anchoring is not part of this demo",
+        **gated,
+    )
     data = invoice_bytes(invoice)
     tolerance = int(tolerance_bp)
 
@@ -119,8 +143,7 @@ def main(out_dir, run_id: str, invoice: str, tolerance_bp: str, plant: str = "",
         lines = load_json_bounded(data.decode("utf-8"), "the invoice file").splitlines()
         order = lines[1].rsplit(" ", 1)[1]
         item, quantity, price = lines[3].rsplit(",", 2)
-        return ctx.write_json("invoice.json", {"order": order, "item": item, "quantity": quantity,
-                                               "unit_price": price})
+        return ctx.write_json("invoice.json", {"order": order, "item": item, "quantity": quantity, "unit_price": price})
 
     def match(ctx, read):
         ctx.read_receipt("read_invoice")
@@ -138,11 +161,14 @@ def main(out_dir, run_id: str, invoice: str, tolerance_bp: str, plant: str = "",
         if quantity != po["received"]:
             problems.append(f"quantity invoiced {quantity}, quantity received {po['received']}")
         if over_bp > tolerance:
-            problems.append(f"unit price {_money(price)} is {_percent(over_bp)} over the order's "
-                            f"{_money(po['unit_price_cents'])}, past the tolerance of {_percent(tolerance)}")
-        return ctx.write_json("match.json", {"order": inv["order"], "matched": not problems,
-                                             "problems": problems,
-                                             "amount": _money(quantity * price)})
+            problems.append(
+                f"unit price {_money(price)} is {_percent(over_bp)} over the order's "
+                f"{_money(po['unit_price_cents'])}, past the tolerance of {_percent(tolerance)}"
+            )
+        return ctx.write_json(
+            "match.json",
+            {"order": inv["order"], "matched": not problems, "problems": problems, "amount": _money(quantity * price)},
+        )
 
     def approve_payment(ctx, matched):
         ctx.read_receipt("match")
@@ -153,27 +179,39 @@ def main(out_dir, run_id: str, invoice: str, tolerance_bp: str, plant: str = "",
             #: The decision that allowed what the step does, cited before it does it. Numbers in an
             #: action are decimal strings, as onedoor's are.
             request = f"{run_id}/approve_payment"
-            action = {"action": "pay" if m["matched"] else "hold", "order": m["order"],
-                      "amount_eur": m["amount"]}
+            action = {"action": "pay" if m["matched"] else "hold", "order": m["order"], "amount_eur": m["amount"]}
             if over or plant == "pay-on-deny":
                 ctx.decision(issuer.decide(request, "deny"))
             elif plant == "permit-other-amount":
-                ctx.decision(issuer.decide(request, "permit"),
-                             permit=issuer.permit({**action, "amount_eur": _money(amount + 100000)}), action=action)
+                ctx.decision(
+                    issuer.decide(request, "permit"),
+                    permit=issuer.permit({**action, "amount_eur": _money(amount + 100000)}),
+                    action=action,
+                )
             else:
                 ctx.decision(issuer.decide(request, "permit"), permit=issuer.permit(action), action=action)
         if over:
-            raise Refusal(f"an invoice of {m['amount']} is over the approver's limit of "
-                          f"{_money(APPROVER_LIMIT_CENTS)}")
-        return ctx.write_json("payment.json", {"decision": "pay" if m["matched"] else "hold",
-                                               "amount": m["amount"], "problems": m["problems"]})
+            raise Refusal(f"an invoice of {m['amount']} is over the approver's limit of {_money(APPROVER_LIMIT_CENTS)}")
+        return ctx.write_json(
+            "payment.json",
+            {"decision": "pay" if m["matched"] else "hold", "amount": m["amount"], "problems": m["problems"]},
+        )
 
-    read = rec.run_node("read_invoice", None, Instrument("invoice-reader", "reader", "1.0.0",
-                                                         {"format": "csv, one line"}), read_invoice)
-    matched = rec.run_node("match", None, Instrument("three-way-match", "checker", "1.0.0",
-                                                     {"price_tolerance": _percent(tolerance)}),
-                           match, read)
-    rec.run_node("approve_payment", None, Instrument("payment-approval", "policy", "1.0.0",
-                                                     {"approver_limit": _money(APPROVER_LIMIT_CENTS)}),
-                 approve_payment, matched)
+    read = rec.run_node(
+        "read_invoice", None, Instrument("invoice-reader", "reader", "1.0.0", {"format": "csv, one line"}), read_invoice
+    )
+    matched = rec.run_node(
+        "match",
+        None,
+        Instrument("three-way-match", "checker", "1.0.0", {"price_tolerance": _percent(tolerance)}),
+        match,
+        read,
+    )
+    rec.run_node(
+        "approve_payment",
+        None,
+        Instrument("payment-approval", "policy", "1.0.0", {"approver_limit": _money(APPROVER_LIMIT_CENTS)}),
+        approve_payment,
+        matched,
+    )
     rec.close()

@@ -12,6 +12,7 @@
 
 Each check has its sabotage.
 """
+
 from __future__ import annotations
 
 import re
@@ -32,8 +33,9 @@ def _both_views(demo, base: str, cand: str) -> str:  # noqa: F811
     ids = {r.run_id: r.key for r in store.runs()}
     c = next(c for c in store.comparisons() if (c.run_a, c.run_b) == (ids[base], ids[cand]))
     diff = folder / "store" / "pages" / "diff"
-    return ((diff / f"{c.key}.html").read_text(encoding="utf-8")
-            + (diff / f"{c.key}-proof.html").read_text(encoding="utf-8"))
+    return (diff / f"{c.key}.html").read_text(encoding="utf-8") + (diff / f"{c.key}-proof.html").read_text(
+        encoding="utf-8"
+    )
 
 
 def polish_problems(page: str, annotations: list[dict]) -> list[str]:
@@ -92,9 +94,14 @@ def test_sabotage_each_unpolished_form_is_named(demo, examined):  # noqa: F811
     short = field.rsplit(".", 1)[-1]
     planted = {
         "whole path": page.replace(f"{short}: ", f"{field}: ", 1),
-        "placeholder": page.replace("<code>onetrace diff runs/", "<code>python -m onetrace diff RUN_A RUN_B --out OUT runs/", 1),
-        "digest out of Details": page.replace('<details data-section="settings-details">',
-                                               '<p>sha256:' + "a" * 64 + '</p><details data-section="settings-details">', 1),
+        "placeholder": page.replace(
+            "<code>onetrace diff runs/", "<code>python -m onetrace diff RUN_A RUN_B --out OUT runs/", 1
+        ),
+        "digest out of Details": page.replace(
+            '<details data-section="settings-details">',
+            "<p>sha256:" + "a" * 64 + '</p><details data-section="settings-details">',
+            1,
+        ),
         "all folds open": re.sub(r'(<details data-node-fold="[^"]+")>', r"\1 open>", page),
         "table unfolded": page.replace('<details data-section="stage-table" data-verb="diff">', "<div>", 1),
     }
@@ -108,11 +115,13 @@ def test_a_folds_heading_stays_on_its_markers_line(examined):
     """A stage's fold heads its summary: drawn inline, its heading beside the fold's marker rather
     than on a line of its own under it."""
     from onetrace_console.frame import stylesheet
+
     css = stylesheet().decode("utf-8")
     examined(1, "stylesheet")
     assert ".cp details[data-node-fold]>summary>h3{display:inline;margin:0}" in css
     assert ".cp details[data-node-fold]>summary>h3{display:inline" not in css.replace(
-        ".cp details[data-node-fold]>summary>h3{display:inline;margin:0}", ""), "said once"
+        ".cp details[data-node-fold]>summary>h3{display:inline;margin:0}", ""
+    ), "said once"
 
 
 def test_every_setting_arrow_is_one_arrow(demo, examined):  # noqa: F811

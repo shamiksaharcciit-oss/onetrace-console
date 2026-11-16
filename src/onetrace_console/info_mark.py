@@ -6,6 +6,7 @@ script), named for a screen reader by its `aria-label`, in both themes at the pa
 number in it is read from the record that gave the count (the verifier's own `--json` rows, the
 explanation's record, the comparison's report), never typed.
 """
+
 from __future__ import annotations
 
 import re
@@ -31,8 +32,10 @@ INFO_CSS = """
 
 def mark(note: str) -> str:
     """The "i" and its note: reachable by keyboard, its note its accessible name."""
-    return (f'<span class="info" tabindex="0" role="note" aria-label="{escape(note)}" data-info>'
-            f'<span class="i" aria-hidden="true">i</span><span class="tip" aria-hidden="true">{escape(note)}</span></span>')
+    return (
+        f'<span class="info" tabindex="0" role="note" aria-label="{escape(note)}" data-info>'
+        f'<span class="i" aria-hidden="true">i</span><span class="tip" aria-hidden="true">{escape(note)}</span></span>'
+    )
 
 
 def _plural(n: int, one: str, many: str) -> str:
@@ -44,17 +47,21 @@ def checks_note(rows: list[dict], shown: int) -> str:
     receipt, the manifest, a run-wide check), adding up to N; the rows NOT-RUN and FAIL named apart.
     `rows`: the verifier's own `--json` rows."""
     held = [r for r in rows if r.get("result") == "PASS"]
-    by = Counter(str(r.get("name", "")).split(": ", 1)[0] if ": " in str(r.get("name", "")) else str(r.get("name", ""))
-                 for r in held)
+    by = Counter(
+        str(r.get("name", "")).split(": ", 1)[0] if ": " in str(r.get("name", "")) else str(r.get("name", ""))
+        for r in held
+    )
     receipts = sorted((k, n) for k, n in by.items() if k.startswith("receipts/"))
     others = sorted((k, n) for k, n in by.items() if not k.startswith("receipts/"))
     parts = [f"{n} on {k}" for k, n in receipts] + [f"{n} on {k}" for k, n in others]
     total = sum(by.values())
     rest = Counter(r.get("result") for r in rows if r.get("result") != "PASS")
     not_counted = "; ".join(f"{n} {k}" for k, n in sorted(rest.items()))
-    return (f"onetrace-verify's rows that held, by what each checks: {' + '.join(parts)} = {total}"
-            + (f". Not counted: {not_counted}." if not_counted else ".")
-            + ("" if total == shown else f" (The line shows {shown}.)"))
+    return (
+        f"onetrace-verify's rows that held, by what each checks: {' + '.join(parts)} = {total}"
+        + (f". Not counted: {not_counted}." if not_counted else ".")
+        + ("" if total == shown else f" (The line shows {shown}.)")
+    )
 
 
 def rows_of(envelope: dict | None) -> list[dict]:
@@ -86,19 +93,28 @@ def step_note(rows: list[dict], receipt_file: str, shown: int) -> str:
     held = sum(1 for r in mine if r.get("result") == "PASS")
     rest = Counter(r.get("result") for r in mine if r.get("result") != "PASS")
     not_counted = "; ".join(f"{n} {k}" for k, n in sorted(rest.items()))
-    return (f"onetrace-verify's rows about {receipt_file} that held: {held}"
-            + (f". Not counted: {not_counted}." if not_counted else ".")
-            + ("" if held == shown else f" (The line shows {shown}.)"))
+    return (
+        f"onetrace-verify's rows about {receipt_file} that held: {held}"
+        + (f". Not counted: {not_counted}." if not_counted else ".")
+        + ("" if held == shown else f" (The line shows {shown}.)")
+    )
 
 
-_RUNG = re.compile(r'(<tr data-rung="records-agree"[^>]*>.*?<span class="value" data-words="value">(\d+)</span>'
-                   r' checks? made — (?:all hold|it holds)\.)', re.S)
-_STEP = re.compile(r'(<li data-state="pass" data-count="(\d+)"><strong>step (\d+) of \d+ · [^<]*</strong>'
-                   r' — <span class="value" data-words="value">\d+</span> checks? made — (?:all hold|it holds)\.)')
+_RUNG = re.compile(
+    r'(<tr data-rung="records-agree"[^>]*>.*?<span class="value" data-words="value">(\d+)</span>'
+    r" checks? made — (?:all hold|it holds)\.)",
+    re.S,
+)
+_STEP = re.compile(
+    r'(<li data-state="pass" data-count="(\d+)"><strong>step (\d+) of \d+ · [^<]*</strong>'
+    r' — <span class="value" data-words="value">\d+</span> checks? made — (?:all hold|it holds)\.)'
+)
 #: A format 0.4 run's close receipt, which is not a step: its line in the list of what was checked, by
 #: its label (`viewer.sentences`, `label.close`). Its receipt is the chain's last.
-_CLOSE = re.compile(r'(<li data-state="pass" data-count="(\d+)"><strong>The close receipt</strong>'
-                    r' — <span class="value" data-words="value">\d+</span> checks? made — (?:all hold|it holds)\.)')
+_CLOSE = re.compile(
+    r'(<li data-state="pass" data-count="(\d+)"><strong>The close receipt</strong>'
+    r' — <span class="value" data-words="value">\d+</span> checks? made — (?:all hold|it holds)\.)'
+)
 
 
 def splice(page: str, rows: list[dict], chain_files: list[str]) -> str:
@@ -114,6 +130,7 @@ def splice(page: str, rows: list[dict], chain_files: list[str]) -> str:
         if not 1 <= n <= len(chain_files):
             return m.group(1)
         return m.group(1) + mark(step_note(rows, chain_files[n - 1], int(m.group(2))))
+
     page = _STEP.sub(step, page)
     if not chain_files:
         return page

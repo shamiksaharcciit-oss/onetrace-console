@@ -6,6 +6,7 @@ over one row. Each fingerprint now has a row of its own where the count is, sayi
 fingerprints and that it differs; its two values stay under Details, as before. Held on every
 text diff the demo draws, on the comparison pages and on the text diff's own pages.
 """
+
 from __future__ import annotations
 
 import re
@@ -44,8 +45,12 @@ def test_every_count_sits_over_as_many_rows(demo, examined):  # noqa: F811
 
 def test_a_fingerprint_row_names_it_and_keeps_its_values_under_details(examined):
     from onetrace_console.textdiff_view import _settings
-    lines = ["settings: 2 changed", "  instrument.config_digest: aaa2d6fad586 -> a034738a4cba",
-             "  constants.chunk_size: 1024 -> 512"]
+
+    lines = [
+        "settings: 2 changed",
+        "  instrument.config_digest: aaa2d6fad586 -> a034738a4cba",
+        "  constants.chunk_size: 1024 -> 512",
+    ]
     html = _settings(lines)
     examined(len(lines), "settings lines")
     page = f'<article data-node="split">{html}</article>'
@@ -58,8 +63,12 @@ def test_a_fingerprint_row_names_it_and_keeps_its_values_under_details(examined)
 
 def test_sabotage_a_missing_row_is_named(examined):
     from onetrace_console.textdiff_view import _settings
-    lines = ["settings: 2 changed", "  instrument.config_digest: aaa2d6fad586 -> a034738a4cba",
-             "  constants.chunk_size: 1024 -> 512"]
+
+    lines = [
+        "settings: 2 changed",
+        "  instrument.config_digest: aaa2d6fad586 -> a034738a4cba",
+        "  constants.chunk_size: 1024 -> 512",
+    ]
     html = re.sub(r"<p data-settings data-fingerprint>.*?</p>", "", _settings(lines), count=1)
     examined(1, "planted stage")
     assert count_problems(f'<article data-node="split">{html}</article>') == ["split: settings: 2 changed over 1 rows"]

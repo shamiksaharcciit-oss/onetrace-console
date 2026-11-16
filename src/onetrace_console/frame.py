@@ -14,6 +14,7 @@ copy. Their footer states the configuration they were rendered under -- "Local m
 "Sign-in required" -- and the version, and never a user: a run page is a document
 people save and pass on, and a forwarded page does not say who forwarded it.
 """
+
 from __future__ import annotations
 
 import contextlib
@@ -34,34 +35,66 @@ _FONTS = Path(__file__).parent / "static" / "fonts"
 #: symbols); `unicode-range` names each file's characters, so a page loads Pi only where it draws
 #: one. The ranges were read from the files' own character maps (static/fonts/FONTS.md).
 _FACES = {
-    "IBMPlexSans-Regular-Latin1.woff2": ("IBM Plex Sans", 400,
-             "U+0000,U+000D,U+0020-007E,U+00A0-00FF,U+0131,U+0152-0153,U+02C6,U+02DA,U+02DC,U+2013-2014,U+2018-201A,U+201C-201E,U+2020-2022,U+2026,U+2030,U+2039-203A,U+2044,U+20AC,U+2122,U+2212,U+FB01-FB02"),
-    "IBMPlexSans-Regular-Pi.woff2": ("IBM Plex Sans", 400,
-             "U+0E3F,U+2000-200D,U+2015,U+2028-2029,U+202F,U+2032-2033,U+2070,U+2074-2079,U+2080-2089,U+2113,U+2116,U+2126,U+212E,U+2150-2151,U+2153-215E,U+2190-2199,U+21A9-21AA,U+21B0-21B3,U+21B6-21B7,U+21BA-21BB,U+21C4,U+21C6,U+2202,U+2206,U+220F,U+2211,U+2215,U+221A,U+221E,U+222B,U+2248,U+2260,U+2264-2265,U+25CA,U+2713,U+274C,U+2B0E-2B11,U+ECE0,U+EFCC,U+FEFF,U+FFFD"),
-    "IBMPlexSans-Medium-Latin1.woff2": ("IBM Plex Sans", 500,
-             "U+0000,U+000D,U+0020-007E,U+00A0-00FF,U+0131,U+0152-0153,U+02C6,U+02DA,U+02DC,U+2013-2014,U+2018-201A,U+201C-201E,U+2020-2022,U+2026,U+2030,U+2039-203A,U+2044,U+20AC,U+2122,U+2212,U+FB01-FB02"),
-    "IBMPlexSans-Medium-Pi.woff2": ("IBM Plex Sans", 500,
-             "U+0E3F,U+2000-200D,U+2015,U+2028-2029,U+202F,U+2032-2033,U+2070,U+2074-2079,U+2080-2089,U+2113,U+2116,U+2126,U+212E,U+2150-2151,U+2153-215E,U+2190-2199,U+21A9-21AA,U+21B0-21B3,U+21B6-21B7,U+21BA-21BB,U+21C4,U+21C6,U+2202,U+2206,U+220F,U+2211,U+2215,U+221A,U+221E,U+222B,U+2248,U+2260,U+2264-2265,U+25CA,U+2713,U+274C,U+2B0E-2B11,U+ECE0,U+EFCC,U+FEFF,U+FFFD"),
-    "IBMPlexSans-SemiBold-Latin1.woff2": ("IBM Plex Sans", 600,
-             "U+0000,U+000D,U+0020-007E,U+00A0-00FF,U+0131,U+0152-0153,U+02C6,U+02DA,U+02DC,U+2013-2014,U+2018-201A,U+201C-201E,U+2020-2022,U+2026,U+2030,U+2039-203A,U+2044,U+20AC,U+2122,U+2212,U+FB01-FB02"),
-    "IBMPlexSans-SemiBold-Pi.woff2": ("IBM Plex Sans", 600,
-             "U+0E3F,U+2000-200D,U+2015,U+2028-2029,U+202F,U+2032-2033,U+2070,U+2074-2079,U+2080-2089,U+2113,U+2116,U+2126,U+212E,U+2150-2151,U+2153-215E,U+2190-2199,U+21A9-21AA,U+21B0-21B3,U+21B6-21B7,U+21BA-21BB,U+21C4,U+21C6,U+2202,U+2206,U+220F,U+2211,U+2215,U+221A,U+221E,U+222B,U+2248,U+2260,U+2264-2265,U+25CA,U+2713,U+274C,U+2B0E-2B11,U+ECE0,U+EFCC,U+FEFF,U+FFFD"),
-    "IBMPlexMono-Regular-Latin1.woff2": ("IBM Plex Mono", 400,
-             "U+0020-007E,U+00A0-00FF,U+0131,U+0152-0153,U+02C6,U+02DA,U+02DC,U+2013-2014,U+2018-201A,U+201C-201E,U+2020-2022,U+2026,U+2030,U+2039-203A,U+2044,U+20AC,U+2122,U+2212,U+FB01-FB02"),
-    "IBMPlexMono-Regular-Pi.woff2": ("IBM Plex Mono", 400,
-             "U+03C0,U+0E3F,U+2000-200D,U+2010-2012,U+2015,U+2028-2029,U+202F,U+2032-2033,U+203E,U+205F,U+2070,U+2074-2079,U+2080-2089,U+2113,U+2116,U+2126,U+212E,U+2150-2151,U+2153-215E,U+2190-2199,U+21A9-21AA,U+21B0-21B3,U+21B6-21B7,U+21BA-21BB,U+21C4,U+21C6,U+2202,U+2206,U+220F,U+2211,U+2215,U+2219-221A,U+221E,U+222B,U+2236,U+2248,U+2260,U+2264-2265,U+2400-2421,U+2500-259F,U+25CA,U+2713,U+274C,U+2B0E-2B11,U+3000,U+FEFF,U+FFFD"),
-    "IBMPlexMono-Medium-Latin1.woff2": ("IBM Plex Mono", 500,
-             "U+0020-007E,U+00A0-00FF,U+0131,U+0152-0153,U+02C6,U+02DA,U+02DC,U+2013-2014,U+2018-201A,U+201C-201E,U+2020-2022,U+2026,U+2030,U+2039-203A,U+2044,U+20AC,U+2122,U+2212,U+FB01-FB02"),
-    "IBMPlexMono-Medium-Pi.woff2": ("IBM Plex Mono", 500,
-             "U+03C0,U+0E3F,U+2000-200D,U+2010-2012,U+2015,U+2028-2029,U+202F,U+2032-2033,U+203E,U+205F,U+2070,U+2074-2079,U+2080-2089,U+2113,U+2116,U+2126,U+212E,U+2150-2151,U+2153-215E,U+2190-2199,U+21A9-21AA,U+21B0-21B3,U+21B6-21B7,U+21BA-21BB,U+21C4,U+21C6,U+2202,U+2206,U+220F,U+2211,U+2215,U+2219-221A,U+221E,U+222B,U+2236,U+2248,U+2260,U+2264-2265,U+2400-2421,U+2500-259F,U+25CA,U+2713,U+274C,U+2B0E-2B11,U+3000,U+FEFF,U+FFFD"),
+    "IBMPlexSans-Regular-Latin1.woff2": (
+        "IBM Plex Sans",
+        400,
+        "U+0000,U+000D,U+0020-007E,U+00A0-00FF,U+0131,U+0152-0153,U+02C6,U+02DA,U+02DC,U+2013-2014,U+2018-201A,U+201C-201E,U+2020-2022,U+2026,U+2030,U+2039-203A,U+2044,U+20AC,U+2122,U+2212,U+FB01-FB02",
+    ),
+    "IBMPlexSans-Regular-Pi.woff2": (
+        "IBM Plex Sans",
+        400,
+        "U+0E3F,U+2000-200D,U+2015,U+2028-2029,U+202F,U+2032-2033,U+2070,U+2074-2079,U+2080-2089,U+2113,U+2116,U+2126,U+212E,U+2150-2151,U+2153-215E,U+2190-2199,U+21A9-21AA,U+21B0-21B3,U+21B6-21B7,U+21BA-21BB,U+21C4,U+21C6,U+2202,U+2206,U+220F,U+2211,U+2215,U+221A,U+221E,U+222B,U+2248,U+2260,U+2264-2265,U+25CA,U+2713,U+274C,U+2B0E-2B11,U+ECE0,U+EFCC,U+FEFF,U+FFFD",
+    ),
+    "IBMPlexSans-Medium-Latin1.woff2": (
+        "IBM Plex Sans",
+        500,
+        "U+0000,U+000D,U+0020-007E,U+00A0-00FF,U+0131,U+0152-0153,U+02C6,U+02DA,U+02DC,U+2013-2014,U+2018-201A,U+201C-201E,U+2020-2022,U+2026,U+2030,U+2039-203A,U+2044,U+20AC,U+2122,U+2212,U+FB01-FB02",
+    ),
+    "IBMPlexSans-Medium-Pi.woff2": (
+        "IBM Plex Sans",
+        500,
+        "U+0E3F,U+2000-200D,U+2015,U+2028-2029,U+202F,U+2032-2033,U+2070,U+2074-2079,U+2080-2089,U+2113,U+2116,U+2126,U+212E,U+2150-2151,U+2153-215E,U+2190-2199,U+21A9-21AA,U+21B0-21B3,U+21B6-21B7,U+21BA-21BB,U+21C4,U+21C6,U+2202,U+2206,U+220F,U+2211,U+2215,U+221A,U+221E,U+222B,U+2248,U+2260,U+2264-2265,U+25CA,U+2713,U+274C,U+2B0E-2B11,U+ECE0,U+EFCC,U+FEFF,U+FFFD",
+    ),
+    "IBMPlexSans-SemiBold-Latin1.woff2": (
+        "IBM Plex Sans",
+        600,
+        "U+0000,U+000D,U+0020-007E,U+00A0-00FF,U+0131,U+0152-0153,U+02C6,U+02DA,U+02DC,U+2013-2014,U+2018-201A,U+201C-201E,U+2020-2022,U+2026,U+2030,U+2039-203A,U+2044,U+20AC,U+2122,U+2212,U+FB01-FB02",
+    ),
+    "IBMPlexSans-SemiBold-Pi.woff2": (
+        "IBM Plex Sans",
+        600,
+        "U+0E3F,U+2000-200D,U+2015,U+2028-2029,U+202F,U+2032-2033,U+2070,U+2074-2079,U+2080-2089,U+2113,U+2116,U+2126,U+212E,U+2150-2151,U+2153-215E,U+2190-2199,U+21A9-21AA,U+21B0-21B3,U+21B6-21B7,U+21BA-21BB,U+21C4,U+21C6,U+2202,U+2206,U+220F,U+2211,U+2215,U+221A,U+221E,U+222B,U+2248,U+2260,U+2264-2265,U+25CA,U+2713,U+274C,U+2B0E-2B11,U+ECE0,U+EFCC,U+FEFF,U+FFFD",
+    ),
+    "IBMPlexMono-Regular-Latin1.woff2": (
+        "IBM Plex Mono",
+        400,
+        "U+0020-007E,U+00A0-00FF,U+0131,U+0152-0153,U+02C6,U+02DA,U+02DC,U+2013-2014,U+2018-201A,U+201C-201E,U+2020-2022,U+2026,U+2030,U+2039-203A,U+2044,U+20AC,U+2122,U+2212,U+FB01-FB02",
+    ),
+    "IBMPlexMono-Regular-Pi.woff2": (
+        "IBM Plex Mono",
+        400,
+        "U+03C0,U+0E3F,U+2000-200D,U+2010-2012,U+2015,U+2028-2029,U+202F,U+2032-2033,U+203E,U+205F,U+2070,U+2074-2079,U+2080-2089,U+2113,U+2116,U+2126,U+212E,U+2150-2151,U+2153-215E,U+2190-2199,U+21A9-21AA,U+21B0-21B3,U+21B6-21B7,U+21BA-21BB,U+21C4,U+21C6,U+2202,U+2206,U+220F,U+2211,U+2215,U+2219-221A,U+221E,U+222B,U+2236,U+2248,U+2260,U+2264-2265,U+2400-2421,U+2500-259F,U+25CA,U+2713,U+274C,U+2B0E-2B11,U+3000,U+FEFF,U+FFFD",
+    ),
+    "IBMPlexMono-Medium-Latin1.woff2": (
+        "IBM Plex Mono",
+        500,
+        "U+0020-007E,U+00A0-00FF,U+0131,U+0152-0153,U+02C6,U+02DA,U+02DC,U+2013-2014,U+2018-201A,U+201C-201E,U+2020-2022,U+2026,U+2030,U+2039-203A,U+2044,U+20AC,U+2122,U+2212,U+FB01-FB02",
+    ),
+    "IBMPlexMono-Medium-Pi.woff2": (
+        "IBM Plex Mono",
+        500,
+        "U+03C0,U+0E3F,U+2000-200D,U+2010-2012,U+2015,U+2028-2029,U+202F,U+2032-2033,U+203E,U+205F,U+2070,U+2074-2079,U+2080-2089,U+2113,U+2116,U+2126,U+212E,U+2150-2151,U+2153-215E,U+2190-2199,U+21A9-21AA,U+21B0-21B3,U+21B6-21B7,U+21BA-21BB,U+21C4,U+21C6,U+2202,U+2206,U+220F,U+2211,U+2215,U+2219-221A,U+221E,U+222B,U+2236,U+2248,U+2260,U+2264-2265,U+2400-2421,U+2500-259F,U+25CA,U+2713,U+274C,U+2B0E-2B11,U+3000,U+FEFF,U+FFFD",
+    ),
 }
 
 #: The navigation, in order: (label, href, the page it opens under `pages/`).
-ITEMS = (("Overview", "/", "home.html"),
-         ("Runs", "/executions-all.html", "executions-all.html"),
-         #: After Runs, named for what it lists, not the boards' "Diff & compare".
-         ("Comparisons", "/comparisons.html", "comparisons.html"),
-         ("Incidents", "/incidents.html", "incidents.html"))
+ITEMS = (
+    ("Overview", "/", "home.html"),
+    ("Runs", "/executions-all.html", "executions-all.html"),
+    #: After Runs, named for what it lists, not the boards' "Diff & compare".
+    ("Comparisons", "/comparisons.html", "comparisons.html"),
+    ("Incidents", "/incidents.html", "incidents.html"),
+)
 POLICY = ("Policy", "/policy.html", "policy.html")
 
 
@@ -281,6 +314,16 @@ PAGE_CSS = """
 .cp>p[data-state=no-records]{align-self:flex-start;margin-top:-8px}
 .cp>[data-section=run]{font-size:var(--fs-body);color:var(--ink-muted)}
 .cp [data-section=authorization] h2{font-size:15px}
+.cp table.authorization{background:var(--surface);border:1px solid var(--line);
+  border-radius:var(--r-card);border-collapse:separate;border-spacing:0;width:100%}
+.cp table.authorization th{font-size:var(--fs-small);color:var(--ink-muted);font-weight:500;
+  padding:10px 12px;border-bottom:1px solid var(--line);text-align:left}
+.cp table.authorization td{font-size:var(--fs-small);padding:9px 12px;border-bottom:1px solid var(--line-soft);
+  vertical-align:top;overflow-wrap:anywhere}
+.cp table.authorization tr:last-child td{border-bottom:none}
+.cp table.authorization td ul{margin:0;padding:0}
+.cp table.authorization .absent{color:var(--ink-muted)}
+.cp table.authorization [data-authorization=verifier]{margin:6px 0 0;font-size:var(--fs-small);color:var(--bad-ink)}
 .cp [data-section=authorization] p{font-size:var(--fs-nav)}
 .cp [data-section=authorization] p>a{display:inline-block;padding:9px 16px;
   border:1px solid var(--line-node);border-radius:var(--r-ctl);background:var(--surface);
@@ -356,8 +399,10 @@ PAGE_CSS = """
 #: wasn't done, neutral when the evidence wasn't made. Every chip keeps its words. A
 #: couldn't-check note -- a sentence, not a chip -- is an amber block, as the last-attempt-failed
 #: line is. Held by tests/test_shared_style.py and tests/test_tones.py.
-CHIP_SHAPE = ("display:inline-block;font-size:var(--fs-small);font-weight:500;padding:3px 8px;"
-              "border-radius:var(--r-pill);margin-right:4px")
+CHIP_SHAPE = (
+    "display:inline-block;font-size:var(--fs-small);font-weight:500;padding:3px 8px;"
+    "border-radius:var(--r-pill);margin-right:4px"
+)
 _RUNG = ".shell .page tr[data-rung]"
 #: The runs list's answer cells (F1): the same chips, in a viewer page's frame.
 _ANSWER = ".shell .page td[data-answer]"
@@ -368,8 +413,13 @@ _STATE = ">td:last-child>span:first-child"
 def _states(tone: str) -> str:
     """Every rung and badge state the one rule gives `tone`, as selectors."""
     from onetrace_console import tones
-    return ",".join(f"{row}[data-state={s}]{_STATE}" for s in tones.RUNG
-                    if tones.tone(tones.RUNG, s) == tone for row in (_RUNG, _BADGE))
+
+    return ",".join(
+        f"{row}[data-state={s}]{_STATE}"
+        for s in tones.RUNG
+        if tones.tone(tones.RUNG, s) == tone
+        for row in (_RUNG, _BADGE)
+    )
 
 
 CHIP_CSS = (
@@ -418,7 +468,7 @@ CHIP_CSS = (
     #: Steps inside steps in a run's table of steps (`nesting_ladder`): each child, and each nested
     #: run's row, indented under its calling step.
     f".shell .page tr[data-child-of]>td:first-child{{padding-left:32px}}\n"
-    f".shell .page tr[data-depth=\"2\"]>td:first-child{{padding-left:52px}}\n"
+    f'.shell .page tr[data-depth="2"]>td:first-child{{padding-left:52px}}\n'
     f".shell .page tr[data-child-of] .inside{{font-size:var(--fs-small);color:var(--ink-muted)}}\n"
     f".shell .page tr[data-nested-run] code{{overflow-wrap:anywhere}}\n"
     #: The runs list's run names: at desktop width a name broke every four characters,
@@ -442,7 +492,8 @@ CHIP_CSS = (
     #: A receipt card's quoted names (an input such as "receipt:lookup_account#2") break where
     #: they must at 390, inside the card's grid, rather than reaching past the window.
     f".shell .page .card .grid>*{{min-width:0}}\n"
-    f".shell .page .card .grid q[data-words]{{overflow-wrap:anywhere}}\n")
+    f".shell .page .card .grid q[data-words]{{overflow-wrap:anywhere}}\n"
+)
 
 #: On a narrow screen every table in a region stacks: each row a block, each cell under its column's
 #: header (`words.labelled`), long values wrapping where they must. Nothing is cut off, and nothing
@@ -475,6 +526,37 @@ NARROW_CSS = """
 """
 
 #: The theme switch in the footer: the navigation's own ink and lines, in both themes.
+#: The console's three button styles, each from the theme's tokens, in both themes: primary, a form's main action;
+#: secondary, every other action; destructive, an action that removes something. Every button element the console draws
+#: carries one (`tests/test_button_styles.py`); a rule of its own elsewhere (the theme switch, the gear, Compare's
+#: request button) may shape it further. Text reads at 4.5:1 or more on its ground in both themes, disabled too.
+BUTTON_CSS = """
+button.btn-primary,button.btn-secondary,button.btn-destructive{font:inherit;border-radius:var(--r-ctl);
+  padding:4px 12px;cursor:pointer}
+button.btn-primary{color:var(--accent-ink);background:var(--accent);border:1px solid var(--accent);font-weight:600}
+button.btn-primary:hover{color:var(--accent-ink);background:var(--ink);border-color:var(--ink)}
+button.btn-primary:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+button.btn-primary:disabled{color:var(--ink-faint);background:var(--surface);border-color:var(--line-strong);cursor:default}
+button.btn-secondary{color:var(--ink);background:var(--surface);border:1px solid var(--line-strong)}
+button.btn-secondary:hover{color:var(--ink);background:var(--surface-sunk)}
+button.btn-secondary:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+button.btn-secondary:disabled{color:var(--ink-faint);background:var(--surface);cursor:default}
+button.btn-destructive{color:var(--bad-ink);background:var(--bad-bg);border:1px solid var(--bad-ink)}
+button.btn-destructive:hover{color:var(--bad-bg);background:var(--bad-ink)}
+button.btn-destructive:focus-visible{outline:2px solid var(--bad-ink);outline-offset:2px}
+button.btn-destructive:disabled{color:var(--ink-faint);background:var(--surface);border-color:var(--line-strong);cursor:default}
+button.btn-primary[hidden],button.btn-secondary[hidden],button.btn-destructive[hidden]{display:none}
+"""
+
+#: Inputs, selects and text areas in the theme's tokens, both themes: the field's text at 4.5:1 or more on it, the
+#: placeholder too (it is the only hint some fields give, such as Set up Explain's base_url), the edge at 3:1, and a
+#: visible focus outline (`tests/test_input_styles.py`).
+INPUT_CSS = """
+input:not([type=hidden],[type=checkbox],[type=radio]),select,textarea{color:var(--ink);background:var(--surface);border:1px solid var(--ink-faint);border-radius:var(--r-ctl);padding:4px 8px;font:inherit}
+::placeholder{color:var(--ink-muted);opacity:1}
+:is(input,select,textarea):focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+"""
+
 THEME_CSS = """
 nav.frame footer .theme{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
 nav.frame footer .theme button{font:inherit;color:var(--nav-ink);background:var(--nav-bg);
@@ -512,23 +594,51 @@ def stylesheet() -> bytes:
     pages' rules and the one chip family."""
     from onetrace_console.viewer.page import CSS, FRAME_CSS
     from onetrace_console.viewer.tokens import root_css, scale_css, theme_css
+
     shipped = sorted(p.name for p in _FONTS.glob("*.woff2"))
     if shipped != sorted(_FACES):
         raise RuntimeError(f"the bundled fonts are not the faces this stylesheet names: {shipped}")
     faces = "".join(
         f"@font-face{{font-family:'{family}';font-weight:{weight};font-style:normal;"
         f"font-display:swap;src:url(/static/fonts/{name}) format('woff2');unicode-range:{chars}}}\n"
-        for name, (family, weight, chars) in _FACES.items())
-    from onetrace_console.run_head import HEAD_CSS
-    from onetrace_console.views import VIEWS_CSS
-    from onetrace_console.short_answer import SHORT_CSS
+        for name, (family, weight, chars) in _FACES.items()
+    )
+    from onetrace_console.busy_script import BUSY_CSS
     from onetrace_console.explain import EXPLAIN_CSS
     from onetrace_console.explain_setup import SETUP_CSS
     from onetrace_console.info_mark import INFO_CSS
+    from onetrace_console.run_head import HEAD_CSS
     from onetrace_console.settings_menu import SETTINGS_CSS
-    return (faces + root_css() + "\n" + scale_css() + "\n" + theme_css() + "\n" + CSS + FRAME_CSS + PAGE_CSS + CHIP_CSS
-            + THEME_CSS + COMPARE_CSS + PUBLIC_CSS + HEAD_CSS + VIEWS_CSS + SHORT_CSS + EXPLAIN_CSS + SETUP_CSS + INFO_CSS
-            + SETTINGS_CSS + NARROW_CSS).encode("utf-8")
+    from onetrace_console.short_answer import SHORT_CSS
+    from onetrace_console.views import VIEWS_CSS
+
+    return (
+        faces
+        + root_css()
+        + "\n"
+        + scale_css()
+        + "\n"
+        + theme_css()
+        + "\n"
+        + CSS
+        + FRAME_CSS
+        + PAGE_CSS
+        + CHIP_CSS
+        + BUTTON_CSS
+        + BUSY_CSS
+        + INPUT_CSS
+        + THEME_CSS
+        + COMPARE_CSS
+        + PUBLIC_CSS
+        + HEAD_CSS
+        + VIEWS_CSS
+        + SHORT_CSS
+        + EXPLAIN_CSS
+        + SETUP_CSS
+        + INFO_CSS
+        + SETTINGS_CSS
+        + NARROW_CSS
+    ).encode("utf-8")
 
 
 def items(onedoor: bool) -> tuple[tuple[str, str, str], ...]:
@@ -558,16 +668,20 @@ def _current(rel: str) -> str | None:
 #: setting is the choice, follows it. Both are `hidden` until the script shows them, so a page read
 #: without scripts is the page it was. Not a form: it posts nothing, and goes nowhere.
 THEME_KEY = "onetrace-console-theme"
-THEME_SWITCH = ('<div class="theme" data-theme-controls>'
-                '<button type="button" data-theme-switch hidden>Switch to light theme</button>'
-                '<button type="button" data-theme-system hidden>Follow the system setting</button>'
-                "</div>")
+THEME_SWITCH = (
+    '<div class="theme" data-theme-controls>'
+    '<button class="btn-secondary" type="button" data-theme-switch hidden>Switch to light theme</button>'
+    '<button class="btn-secondary" type="button" data-theme-system hidden>Follow the system setting</button>'
+    "</div>"
+)
 #: In `<head>`, before the stylesheet: the saved choice set before the page is first drawn, so a
 #: page set to light never shows dark first. Storage that is blocked leaves the default, dark.
-THEME_HEAD_SCRIPT = ("<script>try{var t=localStorage.getItem('" + THEME_KEY + "');"
-                     "if(t==='light'||t==='dark'||t==='system')"
-                     "document.documentElement.setAttribute('data-theme',t)"
-                     "}catch(e){}</script>")
+THEME_HEAD_SCRIPT = (
+    "<script>try{var t=localStorage.getItem('" + THEME_KEY + "');"
+    "if(t==='light'||t==='dark'||t==='system')"
+    "document.documentElement.setAttribute('data-theme',t)"
+    "}catch(e){}</script>"
+)
 #: After the buttons: shows them, and keeps their words true to what a press does. A choice is
 #: kept where the browser allows; where it doesn't, it holds for the page in view.
 THEME_SCRIPT = (
@@ -582,10 +696,12 @@ THEME_SCRIPT = (
     "a.addEventListener('click',function(){var v=now()==='dark'?'light':'dark';"
     "d.setAttribute('data-theme',v);keep(v);draw()});"
     "b.addEventListener('click',function(){d.setAttribute('data-theme','system');keep('system');draw();a.focus()});"
-    "m.addEventListener('change',draw);draw()})()</script>")
+    "m.addEventListener('change',draw);draw()})()</script>"
+)
 
 
-from onetrace_console.explain_setup import LINK as _SETUP_WORDS, PATH as _SETUP_PATH  # noqa: E402
+from onetrace_console.explain_setup import LINK as _SETUP_WORDS  # noqa: E402
+from onetrace_console.explain_setup import PATH as _SETUP_PATH  # noqa: E402
 
 #: The link to the setup page (`explain_setup`), in a local console's footer as it serves a page.
 SETUP_LINK = f'<div><a href="{_SETUP_PATH}" data-frame="setup">{_SETUP_WORDS}</a></div>'
@@ -595,8 +711,10 @@ def _footer(mode: str, setup_link: bool = False) -> str:
     #: The setup link left the sidebar for the settings menu at the top right (console 0.6.1 item 13,
     #: `settings_menu`); `setup_link` is kept for its callers, and draws nothing in the footer.
     link = ""
-    return (f"<footer><div>{mode}</div><div>onetrace-console {escape(__version__)}</div>{link}"
-            f"{THEME_SWITCH}{THEME_SCRIPT}</footer>")
+    return (
+        f"<footer><div>{mode}</div><div>onetrace-console {escape(__version__)}</div>{link}"
+        f"{THEME_SWITCH}{THEME_SCRIPT}</footer>"
+    )
 
 
 def footer(user: str | None, *, public: bool = False, setup_link: bool = False) -> str:
@@ -604,6 +722,7 @@ def footer(user: str | None, *, public: bool = False, setup_link: bool = False) 
     console as it serves the page (`setup_link`), the link to the setup page. Never on a public
     console, nor on an export, whose pages are files."""
     from onetrace_console.public import FOOTER_MODE
+
     if public:
         return _footer(FOOTER_MODE)
     return _footer("Local mode" if user is None else f"Signed in as {escape(user)}", setup_link)
@@ -613,6 +732,7 @@ def sealed_footer(sign_in: bool, *, public: bool = False) -> str:
     """A sealed page's footer, filled as it is rendered: the configuration and the version, never
     a user."""
     from onetrace_console.public import FOOTER_MODE
+
     if public:
         return _footer(FOOTER_MODE)
     return _footer("Sign-in required" if sign_in else "Local mode")
@@ -622,15 +742,19 @@ def banner() -> str:
     """The public mode's banner, the first thing under the brand on every page. The command ends its
     sentence: a full stop after it, outside its code type, before the sentence on the demo's runs."""
     from onetrace_console.public import BANNER, BANNER_COMMAND, banner_compare, banner_runs
-    return (f'<p data-frame="banner">{escape(BANNER)} <code>{escape(BANNER_COMMAND)}</code>. '
-            f'{escape(banner_runs())} {escape(banner_compare())}</p>')
+
+    return (
+        f'<p data-frame="banner">{escape(BANNER)} <code>{escape(BANNER_COMMAND)}</code>. '
+        f"{escape(banner_runs())} {escape(banner_compare())}</p>"
+    )
 
 
 def nav(rel: str, *, onedoor: bool, foot: str, public: bool = False, settings: str = "") -> str:
     here = _current(rel)
     links = "".join(
-        f'<a href="{href}"{" aria-current=\"page\"" if label == here else ""}>{label}</a>'
-        for label, href, _ in items(onedoor))
+        f'<a href="{href}"{' aria-current="page"' if label == here else ""}>{label}</a>'
+        for label, href, _ in items(onedoor)
+    )
     return f'<div class="brand">onetrace</div>{settings}{banner() if public else ""}{links}{foot}'
 
 
@@ -645,15 +769,29 @@ def fill_csrf(page: bytes, token: str | None) -> bytes:
     if not token or marker not in page:
         return page
     from onetrace_console.words import escape as _escape
-    return page.replace(marker, f'<input type="hidden" name="csrf_token" value="{_escape(token, quote=True)}" '
-                                f'data-csrf-slot>'.encode("utf-8"))
+
+    return page.replace(
+        marker,
+        f'<input type="hidden" name="csrf_token" value="{_escape(token, quote=True)}" data-csrf-slot>'.encode(),
+    )
 
 
-def fill(page: bytes, rel: str, *, onedoor: bool, user: str | None, public: bool = False,
-         setup_link: bool = False, store=None) -> bytes:
+def fill(
+    page: bytes,
+    rel: str,
+    *,
+    onedoor: bool,
+    user: str | None,
+    public: bool = False,
+    setup_link: bool = False,
+    store=None,
+    csrf: str | None = None,
+) -> bytes:
     """An unsealed page with its frame filled as it is served, or the page unchanged when it has
-    no empty frame -- a sealed page, whose frame was filled before its seal."""
+    no empty frame -- a sealed page, whose frame was filled before its seal. `csrf`: the signed-in
+    session's token, for the settings menu's Sign out."""
     from onetrace_console.viewer.page import FRAME_NAV
+
     marker = FRAME_NAV.encode("utf-8")
     if page.count(marker) != 1:
         return page
@@ -662,16 +800,30 @@ def fill(page: bytes, rel: str, *, onedoor: bool, user: str | None, public: bool
     settings = ""
     if setup_link and not public:
         from onetrace_console.settings_menu import menu
-        settings = menu(store)
-    return page.replace(marker, nav(rel, onedoor=onedoor, foot=footer(user, public=public, setup_link=setup_link),
-                                    public=public, settings=settings).encode("utf-8"))
+
+        settings = menu(store, csrf=csrf if user is not None else None)
+    return with_busy(
+        page.replace(
+            marker,
+            nav(
+                rel,
+                onedoor=onedoor,
+                foot=footer(user, public=public, setup_link=setup_link),
+                public=public,
+                settings=settings,
+            ).encode("utf-8"),
+        ).decode("utf-8"),
+        public=public,
+    ).encode("utf-8")
 
 
 # ------------------------------------------------------------------- sealed pages
 
+
 @dataclass(frozen=True)
 class Rendering:
     """The configuration a render runs under: what a sealed page's frame states."""
+
     onedoor: bool
     sign_in: bool
     public: bool = False
@@ -679,21 +831,36 @@ class Rendering:
     tracing_link: str = ""
     #: A local console's tokenizers (`config.tokenizers`), each (folder, (file, ...)); () for none.
     tokenizers: tuple = ()
+    #: The close-call flag's margin, in nats (`config.close_call_margin`).
+    close_call_margin: float = 1.0
 
 
-_RENDERING: contextvars.ContextVar[Rendering | None] = contextvars.ContextVar("rendering",
-                                                                             default=None)
+_RENDERING: contextvars.ContextVar[Rendering | None] = contextvars.ContextVar("rendering", default=None)
 
 
 @contextlib.contextmanager
-def rendering(*, onedoor: bool, sign_in: bool, public: bool = False, tracing_link: str = "",
-              tokenizers: tuple = ()):
+def rendering(
+    *,
+    onedoor: bool,
+    sign_in: bool,
+    public: bool = False,
+    tracing_link: str = "",
+    tokenizers: tuple = (),
+    close_call_margin: float = 1.0,
+):
     """`with rendering(...)`: sealed pages drawn inside are framed, under this configuration.
     The server renders every page inside one; outside it -- a caller with no console around it --
     a sealed page is drawn as the viewer draws it, with no frame."""
-    token = _RENDERING.set(Rendering(onedoor=onedoor, sign_in=sign_in, public=public,
-                                     tracing_link="" if public else tracing_link,
-                                     tokenizers=() if public else tuple(tokenizers)))
+    token = _RENDERING.set(
+        Rendering(
+            onedoor=onedoor,
+            sign_in=sign_in,
+            public=public,
+            tracing_link="" if public else tracing_link,
+            tokenizers=() if public else tuple(tokenizers),
+            close_call_margin=float(close_call_margin),
+        )
+    )
     try:
         yield
     finally:
@@ -712,6 +879,12 @@ def tokenizers() -> tuple:
     return r.tokenizers if r is not None and not r.public else ()
 
 
+def close_call_margin() -> float:
+    """The close-call flag's margin for a render now; 1.0 outside a render."""
+    r = _RENDERING.get()
+    return r.close_call_margin if r is not None else 1.0
+
+
 def rendering_public() -> bool:
     """Whether the render now is a public console's: such a page offers nothing that computes."""
     r = _RENDERING.get()
@@ -721,6 +894,7 @@ def rendering_public() -> bool:
 def sealed_framing():
     """The viewer's frame for a sealed page drawn now, or nothing outside `rendering`."""
     from onetrace_console.viewer.page import framed
+
     return framed(STYLESHEET) if _RENDERING.get() is not None else contextlib.nullcontext()
 
 
@@ -728,11 +902,26 @@ def fill_sealed(page: str, rel: str) -> str:
     """Fill a sealed page's frame BEFORE it is sealed, so its fingerprint covers the
     frame and the page is served as written. A page drawn outside `rendering` has no frame."""
     from onetrace_console.viewer.page import FRAME_NAV
+
     r = _RENDERING.get()
     if r is None:
         return page
     if page.count(FRAME_NAV) != 1:
         raise ValueError(f"a sealed page to frame must carry exactly one empty frame: {rel}")
-    return page.replace(FRAME_NAV, nav(rel, onedoor=r.onedoor,
-                                       foot=sealed_footer(r.sign_in, public=r.public),
-                                       public=r.public))
+    return with_busy(
+        page.replace(
+            FRAME_NAV, nav(rel, onedoor=r.onedoor, foot=sealed_footer(r.sign_in, public=r.public), public=r.public)
+        ),
+        public=r.public,
+    )
+
+
+def with_busy(page: str, *, public: bool) -> str:
+    """A local console's page that holds a button that starts work (`data-busy=`), with the busy state's script
+    (`busy_script`) before its `</body>`, once; any other page, and every public one, as it is."""
+    from onetrace_console.busy_script import BUSY_SCRIPT
+
+    if public or "data-busy=" not in page or BUSY_SCRIPT in page or "</body>" not in page:
+        return page
+    i = page.rindex("</body>")
+    return page[:i] + BUSY_SCRIPT + page[i:]

@@ -28,6 +28,7 @@ until the release; that source is kept for such a build. Either way the bytes ar
 the one pinned hash by `_verified` before anything is extracted, and a mismatch refuses
 (`tests/test_fixture_sources.py` shows each source refusing).
 """
+
 from __future__ import annotations
 
 import hashlib
@@ -73,8 +74,10 @@ def check() -> bool:
     want = f"{SDIST_NAME} {SDIST_SHA256}"
     got = source.read_text(encoding="utf-8").strip() if source.is_file() else ""
     if got != want:
-        print(f"NOT READY: {CACHE} was not extracted from {SDIST_NAME} "
-              f"({got or 'no source recorded'}); run tools/fetch_sdk_fixtures.py")
+        print(
+            f"NOT READY: {CACHE} was not extracted from {SDIST_NAME} "
+            f"({got or 'no source recorded'}); run tools/fetch_sdk_fixtures.py"
+        )
         return False
     missing = [str(EXAM / p) for p in EXPECTED if not (EXAM / p).is_dir()]
     missing += [str(WARRANTY / p) for p in WARRANTY_EXPECTED if not (WARRANTY / p).is_dir()]
@@ -95,15 +98,29 @@ def _verified(path: Path, source: str) -> Path:
             f"REFUSING: {SDIST_NAME} from {source} does not match the pinned reference.\n"
             f"  expected {SDIST_SHA256}\n  got      {got}\n"
             f"This is the lapse condition: what {source} holds is not what this console "
-            f"already checked, and nothing is extracted from it.")
+            f"already checked, and nothing is extracted from it."
+        )
     return path
 
 
 def _from_pypi(tmp_path: Path) -> Path:
     proc = subprocess.run(
-        [sys.executable, "-m", "pip", "download", "--no-deps", "--no-binary", ":all:",
-         "--no-cache-dir", "--dest", str(tmp_path), REQUIREMENT],
-        capture_output=True, text=True)
+        [
+            sys.executable,
+            "-m",
+            "pip",
+            "download",
+            "--no-deps",
+            "--no-binary",
+            ":all:",
+            "--no-cache-dir",
+            "--dest",
+            str(tmp_path),
+            REQUIREMENT,
+        ],
+        capture_output=True,
+        text=True,
+    )
     if proc.returncode != 0:
         raise SystemExit(f"pip download failed:\n{proc.stdout}\n{proc.stderr}")
     return _verified(tmp_path / SDIST_NAME, "PyPI")
@@ -113,7 +130,12 @@ def _from_wheelhouse(tmp_path: Path) -> Path:
     copy = tmp_path / SDIST_NAME
     if (WHEELHOUSE / SDIST_NAME).is_file():
         shutil.copyfile(WHEELHOUSE / SDIST_NAME, copy)
-    return _verified(copy, "the wheelhouse (" + (WHEELHOUSE.relative_to(REPO).as_posix() if WHEELHOUSE.is_relative_to(REPO) else str(WHEELHOUSE)) + ")")
+    return _verified(
+        copy,
+        "the wheelhouse ("
+        + (WHEELHOUSE.relative_to(REPO).as_posix() if WHEELHOUSE.is_relative_to(REPO) else str(WHEELHOUSE))
+        + ")",
+    )
 
 
 def fetch() -> None:
@@ -124,8 +146,9 @@ def fetch() -> None:
         shutil.rmtree(CACHE, ignore_errors=True)
         CACHE.mkdir(parents=True)
         with tarfile.open(sdist) as t:
-            members = [m for m in t.getmembers() if "/exam/" in "/" + m.name
-                       or "/tests/fixtures/warranty/" in "/" + m.name]
+            members = [
+                m for m in t.getmembers() if "/exam/" in "/" + m.name or "/tests/fixtures/warranty/" in "/" + m.name
+            ]
             for m in members:
                 # Strip the "onetrace-<version>/" wrapper so EXAM is exam/... directly.
                 parts = m.name.split("/", 1)
@@ -134,8 +157,10 @@ def fetch() -> None:
                 m.name = parts[1]
             t.extractall(CACHE, members=members, filter="data")
         (CACHE / SOURCE_FILE).write_text(f"{SDIST_NAME} {SDIST_SHA256}\n", encoding="utf-8")
-    print(f"{'fetched' if SOURCE == 'pypi' else 'read'} and verified {SDIST_NAME} "
-          f"({SDIST_SHA256[:16]}…) from {SOURCE}, extracted exam/ to {EXAM}")
+    print(
+        f"{'fetched' if SOURCE == 'pypi' else 'read'} and verified {SDIST_NAME} "
+        f"({SDIST_SHA256[:16]}…) from {SOURCE}, extracted exam/ to {EXAM}"
+    )
 
 
 def main(argv: list[str]) -> int:

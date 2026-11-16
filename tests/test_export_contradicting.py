@@ -6,6 +6,7 @@ The export now carries the errors page the pinned SDK generates and links those 
 same section; the scan is as strict as before, for everything else. Held with the demo's tampered
 cold-chain run.
 """
+
 from __future__ import annotations
 
 import re
@@ -20,8 +21,10 @@ from tests.conftest import demo_copy
 def demo(shared_demo, tmp_path_factory):
     """Its own copy of the session's demo build: these tests export a store holding a tampered run."""
     from onetrace_console.store import Store
+
     folder = demo_copy(shared_demo, tmp_path_factory.mktemp("export-contradicting") / "demo")
     return folder, Store(folder / "store" / "store")
+
 
 TAMPERED = "p7-41-cold-chain-decision-tampered"
 BASELINE = "p7-39-cold-chain-baseline"
@@ -33,6 +36,7 @@ def _text(html: str) -> str:
 
 def _export(demo, tmp_path):  # noqa: F811
     from onetrace_console.export_static import export
+
     folder, store = demo
     ids = {r.run_id: r.key for r in store.runs()}
     out = tmp_path / "export"
@@ -50,9 +54,13 @@ def test_a_store_with_a_tampered_run_exports(demo, tmp_path, examined):  # noqa:
 
 def test_its_fix_lines_link_the_export_s_own_errors_page(demo, tmp_path, examined):  # noqa: F811
     from onetrace_console.export_static import ERRORS_FILE, external_requests
+
     out, _written, _ids = _export(demo, tmp_path)
-    links = [(p, m) for p in (out / "incidents").glob("*.html")
-             for m in re.findall(r'href="([^"]*errors\.html#([^"]+))"', p.read_text(encoding="utf-8"))]
+    links = [
+        (p, m)
+        for p in (out / "incidents").glob("*.html")
+        for m in re.findall(r'href="([^"]*errors\.html#([^"]+))"', p.read_text(encoding="utf-8"))
+    ]
     examined(len(links), "errors-page links")
     assert links
     errors = (out / ERRORS_FILE).read_text(encoding="utf-8")
@@ -64,6 +72,7 @@ def test_its_fix_lines_link_the_export_s_own_errors_page(demo, tmp_path, examine
 
 def test_sabotage_the_scan_still_refuses_another_host(demo, tmp_path, examined):  # noqa: F811
     from onetrace_console.export_static import external_requests
+
     out, _written, _ids = _export(demo, tmp_path)
     examined(1, "planted page")
     (out / "planted.html").write_text('<a href="https://example.org/x">x</a>', encoding="utf-8")

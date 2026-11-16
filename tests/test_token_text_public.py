@@ -2,6 +2,7 @@
 output text. With a tokenizer named that matches the record exactly, a public console's step page still
 shows the step and the ids only, as it did before, and reads no tokenizer file at all.
 """
+
 from __future__ import annotations
 
 import re
@@ -11,6 +12,7 @@ from tests.test_token_text import IDS, _digest, _folder, _tokenizer_json, step_p
 
 def test_a_public_console_shows_the_step_and_the_ids_and_no_text(tmp_path, monkeypatch, examined):
     from onetrace_console import token_text
+
     files = {"tokenizer.json": _tokenizer_json()}
     named = ((_folder(tmp_path, files), ("tokenizer.json",)),)
     local = step_page(_digest(files), named)
@@ -29,6 +31,7 @@ def test_a_public_console_shows_the_step_and_the_ids_and_no_text(tmp_path, monke
 
 def test_a_public_render_holds_no_tokenizer(examined):
     from onetrace_console.frame import rendering, tokenizers
+
     examined(1, "public render")
     with rendering(onedoor=False, sign_in=False, public=True, tokenizers=(("/models/tok", ("tokenizer.json",)),)):
         assert tokenizers() == ()

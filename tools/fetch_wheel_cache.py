@@ -29,6 +29,7 @@ The two wheels come from PyPI (`SOURCE = "pypi"`), 0.2.0 as released. The
 until the release; that source is kept for such a build. Either way each file is checked against
 its pinned hash by `_verified` before anything is cached, and a mismatch refuses.
 """
+
 from __future__ import annotations
 
 import hashlib
@@ -43,45 +44,58 @@ CACHE = REPO / ".wheel-cache"
 
 #: The same two references `requirements.lock` pins by hash -- typed here once, not
 #: derived from anything downloaded, so a mismatch is caught rather than assumed away.
-#: onetrace 0.7.1 and onetrace-verify 0.7.1 from PyPI, each checked against these hashes.
+#: onetrace 0.8.0 and onetrace-verify 0.8.0, each checked against these hashes: the wheels PyPI receives for
+#: 0.8.0, as their build gave them.
 #: The "wheelhouse" source stays for a branch that pins a build on no index; nothing uses it now.
 SOURCE = "pypi"
 WHEELHOUSE = REPO / "wheelhouse" / "devbuild"
 WHEELS = {
-    "onetrace==0.7.1": (
-        "onetrace-0.7.1-py3-none-any.whl",
-        "889ef744a23c3a5ce05489bfe3a0c75ffbc3f97f46e9e28815f6012637f2f995",
+    "onetrace==0.8.0": (
+        "onetrace-0.8.0-py3-none-any.whl",
+        "a2072c5e6c97843cd4a8915b5392dbde696d3a5d59531b0c666473a794760214",
     ),
-    "onetrace-verify==0.7.1": (
-        "onetrace_verify-0.7.1-py3-none-any.whl",
-        "912a1111840a5ad1206385186e2808e1af0fa380406ace7c3b28d9bac92bc05c",
+    "onetrace-verify==0.8.0": (
+        "onetrace_verify-0.8.0-py3-none-any.whl",
+        "5a2a60387fb25f35d67fdc0f2d6195d2b11465f4adc20465697574409bdef82d",
     ),
 }
 
 
 #: A command the tests run, never a dependency of the console and never in the lock: the published
-#: onetrace-explain, whose wheel the explanation panel's tests install into a folder of their own
-#: (tests/conftest.py, `explain_command`). Typed here once, like WHEELS, from PyPI's JSON.
+#: onetrace-explain, whose wheel the explanation panel's tests install, with what it asks for, into a folder of
+#: their own (tests/conftest.py, `explain_command`). 0.3.1, the one a reader installs beside the console. Typed
+#: here once, like WHEELS.
 TEST_COMMANDS = {
-    "onetrace-explain==0.1.0": (
-        "onetrace_explain-0.1.0-py3-none-any.whl",
-        "122ea6af68bad45eecc78681e270955aa7fd27f59bc7bcbde96d8c6cc7fa434f",
+    "onetrace-explain==0.3.1": (
+        "onetrace_explain-0.3.1-py3-none-any.whl",
+        "20a506dce8e5c1f19fb70c9054f6f7c1bfab313f71fd59aae3b745eebf81e7b5",
     ),
 }
 
 
 #: What a reader installs beside the console in one environment, never a dependency of it and never in
-#: the lock: the published onetrace-explain 0.3.0 (which reads the key from the keychain, and accepts onetrace 0.7), and onetrace-auto 0.7.1, whose
+#: the lock: the published onetrace-explain 0.3.1 (which reads the key from the keychain, and accepts onetrace 0.8), and onetrace-auto 0.8.0, whose
 #: wheels `tests/test_one_environment.py` installs with the console's, offline, and asks `pip check`
-#: about. Typed here once, like WHEELS, from PyPI's JSON.
+#: about. Typed here once, like WHEELS.
 ONE_ENVIRONMENT = {
+    "onetrace-explain==0.3.1": (
+        "onetrace_explain-0.3.1-py3-none-any.whl",
+        "20a506dce8e5c1f19fb70c9054f6f7c1bfab313f71fd59aae3b745eebf81e7b5",
+    ),
+    "onetrace-auto==0.8.0": (
+        "onetrace_auto-0.8.0-py3-none-any.whl",
+        "793031fb930359a21a74ece618b0de3b75ae07a2d496d3b6f6f6d6febb1ee938",
+    ),
+}
+
+
+#: An onetrace-explain that takes no onetrace 0.8 (it asks for `onetrace>=0.6.1,<0.8`): the published 0.3.0,
+#: which `tests/test_one_environment.py` installs beside the console to show pip refusing it. Never installed
+#: beside the console otherwise. Typed here once, from PyPI's JSON.
+EARLIER_EXPLAIN = {
     "onetrace-explain==0.3.0": (
         "onetrace_explain-0.3.0-py3-none-any.whl",
         "6d3390459d2854cefcf3e7e5feaa1f8968b86a767f7cec7bf5d943a273ea21c5",
-    ),
-    "onetrace-auto==0.7.1": (
-        "onetrace_auto-0.7.1-py3-none-any.whl",
-        "e4413e4f0e11742490407fbd4c85ec49291ece98c882220243a90a2b91850bc0",
     ),
 }
 
@@ -118,15 +132,25 @@ KEYCHAIN = {
 #: hash the lock allows (one per platform's file). Cached for this platform, so a test can install
 #: the console as `pip install onetrace-console` does, extra included, with no network.
 CRYPTO = ("asn1crypto", "cffi", "cryptography", "pycparser", "rfc3161-client")
+#: The console's own dependency for sign-in through Microsoft Entra ID, cached the same way, from the lock.
+SIGN_IN = ("pyjwt",)
+
+
+def pinned() -> dict[str, tuple[str, str]]:
+    """{requirement: (file name, sha256)} of every wheel the tool fetches by name: what it fetches, what it copies
+    into the cache, what it counts and what --check requires are this one list."""
+    return {**WHEELS, **TEST_COMMANDS, **ONE_ENVIRONMENT, **EARLIER_EXPLAIN, **KEYCHAIN}
 
 
 def crypto_pins() -> dict[str, set[str]]:
     import re
+
     lock = (REPO / "requirements.lock").read_text(encoding="utf-8")
     pins = {}
-    for m in re.finditer(r"^([A-Za-z0-9_.-]+==[^\s;]+)[^\n]*\\\n((?:\s+--hash=sha256:[0-9a-f]{64}[^\n]*\n?)+)",
-                         lock, re.M):
-        if m.group(1).split("==")[0].lower() in CRYPTO:
+    for m in re.finditer(
+        r"^([A-Za-z0-9_.-]+==[^\s;]+)[^\n]*\\\n((?:\s+--hash=sha256:[0-9a-f]{64}[^\n]*\n?)+)", lock, re.M
+    ):
+        if m.group(1).split("==")[0].lower() in (*CRYPTO, *SIGN_IN):
             pins[m.group(1)] = set(re.findall(r"sha256:([0-9a-f]{64})", m.group(2)))
     return pins
 
@@ -138,16 +162,15 @@ def _crypto_ready() -> list[str]:
 
 
 def check() -> bool:
-    missing = [name for name, _ in (*WHEELS.values(), *TEST_COMMANDS.values(), *ONE_ENVIRONMENT.values(), *KEYCHAIN.values()) if not (CACHE / name).is_file()]
+    missing = [name for name, _ in pinned().values() if not (CACHE / name).is_file()]
     missing += [f"{pin} (any of its pinned wheels)" for pin in _crypto_ready()]
     if missing:
         print(f"NOT READY: missing under {CACHE}: {missing}")
         return False
-    for name, sha in (*WHEELS.values(), *TEST_COMMANDS.values(), *ONE_ENVIRONMENT.values(), *KEYCHAIN.values()):
+    for name, sha in pinned().values():
         got = hashlib.sha256((CACHE / name).read_bytes()).hexdigest()
         if got != sha:
-            print(f"NOT READY: {name} does not match its pinned hash "
-                 f"(expected {sha}, got {got})")
+            print(f"NOT READY: {name} does not match its pinned hash (expected {sha}, got {got})")
             return False
     print(f"ready: {CACHE}")
     return True
@@ -163,47 +186,86 @@ def _verified(wheel: Path, sha: str, source: str) -> None:
             f"REFUSING: {wheel.name} from {source} does not match the pinned reference.\n"
             f"  expected {sha}\n  got      {got}\n"
             f"This is the lapse condition: what {source} holds is not what this "
-            f"console already pins, and nothing is cached from it.")
+            f"console already pins, and nothing is cached from it."
+        )
 
 
 def fetch() -> None:
     with tempfile.TemporaryDirectory(prefix="onetrace-wheel-cache-") as tmp:
         tmp_path = Path(tmp)
-        for requirement, (filename, sha) in {**WHEELS, **TEST_COMMANDS, **ONE_ENVIRONMENT, **KEYCHAIN}.items():
+        for requirement, (filename, sha) in pinned().items():
             if SOURCE == "wheelhouse" and requirement in WHEELS:
                 if (WHEELHOUSE / filename).is_file():
                     shutil.copyfile(WHEELHOUSE / filename, tmp_path / filename)
-                _verified(tmp_path / filename, sha,
-                          "the wheelhouse (" + (WHEELHOUSE.relative_to(REPO).as_posix() if WHEELHOUSE.is_relative_to(REPO) else str(WHEELHOUSE)) + ")")
+                _verified(
+                    tmp_path / filename,
+                    sha,
+                    "the wheelhouse ("
+                    + (WHEELHOUSE.relative_to(REPO).as_posix() if WHEELHOUSE.is_relative_to(REPO) else str(WHEELHOUSE))
+                    + ")",
+                )
                 continue
             proc = subprocess.run(
-                [sys.executable, "-m", "pip", "download", "--no-deps", "--only-binary", ":all:",
-                 "--no-cache-dir", "--dest", str(tmp_path), requirement],
-                capture_output=True, text=True)
+                [
+                    sys.executable,
+                    "-m",
+                    "pip",
+                    "download",
+                    "--no-deps",
+                    "--only-binary",
+                    ":all:",
+                    "--no-cache-dir",
+                    "--dest",
+                    str(tmp_path),
+                    requirement,
+                ],
+                capture_output=True,
+                text=True,
+            )
             if proc.returncode != 0:
-                raise SystemExit(f"pip download failed for {requirement}:\n"
-                                f"{proc.stdout}\n{proc.stderr}")
+                raise SystemExit(f"pip download failed for {requirement}:\n{proc.stdout}\n{proc.stderr}")
             _verified(tmp_path / filename, sha, "PyPI")
         #: The crypto extra: pip picks this platform's file and refuses any not in the lock.
         crypto = tmp_path / "crypto"
         crypto.mkdir()
         req = tmp_path / "crypto.txt"
-        req.write_text("".join(f"{pin} " + " ".join(f"--hash=sha256:{h}" for h in sorted(hashes)) + "\n"
-                               for pin, hashes in crypto_pins().items()), encoding="utf-8")
+        req.write_text(
+            "".join(
+                f"{pin} " + " ".join(f"--hash=sha256:{h}" for h in sorted(hashes)) + "\n"
+                for pin, hashes in crypto_pins().items()
+            ),
+            encoding="utf-8",
+        )
         proc = subprocess.run(
-            [sys.executable, "-m", "pip", "download", "--no-deps", "--only-binary", ":all:",
-             "--no-cache-dir", "--require-hashes", "--dest", str(crypto), "-r", str(req)],
-            capture_output=True, text=True)
+            [
+                sys.executable,
+                "-m",
+                "pip",
+                "download",
+                "--no-deps",
+                "--only-binary",
+                ":all:",
+                "--no-cache-dir",
+                "--require-hashes",
+                "--dest",
+                str(crypto),
+                "-r",
+                str(req),
+            ],
+            capture_output=True,
+            text=True,
+        )
         if proc.returncode != 0:
             raise SystemExit(f"pip download failed for the crypto extra:\n{proc.stdout}\n{proc.stderr}")
         shutil.rmtree(CACHE, ignore_errors=True)
         CACHE.mkdir(parents=True)
-        for filename, _ in (*WHEELS.values(), *TEST_COMMANDS.values(), *ONE_ENVIRONMENT.values(), *KEYCHAIN.values()):
+        for filename, _ in pinned().values():
             shutil.copy(tmp_path / filename, CACHE / filename)
         for wheel in crypto.glob("*.whl"):
             shutil.copy(wheel, CACHE / wheel.name)
-    print(f"{'fetched' if SOURCE == 'pypi' else 'read'} and verified {len(WHEELS) + len(TEST_COMMANDS) + len(ONE_ENVIRONMENT) + len(KEYCHAIN)} wheel(s) "
-          f"from {SOURCE} into {CACHE}")
+    print(
+        f"{'fetched' if SOURCE == 'pypi' else 'read'} and verified {len(pinned())} wheel(s) from {SOURCE} into {CACHE}"
+    )
 
 
 def main(argv: list[str]) -> int:

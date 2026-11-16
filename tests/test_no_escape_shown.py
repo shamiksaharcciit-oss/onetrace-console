@@ -8,6 +8,7 @@ shown escaped, which passes, beside a label of the console's planted with an esc
 The local console's pages are held in tests/test_explain_setup.py (the setup page, with its planted
 example) and tests/test_deploy_fly_kept.py (the kept build, and a local comparison with its
 explanation)."""
+
 from __future__ import annotations
 
 import html
@@ -36,6 +37,7 @@ def record_values(*records) -> set[str]:
     """Each string in the records (parsed JSON), as the display rule shows it, where the rule escapes
     something in it: the only text an escape is allowed in."""
     from onetrace_console.viewer.page import _UNSHOWN, display
+
     out = set()
 
     def walk(v):
@@ -49,19 +51,20 @@ def record_values(*records) -> set[str]:
         elif isinstance(v, list):
             for x in v:
                 walk(x)
+
     for r in records:
         walk(r)
     return out
 
 
 def pages_problems(pages: dict[str, str], allowed=()) -> list[str]:
-    return [f"{name}: {found[:3]}" for name, text in sorted(pages.items())
-            if (found := escapes_shown(text, allowed))]
+    return [f"{name}: {found[:3]}" for name, text in sorted(pages.items()) if (found := escapes_shown(text, allowed))]
 
 
 def _receipts(store) -> list:
     """Every receipt of every stored run, parsed."""
     import json
+
     out = []
     for run in store.runs():
         for path, key in run.listing:
@@ -73,6 +76,7 @@ def _receipts(store) -> list:
 def test_the_demo_s_records_hold_no_character_the_display_rule_escapes(shared_demo, examined):
     """So on the demo's pages no escape is a record's: each would be the console's own."""
     from onetrace_console.store import Store
+
     receipts = _receipts(Store(shared_demo["folder"] / "store" / "store"))
     examined(len(receipts), "demo receipts")
     assert receipts and record_values(*receipts) == set()
@@ -91,6 +95,7 @@ def test_no_page_of_the_public_demo_shows_an_escape(shared_demo, examined):
 def test_no_page_of_an_export_shows_an_escape(shared_demo, tmp_path, examined):
     from onetrace_console.export_static import export
     from onetrace_console.store import Store
+
     source = tmp_path / "console"
     shutil.copytree(shared_demo["folder"] / "store", source)
     runs = {r.run_id: r.key for r in Store(source / "store").runs()}
@@ -104,11 +109,15 @@ def test_sabotage_an_escaped_line_break_planted_is_named(shared_demo, examined):
     pages = _pages(shared_demo["folder"] / "store" / "pages")
     name = next(iter(pages))
     examined(1, "planted page")
-    planted = {**pages, name: pages[name].replace("</main>", "<pre><code>[model]\\u000aprovider</code></pre></main>", 1)}
+    planted = {
+        **pages,
+        name: pages[name].replace("</main>", "<pre><code>[model]\\u000aprovider</code></pre></main>", 1),
+    }
     assert pages_problems(planted) == [f"{name}: ['\\\\u000a']"]
 
 
 # ------------------------------------------------------------------ a record that holds a control character
+
 
 def _hostile_pair(root):
     """Two runs whose `score` stage records a setting, `note`, that holds a carriage return in the
@@ -116,10 +125,17 @@ def _hostile_pair(root):
     from pathlib import Path
 
     from onetrace.emit import Instrument, Recorder
+
     out = []
     for name, note, x in (("a", "a\rb", "1"), ("b", "c", "2")):
-        rec = Recorder(str(root / name), run_id=f"hostile-{name}", declared_stages=["load", "score"],
-                       manifest=Path(__file__), policy="fail-closed", anchor_reason="a test record")
+        rec = Recorder(
+            str(root / name),
+            run_id=f"hostile-{name}",
+            declared_stages=["load", "score"],
+            manifest=Path(__file__),
+            policy="fail-closed",
+            anchor_reason="a test record",
+        )
 
         def load(ctx):
             return ctx.write_json("load.json", {"load": "1"})
@@ -127,6 +143,7 @@ def _hostile_pair(root):
         def score(ctx, note=note, x=x):
             ctx.constant("note", note)
             return ctx.write_json("score.json", {"score": x})
+
         rec.run_stage("load", Instrument("loader", "tool", "1.0.0", {"source": "docs"}), load)
         rec.run_stage("score", Instrument("scorer", "tool", "1.0.0", {"rule": "max"}), score)
         rec.close()
@@ -142,6 +159,7 @@ def hostile(tmp_path):
     from onetrace_console.store import Store
     from tests.test_checks import _require_installed
     from tests.test_compare import _deliver
+
     _require_installed()
     store = Store(tmp_path / "store")
     a, b = (run_and_record(_deliver(f, store), store) for f in _hostile_pair(tmp_path / "made"))

@@ -9,14 +9,14 @@
 The other lists a count opens (a tally of some of the runs) are not the Runs page and keep the
 viewer's words; the decision is about the Runs page.
 """
+
 from __future__ import annotations
 
 import re
 
 from onetrace_console.render import render_all
 from tests.test_checks import _require_installed
-from tests.test_home_and_diff import (GENERATED_AT, RUN_C, RUN_C_POPPLER24, _deliver,
-                                      _require_exam)
+from tests.test_home_and_diff import GENERATED_AT, RUN_C, RUN_C_POPPLER24, _deliver, _require_exam
 
 FREE = "It is not a view of a store, and nothing is summarised across runs."
 
@@ -33,13 +33,16 @@ def test_the_console_runs_page_carries_the_ruled_sentence_and_not_the_free_files
     n = len(store.runs())
     examined(n, "stored runs")
     page = _text(render_all(store, generated_at=GENERATED_AT)["executions-all.html"])
-    assert (f"Runs stored: {n} of {n}, and this page lists every one of them. Nothing is "
-            "summarised across runs on this page.") in page
+    assert (
+        f"Runs stored: {n} of {n}, and this page lists every one of them. Nothing is "
+        "summarised across runs on this page."
+    ) in page
     assert FREE not in page and "not a view of a store" not in page
 
 
 def test_the_free_viewer_file_keeps_its_sentence(examined):
     from onetrace_console.viewer.page import render_executions
+
     page = _text(render_executions([], "2026-10-03", "viewer", of=0))
     examined(1, "free Runs page")
     assert FREE in page
@@ -48,9 +51,10 @@ def test_the_free_viewer_file_keeps_its_sentence(examined):
 
 
 def test_a_filtered_list_carries_its_ruled_sentence_and_not_the_free_files(store, examined):
-    """"Runs in this list: {n} of {T} stored, and this page lists every one
+    """ "Runs in this list: {n} of {T} stored, and this page lists every one
     of them. Nothing is summarised across runs on this page." In the console's frame only."""
     from onetrace_console.home import tallies
+
     _require_installed()
     _require_exam()
     for run in (RUN_C, RUN_C_POPPLER24):
@@ -73,6 +77,7 @@ TAIL = " Nothing is summarised across runs on this page."
 
 def _said(n: int, total: int) -> str:
     from onetrace_console.pages import runs_in_list
+
     return runs_in_list(n, total)
 
 

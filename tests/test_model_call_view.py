@@ -17,6 +17,7 @@ records compared by the installed onetrace's own comparator, in its words.
    where none does, it says so.
 7. Each field's description is the schema copy's; a field no group lists is under its own heading.
 """
+
 from __future__ import annotations
 
 import hashlib
@@ -27,6 +28,7 @@ import re
 import pytest
 
 from onetrace_console import model_call as mc
+from tests.conftest import only
 
 GENERATED_AT = "2026-09-26T12:00:00+02:00"
 IDS_A, IDS_B = ["5", "9", "13", "20"], ["5", "9", "14", "21"]
@@ -47,11 +49,13 @@ def built(tmp_path_factory):
     from tests.model_call_runs import record_run
     from tests.test_checks import FIXED_RAN_AT
     from tests.test_compare import _deliver
+
     folder = tmp_path_factory.mktemp("model-call-view")
     made = {
         "a": record_run(folder / "a", "mc-a", token_ids=IDS_A),
-        "b": record_run(folder / "b", "mc-b", fingerprint="sha256:" + "d" * 64, output="sha256:" + "e" * 64,
-                        token_ids=IDS_B),
+        "b": record_run(
+            folder / "b", "mc-b", fingerprint="sha256:" + "d" * 64, output="sha256:" + "e" * 64, token_ids=IDS_B
+        ),
         "c": record_run(folder / "c", "mc-c", token_ids=IDS_A),
         "d": record_run(folder / "d", "mc-d", files_digest="sha256:" + "f" * 64),
         "n": record_run(folder / "n", "mc-n", with_record=False),
@@ -68,7 +72,7 @@ def built(tmp_path_factory):
 
 def _stored(folder) -> tuple[dict, list[str] | None]:
     """The record and steps ids as the run's own folder holds them, read here without the console."""
-    step = next((folder / "artifacts").iterdir())
+    step = only(p for p in (folder / "artifacts").iterdir() if (p / "model_call.json").is_file())
     rec = json.loads((step / "model_call.json").read_bytes())
     steps = step / "model_call.steps.json"
     return rec, json.loads(steps.read_bytes())["token_ids"] if steps.exists() else None
@@ -87,14 +91,16 @@ def _lines(section: str) -> list[str]:
         wholes = re.findall(r'<span class="mono" data-fingerprint="whole">([^<]+)</span>', li)
         inline = re.sub(r"<details.*?</details>", "", li, flags=re.S)
         for w in wholes:
-            inline = inline.replace(f'<span class="mono">{w[:len("sha256:") + 12]}…</span>', w)
+            inline = inline.replace(f'<span class="mono">{w[: len("sha256:") + 12]}…</span>', w)
         out.append(_text(inline))
     return out
 
 
 def test_the_comparator_s_fingerprints_are_short_with_each_whole_one_fold_away(built, examined):
-    from onetrace_console.viewer.page import shortened_in_text
     from onetrace import model_call as sdk
+
+    from onetrace_console.viewer.page import shortened_in_text
+
     (ra, ia), (rb, ib) = _stored(built["folders"]["a"]), _stored(built["folders"]["b"])
     want = sdk.compare(ra, rb, receipts=("verified", "verified"), steps=(ia, ib)).lines()
     items = re.findall(r"<li[^>]*>(.*?)</li>", _section(built["diffs"]["ab"]), re.S)
@@ -107,6 +113,7 @@ def test_the_comparator_s_fingerprints_are_short_with_each_whole_one_fold_away(b
 
 def test_the_comparator_s_report_is_shown_line_for_line_under_the_short_answer(built, examined):
     from onetrace import model_call as sdk
+
     (ra, ia), (rb, ib) = _stored(built["folders"]["a"]), _stored(built["folders"]["b"])
     want = sdk.compare(ra, rb, receipts=("verified", "verified"), steps=(ia, ib)).lines()
     page = built["diffs"]["ab"]
@@ -128,13 +135,15 @@ def test_the_first_differing_step_links_to_its_decode_step_row(built, examined):
     href, at = link.groups()
     run_b = built["runs"]["b"]
     assert href == f"../runs/{run_b.key}/stage-1.html#decode-model_call-json-2"
-    row = re.search(r'<tr id="decode-model_call-json-2" data-decode-step="2">(.*?)</tr>',
-                    built["pages"]["b"]["stage-1.html"], re.S)
+    row = re.search(
+        r'<tr id="decode-model_call-json-2" data-decode-step="2">(.*?)</tr>', built["pages"]["b"]["stage-1.html"], re.S
+    )
     assert row is not None and _text(row.group(1)) == f"2 {IDS_B[2]}"
 
 
 def test_same_and_a_divergence_without_steps_files_read_as_the_comparator_words_them(built, examined):
     from onetrace import model_call as sdk
+
     examined(2, "comparisons")
     for pair, other in (("ac", "c"), ("ad", "d")):
         (ra, ia), (ro, io) = _stored(built["folders"]["a"]), _stored(built["folders"][other])
@@ -166,8 +175,10 @@ def test_a_step_s_record_output_links_to_its_record_on_the_same_page(built, exam
 
 def test_a_step_page_draws_its_steps_file_as_ids(built, examined):
     page = built["pages"]["b"]["stage-1.html"]
-    rows = re.findall(r'<tr id="decode-model_call-json-(\d+)" data-decode-step="\d+"><td[^>]*>\d+</td><td[^>]*><code>(\d+)</code>',
-                      page)
+    rows = re.findall(
+        r'<tr id="decode-model_call-json-(\d+)" data-decode-step="\d+"><td[^>]*>\d+</td><td[^>]*><code>(\d+)</code>',
+        page,
+    )
     examined(len(rows), "decode-step rows")
     assert rows == [(str(i), t) for i, t in enumerate(IDS_B)]
     assert "capture level, as the steps file names it: L1" in _text(page)
@@ -176,28 +187,42 @@ def test_a_step_page_draws_its_steps_file_as_ids(built, examined):
 
 
 def _step(files: dict[str, bytes], digests: dict[str, str] | None = None):
-    receipt = {"outputs": [{"name": n, "digest": (digests or {}).get(n, "sha256:" + hashlib.sha256(b).hexdigest())}
-                           for n, b in files.items()]}
+    receipt = {
+        "outputs": [
+            {"name": n, "digest": (digests or {}).get(n, "sha256:" + hashlib.sha256(b).hexdigest())}
+            for n, b in files.items()
+        ]
+    }
     return receipt, {f"artifacts/02-call/{n}": b for n, b in files.items()}.get
 
 
 def _with_steps(steps_bytes: bytes, named: bytes | None = None, digests=None) -> str:
     from onetrace import model_call as m
+
     from tests.test_model_call import raw, record
+
     digest = "sha256:" + hashlib.sha256(named if named is not None else steps_bytes).hexdigest()
     rec = record(steps=m.observed(digest, "model_call.steps.json"))
     receipt, read_file = _step({"model_call.json": raw(rec), "model_call.steps.json": steps_bytes}, digests)
     return mc.step_section(receipt, "receipts/02-call.json", read_file)
 
 
-@pytest.mark.parametrize("make, why", [
-    (lambda: _with_steps(b'{"token_ids":["1"]}', named=b"other"), "its bytes do not match the digest the record names"),
-    (lambda: _with_steps(b'{"token_ids":["1"]}', digests={"model_call.steps.json": "sha256:" + "0" * 64}),
-     "its stored bytes do not match its receipt"),
-    (lambda: _with_steps(b'{"token_ids":[1]}'), "the steps file holds no token_ids list of decimal strings"),
-    (lambda: _with_steps(b'{"token_ids":["01"]}'), "the steps file holds no token_ids list of decimal strings"),
-    (lambda: _with_steps(b"{"), "the steps file is not JSON this reader reads"),
-])
+@pytest.mark.parametrize(
+    "make, why",
+    [
+        (
+            lambda: _with_steps(b'{"token_ids":["1"]}', named=b"other"),
+            "its bytes do not match the digest the record names",
+        ),
+        (
+            lambda: _with_steps(b'{"token_ids":["1"]}', digests={"model_call.steps.json": "sha256:" + "0" * 64}),
+            "its stored bytes do not match its receipt",
+        ),
+        (lambda: _with_steps(b'{"token_ids":[1]}'), "the steps file holds no token_ids list of decimal strings"),
+        (lambda: _with_steps(b'{"token_ids":["01"]}'), "the steps file holds no token_ids list of decimal strings"),
+        (lambda: _with_steps(b"{"), "the steps file is not JSON this reader reads"),
+    ],
+)
 def test_a_steps_file_that_does_not_hold_is_named_and_not_drawn(make, why, examined):
     page = make()
     examined(1, "planted steps file")
@@ -222,14 +247,19 @@ def test_the_runs_naming_the_same_model_files_are_listed_and_linked(built, exami
     d = built["pages"]["d"]["stage-1.html"]
     line = re.search(r'<div data-same-files="none">(.*?)</div>', d, re.S)
     assert line is not None and "data-same-files-run" not in d
-    assert _text(line.group(1)).startswith("No other run's model-call record names the same model files, model.files_digest")
+    assert _text(line.group(1)).startswith(
+        "No other run's model-call record names the same model files, model.files_digest"
+    )
     assert "sha256:" + "f" * 64 in line.group(1)
 
 
 def test_each_description_is_the_schema_copy_s_and_an_ungrouped_field_has_its_heading(examined):
     from importlib.resources import files
+
     from onetrace import model_call as m
+
     from tests.test_model_call import raw, record
+
     schema = json.loads(files("onetrace_console").joinpath(mc.SCHEMA_FILE).read_bytes())
     rec = record(**{"engine.settings.max_tokens": m.observed("16", "written for this test")})
     receipt, read_file = _step({"model_call.json": raw(rec)})

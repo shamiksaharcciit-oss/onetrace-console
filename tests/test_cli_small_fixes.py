@@ -9,6 +9,7 @@
 
 tools/sabotage_small_fixes.py breaks each one and expects these tests to fail.
 """
+
 from __future__ import annotations
 
 import os
@@ -23,10 +24,15 @@ REPO = Path(__file__).resolve().parent.parent
 
 
 def _cli(*args: str) -> subprocess.CompletedProcess:
-    env = {**{k: v for k, v in os.environ.items() if k != "ONETRACE_CONSOLE_CONFIG"},
-           "PYTHONPATH": str(REPO / "src")}
-    return subprocess.run([sys.executable, "-B", "-m", "onetrace_console", *args],
-                          capture_output=True, text=True, encoding="utf-8", env=env, timeout=120)
+    env = {**{k: v for k, v in os.environ.items() if k != "ONETRACE_CONSOLE_CONFIG"}, "PYTHONPATH": str(REPO / "src")}
+    return subprocess.run(
+        [sys.executable, "-B", "-m", "onetrace_console", *args],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        env=env,
+        timeout=120,
+    )
 
 
 @pytest.mark.parametrize("flag", ["--help", "-h"])
@@ -45,20 +51,30 @@ def test_anything_not_understood_still_goes_to_standard_error_with_2(args, exami
     assert done.returncode == 2 and done.stdout == "" and "onetrace-console demo" in done.stderr
 
 
-@pytest.mark.skipif(os.name == "nt", reason="Windows stops a process with TerminateProcess, "
-                                            "which no program can catch; there is no SIGTERM to test")
+@pytest.mark.skipif(
+    os.name == "nt",
+    reason="Windows stops a process with TerminateProcess, which no program can catch; there is no SIGTERM to test",
+)
 def test_a_public_demo_stopped_with_sigterm_leaves_no_temporary_folder(tmp_path, examined):
     from tests.test_checks import _require_installed
     from tests.test_folder_load import _Console, _free_port
+
     _require_installed()
     temp = tmp_path / "tmp"
     temp.mkdir()
-    c = _Console(tmp_path, "demo", "--public", "--port", str(_free_port()),
-                 env={"TMPDIR": str(temp), "TEMP": str(temp), "TMP": str(temp)})
+    c = _Console(
+        tmp_path,
+        "demo",
+        "--public",
+        "--port",
+        str(_free_port()),
+        env={"TMPDIR": str(temp), "TEMP": str(temp), "TMP": str(temp)},
+    )
     try:
         c.until("overview:")
-        assert [p.name for p in temp.iterdir() if p.name.startswith("onetrace-console-public-demo-")], \
+        assert [p.name for p in temp.iterdir() if p.name.startswith("onetrace-console-public-demo-")], (
             "the demo was built in the temporary folder"
+        )
         c.proc.terminate()
         c.proc.wait(timeout=60)
     finally:
@@ -69,9 +85,10 @@ def test_a_public_demo_stopped_with_sigterm_leaves_no_temporary_folder(tmp_path,
 
 
 def test_the_icon_is_served_in_the_skins_colours_and_every_framed_page_links_it(examined):
-    from onetrace_console.serve import STATIC_FILES, _STATIC_TYPES
-    from onetrace_console.viewer.page import framed, _head
+    from onetrace_console.serve import _STATIC_TYPES, STATIC_FILES
+    from onetrace_console.viewer.page import _head, framed
     from onetrace_console.viewer.tokens import root_css
+
     icon = STATIC_FILES["/static/favicon.svg"]
     examined(1, "icon")
     assert _STATIC_TYPES[icon.suffix] == "image/svg+xml"
@@ -86,6 +103,7 @@ def test_the_icon_is_served_in_the_skins_colours_and_every_framed_page_links_it(
 
 def test_the_icon_ships_in_the_package(examined):
     import tomllib
+
     data = tomllib.loads((REPO / "pyproject.toml").read_text(encoding="utf-8"))
     examined(1, "package-data list")
     assert "static/favicon.svg" in data["tool"]["setuptools"]["package-data"]["onetrace_console"]

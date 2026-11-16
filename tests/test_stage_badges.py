@@ -12,21 +12,28 @@ words; the signing badge keeps its placeholder until the third build.
 The FAIL is the pinned verifier's own; PASS and NOT-RUN edit that stored report's one anchor row,
 text and --json together, read by the viewer row by row (tests/test_step3_receipt_anchor.py).
 """
+
 from __future__ import annotations
 
 import json
 import re
 from html import unescape
 
-
 from tests.test_stage_pages import _pages, demo  # noqa: F401
-from tests.test_step3_receipt_anchor import (BITCOIN, _anchor_row_as, _read_by_the_viewer,  # noqa: F401
-                                             anchored, declared)
+from tests.test_step3_receipt_anchor import (
+    BITCOIN,
+    _anchor_row_as,
+    _read_by_the_viewer,  # noqa: F401
+    anchored,  # noqa: F401 - a fixture, requested by name
+    declared,  # noqa: F401 - a fixture, requested by name
+)
 
 
 def _cells(row: str) -> list[str]:
-    return [re.sub(r"\s+", " ", unescape(re.sub(r"<[^>]+>", " ", c))).strip()
-            for c in re.findall(r"<td>(.*?)</td>", row, re.S)]
+    return [
+        re.sub(r"\s+", " ", unescape(re.sub(r"<[^>]+>", " ", c))).strip()
+        for c in re.findall(r"<td>(.*?)</td>", row, re.S)
+    ]
 
 
 def _badges(run, store) -> set[str]:
@@ -43,8 +50,10 @@ def _badges(run, store) -> set[str]:
 def test_yes_names_the_whole_runs_record(anchored):
     run, store = anchored
     run = _anchor_row_as(run, store, "PASS", BITCOIN)
-    assert _badges(run, store) == {"Committed by a known time · Yes · existed by "
-                                   "2024-04-20T00:09:27Z · bitcoin block 840000 (the whole run's record)"}
+    assert _badges(run, store) == {
+        "Committed by a known time · Yes · existed by "
+        "2024-04-20T00:09:27Z · bitcoin block 840000 (the whole run's record)"
+    }
 
 
 def test_couldnt_check_gives_the_verifiers_reason_alone(anchored):
@@ -57,8 +66,7 @@ def test_a_failed_check_says_what_the_check_says(anchored):
     run, store = anchored
     _read_by_the_viewer(json.loads(store.get(run.check_report).decode("utf-8")))
     (said,) = _badges(run, store)
-    assert said.startswith("Committed by a known time · No · the check says: malformed anchor "
-                           "record"), said
+    assert said.startswith("Committed by a known time · No · the check says: malformed anchor record"), said
 
 
 def test_no_anchor_row_is_not_anchored(demo):  # noqa: F811
@@ -78,6 +86,7 @@ def test_without_an_own_check_it_is_the_record_declared_rung_as_on_the_run_page(
     from dataclasses import replace
 
     from tests.test_step3_receipt_anchor import _case_rung
+
     run, store = anchored
     envelope = json.loads(store.get(run.check_report).decode("utf-8"))
     envelope["stdout"] += "forged: a line after the summary\n"

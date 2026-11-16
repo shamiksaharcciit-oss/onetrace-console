@@ -3,7 +3,7 @@
 Tested on **synthetic** receipts (`tests/fixtures/synthetic_receipts/`), because the
 SDK does not emit `decision_refs` yet -- so there is no live page to splice this onto
 today. `join_stage`/`render_panel`/`citation_incidents` are complete and tested
-against the specified `decision_refs` shape; wiring a real run's receipts through them is a
+against onedoor's `decision_refs` shape; wiring a real run's receipts through them is a
 later order's work, once the SDK actually produces `decision_refs` and
 `gated_stages` (out of scope here: both come from the SDK after 0.1.1).
 
@@ -41,27 +41,33 @@ names an unaltered row -- once it does, showing that row's own recorded word is
 the more direct claim, and remains true even for a citation built by hand (this
 module's own synthetic-receipt tests) rather than by onedoor itself.
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass
-from onetrace_console.words import escape
+from typing import TYPE_CHECKING
 
 from onetrace_console.incidents import Incident, Rule, incident_id
 from onetrace_console.onedoor_ext.policy_pages import Decision, all_decisions, checked_rows
 from onetrace_console.store import Store
+from onetrace_console.words import escape
+
+if TYPE_CHECKING:
+    from onetrace_console.onedoor_ext.decisions import DecisionRow
 
 STATE_MATCH = "matches"
 STATE_MISMATCH = "mismatch"
 STATE_UNKNOWN = "unknown"
-STATE_MISSING = "missing"       # gated, no ref
-STATE_NONE = "none"             # neither cited nor gated -- shows nothing
+STATE_MISSING = "missing"  # gated, no ref
+STATE_NONE = "none"  # neither cited nor gated -- shows nothing
 #: The cited row, or a row it could be, cannot be checked against its
 #: delivery. Never reported as "unknown", and never as "matches".
 STATE_COULDNT_CHECK = "couldnt-check"
 
-#: Printed on the panel in plain words, per the specification's own requirement.
-LIMIT_SENTENCE = ("A citation shows that the run names an existing, unaltered "
-                 "decision. It does not show that every action was gated.")
+#: Printed on the panel in plain words, so the panel never claims more than a citation shows.
+LIMIT_SENTENCE = (
+    "A citation shows that the run names an existing, unaltered decision. It does not show that every action was gated."
+)
 
 PANEL_TITLE = "Decisions cited"
 
@@ -71,8 +77,8 @@ class StageCitation:
     stage: str
     state: str
     request_id: str | None = None
-    verdict: str | None = None        # onedoor's own row word; STATE_MATCH only
-    reason: str | None = None         # STATE_COULDNT_CHECK only: the sentence naming the row
+    verdict: str | None = None  # onedoor's own row word; STATE_MATCH only
+    reason: str | None = None  # STATE_COULDNT_CHECK only: the sentence naming the row
 
 
 def _decisions_by_request_id(store: Store) -> dict[str, Decision]:
@@ -84,9 +90,15 @@ def _decisions_by_request_id(store: Store) -> dict[str, Decision]:
     return {d.request_id: d for d in all_decisions(store) if d.request_id is not None}
 
 
-def join_stage(stage: str, ref: dict | None, gated: bool, store: Store,
-              *, _trust_receipt_verdict: bool = False,
-              _pick_first_row: bool = False) -> StageCitation:
+def join_stage(
+    stage: str,
+    ref: dict | None,
+    gated: bool,
+    store: Store,
+    *,
+    _trust_receipt_verdict: bool = False,
+    _pick_first_row: bool = False,
+) -> StageCitation:
     """One stage's state, one of the five, its row chosen by digest (see the module docstring).
 
     `_trust_receipt_verdict` exists only for the sabotage test named in step 5's own
@@ -110,13 +122,13 @@ def join_stage(stage: str, ref: dict | None, gated: bool, store: Store,
     #: cited row may be among them: neither "not in any ingested export" nor "does not match"
     #: can then be shown.
     unreadable = next((c for c in checked_rows(store) if c.delivered is None), None)
-    d = _decisions_by_request_id(store).get(request_id)
+    d = _decisions_by_request_id(store).get(request_id)  # type: ignore[arg-type]  # a key that is None reads as the default
     if d is None:
         if unreadable is not None:
-            return StageCitation(stage, STATE_COULDNT_CHECK, request_id,
-                                 reason=unreadable.couldnt_check)
+            return StageCitation(stage, STATE_COULDNT_CHECK, request_id, reason=unreadable.couldnt_check)
         return StageCitation(stage, STATE_UNKNOWN, request_id)
 
+    matched: DecisionRow | None
     if _pick_first_row:
         matched = d.rows[0]
     else:
@@ -135,18 +147,22 @@ def join_stage(stage: str, ref: dict | None, gated: bool, store: Store,
     if unchecked is not None:
         return StageCitation(stage, STATE_COULDNT_CHECK, request_id, reason=unchecked)
     if unreadable is not None:
-        return StageCitation(stage, STATE_COULDNT_CHECK, request_id,
-                             reason=unreadable.couldnt_check)
+        return StageCitation(stage, STATE_COULDNT_CHECK, request_id, reason=unreadable.couldnt_check)
     return StageCitation(stage, STATE_MISMATCH, request_id)
 
 
-def join_run(stages: list[dict], store: Store,
-            *, _trust_receipt_verdict: bool = False) -> tuple[StageCitation, ...]:
+def join_run(stages: list[dict], store: Store, *, _trust_receipt_verdict: bool = False) -> tuple[StageCitation, ...]:
     """`stages` is the synthetic-receipt shape: `[{"stage", "gated", "decision_ref"}]`."""
     return tuple(
-        join_stage(s["stage"], s.get("decision_ref"), bool(s.get("gated", False)), store,
-                  _trust_receipt_verdict=_trust_receipt_verdict)
-        for s in stages)
+        join_stage(
+            s["stage"],
+            s.get("decision_ref"),
+            bool(s.get("gated", False)),
+            store,
+            _trust_receipt_verdict=_trust_receipt_verdict,
+        )
+        for s in stages
+    )
 
 
 def _state_sentence(c: StageCitation) -> str | None:
@@ -160,11 +176,11 @@ def _state_sentence(c: StageCitation) -> str | None:
         return c.reason or "couldn't check"
     if c.state == STATE_MISSING:
         return "no decision cited"
-    return None                                            # STATE_NONE: shows nothing
+    return None  # STATE_NONE: shows nothing
 
 
 def render_panel(citations: tuple[StageCitation, ...]) -> str:
-    """The panel: one line per stage that has something to say, in the specification's own
+    """The panel: one line per stage that has something to say, in its
     five states, plus the limit sentence in plain words. The words "allowed" and
     "authorised" appear nowhere here -- checked directly by this module's own tests.
     """
@@ -176,17 +192,19 @@ def render_panel(citations: tuple[StageCitation, ...]) -> str:
         items.append(
             f'<li data-stage="{escape(c.stage, quote=True)}" '
             f'data-state="{escape(c.state, quote=True)}">'
-            f"<strong>{escape(c.stage)}</strong>: {escape(sentence)}</li>")
+            f"<strong>{escape(c.stage)}</strong>: {escape(sentence)}</li>"
+        )
     return (
         f'<section data-section="decisions-cited"><h2>{escape(PANEL_TITLE)}</h2>'
         f'<ul class="plain">{"".join(items)}</ul>'
         f'<p class="limit" data-section="citation-limit">{escape(LIMIT_SENTENCE)}</p>'
-        "</section>")
+        "</section>"
+    )
 
 
 # ------------------------------------------------------------------- incidents
 
-#: State 2 and state 4 each raise an incident (the specification's own words). `raise_for`
+#: State 2 and state 4 each raise an incident. `raise_for`
 #: is left `None` for the same reason `decision_incidents.RULE` leaves it `None`:
 #: these incidents are supplied already-made, via `derive()`'s `extra_incidents`,
 #: because they come from a run's synthetic receipts, not from iterating `StoredRun`.
@@ -214,18 +232,30 @@ def citation_incidents(run_key: str, citations: tuple[StageCitation, ...]) -> tu
     for c in citations:
         if c.state == STATE_MISMATCH:
             path = f"stages[{c.stage}].decision_ref.decision_digest"
-            out.append(Incident(
-                id=incident_id(MISMATCH_RULE.id, run_key, path),
-                rule=MISMATCH_RULE.id, subject=f"{run_key}:{c.stage}",
-                subject_kind="stage", source_sha=run_key, field_path=path,
-                quoted=f"stage {c.stage!r} cites request_id {c.request_id!r}",
-                evidence=f"runs/{run_key}/case.html"))
+            out.append(
+                Incident(
+                    id=incident_id(MISMATCH_RULE.id, run_key, path),
+                    rule=MISMATCH_RULE.id,
+                    subject=f"{run_key}:{c.stage}",
+                    subject_kind="stage",
+                    source_sha=run_key,
+                    field_path=path,
+                    quoted=f"stage {c.stage!r} cites request_id {c.request_id!r}",
+                    evidence=f"runs/{run_key}/case.html",
+                )
+            )
         elif c.state == STATE_MISSING:
             path = f"stages[{c.stage}].decision_ref"
-            out.append(Incident(
-                id=incident_id(MISSING_RULE.id, run_key, path),
-                rule=MISSING_RULE.id, subject=f"{run_key}:{c.stage}",
-                subject_kind="stage", source_sha=run_key, field_path=path,
-                quoted=f"stage {c.stage!r} is gated and cites nothing",
-                evidence=f"runs/{run_key}/case.html"))
+            out.append(
+                Incident(
+                    id=incident_id(MISSING_RULE.id, run_key, path),
+                    rule=MISSING_RULE.id,
+                    subject=f"{run_key}:{c.stage}",
+                    subject_kind="stage",
+                    source_sha=run_key,
+                    field_path=path,
+                    quoted=f"stage {c.stage!r} is gated and cites nothing",
+                    evidence=f"runs/{run_key}/case.html",
+                )
+            )
     return tuple(out)

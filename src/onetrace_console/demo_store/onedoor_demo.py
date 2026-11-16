@@ -8,6 +8,7 @@ could use, and a committed time-valid permit would expire). Beside the runs the 
 decision export (`decisions.jsonl`, with its `.sha256` sidecar) and the issuer's PUBLIC key
 (`permit-issuers.json`), so onetrace-verify can check every run from the files beside it.
 """
+
 from __future__ import annotations
 
 import base64
@@ -29,27 +30,38 @@ class Issuer:
     def __init__(self):
         from cryptography.hazmat.primitives import serialization
         from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+
         self._key = Ed25519PrivateKey.generate()
-        self.public = self._key.public_key().public_bytes(serialization.Encoding.Raw,
-                                                          serialization.PublicFormat.Raw).hex()
+        self.public = (
+            self._key.public_key().public_bytes(serialization.Encoding.Raw, serialization.PublicFormat.Raw).hex()
+        )
         self.rows: list[dict] = []
 
     def decide(self, request_id: str, verdict: str, *, in_export: bool = True) -> dict:
         """A decision reference, its row added to the export (`decision` as onedoor words it)."""
         from onetrace import onedoor_ref
-        row = {"request_id": request_id, "action_type": "pay",
-               "decision": {"permit": "executed", "deny": "denied", "propose": "proposed"}[verdict]}
+
+        row = {
+            "request_id": request_id,
+            "action_type": "pay",
+            "decision": {"permit": "executed", "deny": "denied", "propose": "proposed"}[verdict],
+        }
         if in_export:
             self.rows.append(row)
-        return {"format": "onedoor-decision-ref/1", "request_id": request_id,
-                "decision_digest": onedoor_ref.decision_digest(row), "verdict": verdict, "issuer": ISSUER}
+        return {
+            "format": "onedoor-decision-ref/1",
+            "request_id": request_id,
+            "decision_digest": onedoor_ref.decision_digest(row),
+            "verdict": verdict,
+            "issuer": ISSUER,
+        }
 
     def permit(self, action: dict, seconds: int = 7 * 24 * 3600) -> str:
         """A bound permit for `action`, valid from now for `seconds`, as onedoor's profile shapes it."""
         from onetrace import onedoor_ref
+
         header = {"alg": "EdDSA", "kid": "payments-key-1", "typ": "aadp-permit+jwt"}
-        claims = {"iss": ISSUER, "action_digest": onedoor_ref.action_digest(action),
-                  "exp": int(time.time()) + seconds}
+        claims = {"iss": ISSUER, "action_digest": onedoor_ref.action_digest(action), "exp": int(time.time()) + seconds}
         signing_input = _b64url(json.dumps(header).encode()) + "." + _b64url(json.dumps(claims).encode())
         return signing_input + "." + _b64url(self._key.sign(signing_input.encode("ascii")))
 
@@ -60,7 +72,17 @@ class Issuer:
         export = "".join(json.dumps(r, sort_keys=True, separators=(",", ":")) + "\n" for r in self.rows).encode("utf-8")
         (runs / "decisions.jsonl").write_bytes(export)
         (runs / "decisions.jsonl.sha256").write_bytes(
-            (hashlib.sha256(export).hexdigest() + "  decisions.jsonl\n").encode("utf-8"))
-        (runs / "permit-issuers.json").write_bytes((json.dumps(
-            {"format": "onedoor-issuer-trust/1",
-             "issuers": [{"issuer": ISSUER, "alg": "ed25519", "public_key": self.public}]}, indent=1) + "\n").encode("utf-8"))
+            (hashlib.sha256(export).hexdigest() + "  decisions.jsonl\n").encode("utf-8")
+        )
+        (runs / "permit-issuers.json").write_bytes(
+            (
+                json.dumps(
+                    {
+                        "format": "onedoor-issuer-trust/1",
+                        "issuers": [{"issuer": ISSUER, "alg": "ed25519", "public_key": self.public}],
+                    },
+                    indent=1,
+                )
+                + "\n"
+            ).encode("utf-8")
+        )

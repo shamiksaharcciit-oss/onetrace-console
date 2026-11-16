@@ -12,16 +12,15 @@
 5. The results page: the box on the Runs page and on each run's page, the matched fields shown,
    "Compare with this run" opening a held comparison; a public console's query writes nothing.
 """
+
 from __future__ import annotations
 
 import copy
-import hashlib
 import json
-import shutil
-from pathlib import Path
-from tests.http_limits import limit
 
 import pytest
+
+from tests.http_limits import limit
 
 P1_CANDIDATE = "p1-08-candidate-set2"
 P1_BASELINE = "p1-02-baseline-set2"
@@ -31,6 +30,7 @@ P1_BASELINE = "p1-02-baseline-set2"
 def demo(shared_demo):
     from onetrace_console import run_index
     from onetrace_console.store import Store
+
     folder = shared_demo["folder"]
     store = Store(folder / "store" / "store")
     index = run_index.read(folder / "store")
@@ -48,15 +48,23 @@ def _ids(results):
 
 # ------------------------------------------------------------------- 1. derived, rebuilt
 
+
 def test_deleting_the_index_and_rebuilding_it_gives_the_same_file_and_answers(shared_demo, tmp_path, examined):
-    from tests.conftest import demo_copy
     from onetrace_console import run_index
     from onetrace_console.store import Store
+    from tests.conftest import demo_copy
+
     folder = demo_copy(shared_demo, tmp_path / "demo")
     path = folder / "store" / run_index.FILE_NAME
     before = path.read_bytes()
-    queries = ["setting:*.chunk_size=512", "benchmark:yes", "verdict:FAIL", "first_diff:any:setting",
-               f"inputs:same-as:{P1_BASELINE}", "pipeline:P8 gated:approve_payment"]
+    queries = [
+        "setting:*.chunk_size=512",
+        "benchmark:yes",
+        "verdict:FAIL",
+        "first_diff:any:setting",
+        f"inputs:same-as:{P1_BASELINE}",
+        "pipeline:P8 gated:approve_payment",
+    ]
     answers = [_ids(run_index.query(run_index.read(folder / "store"), q)) for q in queries]
     path.unlink()
     assert run_index.read(folder / "store") is None
@@ -67,11 +75,12 @@ def test_deleting_the_index_and_rebuilding_it_gives_the_same_file_and_answers(sh
 
 
 def test_drawing_the_pages_writes_the_index(shared_demo, tmp_path, examined):
-    from tests.conftest import demo_copy
     from onetrace_console import run_index
     from onetrace_console.config import Config
     from onetrace_console.serve import _render_all_pages
     from onetrace_console.store import Store
+    from tests.conftest import demo_copy
+
     folder = demo_copy(shared_demo, tmp_path / "demo")
     path = folder / "store" / run_index.FILE_NAME
     before = path.read_bytes()
@@ -83,8 +92,10 @@ def test_drawing_the_pages_writes_the_index(shared_demo, tmp_path, examined):
 
 # ------------------------------------------------------------------- 2. what it holds
 
+
 def test_a_run_s_entry_is_its_record_s_own(demo, examined):
     from onetrace_console.stage_pages import _steps
+
     _folder, store, index = demo
     run = store.runs_with_id(P1_CANDIDATE)[0]
     entry = _run(index, P1_CANDIDATE)
@@ -95,8 +106,11 @@ def test_a_run_s_entry_is_its_record_s_own(demo, examined):
     for got, s in zip(entry["steps"], steps):
         r = s["receipt"]
         assert got["outcome"] == r["outcome"]["class"]
-        assert got["instrument"] == {"id": r["instrument"]["id"], "version": r["instrument"]["version"],
-                                     "config_digest": r["instrument"].get("config_digest", "")}
+        assert got["instrument"] == {
+            "id": r["instrument"]["id"],
+            "version": r["instrument"]["version"],
+            "config_digest": r["instrument"].get("config_digest", ""),
+        }
         assert got["settings"] == (r.get("assertions") or {}).get("constants", {})
         assert got["inputs"] == [[i["name"], i["digest"]] for i in r["inputs"]]
         assert got["outputs"] == [[o["name"], o["digest"]] for o in r["outputs"]]
@@ -107,6 +121,7 @@ def test_a_run_s_entry_is_its_record_s_own(demo, examined):
 def test_the_verdict_and_rows_are_the_verifier_s(demo, examined):
     from onetrace_console.info_mark import rows_of
     from onetrace_console.pages import _envelope
+
     _folder, store, index = demo
     seen = 0
     for entry in index["runs"]:
@@ -124,6 +139,7 @@ def test_the_verdict_and_rows_are_the_verifier_s(demo, examined):
 
 def test_each_held_comparison_s_first_difference_is_its_short_answer_s(demo, examined):
     from onetrace_console.render import short_headline
+
     _folder, store, index = demo
     held = {c.key: c for c in store.comparisons()}
     examined(len(index["comparisons"]), "held comparisons")
@@ -135,8 +151,11 @@ def test_each_held_comparison_s_first_difference_is_its_short_answer_s(demo, exa
             assert any(f"`{s}`" in headline for s in first["steps"]), (headline, first)
         for name in first["settings"]:
             assert f"`{name}`" in headline, (headline, first)
-    p1 = next(c for c in index["comparisons"]
-              if (c["a"], c["b"]) == (store.runs_with_id(P1_BASELINE)[0].key, store.runs_with_id(P1_CANDIDATE)[0].key))
+    p1 = next(
+        c
+        for c in index["comparisons"]
+        if (c["a"], c["b"]) == (store.runs_with_id(P1_BASELINE)[0].key, store.runs_with_id(P1_CANDIDATE)[0].key)
+    )
     assert p1["first_diff"] == {"steps": ["split"], "kinds": ["setting"], "settings": ["chunk_size"], "inputs": []}
 
 
@@ -155,8 +174,11 @@ def test_no_kept_input_s_bytes_are_in_the_index(demo, examined):
     """The index holds digests, never the text the runs read: no kept input file's contents."""
     folder, _store, index = demo
     text = (folder / "store" / "run_index.json").read_text(encoding="utf-8")
-    kept = [p for p in sorted((folder / "runs").rglob("*.json"))
-            if p.parent.name == "inputs" or p.name in ("questions.json", "documents.json")]
+    kept = [
+        p
+        for p in sorted((folder / "runs").rglob("*.json"))
+        if p.parent.name == "inputs" or p.name in ("questions.json", "documents.json")
+    ]
     examined(len(kept), "kept input files")
     assert kept
     for p in kept:
@@ -178,8 +200,10 @@ def _strings(doc):
 
 # --------------------------------------------------------------------- 3. the grammar
 
+
 def test_each_term_answers_the_runs_the_record_says(demo, examined):
     from onetrace_console import run_index as ri
+
     _folder, store, index = demo
     by_id = {r["run_id"]: r for r in index["runs"]}
     want = {
@@ -203,14 +227,16 @@ def test_each_term_answers_the_runs_the_record_says(demo, examined):
     assert P1_CANDIDATE in _ids(ri.query(index, f"input:{digest[0]}={digest[1]}"))
     row = by_id["p1-15-candidate-set4-file-deleted"]["rows"]["FAIL"][0]
     assert _ids(ri.query(index, f'row:"{row}"=FAIL')) == ["p1-15-candidate-set4-file-deleted"]
-    weights = next(c for s in by_id["pz-51-agent-baseline"]["steps"] for c in s.get("model_calls", [])
-                   if "weights" in c["fields"])["fields"]["weights"]["value"]
+    weights = next(
+        c for s in by_id["pz-51-agent-baseline"]["steps"] for c in s.get("model_calls", []) if "weights" in c["fields"]
+    )["fields"]["weights"]["value"]
     assert _ids(ri.query(index, f"model:weights={weights}")) == ["pz-51-agent-baseline", "pz-53-agent-amount-changed"]
     examined(len(want) + 4, "queries")
 
 
 def test_every_result_names_what_matched_as_recorded(demo, examined):
     from onetrace_console import run_index as ri
+
     _folder, _store, index = demo
     got = ri.query(index, "pipeline:P1 setting:split.chunk_size=512 benchmark:no")
     examined(len(got), "results")
@@ -222,6 +248,7 @@ def test_every_result_names_what_matched_as_recorded(demo, examined):
 def test_diff_same_as_finds_runs_that_first_differ_the_same_way(demo, examined):
     """`diff:same-as:X`: the runs whose held comparison has X's baseline and X's first difference."""
     from onetrace_console import run_index as ri
+
     _folder, _store, index = demo
     index = copy.deepcopy(index)
     p5 = [c for c in index["comparisons"] if c["first_diff"]["steps"] == ["calibrate"]]
@@ -240,6 +267,7 @@ def test_diff_same_as_finds_runs_that_first_differ_the_same_way(demo, examined):
 def test_sabotage_a_changed_index_answers_differently(demo, examined):
     """The answers are the index's: a setting changed in it changes what a query finds."""
     from onetrace_console import run_index as ri
+
     _folder, _store, index = demo
     planted = copy.deepcopy(index)
     _run(planted, P1_CANDIDATE)["steps"][1]["settings"]["chunk_size"] = "999"
@@ -251,18 +279,23 @@ def test_sabotage_a_changed_index_answers_differently(demo, examined):
 
 # ------------------------------------------------------------------------ 4. refused
 
-@pytest.mark.parametrize("q, words", [
-    ("nonsense", "is not a term"),
-    ("colour:blue", "has no field 'colour'"),
-    ("setting:chunk_size=512", "setting takes <step>.<name>=<value>"),
-    ('row:"x"=PASS', "keeps the rows that read FAIL or NOT-RUN"),
-    ("first_diff:any:mood", "first_diff:any: takes"),
-    ("benchmark:maybe", "benchmark takes yes or no"),
-    ("model:colour=red", "model's fields are"),
-    ("inputs:same-as:no-such-run", "no run is named"),
-])
+
+@pytest.mark.parametrize(
+    "q, words",
+    [
+        ("nonsense", "is not a term"),
+        ("colour:blue", "has no field 'colour'"),
+        ("setting:chunk_size=512", "setting takes <step>.<name>=<value>"),
+        ('row:"x"=PASS', "keeps the rows that read FAIL or NOT-RUN"),
+        ("first_diff:any:mood", "first_diff:any: takes"),
+        ("benchmark:maybe", "benchmark takes yes or no"),
+        ("model:colour=red", "model's fields are"),
+        ("inputs:same-as:no-such-run", "no run is named"),
+    ],
+)
 def test_a_query_the_grammar_does_not_hold_is_refused_in_words(demo, q, words, examined):
     from onetrace_console import run_index as ri
+
     _folder, _store, index = demo
     examined(1, "query")
     with pytest.raises(ri.QueryError, match=words.replace("*", r"\*").replace("<", ".").replace(">", ".")):
@@ -270,6 +303,7 @@ def test_a_query_the_grammar_does_not_hold_is_refused_in_words(demo, q, words, e
 
 
 # ------------------------------------------------------------------------ 5. the page
+
 
 def test_the_box_is_on_the_runs_page_and_every_run_s_page(demo, examined):
     folder, store, _index = demo
@@ -285,6 +319,7 @@ def test_the_box_is_on_the_runs_page_and_every_run_s_page(demo, examined):
 
 def test_the_results_page_shows_the_matches_and_opens_held_comparisons(demo, examined):
     from onetrace_console import run_index, search_page
+
     _folder, store, index = demo
     asked = store.runs_with_id(P1_BASELINE)[0]
     page = search_page.page(index, "setting:split.chunk_size=512", asked.key, store, public=True)
@@ -296,13 +331,17 @@ def test_the_results_page_shows_the_matches_and_opens_held_comparisons(demo, exa
     assert 'data-search="not-held"' in page and "data-compare-post" not in page
     local = search_page.page(index, "setting:split.chunk_size=512", asked.key, store, public=False)
     assert "data-compare-post" in local
-    assert run_index.QueryError.__name__ and 'data-search="refused"' in search_page.page(index, "x", "", store, public=True)
+    assert run_index.QueryError.__name__ and 'data-search="refused"' in search_page.page(
+        index, "x", "", store, public=True
+    )
 
 
 def test_a_public_console_s_query_writes_nothing_and_answers(shared_cli_demo, tmp_path, examined):
-    from tests.test_public_mode import _config, _tree
-    from tests.test_folder_load import _Console
     import urllib.request
+
+    from tests.test_folder_load import _Console
+    from tests.test_public_mode import _config, _tree
+
     built = shared_cli_demo["folder"]
     config = _config(tmp_path, built, compare_cache=str(tmp_path / "compared"))
     port = json.loads(config.read_text(encoding="utf-8"))["port"]

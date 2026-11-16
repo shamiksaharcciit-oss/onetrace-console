@@ -7,6 +7,7 @@
 The console serves every page inside `frame.rendering(...)`; a page drawn outside it is drawn as the
 viewer draws the free file.
 """
+
 from __future__ import annotations
 
 from onetrace_console.frame import rendering

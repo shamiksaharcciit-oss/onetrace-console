@@ -5,13 +5,12 @@ variable its `key_env` names, and whether that variable is set in the environmen
 from -- "set" or "not set", never its value -- with the restart line where it is not set. The file's path
 follows `ONETRACE_EXPLAIN_CONFIG`.
 """
+
 from __future__ import annotations
 
 import os
 import re
 from html import unescape
-
-import pytest
 
 from tests.test_explain_panel import _diff, _panel, in_full, pair, toml_string  # noqa: F401  (pair: a fixture)
 
@@ -21,14 +20,19 @@ VAR = "PLANTED_KEY_VARIABLE"
 
 def _config(config, *, key_env: str = VAR) -> None:
     from tests.test_explain_panel import _closed_port
-    config.write_text(f'[model]\nprovider = "anthropic"\nname = "a-model"\n'
-                      f"base_url = {toml_string('http://127.0.0.1:%d' % _closed_port())}\n"
-                      f"key_env = {toml_string(key_env)}\n", encoding="utf-8")
+
+    config.write_text(
+        f'[model]\nprovider = "anthropic"\nname = "a-model"\n'
+        f"base_url = {toml_string(f'http://127.0.0.1:{_closed_port()}')}\n"
+        f"key_env = {toml_string(key_env)}\n",
+        encoding="utf-8",
+    )
 
 
 def _failed(pair) -> str:
     """The panel after a Send that failed (nothing listens at the address)."""
     from onetrace_console import explain
+
     store, comparison, _config_path = pair
     explain.prepare(comparison, store)
     got = explain.explain(comparison, store, send=True)
@@ -38,6 +42,7 @@ def _failed(pair) -> str:
 
 def test_an_unset_variable_is_named_with_the_file_and_the_restart_line(pair, monkeypatch):
     from onetrace_console import explain
+
     store, comparison, config = pair
     _config(config)
     monkeypatch.delenv(VAR, raising=False)
@@ -45,11 +50,15 @@ def test_an_unset_variable_is_named_with_the_file_and_the_restart_line(pair, mon
     #: The file's last two parts with this platform's own separator, as the panel shortens it (`/` is
     #: not Windows' separator).
     short = re.escape(f"…{os.sep}config{os.sep}explain.toml")
-    assert re.search(rf"onetrace-explain read {short}; its key_env names {VAR}, which is not set in "
-                     r"the environment this console started from\.", panel), panel
+    assert re.search(
+        rf"onetrace-explain read {short}; its key_env names {VAR}, which is not set in "
+        r"the environment this console started from\.",
+        panel,
+    ), panel
     assert f"Set {VAR} in the environment you start the console from, then start the console again" in panel
-    assert re.search(r'<a class="button" data-explain="setup" href="/explain/setup">Set up Explain</a>',
-                     _failed(pair)), "the failure links to Set up Explain"
+    assert re.search(
+        r'<a class="button" data-explain="setup" href="/explain/setup">Set up Explain</a>', _failed(pair)
+    ), "the failure links to Set up Explain"
     page = unescape(explain.panel(comparison, store, public=False))
     assert VALUE not in page
 
@@ -66,6 +75,7 @@ def test_a_set_variable_says_set_and_never_its_value(pair, monkeypatch):
 
 def test_the_setup_page_names_the_file_from_the_environment_the_variable_and_its_state(pair, monkeypatch, tmp_path):
     from onetrace_console import explain_setup
+
     store, _comparison, config = pair
     _config(config)
     monkeypatch.setenv("ONETRACE_EXPLAIN_CONFIG", str(config))
@@ -82,6 +92,7 @@ def test_the_setup_page_names_the_file_from_the_environment_the_variable_and_its
 
 def test_no_key_env_no_line(pair):
     from onetrace_console import explain
+
     _store, _comparison, config = pair
     _config(config, key_env="")
     assert explain.key_status() is None and explain.key_lines(None) == ""

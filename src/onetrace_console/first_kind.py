@@ -23,6 +23,7 @@ kind and no tool call, so it waits for a source onetrace defines (console 0.7.0)
 
 The line names what differs as the records give it; it never says what produced the difference.
 """
+
 from __future__ import annotations
 
 from onetrace_console.words import escape
@@ -48,6 +49,7 @@ def _code(s: str) -> str:
 def model_kind(first: str) -> str:
     """The comparator's group of its first differing field, from its own lists."""
     from onetrace.model_call.comparator import IDENTITY as FIELDS
+
     if first in FIELDS:
         return IDENTITY
     if first.startswith("engine.settings."):
@@ -73,6 +75,7 @@ def _inputs_differ(stage: str, a: list[dict], b: list[dict]) -> bool:
     """Whether an input of the step's own differs: not a link to a run the step started, whose name and
     digest differ between any two runs (a difference inside that run is the step diff's, as it descends)."""
     from onetrace_console.render import own_inputs
+
     x, y = own_inputs(a).get(stage, {}), own_inputs(b).get(stage, {})
     return any(x.get(n) != y.get(n) for n in x.keys() | y.keys() if not n.startswith(SUB_RUN))
 
@@ -81,7 +84,8 @@ def _export_row(ref: dict, store):
     """The held export row a decision ref names (by `request_id`, then `decision_digest`), where every
     copy of it checks against its delivery; None otherwise."""
     from onetrace_console.onedoor_ext.decision_refs import _decisions_by_request_id
-    d = _decisions_by_request_id(store).get(ref.get("request_id"))
+
+    d = _decisions_by_request_id(store).get(ref.get("request_id"))  # type: ignore[arg-type]  # a key that is None reads as the default
     if d is None:
         return None
     row = next((r for r in d.rows if r.decision_digest == ref.get("decision_digest")), None)
@@ -102,10 +106,12 @@ def _versions(refs: list[dict], store) -> list[str] | None:
 
 def _decision_line(ra: dict | None, rb: dict | None, store) -> str:
     from onetrace_console.onedoor_panel import decisions, differs
+
     if differs(ra, rb) != "decision":
         return ""
-    refs = [[d.get("ref") if isinstance(d.get("ref"), dict) else {} for d in decisions(r or {}) or []]
-            for r in (ra, rb)]
+    refs = [
+        [_ref if isinstance(_ref := d.get("ref"), dict) else {} for d in decisions(r or {}) or []] for r in (ra, rb)
+    ]
     verdicts = [", ".join(_code(str(ref.get("verdict", ""))) for ref in side) or "no decision" for side in refs]
     line = DECISION.format(a=verdicts[0], b=verdicts[1])
     try:
@@ -121,6 +127,7 @@ def _decision_line(ra: dict | None, rb: dict | None, store) -> str:
 
 def _model_line(comparison, store, stage: str) -> str:
     from onetrace_console import model_call_compare
+
     for result in model_call_compare.compared(comparison, store, stage):
         if result.result == "diverged":
             return MODEL.format(kind=escape(model_kind(result.first)), field=_code(result.first))
@@ -134,6 +141,7 @@ def _model_line(comparison, store, stage: str) -> str:
 def _not_kept(comparison, store, stage: str) -> bool:
     from onetrace_console.compare import text_diff_raw
     from onetrace_console.textdiff_view import TextDiffUnreadable, read_textdiff
+
     found = text_diff_raw(comparison, store)
     if found is None:
         return False
@@ -144,8 +152,12 @@ def _not_kept(comparison, store, stage: str) -> bool:
     for node in doc.get("nodes", []):
         if str(node.get("node", "")).split("#", 1)[0] != stage or node.get("verdict") != "FIRST DIFFERENCE":
             continue
-        return any(o["kind"] == "not shown" and str(o.get("reason", "")).startswith("not shown: ")
-                   and str(o.get("reason", "")).endswith(" is missing") for o in node["outputs"])
+        return any(
+            o["kind"] == "not shown"
+            and str(o.get("reason", "")).startswith("not shown: ")
+            and str(o.get("reason", "")).endswith(" is missing")
+            for o in node["outputs"]
+        )
     return False
 
 
@@ -161,6 +173,7 @@ def at_stage(stage: str, comparison, store) -> tuple[str, str] | None:
     """(the kind, the line as HTML) at `stage` of the comparison's two runs, in the same order, or None
     where no kind holds there: the first-run-to-leave page asks it at the step it names."""
     from onetrace_console.render import _receipts_in_order, _stage_of
+
     a, b = _receipts_in_order(comparison.run_a, store), _receipts_in_order(comparison.run_b, store)
     if not (a and b):
         return None

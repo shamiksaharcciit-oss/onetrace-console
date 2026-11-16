@@ -7,6 +7,7 @@ file is the other half of that lesson: every check below is exercised against th
 `ingest.accept()` / `read_tar()` it protects, or against a real running server, never against
 a mock of either.
 """
+
 from __future__ import annotations
 
 import io
@@ -17,16 +18,16 @@ import urllib.error
 import urllib.request
 
 import pytest
-from tests.http_limits import limit
 
 from onetrace_console.config import Config
 from onetrace_console.ingest import read_tar
 from onetrace_console.serve import Handler
-from tests.test_checks import _require_installed
+from tests.http_limits import limit
 
 
-def _member(name: str, data: bytes = b"", *, type_: bytes | None = None,
-           linkname: str = "", size: int | None = None) -> tuple[tarfile.TarInfo, bytes]:
+def _member(
+    name: str, data: bytes = b"", *, type_: bytes | None = None, linkname: str = "", size: int | None = None
+) -> tuple[tarfile.TarInfo, bytes]:
     info = tarfile.TarInfo(name=name)
     info.size = len(data) if size is None else size
     info.mtime = 0
@@ -51,8 +52,7 @@ def _valid_manifest_member(run_id: str = "r", extra: dict | None = None) -> tupl
     tests only need `read_tar`/`accept` to REFUSE at the archive-hardening layer, before any
     of that runs, so a real run is not needed to prove the hardening.
     """
-    manifest = {"format": "stage-receipt-chain/0.1", "run_id": run_id,
-               "chain_head": "sha256:" + "0" * 64, "chain": []}
+    manifest = {"format": "stage-receipt-chain/0.1", "run_id": run_id, "chain_head": "sha256:" + "0" * 64, "chain": []}
     if extra:
         manifest.update(extra)
     data = json.dumps(manifest, sort_keys=True).encode("utf-8")
@@ -62,6 +62,7 @@ def _valid_manifest_member(run_id: str = "r", extra: dict | None = None) -> tupl
 # =====================================================================================
 # item 1 -- path traversal
 # =====================================================================================
+
 
 def test_item1_traversal_members_are_refused(store, examined):
     cases = [
@@ -78,10 +79,12 @@ def test_item1_traversal_members_are_refused(store, examined):
             read_tar(data)
         # DeliveryRefused, imported lazily to avoid a second top-level import for one use
         from onetrace_console.ingest import DeliveryRefused
+
         assert isinstance(exc_info.value, DeliveryRefused), (name, exc_info.value)
-        assert any("escapes the run folder" in r or "absolute" in r or "drive letter" in r
-                  or "backslash" in r or "'..'" in r
-                  for r in exc_info.value.rows), (name, exc_info.value.rows)
+        assert any(
+            "escapes the run folder" in r or "absolute" in r or "drive letter" in r or "backslash" in r or "'..'" in r
+            for r in exc_info.value.rows
+        ), (name, exc_info.value.rows)
 
 
 def test_item1_sabotage_disabling_the_path_check_lets_traversal_through(store):
@@ -101,6 +104,7 @@ def test_item1_sabotage_disabling_the_path_check_lets_traversal_through(store):
         tarfile.data_filter = lambda member, dest: member
         try:
             from onetrace_console.ingest import DeliveryRefused
+
             try:
                 read_tar(data)
                 raised = False
@@ -109,7 +113,8 @@ def test_item1_sabotage_disabling_the_path_check_lets_traversal_through(store):
             assert not raised, (
                 "the traversal member was refused even with BOTH the explicit check and "
                 "the filter disabled -- something else is catching it, and the sabotage "
-                "proves nothing")
+                "proves nothing"
+            )
         finally:
             tarfile.data_filter = original_filter
     finally:
@@ -119,6 +124,7 @@ def test_item1_sabotage_disabling_the_path_check_lets_traversal_through(store):
 # =====================================================================================
 # item 2 -- links and special files
 # =====================================================================================
+
 
 def test_item2_links_and_special_files_are_refused(examined):
     from onetrace_console.ingest import DeliveryRefused
@@ -159,15 +165,15 @@ def test_item2_sabotage_disabling_the_type_checks_lets_a_symlink_through_to_the_
     #: rejection gone. That is what "not only one of the two" is guarding against: with
     #: neither explicit check active, only a filter that inspects every kind of escape
     #: would save this case, and `data_filter` does not treat "is a symlink" as one.
-    archive = _tar(_valid_manifest_member(),
-                  _member("a_symlink", type_=tarfile.SYMTYPE, linkname="MANIFEST.json"))
-    files = read_tar(archive)      # must NOT raise, proving the two checks were load-bearing
+    archive = _tar(_valid_manifest_member(), _member("a_symlink", type_=tarfile.SYMTYPE, linkname="MANIFEST.json"))
+    files = read_tar(archive)  # must NOT raise, proving the two checks were load-bearing
     assert "MANIFEST.json" in files
 
 
 # =====================================================================================
 # item 3 -- size limits
 # =====================================================================================
+
 
 def test_item3a_oversized_request_body_is_refused_before_reading(server, examined):
     base, _ = server
@@ -180,12 +186,14 @@ def test_item3a_oversized_request_body_is_refused_before_reading(server, examine
     #: checking the length, this would hang waiting for bytes that never arrive; it
     #: does not hang, which is the proof that the check runs first.
     import socket
+
     host_port = base.split("//", 1)[1]
     host, port = host_port.split(":")
     with socket.create_connection((host, int(port)), timeout=10) as sock:
         sock.sendall(
             f"POST /v1/runs HTTP/1.1\r\nHost: {host}\r\n"
-            f"Content-Length: {oversized_length}\r\nConnection: close\r\n\r\n".encode())
+            f"Content-Length: {oversized_length}\r\nConnection: close\r\n\r\n".encode()
+        )
         sock.settimeout(10)
         response = b""
         try:
@@ -194,7 +202,7 @@ def test_item3a_oversized_request_body_is_refused_before_reading(server, examine
                 if not chunk:
                     break
                 response += chunk
-        except socket.timeout:
+        except TimeoutError:
             pytest.fail("the server waited for a body it should have refused before reading")
     assert b"413" in response.split(b"\r\n", 1)[0], response[:200]
 
@@ -215,7 +223,7 @@ def test_item3b_sabotage_a_generous_member_limit_lets_the_same_archive_through()
     limits = Config(max_members=1000)
     members = [_valid_manifest_member()] + [_member(f"extra-{i}.json", b"{}") for i in range(5)]
     archive = _tar(*members)
-    files = read_tar(archive, limits=limits)     # must NOT raise for the member-count reason
+    files = read_tar(archive, limits=limits)  # must NOT raise for the member-count reason
     assert len(files) == 6
 
 
@@ -243,6 +251,7 @@ def test_item3c_sabotage_a_generous_total_limit_lets_the_same_archive_through():
 # item 4 -- timeouts for stalled requests
 # =====================================================================================
 
+
 def test_item4_a_stalled_request_times_out(server, examined):
     """A client that sends headers, declares a body, then sends NOTHING further: the
     server must give up rather than hold the thread (and the connection) forever.
@@ -251,8 +260,7 @@ def test_item4_a_stalled_request_times_out(server, examined):
 
     base, _ = server
     original_timeout = Handler.config.request_timeout_seconds
-    Handler.config = Config(request_timeout_seconds=0.6,
-                           max_request_body=Handler.config.max_request_body)
+    Handler.config = Config(request_timeout_seconds=0.6, max_request_body=Handler.config.max_request_body)
     examined(1, "stalled connections")
     try:
         host_port = base.split("//", 1)[1]
@@ -260,8 +268,8 @@ def test_item4_a_stalled_request_times_out(server, examined):
         start = time.monotonic()
         with socket.create_connection((host, int(port)), timeout=10) as sock:
             sock.sendall(
-                f"POST /v1/runs HTTP/1.1\r\nHost: {host}\r\n"
-                f"Content-Length: 100\r\nConnection: close\r\n\r\n".encode())
+                f"POST /v1/runs HTTP/1.1\r\nHost: {host}\r\nContent-Length: 100\r\nConnection: close\r\n\r\n".encode()
+            )
             # Deliberately send nothing else -- the declared 100 bytes never arrive.
             sock.settimeout(10)
             response = b""
@@ -271,14 +279,15 @@ def test_item4_a_stalled_request_times_out(server, examined):
                     if not chunk:
                         break
                     response += chunk
-            except socket.timeout:
+            except TimeoutError:
                 pytest.fail("the server never responded to the stalled request")
         elapsed = time.monotonic() - start
         assert elapsed < 5.0, f"took {elapsed:.1f}s -- the timeout did not bound this"
         assert b"408" in response.split(b"\r\n", 1)[0], response[:200]
     finally:
-        Handler.config = Config(request_timeout_seconds=original_timeout,
-                               max_request_body=Handler.config.max_request_body)
+        Handler.config = Config(
+            request_timeout_seconds=original_timeout, max_request_body=Handler.config.max_request_body
+        )
 
 
 def test_item4_a_slow_but_alive_client_is_not_falsely_timed_out(server):
@@ -293,18 +302,21 @@ def test_item4_a_slow_but_alive_client_is_not_falsely_timed_out(server):
     manifest, data = _valid_manifest_member()
     body = _tar((manifest, data))
     original = Handler.config
-    Handler.config = Config(request_timeout_seconds=3.0,
-                           max_request_body=original.max_request_body,
-                            sign_in={**Config().sign_in, "enabled": False})
+    Handler.config = Config(
+        request_timeout_seconds=3.0,
+        max_request_body=original.max_request_body,
+        sign_in={**Config().sign_in, "enabled": False},
+    )
     try:
         host_port = base.split("//", 1)[1]
         host, port = host_port.split(":")
         with socket.create_connection((host, int(port)), timeout=10) as sock:
-            header = (f"POST /v1/runs HTTP/1.1\r\nHost: {host}\r\n"
-                     f"Content-Length: {len(body)}\r\nConnection: close\r\n\r\n").encode()
+            header = (
+                f"POST /v1/runs HTTP/1.1\r\nHost: {host}\r\nContent-Length: {len(body)}\r\nConnection: close\r\n\r\n"
+            ).encode()
             sock.sendall(header + body[: len(body) // 2])
-            time.sleep(0.8)                          # comfortably inside the 3.0s deadline
-            sock.sendall(body[len(body) // 2:])
+            time.sleep(0.8)  # comfortably inside the 3.0s deadline
+            sock.sendall(body[len(body) // 2 :])
             sock.settimeout(10)
             response = b""
             while True:
@@ -322,6 +334,7 @@ def test_item4_a_slow_but_alive_client_is_not_falsely_timed_out(server):
 # item 5 -- malformed input
 # =====================================================================================
 
+
 def test_item5_malformed_input_is_a_plain_4xx_with_no_traceback_and_no_partial_store(server, examined):
     base, store_root = server
     cases = [b"not a tar file at all", b"PK\x03\x04not a tar either"]
@@ -335,10 +348,11 @@ def test_item5_malformed_input_is_a_plain_4xx_with_no_traceback_and_no_partial_s
             status, response_body = e.code, e.read()
         assert 400 <= status < 500, (status, response_body)
         assert b"Traceback" not in response_body, response_body
-        assert b"File \"" not in response_body, response_body
+        assert b'File "' not in response_body, response_body
 
     #: No partial store: nothing was ever written for any of the malformed attempts.
     from onetrace_console.store import Store
+
     reopened = Store(store_root / "store")
     assert reopened.runs() == ()
 
@@ -360,6 +374,7 @@ def test_item5_a_truncated_real_tar_is_refused_with_no_partial_store(server, exa
     assert b"Traceback" not in body
 
     from onetrace_console.store import Store
+
     reopened = Store(store_root / "store")
     assert reopened.runs() == ()
 
@@ -368,8 +383,8 @@ def test_item5_a_truncated_real_tar_is_refused_with_no_partial_store(server, exa
 # item 6 -- both the filter and the explicit checks are load-bearing
 # =====================================================================================
 
-def test_item6_the_filter_catches_an_escaping_link_target_the_explicit_checks_do_not_inspect(
-        monkeypatch):
+
+def test_item6_the_filter_catches_an_escaping_link_target_the_explicit_checks_do_not_inspect(monkeypatch):
     """`tarfile.data_filter` resolves the real destination path rather than pattern-
     matching the name, so it catches something neither of this module's own explicit
     checks looks at AT ALL: a symlink's own **target**. `_unsafe_path` only inspects a
@@ -379,8 +394,8 @@ def test_item6_the_filter_catches_an_escaping_link_target_the_explicit_checks_do
     that `data_filter` is the only thing standing between this member and acceptance --
     and it refuses, because the symlink's target escapes the destination.
     """
-    from onetrace_console.ingest import DeliveryRefused
     import onetrace_console.ingest as ingest_mod
+    from onetrace_console.ingest import DeliveryRefused
 
     monkeypatch.setattr(ingest_mod, "_is_link_or_special", lambda member: False)
     monkeypatch.setattr(tarfile.TarInfo, "isfile", lambda self: True)
@@ -404,7 +419,6 @@ def test_item6_sabotage_the_filter_itself_is_what_objects_not_something_else(mon
     else in `read_tar` deserve the credit? It does -- confirmed against the unpatched,
     real `tarfile.data_filter`, the same function `read_tar` actually calls.
     """
-    escaping_symlink, _ = _member("looks_ordinary", type_=tarfile.SYMTYPE,
-                                  linkname="../../../etc/passwd")
+    escaping_symlink, _ = _member("looks_ordinary", type_=tarfile.SYMTYPE, linkname="../../../etc/passwd")
     with pytest.raises(tarfile.FilterError):
         tarfile.data_filter(escaping_symlink, "/run")

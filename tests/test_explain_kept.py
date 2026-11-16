@@ -13,6 +13,7 @@ leaves this machine (tests/test_explain_panel.py). None goes into the demo.
 Two stores hold the same two runs, byte for byte: the builder's, where the explanation is made,
 and the build's, which keeps it. A third holds another pair, which the build does not hold.
 """
+
 from __future__ import annotations
 
 import json
@@ -23,8 +24,8 @@ from pathlib import Path
 
 import pytest
 
-from tests.test_explain_panel import (LABEL, RAN_AT, _diff, _fake, _make, _panel, _text,
-                                      explained_problems, tried)
+from tests.conftest import only
+from tests.test_explain_panel import RAN_AT, _diff, _fake, _make, _panel, _text, explained_problems, tried
 
 
 def _store_of(made: list[Path], root: Path):
@@ -33,6 +34,7 @@ def _store_of(made: list[Path], root: Path):
     from onetrace_console.compare import compare
     from onetrace_console.store import Store
     from tests.test_compare import _deliver
+
     store = Store(root)
     a, b = (run_and_record(_deliver(f, store, outputs=True), store, ran_at=RAN_AT) for f in made)
     return store, compare(a, b, store)
@@ -44,6 +46,7 @@ def kept(tmp_path, monkeypatch, explain_installed):
     the same runs; and the folder the command wrote `explain/` under, which the builder names."""
     from onetrace_console import explain
     from tests.test_checks import _require_installed
+
     _require_installed()
     made = _make(tmp_path / "made")
     builder, b_cmp = _store_of(made, tmp_path / "builder")
@@ -60,12 +63,14 @@ def kept(tmp_path, monkeypatch, explain_installed):
 
 def _public_page(store, comparison) -> str:
     from onetrace_console.frame import rendering
+
     with rendering(onedoor=False, sign_in=False, public=True):
         return _diff(store, comparison)
 
 
 def _local_page(store, comparison) -> str:
     from onetrace_console.frame import rendering
+
     with rendering(onedoor=False, sign_in=False, public=False):
         return _diff(store, comparison)
 
@@ -90,8 +95,10 @@ def refusals(record: dict) -> dict[str, str]:
 
 # ------------------------------------------------------------------ kept and shown
 
+
 def test_a_kept_explanation_is_shown_on_a_public_page_as_the_command_wrote_it(kept, examined):
     from onetrace_console import explain
+
     build, cmp, source = kept
     record = explain.keep(source, build)
     examined(1, "kept explanation")
@@ -104,6 +111,7 @@ def test_a_kept_explanation_is_shown_on_a_public_page_as_the_command_wrote_it(ke
 
 def test_the_kept_record_is_in_the_build_s_store_and_reads_as_written(kept, examined):
     from onetrace_console import explain
+
     build, cmp, source = kept
     explain.keep(source, build)
     kept_at = explain.folder_of(build, cmp.key) / explain.REPORT / "explain"
@@ -119,6 +127,7 @@ def test_the_kept_record_is_in_the_build_s_store_and_reads_as_written(kept, exam
 
 def test_without_kept_explanations_the_public_page_reads_as_in_0_3_0(kept, examined):
     from onetrace_console import explain
+
     build, cmp, _ = kept
     examined(1, "public comparison page, nothing kept")
     panel = _panel(_public_page(build, cmp))
@@ -129,6 +138,7 @@ def test_a_comparison_with_none_kept_says_so_on_a_build_that_kept_some(kept, tmp
     """The build kept explanations, none of them of this comparison."""
     from onetrace_console import explain
     from onetrace_console.compare import compare
+
     build, cmp, source = kept
     explain.keep(source, build)
     other = compare(build.get_run(cmp.run_b), build.get_run(cmp.run_a), build)
@@ -140,21 +150,26 @@ def test_a_comparison_with_none_kept_says_so_on_a_build_that_kept_some(kept, tmp
 def test_the_local_console_is_unchanged_by_a_kept_explanation(kept, examined):
     """A local console's page is its own: its panel's flow, as before the build kept anything."""
     from onetrace_console import explain
+
     build, cmp, source = kept
     before = _panel(_local_page(build, cmp))
     explain.keep(source, build)
     examined(1, "local comparison page")
     after = _panel(_local_page(build, cmp))
     flow = lambda p: re.search(r'data-flow="([^"]+)"', p).group(1)  # noqa: E731
-    buttons = lambda p: re.findall(r"<(?:button|a class=\"button\")\b[^>]*>([^<]*)</(?:button|a)>",  # noqa: E731
-                                   re.search(r'<p data-explain="buttons">.*?</p>', p, re.S).group(0))
+    buttons = lambda p: re.findall(  # noqa: E731
+        r"<(?:button|a class=\"button\")\b[^>]*>([^<]*)</(?:button|a)>",
+        re.search(r'<p data-explain="buttons">.*?</p>', p, re.S).group(0),
+    )
     assert flow(after) == flow(before) and buttons(after) == buttons(before) and buttons(after)
 
 
 # ------------------------------------------------------------------ refused, with the reason
 
+
 def test_a_record_for_a_comparison_the_build_does_not_hold_is_refused(kept, tmp_path, examined):
     from onetrace_console import explain
+
     _, _, source = kept
     other, o_cmp = _store_of(_make(tmp_path / "other-made"), tmp_path / "other")
     record = explain.keep(source, other)
@@ -165,12 +180,13 @@ def test_a_record_for_a_comparison_the_build_does_not_hold_is_refused(kept, tmp_
 
 
 def _one_record(source: Path) -> Path:
-    return next(p for p in (source / "explain").iterdir() if p.is_dir())
+    return only(p for p in (source / "explain").iterdir() if p.is_dir())
 
 
 @pytest.mark.parametrize("edited", ["the model's reply", "a receipt", "the explanation's claims", "its model"])
 def test_an_edited_record_is_refused(kept, edited, examined):
     from onetrace_console import explain
+
     build, cmp, source = kept
     rec = _one_record(source)
     side = rec.with_name(rec.name + ".explanation.json")
@@ -191,26 +207,34 @@ def test_an_edited_record_is_refused(kept, edited, examined):
     examined(1, f"record with {edited} edited")
     assert record["kept"] == []
     reason = refusals(record)[f"explain/{side.name}"]
-    want = {"the model's reply": explain.NOT_VERIFIED, "a receipt": explain.NOT_VERIFIED,
-            "the explanation's claims": explain.NOT_ITS_RECORD, "its model": explain.NOT_ITS_MODEL}[edited]
+    want = {
+        "the model's reply": explain.NOT_VERIFIED,
+        "a receipt": explain.NOT_VERIFIED,
+        "the explanation's claims": explain.NOT_ITS_RECORD,
+        "its model": explain.NOT_ITS_MODEL,
+    }[edited]
     assert reason.startswith(want), reason
     assert _text(_panel(_public_page(build, cmp))) == f"{explain.TITLE} {explain.KEPT_NONE}"
 
 
 def test_a_file_that_is_not_the_command_s_is_refused_and_nothing_else_is_taken(kept, examined):
     from onetrace_console import explain
+
     build, cmp, source = kept
     (source / "explain" / "notes.txt").write_text("not the command's", encoding="utf-8")
     shutil.copytree(_one_record(source), source / "explain" / "2026-01-01T00-00-00.000000Z")
     record = explain.keep(source, build)
     examined(3, "files in the folder")
     assert len(record["kept"]) == 1
-    assert refusals(record) == {"explain/notes.txt": explain.NOT_ITS_FILE,
-                                "explain/2026-01-01T00-00-00.000000Z": explain.NO_EXPLANATION}
+    assert refusals(record) == {
+        "explain/notes.txt": explain.NOT_ITS_FILE,
+        "explain/2026-01-01T00-00-00.000000Z": explain.NO_EXPLANATION,
+    }
 
 
 def test_a_folder_without_explain_is_refused_in_words(tmp_path, kept):
     from onetrace_console import explain
+
     build, _, _ = kept
     with pytest.raises(ValueError, match="holds no explain/ folder"):
         explain.keep(tmp_path, build)
@@ -218,9 +242,11 @@ def test_a_folder_without_explain_is_refused_in_words(tmp_path, kept):
 
 # ------------------------------------------------------------------ sabotages
 
+
 def test_sabotage_the_held_check_skipped_is_named(kept, tmp_path, monkeypatch, examined):
     """With the comparison check skipped, the foreign record is kept and shown: named."""
     from onetrace_console import explain
+
     _, _, source = kept
     other, o_cmp = _store_of(_make(tmp_path / "other-made"), tmp_path / "other")
     monkeypatch.setattr(explain, "_held_comparison", lambda held, rec: next(iter(held.values())))
@@ -233,6 +259,7 @@ def test_sabotage_the_held_check_skipped_is_named(kept, tmp_path, monkeypatch, e
 def test_sabotage_the_verifier_skipped_is_named(kept, monkeypatch, examined):
     """With the verifier's reading skipped, an edited reply is kept: named."""
     from onetrace_console import explain
+
     build, _, source = kept
     p = _one_record(source) / "artifacts" / "02-model" / "reply.txt"
     p.write_bytes(p.read_bytes() + b" ")
@@ -245,9 +272,12 @@ def test_sabotage_the_verifier_skipped_is_named(kept, monkeypatch, examined):
 def test_sabotage_a_kept_explanation_with_a_button_is_named(kept, monkeypatch, examined):
     """A kept explanation drawn as the local console draws it offers Run: named."""
     from onetrace_console import explain
+
     build, cmp, source = kept
     explain.keep(source, build)
     real = explain._one
-    monkeypatch.setattr(explain, "_one", lambda e, c, s, steps, read_only=False, facts=None: real(e, c, s, steps, facts=facts))
+    monkeypatch.setattr(
+        explain, "_one", lambda e, c, s, steps, read_only=False, facts=None: real(e, c, s, steps, facts=facts)
+    )
     examined(1, "kept explanation with a button")
     assert read_only_problems(_panel(_public_page(build, cmp))) != []

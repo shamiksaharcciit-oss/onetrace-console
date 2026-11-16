@@ -12,6 +12,7 @@ second test holds that premise in place, since `own_check=True` is only true whi
 The `--require-artifacts` half waits on blocker B4: the pinned verifier (0.1.0) does not check
 artifacts, and the one that does (0.1.1) needs the viewer taught its new row first.
 """
+
 from __future__ import annotations
 
 import re
@@ -41,11 +42,14 @@ def test_a_stored_runs_rung_one_is_the_consoles_own_check(checked, store):  # no
 
 def test_only_the_consoles_own_check_writes_a_runs_stored_report():
     """`own_check=True` rests on this: every `check_report=` in the source is `run_and_record`'s."""
-    writers = [(p.relative_to(SRC).as_posix(), n) for p in sorted(SRC.rglob("*.py"))
-               for n, text in enumerate(p.read_text(encoding="utf-8").splitlines(), 1)
-               if re.search(r"\bcheck_report\s*=(?!=)", text)]
+    writers = [
+        (p.relative_to(SRC).as_posix(), n)
+        for p in sorted(SRC.rglob("*.py"))
+        for n, text in enumerate(p.read_text(encoding="utf-8").splitlines(), 1)
+        if re.search(r"\bcheck_report\s*=(?!=)", text)
+    ]
     assert [w for w, _ in writers] == ["checks.py"], writers
     checks = (SRC / "checks.py").read_text(encoding="utf-8")
-    body = checks[checks.index("def run_and_record("):]
-    body = body[:body.index("\ndef ", 1)]
+    body = checks[checks.index("def run_and_record(") :]
+    body = body[: body.index("\ndef ", 1)]
     assert "check_report=report_key" in body, "the one writer is run_and_record, over its own check"

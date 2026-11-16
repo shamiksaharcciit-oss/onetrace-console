@@ -6,6 +6,7 @@
    run delivery checks both ways; the side-car now does too.
 2. A refusal names the side-car's own file (`onedoor-export.jsonl.sha256`), not `SHA256SUMS`.
 """
+
 from __future__ import annotations
 
 import hashlib
@@ -30,10 +31,12 @@ def _good(onedoor_fixture_dir) -> str:
     return hashlib.sha256((onedoor_fixture_dir / NAME).read_bytes()).hexdigest()
 
 
-@pytest.mark.parametrize("other", [f"./{NAME}", NAME.upper(), "something-else.jsonl"],
-                         ids=["dot-slash spelling", "other case", "another file"])
-def test_a_side_car_naming_anything_beside_the_delivered_file_is_refused(
-        onedoor_fixture_dir, store, other, examined):
+@pytest.mark.parametrize(
+    "other",
+    [f"./{NAME}", NAME.upper(), "something-else.jsonl"],
+    ids=["dot-slash spelling", "other case", "another file"],
+)
+def test_a_side_car_naming_anything_beside_the_delivered_file_is_refused(onedoor_fixture_dir, store, other, examined):
     good = _good(onedoor_fixture_dir)
     text = f"{good}  {NAME}\n{ZERO}  {other}\n"
     examined(1, f"side-car naming {other!r} beside the delivered file")

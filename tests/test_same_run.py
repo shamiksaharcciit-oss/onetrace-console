@@ -6,6 +6,7 @@ Nothing is compared and nothing is stored: there is no second run to find a diff
 a stored comparison of a run with itself would be a row in every "compared" count that
 compared nothing.
 """
+
 from __future__ import annotations
 
 import json

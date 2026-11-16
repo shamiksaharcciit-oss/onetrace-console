@@ -10,6 +10,7 @@ the same view. Only where a run declares no gated step and cites no decision doe
 3. p1-02, no gated step: No records, and no link.
 4. The Overview's row says where the row is read, not that the console records no authorization.
 """
+
 from __future__ import annotations
 
 import html
@@ -25,6 +26,7 @@ def _text(h: str) -> str:
 @pytest.fixture(scope="module")
 def demo(shared_demo):
     from onetrace_console.store import Store
+
     folder = shared_demo["folder"]
     store = Store(folder / "store" / "store")
     return folder, store, {r.run_id: r for r in store.runs()}
@@ -65,6 +67,7 @@ def test_a_planted_run_reads_no_at_the_row_that_failed(demo, examined):
 
 def test_a_run_with_no_gated_step_reads_no_records(demo, examined):
     from onetrace_console.pages import declares_authorization
+
     folder, store, runs = demo
     run = runs["p1-02-baseline-set2"]
     page, state, row = _row(folder, run)
@@ -72,22 +75,30 @@ def test_a_run_with_no_gated_step_reads_no_records(demo, examined):
     assert not declares_authorization(run, store)
     assert state == "no-records", state
     assert "No records · This console does not record authorization." in _text(row)
-    assert "data-link=\"gated-steps\"" not in row
+    assert 'data-link="gated-steps"' not in row
 
 
 def test_the_combined_result_is_the_verifier_s(examined):
     """Any FAIL is No, all PASS is Yes, otherwise couldn't check: each state from its rows."""
     from onetrace_console.pages import AUTHORIZED_STATES
+
     examined(3, "results")
-    assert AUTHORIZED_STATES == {"PASS": ("yes", "rung.state.yes"), "FAIL": ("no", "rung.state.no"),
-                                 "NOT-RUN": ("couldnt-check", "rung.state.couldnt_check")}
+    assert AUTHORIZED_STATES == {
+        "PASS": ("yes", "rung.state.yes"),
+        "FAIL": ("no", "rung.state.no"),
+        "NOT-RUN": ("couldnt-check", "rung.state.couldnt_check"),
+    }
 
 
 def test_the_overview_says_where_the_row_is_read(demo, examined):
     from onetrace_console.words import AUTHORIZED_OVERVIEW
+
     folder, _store, _runs = demo
-    pages = [p for p in (folder / "store" / "pages").glob("*.html")
-             if 'data-rung="authorized"' in p.read_text(encoding="utf-8")]
+    pages = [
+        p
+        for p in (folder / "store" / "pages").glob("*.html")
+        if 'data-rung="authorized"' in p.read_text(encoding="utf-8")
+    ]
     examined(len(pages), "pages with the all-runs row")
     assert pages
     for p in pages:

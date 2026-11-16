@@ -14,15 +14,13 @@ The Home page's checks:
 
 Every check reports what it examined.
 """
+
 from __future__ import annotations
 
-import hashlib
-import io
 import json
 import re
-import tarfile
-from html import escape, unescape
 from dataclasses import replace
+from html import escape, unescape
 from pathlib import Path
 
 import pytest
@@ -30,9 +28,8 @@ import pytest
 from onetrace_console.checks import CONTRADICTS, COULD_NOT_CHECK, HOLDS, run_and_record
 from onetrace_console.compare import DIFF, compare, report_text
 from onetrace_console.home import MOST_RECENT, NOT_CHECKED, tallies, verdict_of
-from onetrace_console.ingest import RUN_ID_REUSED, SUMS_NAME, accept
-from onetrace_console.render import (COUNTS, DIFF_PAGE, HOME, render_all, render_counts,
-                                     render_diff, render_home)
+from onetrace_console.ingest import RUN_ID_REUSED
+from onetrace_console.render import COUNTS, DIFF_PAGE, HOME, render_all, render_counts, render_diff, render_home
 from onetrace_console.store import StoredRun
 from tests.test_checks import FIXED_RAN_AT, _require_installed
 from tests.test_compare import EXAM, RUN_C, RUN_C_POPPLER24, _deliver, _require_exam
@@ -42,6 +39,7 @@ GENERATED_AT = "2026-09-26T12:00:00+02:00"
 
 
 # ------------------------------------------------------------------ the Diff page
+
 
 @pytest.fixture
 def compared(store):
@@ -69,17 +67,19 @@ def _diff_json(comparison, store) -> dict:
 
 def _diff_rows(page: str) -> list[tuple[str, str]]:
     from html import unescape
+
     table = re.search(r'<table data-section="changes" data-verb="diff".*?</table>', page, re.S)
-    return [(v, unescape(cells)) for v, cells in
-            re.findall(r'<tr data-verdict="([^"]*)"[^>]*>(.*?)</tr>', table.group(0), re.S)]
-
-
+    return [
+        (v, unescape(cells))
+        for v, cells in re.findall(r'<tr data-verdict="([^"]*)"[^>]*>(.*?)</tr>', table.group(0), re.S)
+    ]
 
 
 def _unlabelled(html: str) -> str:
     """The page without the narrow screen's column labels (`words.labelled`), so a table reads as
     its cells were drawn before them; nothing else changes."""
     import re as _re
+
     return _re.sub(r' data-label="[^"]*"', "", html)
 
 
@@ -132,8 +132,10 @@ def test_the_settings_column_names_each_changed_setting(diverging, compared, exa
                 #: Shown by its short name, its whole path in the tooltip; its values whole.
                 short = field.rsplit(".", 1)[-1]
                 assert f"{short} {old} → {new}" in text, (i, field)
-                assert f'data-setting-path="{escape(field)}" title="{escape(field)}">{escape(short)}<' \
-                    in settings, (i, field)
+                assert f'data-setting-path="{escape(field)}" title="{escape(field)}">{escape(short)}<' in settings, (
+                    i,
+                    field,
+                )
 
 
 def test_a_stage_the_sdk_did_not_compare_says_so_in_the_settings_column():
@@ -142,8 +144,15 @@ def test_a_stage_the_sdk_did_not_compare_says_so_in_the_settings_column():
     from types import SimpleNamespace
 
     from onetrace_console.render import _ladder_table
-    row = SimpleNamespace(index="3", stage="cleaned", baseline=None, candidate=None,
-                          verdict="COULD NOT CHECK", reason="nothing recorded to compare")
+
+    row = SimpleNamespace(
+        index="3",
+        stage="cleaned",
+        baseline=None,
+        candidate=None,
+        verdict="COULD NOT CHECK",
+        reason="nothing recorded to compare",
+    )
     table = _ladder_table(SimpleNamespace(ladder=[row]), "diff", annotations=[])
     assert _settings_cell(table) == "not compared", table
 
@@ -160,39 +169,43 @@ def _refused_on_the_page(page: str, why: str) -> None:
     assert "The diff report as the SDK wrote it, with names from the records escaped" in page
 
 
-@pytest.mark.parametrize("annotations", [
-    {"index": "4"},                                                    # not a list
-    [{"index": 4, "stage": "split", "differs": {"x": ["1", "2"]}}],    # index not a string
-    [{"index": "4", "stage": "split", "differs": {"x": ["1"]}}],       # not an old/new pair
-    [{"index": "4", "stage": "split", "differs": ["x"]}],              # differs not a mapping
-    [{"index": "4", "stage": "split"}],                                # differs missing
-])
+@pytest.mark.parametrize(
+    "annotations",
+    [
+        {"index": "4"},  # not a list
+        [{"index": 4, "stage": "split", "differs": {"x": ["1", "2"]}}],  # index not a string
+        [{"index": "4", "stage": "split", "differs": {"x": ["1"]}}],  # not an old/new pair
+        [{"index": "4", "stage": "split", "differs": ["x"]}],  # differs not a mapping
+        [{"index": "4", "stage": "split"}],  # differs missing
+    ],
+)
 def test_annotations_it_cannot_read_are_refused_not_half_rendered(diverging, annotations):
     """The F16 lesson at the input, as the viewer's strict reader applies it to the rest of
     the report: an annotation shape this console has not been taught refuses the report --
     on the page (it used to raise out of `render_diff`)."""
     from onetrace_console.compare import LOCALIZE
+
     comparison, store = diverging
     report = _diff_json(comparison, store)
     report["annotations"] = annotations
     edited = store.put(json.dumps(report).encode("utf-8"))
     verbs = tuple(
-        replace(v, reports=tuple((n, edited if n == "diff.json" else k) for n, k in v.reports))
-        if v.verb == DIFF else v for v in comparison.verbs if v.verb != LOCALIZE)
-    _refused_on_the_page(
-        render_diff(replace(comparison, verbs=verbs), store, generated_at=GENERATED_AT),
-        "annotations")
+        replace(v, reports=tuple((n, edited if n == "diff.json" else k) for n, k in v.reports)) if v.verb == DIFF else v
+        for v in comparison.verbs
+        if v.verb != LOCALIZE
+    )
+    _refused_on_the_page(render_diff(replace(comparison, verbs=verbs), store, generated_at=GENERATED_AT), "annotations")
 
 
 def _summary(page: str) -> str | None:
     from html import unescape
+
     found = re.findall(r'<section data-section="first-difference">(.*?)</section>', page, re.S)
     assert len(found) <= 1, "one summary per page"
     return unescape(found[0]) if found else None
 
 
-def test_the_summary_names_the_first_difference_and_what_is_not_established(
-        diverging, examined):
+def test_the_summary_names_the_first_difference_and_what_is_not_established(diverging, examined):
     """Board 6's stage-level summary: where the first difference is, how many stages were
     identical before it (with its denominator), one plain sentence of what differs (each setting
     by its short name with both values, how many stages after it changed). With a setting
@@ -206,8 +219,7 @@ def test_the_summary_names_the_first_difference_and_what_is_not_established(
     examined(1, "the first-difference summary of the diverging pair")
     before = int(first["index"]) - 1
     assert f"stage {first['index']} · {first['stage']}" in block
-    assert f"Stages identical before it: {report['stages_identical_before_first_difference']} " \
-           f"of {before}" in block
+    assert f"Stages identical before it: {report['stages_identical_before_first_difference']} of {before}" in block
     assert "is not established by this evidence." not in block
     #: One plain sentence (the Compare board's): each differing setting by its short name, with
     #: both values, never its whole path; the stages the same before it; how many changed after.
@@ -220,13 +232,15 @@ def test_the_summary_names_the_first_difference_and_what_is_not_established(
             continue
         assert f"{field.rsplit('.', 1)[-1]}: {old} → {new}" in text, field
         assert field not in text or "." not in field, f"the whole path {field}"
-    same = [r["stage"] for r in report["ladder"]
-            if int(r["index"]) < int(first["index"]) and r["verdict"] == "same"]
+    same = [r["stage"] for r in report["ladder"] if int(r["index"]) < int(first["index"]) and r["verdict"] == "same"]
     assert all(s in text for s in same) and "the same in both" in text
     after = [r for r in report["ladder"] if int(r["index"]) > int(first["index"])]
     changed = sum(r["verdict"] == "downstream" for r in after)
-    assert (f"all {changed} stages after it changed too" if changed == len(after)
-            else f"{changed} of the {len(after)} stages after it changed too") in text
+    assert (
+        f"all {changed} stages after it changed too"
+        if changed == len(after)
+        else f"{changed} of the {len(after)} stages after it changed too"
+    ) in text
     for causal in ("as a result", "caused", "because", "led to", "due to"):
         assert causal not in block.lower(), causal
 
@@ -244,37 +258,46 @@ def test_a_count_before_the_first_difference_it_cannot_read_is_refused(diverging
     that is missing, not in the SDK's digit-string form, or larger than that denominator
     refuses the report -- on the page."""
     from onetrace_console.compare import LOCALIZE
+
     comparison, store = diverging
     report = _diff_json(comparison, store)
     report["stages_identical_before_first_difference"] = identical
     edited = store.put(json.dumps(report).encode("utf-8"))
     verbs = tuple(
-        replace(v, reports=tuple((n, edited if n == "diff.json" else k) for n, k in v.reports))
-        if v.verb == DIFF else v for v in comparison.verbs if v.verb != LOCALIZE)
+        replace(v, reports=tuple((n, edited if n == "diff.json" else k) for n, k in v.reports)) if v.verb == DIFF else v
+        for v in comparison.verbs
+        if v.verb != LOCALIZE
+    )
     _refused_on_the_page(
         render_diff(replace(comparison, verbs=verbs), store, generated_at=GENERATED_AT),
-        "stages_identical_before_first_difference")
+        "stages_identical_before_first_difference",
+    )
 
 
-@pytest.mark.parametrize("field,value,why", [
-    ("ladder", "x", "not a list of objects"),
-    ("first_difference", "4 split", "neither an object nor null"),
-    ("carried", 7, "not a list of objects"),
-])
+@pytest.mark.parametrize(
+    "field,value,why",
+    [
+        ("ladder", "x", "not a list of objects"),
+        ("first_difference", "4 split", "neither an object nor null"),
+        ("carried", 7, "not a list of objects"),
+    ],
+)
 def test_a_report_shape_the_viewer_refuses_is_stated_not_raised(diverging, field, value, why):
     """Before, `read_report` raised `AttributeError`/`TypeError` on
     some of these, and a clean refusal still escaped `render_diff` -- a 500 at compare time,
     and a restart over the store that never reached its listener."""
     from onetrace_console.compare import LOCALIZE
+
     comparison, store = diverging
     report = _diff_json(comparison, store)
     report[field] = value
     edited = store.put(json.dumps(report).encode("utf-8"))
     verbs = tuple(
-        replace(v, reports=tuple((n, edited if n == "diff.json" else k) for n, k in v.reports))
-        if v.verb == DIFF else v for v in comparison.verbs if v.verb != LOCALIZE)
-    _refused_on_the_page(
-        render_diff(replace(comparison, verbs=verbs), store, generated_at=GENERATED_AT), why)
+        replace(v, reports=tuple((n, edited if n == "diff.json" else k) for n, k in v.reports)) if v.verb == DIFF else v
+        for v in comparison.verbs
+        if v.verb != LOCALIZE
+    )
+    _refused_on_the_page(render_diff(replace(comparison, verbs=verbs), store, generated_at=GENERATED_AT), why)
 
 
 def test_the_localized_set_heading_carries_no_count(run_folder, examined):
@@ -289,8 +312,7 @@ def test_the_localized_set_heading_carries_no_count(run_folder, examined):
     examined(len(report.nodes), "nodes in the localized set")
     heading = re.search(r"<h3>(.*?)</h3>", block).group(1)
     assert heading == "The set it localized", heading
-    assert sorted(re.findall(r'<li class="mono">(.*?)</li>', block)) == \
-        sorted(n.node for n in report.nodes)
+    assert sorted(re.findall(r'<li class="mono">(.*?)</li>', block)) == sorted(n.node for n in report.nodes)
 
 
 def test_the_diff_page_renders(compared, examined):
@@ -302,8 +324,7 @@ def test_the_diff_page_renders(compared, examined):
     assert 'data-section="localized"' in page, "no localized block on the Diff page"
 
 
-def test_the_changes_table_is_the_sdks_ladder_row_for_row_in_its_own_order(compared,
-                                                                          examined):
+def test_the_changes_table_is_the_sdks_ladder_row_for_row_in_its_own_order(compared, examined):
     """Step 3's first check, over the table itself rather than a summary of it.
 
     Every ladder row in the stored report must appear once, in the report's order, with the
@@ -329,8 +350,7 @@ def test_the_changes_table_is_the_sdks_ladder_row_for_row_in_its_own_order(compa
     assert table, "no diff changes table on the page"
     rows = re.findall(r'<tr data-verdict="([^"]*)"[^>]*>(.*?)</tr>', table.group(0), re.S)
     examined(len(rows), "rendered changes-table rows for diff")
-    assert len(rows) == len(report.ladder), (
-        f"{len(rows)} rendered rows against {len(report.ladder)} ladder rows")
+    assert len(rows) == len(report.ladder), f"{len(rows)} rendered rows against {len(report.ladder)} ladder rows"
 
     #: The header names every column and every row must fill all of them. Dropping the
     #: SDK's `reason` was a sabotage this test once missed, because on this fixture every
@@ -343,8 +363,9 @@ def test_the_changes_table_is_the_sdks_ladder_row_for_row_in_its_own_order(compa
 
     #: Stage ORDER, not just membership. "never re-orders what the SDK returned" is the claim,
     #: and a per-row comparison cannot see a reversal on its own.
-    assert [row.stage for row in report.ladder] == re.findall(
-        r"<td>\d+</td><td>(.*?)</td>", table.group(0)), "the table re-ordered the ladder"
+    assert [row.stage for row in report.ladder] == re.findall(r"<td>\d+</td><td>(.*?)</td>", table.group(0)), (
+        "the table re-ordered the ladder"
+    )
 
     for rendered, row in zip(rows, report.ladder):
         verdict, cells = rendered
@@ -354,8 +375,8 @@ def test_the_changes_table_is_the_sdks_ladder_row_for_row_in_its_own_order(compa
         if row.reason:
             assert escape(row.reason) in cells, f"stage {row.stage}: its reason is not shown"
         assert len(re.findall(r"<td", cells)) == len(headers), (
-            f"stage {row.stage}: {len(re.findall(r'<td', cells))} cells for "
-            f"{len(headers)} columns")
+            f"stage {row.stage}: {len(re.findall(r'<td', cells))} cells for {len(headers)} columns"
+        )
 
 
 def test_the_envelope_and_exit_on_the_page_are_the_reports(compared, examined):
@@ -374,12 +395,14 @@ def test_the_envelope_and_exit_on_the_page_are_the_reports(compared, examined):
     page = render_diff(comparison, store, generated_at=GENERATED_AT)
     examined(2, "report fields compared with the page")
     from onetrace_console.render import DIFF_ENVELOPES
+
     line = re.search(r'<p data-section="diff-envelope" data-verdict="([^"]+)">([^<]*)</p>', page)
     assert line and line.group(1) == report.envelope, "the page does not carry the report's envelope"
     assert line.group(2) == DIFF_ENVELOPES[report.envelope], line.group(2)
     #: The exit code is the SDK's own: in its report as it wrote it, not in the page's line.
-    sdk = re.search(r'<details data-layer="3"><summary>The diff report as the SDK wrote it.*?</details>',
-                    page, re.S).group(0)
+    sdk = re.search(
+        r'<details data-layer="3"><summary>The diff report as the SDK wrote it.*?</details>', page, re.S
+    ).group(0)
     assert f"exit {report.exit_code}" not in line.group(0) and str(report.exit_code) in sdk
 
 
@@ -393,6 +416,7 @@ def test_the_sdks_own_report_is_on_the_page_whole(compared, examined):
     from html import escape
 
     from onetrace_console.compare import report_json
+
     #: The folders it was given: named relative to the folder the console ran it from, so the
     #: SDK's words hold no folder of this host and are shown as written.
     inputs = report_json(comparison, DIFF, store)["inputs"]
@@ -404,12 +428,13 @@ def test_the_command_to_repeat_the_comparison_is_on_the_page(compared, examined)
     """The command a reader types to repeat each verb: the SDK's own (`onetrace <verb>`), over the
     two run folders by their run ids -- never the stored placeholder form (RUN_A RUN_B --out OUT)."""
     from onetrace_console.render import typed_command
+
     comparison, store = compared
     page = unescape(render_diff(comparison, store, generated_at=GENERATED_AT))
     from onetrace_console.compare import DIFF, LOCALIZE
+
     #: Each verb's own section; the text diff's command is in the text diff's section.
-    shown = {v.verb: typed_command(comparison, store, v.verb) for v in comparison.verbs
-             if v.verb in (DIFF, LOCALIZE)}
+    shown = {v.verb: typed_command(comparison, store, v.verb) for v in comparison.verbs if v.verb in (DIFF, LOCALIZE)}
     examined(len(shown), "repeat commands that must appear")
     for verb, command in shown.items():
         assert command in page, f"{verb}'s repeat command is missing: {command!r}"
@@ -429,8 +454,16 @@ def test_the_diff_page_keeps_the_limit_sentence(compared, examined):
 _AGREE = {HOLDS: "yes", CONTRADICTS: "no", COULD_NOT_CHECK: "couldnt-check", "": ""}
 
 
-def _fake_run(store, base: StoredRun, *, run_id: str, verdict: str, note: str = "",
-              flags: tuple[str, ...] = (), agree: tuple[str, str] | None = None) -> StoredRun:
+def _fake_run(
+    store,
+    base: StoredRun,
+    *,
+    run_id: str,
+    verdict: str,
+    note: str = "",
+    flags: tuple[str, ...] = (),
+    agree: tuple[str, str] | None = None,
+) -> StoredRun:
     """A stored run in a chosen state, for covering states a real store reaches slowly.
 
     The bytes are a real run's; only the fields Home counts are set. Built through the store
@@ -439,15 +472,23 @@ def _fake_run(store, base: StoredRun, *, run_id: str, verdict: str, note: str = 
     files required, unless given.
     """
     from onetrace_console.store import run_key
+
     key = run_key(run_id, base.chain_head)
     #: A run the check runner has not reached has no rung 3 recorded either: it is recorded
     #: when the run is checked.
-    made = replace(base, key=key, run_id=run_id, check_verdict=verdict,
-                   check_note=note, flags=flags,
-                   nothing_missing=base.nothing_missing if verdict else "",
-                   anchored=base.anchored if verdict else "",
-                   signed=base.signed if verdict else "",
-                   agree=(agree or (_AGREE[verdict], ""))[0], agree_why=(agree or (_AGREE[verdict], ""))[1])
+    made = replace(
+        base,
+        key=key,
+        run_id=run_id,
+        check_verdict=verdict,
+        check_note=note,
+        flags=flags,
+        nothing_missing=base.nothing_missing if verdict else "",
+        anchored=base.anchored if verdict else "",
+        signed=base.signed if verdict else "",
+        agree=(agree or (_AGREE[verdict], ""))[0],
+        agree_why=(agree or (_AGREE[verdict], ""))[1],
+    )
     store.put_run(made)
     return made
 
@@ -462,7 +503,7 @@ def ten_runs(store):
     made = [checked]
     plan = [
         ("holds-1", HOLDS, "", ()),
-        ("holds-2", HOLDS, "", ()),             # held without its output files required: below
+        ("holds-2", HOLDS, "", ()),  # held without its output files required: below
         ("contradicts-1", CONTRADICTS, "", ()),
         ("contradicts-2", CONTRADICTS, "", ()),
         ("cnc-1", COULD_NOT_CHECK, "the report has no summary line", ()),
@@ -473,8 +514,17 @@ def ten_runs(store):
         ("reused-2", CONTRADICTS, "", (RUN_ID_REUSED,)),
     ]
     for run_id, verdict, note, flags in plan:
-        made.append(_fake_run(store, real, run_id=run_id, verdict=verdict, note=note, flags=flags,
-                              agree=("not-checked", "no-outputs") if run_id == "holds-2" else None))
+        made.append(
+            _fake_run(
+                store,
+                real,
+                run_id=run_id,
+                verdict=verdict,
+                note=note,
+                flags=flags,
+                agree=("not-checked", "no-outputs") if run_id == "holds-2" else None,
+            )
+        )
     #: Two more states: a run whose manifest declares a stage its chain holds no
     #: receipt for, and a real comparison whose diff found a first difference -- so the
     #: "missing a declared stage" and "changed vs baseline" counts are never examined empty.
@@ -495,27 +545,34 @@ def ten_runs(store):
     made += [a, b]
     #: The anchoring forms, so no count is examined empty: three checked runs
     #: given the readings no exam run reaches (the exam runs have no anchor beside their chain).
-    for run_id, reading in (("holds-1", "yes"), ("holds-2", "couldnt-check"),
-                            ("contradicts-1", "failed")):
+    for run_id, reading in (("holds-1", "yes"), ("holds-2", "couldnt-check"), ("contradicts-1", "failed")):
         (run,) = [r for r in store.runs() if r.run_id == run_id]
         store.put_run(replace(run, anchored=reading))
     #: The signing forms the same way: four checked runs given the readings no exam
     #: run reaches (no exam run is signed).
-    for run_id, reading in (("holds-1", "yes"), ("holds-2", "untrusted"),
-                            ("contradicts-1", "failed"), ("contradicts-2", "couldnt-check")):
+    for run_id, reading in (
+        ("holds-1", "yes"),
+        ("holds-2", "untrusted"),
+        ("contradicts-1", "failed"),
+        ("contradicts-2", "couldnt-check"),
+    ):
         (run,) = [r for r in store.runs() if r.run_id == run_id]
         store.put_run(replace(run, signed=reading))
     #: A run stopped by a step's own rule, so "Stopped by a step" is never examined empty: its
     #: stored reading as the check derives one (`ingest.declined_at`).
     stopped = _fake_run(store, real, run_id="stopped-1", verdict=HOLDS)
-    store.put_run(replace(stopped, declined=json.dumps(
-        {"stage": "answer", "reason": "over the limit", "left": []})))
+    store.put_run(replace(stopped, declined=json.dumps({"stage": "answer", "reason": "over the limit", "left": []})))
     made.append(store.get_run(stopped.key))
     #: And one whose rung 3 reads "Not reached", so "stopped at a step" is never examined empty: a
     #: step declined with a declared step after it, as the check derives both.
     not_reached = _fake_run(store, real, run_id="stopped-2", verdict=HOLDS)
-    store.put_run(replace(not_reached, nothing_missing="not-reached", declined=json.dumps(
-        {"stage": "answer", "reason": "over the limit", "left": ["deliver"]})))
+    store.put_run(
+        replace(
+            not_reached,
+            nothing_missing="not-reached",
+            declined=json.dumps({"stage": "answer", "reason": "over the limit", "left": ["deliver"]}),
+        )
+    )
     made.append(store.get_run(not_reached.key))
     made = [store.get_run(r.key) for r in made]
     return store, made
@@ -552,11 +609,14 @@ def test_every_executions_list_states_the_runs_it_was_chosen_from(ten_runs, exam
         text = unescape(listed)
         if t.slug == "all":
             #: The Runs page itself, in the console's own words.
-            assert rows == stored and (f"Runs stored: {stored} of {stored}, and this page "
-                                       "lists every one of them.") in text, t.slug
+            assert (
+                rows == stored
+                and (f"Runs stored: {stored} of {stored}, and this page lists every one of them.") in text
+            ), t.slug
             continue
         #: Every other list, in the console's own words.
         from onetrace_console.pages import runs_in_list
+
         assert runs_in_list(rows, stored) in text, t.slug
 
 
@@ -600,15 +660,13 @@ def test_every_number_on_home_equals_the_filtered_list_its_link_opens(ten_runs, 
         shown = re.search(r"(\d+) runs? of (\d+)", block.group(0))
         assert shown, f"Home's {t.slug!r} line carries no `N of M`: {block.group(0)[:160]}"
         page_count, page_total = int(shown.group(1)), int(shown.group(2))
-        assert page_count == len(rows), (
-            f"{t.slug}: Home says {page_count} but {t.href} shows {len(rows)} rows")
+        assert page_count == len(rows), f"{t.slug}: Home says {page_count} but {t.href} shows {len(rows)} rows"
         assert page_total == len(store.runs()), (
-            f"{t.slug}: Home's denominator is {page_total}, the store holds "
-            f"{len(store.runs())}")
+            f"{t.slug}: Home's denominator is {page_total}, the store holds {len(store.runs())}"
+        )
         #: Compared in its ESCAPED form: the label naming the flag carries apostrophes
         #: and the page escapes them, which is the escaping working correctly.
-        assert escape(t.sentence) in home, (
-            f"Home does not carry {escape(t.sentence)!r}")
+        assert escape(t.sentence) in home, f"Home does not carry {escape(t.sentence)!r}"
 
 
 def test_every_count_carries_its_denominator(ten_runs, examined):
@@ -630,14 +688,14 @@ def test_could_not_be_checked_carries_its_reasons(ten_runs, examined):
     examined(len(t.reasons), "distinct reasons behind the could-not-check count")
     assert t.reasons, "the could-not-check tally carries no reason"
     from html import unescape
+
     home = render_counts(store, generated_at=GENERATED_AT)
     #: Read as shown: a reason with an apostrophe (such as "doesn't") is escaped in the HTML.
     for reason in t.reasons:
         assert reason in unescape(home), f"Home does not show the reason {reason!r}"
 
 
-def test_a_run_nobody_checked_is_its_own_state_and_not_folded_into_a_verdict(ten_runs,
-                                                                            examined):
+def test_a_run_nobody_checked_is_its_own_state_and_not_folded_into_a_verdict(ten_runs, examined):
     store, _ = ten_runs
     unchecked = [r for r in store.runs() if verdict_of(r) == NOT_CHECKED]
     examined(len(unchecked), "runs the check runner has not reached")
@@ -652,17 +710,15 @@ def test_the_most_recent_list_is_by_arrival_and_is_not_a_ranking(ten_runs, exami
     t = next(t for t in tallies(store) if t.slug == "most-recent")
     examined(len(t.runs), "runs in the most-recent list")
     assert len(t.runs) == min(MOST_RECENT, len(store.runs()))
-    assert list(t.runs) == list(store.runs()[:len(t.runs)]), "the list was re-ordered"
+    assert list(t.runs) == list(store.runs()[: len(t.runs)]), "the list was re-ordered"
 
 
 def test_home_shows_no_percentage_trend_or_health(ten_runs, examined):
     """Step 4's "no score, no trend arrow, no health, no recommendation", by shape."""
     store, _ = ten_runs
     #: The Overview and the All counts page its counts moved to.
-    body = (_body(render_home(store, generated_at=GENERATED_AT))
-            + _body(render_counts(store, generated_at=GENERATED_AT)))
-    banned = ("health", "trend", "score", "grade", "↑", "↓", "▲", "▼",
-              "improving", "worsening", "recommend")
+    body = _body(render_home(store, generated_at=GENERATED_AT)) + _body(render_counts(store, generated_at=GENERATED_AT))
+    banned = ("health", "trend", "score", "grade", "↑", "↓", "▲", "▼", "improving", "worsening", "recommend")
     found = [w for w in banned if w in body.lower()]
     examined(len(banned), "banned shapes searched for")
     assert not found, f"Home carries {found}"
@@ -671,6 +727,7 @@ def test_home_shows_no_percentage_trend_or_health(ten_runs, examined):
 
 
 # ------------------------------------- the five prohibitions, on both new pages
+
 
 @pytest.fixture
 def new_pages(ten_runs, compared) -> dict[str, str]:
@@ -694,45 +751,58 @@ def test_the_new_pages_pass_the_five_prohibitions(new_pages, examined):
         #: "Choose run B"'s Compare buttons, each posting one pair to /compare and nothing else.
         panel = re.search(r'<section data-section="explain".*?</section>', body, re.S)
         rest = body.replace(panel.group(0), "") if panel else body
-        compare = re.findall(r'<button type="button" hidden data-compare-post="/compare\?a=[0-9a-f]{64}&amp;b=[0-9a-f]{64}">'
-                             r'compare</button>', rest)
+        compare = re.findall(
+            r'<button class="btn-secondary" data-busy="comparing…" data-busy-wait="the comparison" type="button" hidden data-compare-post="/compare\?a=[0-9a-f]{64}&amp;b=[0-9a-f]{64}">'
+            r"compare</button>",
+            rest,
+        )
         assert not compare or name.startswith("choose-"), f"{name} carries a compare button"
         for button in compare:
             rest = rest.replace(button, "")
         #: And, each by its exact shape: the index's search box (a GET form to /search), a public
         #: console's Compare picker, and a local run page's benchmark mark and its note.
-        for shape in (r'<form method="get" action="(?:\.\./\.\./)?search" role="search" class="search-box" '
-                      r'data-search-box><label>search the runs by recorded field <input type="search" name="q" '
-                      r'[^>]*></label>(?:<input type="hidden" name="run" value="[0-9a-f]{64}">)? '
-                      r'<button type="submit">search</button></form>',
-                      r'<form method="post" action="/compare" data-visitor-compare>.*?'
-                      r'<button type="submit">compare</button></form>',
-                      #: A local console's pipeline picker (console 0.6.1 item 4): one pair to /compare.
-                      r'<form method="post" action="/compare" data-local-compare>.*?'
-                      r'<button type="submit">compare</button></form>',
-                      #: A pipeline's first-run-to-leave page: its one window form, a GET to bisect that reads
-                      #: what is kept and runs nothing (console 0.7.0).
-                      r'<form method="get" action="bisect" data-bisect-window><input type="hidden" name="p" '
-                      r'value="[^"]*"><label>find the first run to leave after: <input type="text" name="after" '
-                      r'value="[^"]*" maxlength="64"></label> <button type="submit">find</button></form>',
-                      r'<label hidden data-benchmark-note>note \(optional\) <input type="text" maxlength="280" '
-                      r'data-benchmark-note-input></label>',
-                      r'<button type="button" hidden data-benchmark-post="/benchmark\?run=[0-9a-f]{64}&amp;'
-                      r'mark=(?:yes|no)">[^<]*</button>'):
+        for shape in (
+            r'<form method="get" action="(?:\.\./\.\./)?search" role="search" class="search-box" '
+            r'data-search-box><label>search the runs by recorded field <input type="search" name="q" '
+            r'[^>]*></label>(?:<input type="hidden" name="run" value="[0-9a-f]{64}">)? '
+            r'<button class="btn-primary" data-busy="searching…" type="submit">search</button></form>',
+            r'<form method="post" action="/compare" data-visitor-compare>.*?'
+            r'<button class="btn-primary" data-busy="comparing…" data-busy-wait="the comparison" type="submit">compare</button></form>',
+            #: A local console's pipeline picker (console 0.6.1 item 4): one pair to /compare.
+            r'<form method="post" action="/compare" data-local-compare>.*?'
+            r'<button class="btn-primary" data-busy="comparing…" data-busy-wait="the comparison" type="submit">compare</button></form>',
+            #: A pipeline's first-run-to-leave page: its one window form, a GET to bisect that reads
+            #: what is kept and runs nothing (console 0.7.0).
+            r'<form method="get" action="bisect" data-bisect-window><input type="hidden" name="p" '
+            r'value="[^"]*"><label>find the first run to leave after: <input type="text" name="after" '
+            r'value="[^"]*" maxlength="64"></label> <button class="btn-primary" data-busy="finding…" type="submit">find</button></form>',
+            r'<label hidden data-benchmark-note>note \(optional\) <input type="text" maxlength="280" '
+            r"data-benchmark-note-input></label>",
+            r'<button class="btn-secondary" data-busy="[^"]*" type="button" hidden data-benchmark-post="/benchmark\?run=[0-9a-f]{64}&amp;'
+            r'mark=(?:yes|no)">[^<]*</button>',
+        ):
             rest = re.sub(shape, "", rest, flags=re.S)
         for mechanism in ("<button", "<form", "<input", "onclick=", "onsubmit="):
             assert mechanism not in rest, f"{name} carries {mechanism!r}"
         if panel:
             #: The panel's text checkbox (console 0.6.1 item 12), by its exact shape: its one input.
-            shown = re.sub(r'<p data-explain="text-choice"><label><input type="checkbox" '
-                           r'data-explain-text="/explain/text\?c=[0-9a-f]{64}&amp;on="(?: checked)? disabled> '
-                           r'[^<]*</label></p>', "", panel.group(0))
+            shown = re.sub(
+                r'<p data-explain="text-choice"><label><input type="checkbox" '
+                r'data-explain-text="/explain/text\?c=[0-9a-f]{64}&amp;on="(?: checked)? disabled> '
+                r"[^<]*</label></p>",
+                "",
+                panel.group(0),
+            )
             for m in ("<form", "<input", "onclick=", "onsubmit="):
                 assert m not in shown, f"{name}'s explanation panel carries {m!r}"
-            posts = re.findall(r'<button (?:class="primary" )?type="button" data-explain-post="([^"]*)"', panel.group(0))
+            posts = re.findall(
+                r'<button (?:class="btn-[a-z]+" [^>]*?)?type="button" data-explain-post="([^"]*)"', panel.group(0)
+            )
             assert panel.group(0).count("<button") == len(posts), f"{name}: a button that posts nowhere named"
-            assert all(re.fullmatch(r"/explain(/packet|/check|/cancel)?\?c=[0-9a-f]{64}(&amp;[a-z]=[^&\"]*)*", p)
-                       for p in posts), posts
+            assert all(
+                re.fullmatch(r"/explain(/packet|/check|/cancel)?\?c=[0-9a-f]{64}(&amp;[a-z]=[^&\"]*)*", p)
+                for p in posts
+            ), posts
         inline = re.findall(r'style="[^"]*(?:color|background)[^"]*"', page, re.I)
         assert not inline, f"{name} carries inline colour: {inline[:2]}"
 
@@ -781,11 +851,11 @@ def test_home_names_each_records_agree_state_in_its_own_word_and_does_not_summar
     from onetrace_console.checks import VERDICTS
 
     store, _ = ten_runs
-    home = (render_home(store, generated_at=GENERATED_AT)
-            + render_counts(store, generated_at=GENERATED_AT))
+    home = render_home(store, generated_at=GENERATED_AT) + render_counts(store, generated_at=GENERATED_AT)
     examined(len(records.STATES), "rung 1 labels checked on Home")
 
     import html as _html
+
     for state in records.STATES:
         assert records.LABEL[state] in _html.unescape(home), f"Home does not show {records.LABEL[state]!r}"
     for state in VERDICTS:
@@ -793,7 +863,5 @@ def test_home_names_each_records_agree_state_in_its_own_word_and_does_not_summar
     assert not re.search(r"\bVerified\b", re.sub(r"<[^>]+>", " ", home)), "Home counts runs as 'Verified'"
 
     #: And the paraphrases are gone from the page itself, not merely from the table.
-    for gone in ("the trail holds", "the trail contradicts", "not checked yet",
-                 "could not be checked"):
-        assert gone not in home, (
-            f"Home carries {gone!r}, a summary in this console's own voice")
+    for gone in ("the trail holds", "the trail contradicts", "not checked yet", "could not be checked"):
+        assert gone not in home, f"Home carries {gone!r}, a summary in this console's own voice"

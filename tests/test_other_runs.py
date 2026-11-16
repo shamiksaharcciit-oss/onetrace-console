@@ -14,6 +14,7 @@ recorded it -- the outcome, the settings, the instrument and the outputs.
 
 Each check has its sabotage.
 """
+
 from __future__ import annotations
 
 import copy
@@ -28,6 +29,7 @@ def demo(shared_demo):
     """The public demo, built once."""
     from onetrace_console.store import Store
     from tests.test_checks import _require_installed
+
     _require_installed()
     folder = shared_demo["folder"]
     return Store(folder / "store" / "store"), folder / "store" / "pages"
@@ -46,6 +48,7 @@ def _rows(section: str) -> list[tuple[str, str, str]]:
 def section_problems(store, pages) -> tuple[int, list[str]]:
     from onetrace_console.overview import pipelines
     from onetrace_console.stage_pages import OTHER_RUNS_SHOWN
+
     out, seen = [], 0
     for p in pipelines(store):
         for run in p.runs:
@@ -56,7 +59,9 @@ def section_problems(store, pages) -> tuple[int, list[str]]:
                 stage = re.search(r"<h1>.*?</h1>", page, re.S).group(0)
                 rows = _rows(_section(page))
                 if [k for k, _o, _h in rows] != want:
-                    out.append(f"{run.key[:12]}/{page_path.name}: rows {len(rows)}, not the pipeline's other runs newest first")
+                    out.append(
+                        f"{run.key[:12]}/{page_path.name}: rows {len(rows)}, not the pipeline's other runs newest first"
+                    )
                 for key, outcome, row in rows:
                     link = re.match(r'<td[^>]*><a href="\.\./([0-9a-f]+)/(stage-\d+\.html)">', row)
                     if outcome in ("no-receipt", "not-read"):
@@ -67,8 +72,10 @@ def section_problems(store, pages) -> tuple[int, list[str]]:
                         out.append(f"{run.key[:12]}/{page_path.name}: {key[:12]} has no link to its step")
                         continue
                     target = pages / "runs" / key / link.group(2)
-                    if not target.is_file() or re.search(r"<h1>.*?</h1>", target.read_text(encoding="utf-8"),
-                                                         re.S).group(0) != stage:
+                    if (
+                        not target.is_file()
+                        or re.search(r"<h1>.*?</h1>", target.read_text(encoding="utf-8"), re.S).group(0) != stage
+                    ):
                         out.append(f"{run.key[:12]}/{page_path.name}: {key[:12]}'s link is not the same step")
     return seen, out
 
@@ -81,6 +88,7 @@ def test_every_step_page_shows_the_step_in_its_pipeline_s_other_runs(demo, exami
 
 def test_sabotage_a_row_left_out_is_named(demo, tmp_path, examined):
     import shutil
+
     store, pages = demo
     copied = tmp_path / "pages"
     shutil.copytree(pages, copied)
@@ -96,12 +104,15 @@ def test_the_demo_shows_each_kind_of_outcome_it_holds(demo, examined):
     """The failed answer of the demo's run 20, the retried lookup of its P3 run, and its declined
     P4 run, which has no receipt for `send`, are rows."""
     _store, pages = demo
-    outcomes = {o for p in pages.rglob("stage-*.html")
-                for _k, o, _h in _rows(_section(p.read_text(encoding="utf-8")))}
+    outcomes = {o for p in pages.rglob("stage-*.html") for _k, o, _h in _rows(_section(p.read_text(encoding="utf-8")))}
     examined(len(outcomes), "kinds of outcome shown")
     assert {"ok", "error", "refused", "no-receipt"} <= outcomes, outcomes
-    attempts = [h for p in pages.rglob("stage-*.html")
-                for _k, _o, h in _rows(_section(p.read_text(encoding="utf-8"))) if "the last of 2 attempts" in h]
+    attempts = [
+        h
+        for p in pages.rglob("stage-*.html")
+        for _k, _o, h in _rows(_section(p.read_text(encoding="utf-8")))
+        if "the last of 2 attempts" in h
+    ]
     assert attempts, "a retried step does not say its row is the last attempt"
 
 
@@ -113,18 +124,26 @@ RECEIPT = {
     "outcome": {"class": "ok"},
     "assertions": {"constants": {"chunk_size": "512", "overlap": "64"}},
     "instrument": {"id": "char-splitter", "version": "1.0.0", "config_digest": "sha256:" + "cd" * 32},
-    "inputs": [{"name": "receipt:load_docs", "digest": "sha256:" + "11" * 32},
-               {"name": "documents.json", "digest": "sha256:" + "22" * 32}],
+    "inputs": [
+        {"name": "receipt:load_docs", "digest": "sha256:" + "11" * 32},
+        {"name": "documents.json", "digest": "sha256:" + "22" * 32},
+    ],
     "outputs": [{"name": "chunks.json", "digest": D}],
 }
 
 
 def _row(demo, other_receipt, mine=RECEIPT, monkeypatch=None):
     from onetrace_console.stage_pages import _other_row, _recorded
+
     store, _pages = demo
     run = next(iter(store.runs()))
-    return _other_row(store, run, [{"index": "2", "file": "receipts/02-split.json", "receipt": other_receipt}],
-                      "split", _recorded(mine))
+    return _other_row(
+        store,
+        run,
+        [{"index": "2", "file": "receipts/02-split.json", "receipt": other_receipt}],
+        "split",
+        _recorded(mine),
+    )
 
 
 def marks(row: str) -> int:
@@ -150,11 +169,13 @@ def test_inputs_are_never_compared(demo, examined):
 
 def test_sabotage_a_row_that_compares_inputs_is_named(demo, monkeypatch, examined):
     from onetrace_console import stage_pages
+
     real = stage_pages._recorded
 
     def with_inputs(receipt):
         settings, inst, outputs = real(receipt)
         return settings, inst, {**outputs, **{i["name"]: i["digest"] for i in receipt.get("inputs") or []}}
+
     monkeypatch.setattr(stage_pages, "_recorded", with_inputs)
     other = copy.deepcopy(RECEIPT)
     other["inputs"][0]["digest"] = "sha256:" + "99" * 32
@@ -164,6 +185,7 @@ def test_sabotage_a_row_that_compares_inputs_is_named(demo, monkeypatch, examine
 
 def test_a_run_without_the_step_or_missing_part_of_it_says_so(demo, examined):
     from onetrace_console.stage_pages import NO_RECEIPT, NOT_READ, _other_row, _recorded
+
     store, _pages = demo
     run = next(iter(store.runs()))
     examined(2, "rows")
@@ -174,6 +196,7 @@ def test_a_run_without_the_step_or_missing_part_of_it_says_so(demo, examined):
 def test_past_the_cap_the_newest_are_shown_and_counted(demo, monkeypatch, examined):
     from onetrace_console import stage_pages
     from onetrace_console.overview import pipelines
+
     store, _pages = demo
     big = max(pipelines(store), key=lambda p: len(p.runs))
     monkeypatch.setattr(stage_pages, "OTHER_RUNS_SHOWN", 3)

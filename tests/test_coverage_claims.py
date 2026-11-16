@@ -35,6 +35,7 @@ the viewer's table, and in the documents. A claim worded some other way, or on a
 runs do not reach, is outside it. The list of every coverage sentence, before and after, is in the
 pin report for a reader to read.
 """
+
 from __future__ import annotations
 
 import json
@@ -45,9 +46,10 @@ from pathlib import Path
 from tests.conftest import make_tar
 from tests.test_diff_sdk_text_layer import _forged_pair, _tar
 from tests.test_serve import _post
+
 try:
     from tools.export_public import NEVER
-except ImportError:   # the public tree has no export tool, and its never-ship files are already absent
+except ImportError:  # the public tree has no export tool, and its never-ship files are already absent
     NEVER = ()
 
 REPO = Path(__file__).resolve().parent.parent
@@ -61,22 +63,26 @@ CLAIMS = {
     #: after it changes too" describes a pipeline, and is not a claim about a check.
     "every step/check/receipt/stage/record": re.compile(
         r"\bevery (?:step|check|receipt|stage|record)s?\b[^.;]{0,60}?"
-        r"\b(?:checks? out|holds?|held|checked|verified|pass(?:es|ed)?)\b", re.I),
+        r"\b(?:checks? out|holds?|held|checked|verified|pass(?:es|ed)?)\b",
+        re.I,
+    ),
     "nothing is missing": re.compile(r"\bnothing (?:is |was )?missing\b", re.I),
     #: 0.1.2 passes a receipt that misstates its stage order, so "consistent with itself" and
     #: "checked for consistency" say more than it checks; both were reworded.
     "consistency": re.compile(r"\bconsistent with itself\b|\bchecked for consistency\b", re.I),
     #: Proof of time. 0.1.2 checks only that an anchor state is declared, and
     #: this console checks no anchor.
-    "proof of time": re.compile(r"\bexisted by\b|\bhasn't changed since\b|\bindependent anchor\b",
-                                re.I),
+    "proof of time": re.compile(r"\bexisted by\b|\bhasn't changed since\b|\bindependent anchor\b", re.I),
     "fully checked/verified": re.compile(
-        r"\bfully (?:checked|verified)\b|\b(?:checked|verified) (?:in full|completely)\b", re.I),
+        r"\bfully (?:checked|verified)\b|\b(?:checked|verified) (?:in full|completely)\b", re.I
+    ),
 }
 QUALIFIED = re.compile(
     r"\b(?:not|no|never|cannot|can't|isn't|doesn't|didn't|none|nor)\b"
     r"|\bas the receipts\b|\bthe receipts themselves\b|\breceipts' own\b|\bdeclare[sd]?\b"
-    r"|\bwill ship\b", re.I)
+    r"|\bwill ship\b",
+    re.I,
+)
 
 #: A conditional: what something WOULD show, not what this record has. It qualifies the proof-of-time
 #: claim of its sentence only -- the fixed "Anchored, it would read: this record existed by ..." (015).
@@ -122,8 +128,7 @@ def _sentences(text: str) -> list[str]:
 NEAR = 30
 
 
-def _unqualified(where: str, sentences: list[str], not_said: bool = False,
-                 checked: tuple[str, ...] = ()) -> list[str]:
+def _unqualified(where: str, sentences: list[str], not_said: bool = False, checked: tuple[str, ...] = ()) -> list[str]:
     out = []
     for s in sentences:
         #: "it would read:" qualifies the proof-of-time claim of its sentence and nothing else
@@ -134,7 +139,7 @@ def _unqualified(where: str, sentences: list[str], not_said: bool = False,
             if hypothetical and claim == "proof of time" or claim in checked:
                 continue
             for m in pattern.finditer(s):
-                if not QUALIFIED.search(s[max(0, m.start() - NEAR):m.end() + NEAR]):
+                if not QUALIFIED.search(s[max(0, m.start() - NEAR) : m.end() + NEAR]):
                     out.append(f"{where}: [{claim}] {s[:200]}")
     return out
 
@@ -142,6 +147,7 @@ def _unqualified(where: str, sentences: list[str], not_said: bool = False,
 def _page_words(html: str) -> str:
     """A page's own words: its `<pre>` layers and marked quotations left out."""
     from tests.viewer.pagetext import own_words
+
     return own_words(re.sub(r"<pre\b.*?</pre>", " ", html, flags=re.S))
 
 
@@ -161,29 +167,39 @@ def _drawn_pages(server, files, tmp_path) -> dict[str, str]:
     _, forged = _forged_pair(tmp_path / "forged", artifacts=True)
     status, body = _post(base, "/v1/runs", _tar(forged))
     assert json.loads(body)["check_verdict"] == "contradicts"
-    return {p.relative_to(root).as_posix(): p.read_text(encoding="utf-8")
-            for p in sorted((root / "pages").rglob("*.html"))}
+    return {
+        p.relative_to(root).as_posix(): p.read_text(encoding="utf-8") for p in sorted((root / "pages").rglob("*.html"))
+    }
 
 
 def _documents() -> dict[str, str]:
-    tracked = subprocess.run(["git", "ls-files", "-z"], cwd=REPO, capture_output=True, text=True,
-                             check=True).stdout.split("\0")
-    return {rel: (REPO / rel).read_text(encoding="utf-8", errors="replace") for rel in tracked
-            if rel.endswith(".md") and not rel.startswith(("tests/", *NEVER))}
+    tracked = subprocess.run(
+        ["git", "ls-files", "-z"], cwd=REPO, capture_output=True, text=True, check=True
+    ).stdout.split("\0")
+    return {
+        rel: (REPO / rel).read_text(encoding="utf-8", errors="replace")
+        for rel in tracked
+        if rel.endswith(".md") and not rel.startswith(("tests/", *NEVER))
+    }
 
 
-def test_no_page_the_console_draws_claims_more_than_0_1_2_checks(server, files, tmp_path,
-                                                                  examined):
+def test_no_page_the_console_draws_claims_more_than_0_1_2_checks(server, files, tmp_path, examined):
     pages = _drawn_pages(server, files, tmp_path)
     examined(len(pages), "pages drawn and read")
     kinds = {p.split("/")[1].split("-")[0] if "/" in p[6:] else p for p in pages}
     assert any("diff/" in p for p in pages) and any("incidents-" in p for p in pages), kinds
     assert any(p.startswith("pages/runs/") and p.endswith("case.html") for p in pages), kinds
     assert any(NOT_SAID.search(html) for html in pages.values()), "no receipt page was read"
-    bad = [hit for rel, html in pages.items()
-           for hit in _unqualified(rel, _sentences(_page_words(NOT_SAID.sub(" ", html))))
-           + [h for said in NOT_SAID.findall(html)
-              for h in _unqualified(rel, _sentences(_page_words(said)), not_said=True)]]
+    bad = [
+        hit
+        for rel, html in pages.items()
+        for hit in _unqualified(rel, _sentences(_page_words(NOT_SAID.sub(" ", html))))
+        + [
+            h
+            for said in NOT_SAID.findall(html)
+            for h in _unqualified(rel, _sentences(_page_words(said)), not_said=True)
+        ]
+    ]
     assert not bad, "a page claims more than 0.1.2 checks:\n" + "\n".join(bad)
 
 
@@ -192,6 +208,7 @@ def test_the_receipt_s_does_not_say_list_qualifies_only_the_proof_of_time_claim(
     claim there is still caught, and "existed by" anywhere else on the page is too."""
     examined(3, "sentences checked")
     from onetrace_console.receipt_page import DOES_NOT_SAY
+
     listed = " ".join(DOES_NOT_SAY)
     assert "existed by" in listed
     assert _unqualified("receipt", _sentences(listed), not_said=True) == []
@@ -202,17 +219,18 @@ def test_the_receipt_s_does_not_say_list_qualifies_only_the_proof_of_time_claim(
 
 def test_no_sentence_in_the_viewer_s_table_claims_more_than_0_1_2_checks(examined):
     from onetrace_console.viewer import sentences as S
-    keys = (set(S.TABLE) | set(S.FIXED) | set(S.RULED) | set(S.PROVISIONAL) | set(S.LABELS)
-            | set(S.REWORDED))
+
+    keys = set(S.TABLE) | set(S.FIXED) | set(S.RULED) | set(S.PROVISIONAL) | set(S.LABELS) | set(S.REWORDED)
     examined(len(keys), "sentences in the viewer's table")
     bad = [hit for key in sorted(keys) for hit in _table_hits(key, S.template(key))]
     assert not bad, "a sentence claims more than 0.1.2 checks:\n" + "\n".join(bad)
 
 
 def test_the_allowance_is_by_name_and_for_proof_of_time_only():
-    """"existed by" in any other key is still caught, and an allowed key's other
+    """ "existed by" in any other key is still caught, and an allowed key's other
     claims are still read."""
     from onetrace_console.viewer import sentences as S
+
     for key in RULED_PROOF_OF_TIME:
         sentence = S.template(key)
         assert "existed by" in sentence, key
@@ -238,8 +256,14 @@ def test_only_what_0_2_0_checks_is_allowed_in_a_document():
     allowed = "The verifier checks stage order, and the anchor shows the record existed by then."
     assert _unqualified("doc", _sentences(allowed), checked=CHECKED_BY_0_2_0) == []
     assert _unqualified("doc", _sentences(allowed)), "the premise: 0.1.2's list reads both"
-    for claim in ("Every step checks out.", "Nothing is missing.", "The run is fully verified.",
-                  "The topology check ran.", "Its completeness is shown.", "It is consistent with itself."):
+    for claim in (
+        "Every step checks out.",
+        "Nothing is missing.",
+        "The run is fully verified.",
+        "The topology check ran.",
+        "Its completeness is shown.",
+        "It is consistent with itself.",
+    ):
         assert _unqualified("doc", _sentences(claim), checked=CHECKED_BY_0_2_0), claim
 
 
@@ -258,9 +282,8 @@ def test_it_would_read_qualifies_only_the_proof_of_time_claim(examined):
     """The pin re-check's note 3: "it would read:" excused every claim in its sentence. It now
     qualifies only the proof-of-time claim it was added for (the fixed anchoring.would_add)."""
     from onetrace_console.viewer import sentences as S
+
     examined(2, "sentences checked")
     assert _unqualified("would_add", _sentences(S.template("anchoring.would_add"))) == []
-    caught = _unqualified("made up", _sentences(
-        "Every step checks out, and it would read: nothing is missing."))
-    assert any("[every step" in c for c in caught) and any("[nothing is missing]" in c
-                                                           for c in caught), caught
+    caught = _unqualified("made up", _sentences("Every step checks out, and it would read: nothing is missing."))
+    assert any("[every step" in c for c in caught) and any("[nothing is missing]" in c for c in caught), caught

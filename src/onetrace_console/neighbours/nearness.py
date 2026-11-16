@@ -5,6 +5,7 @@ Nearness is the cosine of two L2-normalised vectors. Where two digests are equal
 the record, and nothing is embedded or read for it. No threshold is fitted anywhere: the numbers are
 shown and ordered, and nothing here says which difference changed anything.
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -16,7 +17,7 @@ BY_RECORD, BY_EMBEDDER = "record", "embedder"
 @dataclass(frozen=True)
 class Near:
     value: float
-    how: str            # BY_RECORD or BY_EMBEDDER
+    how: str  # BY_RECORD or BY_EMBEDDER
 
 
 def near(a, b, vectors: dict) -> Near | None:
@@ -27,14 +28,16 @@ def near(a, b, vectors: dict) -> Near | None:
     if a.text is None or b.text is None or a.digest not in vectors or b.digest not in vectors:
         return None
     from onetrace_console.neighbours.batches import decode
+
     return Near(float(decode(vectors[a.digest]) @ decode(vectors[b.digest])), BY_EMBEDDER)
 
 
 # ------------------------------------------------------------------------------ a run's neighbours
 
+
 @dataclass(frozen=True)
 class Row:
-    other: object                 # the other StoredRun
+    other: object  # the other StoredRun
     step: str
     name: str
     near: Near
@@ -56,6 +59,7 @@ def suggestions(run, store) -> Suggestions | None:
     """The runs of `run`'s group whose kept inputs are near its own, nearest first; None where
     neighbours are not on here."""
     from onetrace_console.neighbours import active, batches, grouping, kept
+
     if not active(store):
         return None
     got = batches.current(store)
@@ -88,14 +92,15 @@ def suggestions(run, store) -> Suggestions | None:
 
 # ------------------------------------------------------------------------------ the nearness ladder
 
+
 @dataclass(frozen=True)
 class Rung:
     step: str
-    inputs: Near | None           # None: "not kept"
+    inputs: Near | None  # None: "not kept"
     outputs: Near | None
-    input_name: str = ""          # the least near input, where the step has more than one
+    input_name: str = ""  # the least near input, where the step has more than one
     output_name: str = ""
-    facts: tuple = ()             # what differs exactly at this step, as the records state it
+    facts: tuple = ()  # what differs exactly at this step, as the records state it
 
     @property
     def drop(self) -> float | None:
@@ -126,13 +131,14 @@ def _least(pairs, vectors) -> tuple[Near | None, str, int]:
 def _facts(ra: dict, rb: dict, pa, pb) -> tuple:
     """What differs exactly at one step: settings by name, the instrument, inputs and outputs by name."""
     from onetrace_console.run_index import _settings
+
     facts = []
     sa, sb = _settings(ra), _settings(rb)
     for k in sorted(sa.keys() | sb.keys()):
         if sa.get(k) != sb.get(k) and not k.startswith("onetrace."):
             facts.append(f"setting {k}: {sa.get(k, '(none)')} → {sb.get(k, '(none)')}")
-    ia = ra.get("instrument") if isinstance(ra.get("instrument"), dict) else {}
-    ib = rb.get("instrument") if isinstance(rb.get("instrument"), dict) else {}
+    ia = _instrument if isinstance(_instrument := ra.get("instrument"), dict) else {}
+    ib = _instrument2 if isinstance(_instrument2 := rb.get("instrument"), dict) else {}
     if any(ia.get(k) != ib.get(k) for k in ("id", "version", "config_digest")):
         facts.append("the instrument's configuration differs")
     names_in = sorted({a.name for a, b in pa if a.digest != b.digest})
@@ -150,6 +156,7 @@ def ladder(comparison, store) -> list[Rung] | None:
     nothing)."""
     from onetrace_console.neighbours import active, batches, grouping, kept
     from onetrace_console.stage_pages import _stage_name, _steps
+
     if not active(store):
         return None
     a, b = store.get_run(comparison.run_a), store.get_run(comparison.run_b)
@@ -172,7 +179,7 @@ def ladder(comparison, store) -> list[Rung] | None:
         if step not in receipts_b:
             continue
 
-        def paired(kind):
+        def paired(kind, step=step):
             xa = {p.name: p for p in parts_a if p.step == step and p.kind == kind}
             xb = {p.name: p for p in parts_b if p.step == step and p.kind == kind}
             return [(xa[n], xb[n]) for n in xa if n in xb]
@@ -180,8 +187,16 @@ def ladder(comparison, store) -> list[Rung] | None:
         pi, po = paired(kept.INPUT), paired(kept.OUTPUT)
         ni, name_i, count_i = _least(pi, vectors)
         no, name_o, count_o = _least(po, vectors)
-        rungs.append(Rung(step, ni, no, name_i if count_i > 1 else "", name_o if count_o > 1 else "",
-                          _facts(s["receipt"], receipts_b[step], pi, po)))
+        rungs.append(
+            Rung(
+                step,
+                ni,
+                no,
+                name_i if count_i > 1 else "",
+                name_o if count_o > 1 else "",
+                _facts(s["receipt"], receipts_b[step], pi, po),
+            )
+        )
     return rungs
 
 
@@ -189,7 +204,7 @@ def largest_drop(rungs: list[Rung]) -> int | None:
     """The index of the rung with the largest drop from input to output nearness, the first on a tie;
     only a drop above zero is marked (`Rung.dropped`). None where no rung's outputs are further apart
     than its inputs."""
-    drops = [(round(r.drop, 3), -i) for i, r in enumerate(rungs) if r.dropped]
+    drops = [(round(r.drop, 3), -i) for i, r in enumerate(rungs) if r.dropped]  # type: ignore[arg-type]  # a rung that dropped has a drop
     if not drops:
         return None
     return -max(drops)[1]

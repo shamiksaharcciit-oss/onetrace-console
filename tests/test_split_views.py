@@ -23,6 +23,7 @@
 4. Incident pages link the runs they name at their "Proof" view.
 5. No script, and the export's scan for requests to another host passes.
 """
+
 from __future__ import annotations
 
 import re
@@ -41,17 +42,20 @@ READ_FROM = ("case", "strip")
 #: Said about the record, so kept on a red run's "What changed".
 KEPT_RUNGS = ("records-agree", "signed", "anchored")
 #: The line in the head where a red run's content-derived answers were.
-NOT_SHOWN = {"Contradicts its record": "Not shown: this record does not hold up.",
-             "Couldn't check": "Not shown: this record could not be checked."}
+NOT_SHOWN = {
+    "Contradicts its record": "Not shown: this record does not hold up.",
+    "Couldn't check": "Not shown: this record could not be checked.",
+}
 #: What each red state says on "What changed", and the heading over the rows on "Proof".
-REASON = {"Contradicts its record": "the record does not hold up",
-          "Couldn't check": "the record could not be checked"}
+REASON = {"Contradicts its record": "the record does not hold up", "Couldn't check": "the record could not be checked"}
 #: The answer trail's command to repeat the check, as the trail draws it.
 REPEAT = re.compile(r'<details data-layer="4"><summary>Repeat the check</summary>.*?</details>', re.S)
 #: Its copy on a red run's "What changed", with "What could be re-checked".
 FROM_TRAIL = 'data-from="trail"'
-HEADING = {"Contradicts its record": "These rows come from a record that does not hold up.",
-           "Couldn't check": "These rows come from a record that could not be checked."}
+HEADING = {
+    "Contradicts its record": "These rows come from a record that does not hold up.",
+    "Couldn't check": "These rows come from a record that could not be checked.",
+}
 
 
 def _text(html: str) -> str:
@@ -65,6 +69,7 @@ def built(tmp_path_factory):
     from onetrace_console.folder_load import build_public
     from onetrace_console.store import Store
     from tests.test_checks import _require_installed
+
     _require_installed()
     seen = []
     real = views.split
@@ -73,6 +78,7 @@ def built(tmp_path_factory):
         what, proof = real(page, kind, *a, **kw)
         seen.append((kind, page, what, proof))
         return what, proof
+
     folder = tmp_path_factory.mktemp("views") / "demo"
     with pytest.MonkeyPatch.context() as mp:
         mp.setattr(views, "split", recording)
@@ -116,9 +122,13 @@ def coverage_problems(kind: str, whole: str, what: str, proof: str) -> list[str]
     from collections import Counter
 
     from onetrace_console import views
-    is_container = ((lambda t, a: t == "main" and "page" in (a.get("class") or "").split()) if kind == "run"
-                    else (lambda t, a: t == "div" and "cp" in (a.get("class") or "").split()))
-    both = (views.RUN_BOTH if kind == "run" else views.DIFF_BOTH)
+
+    is_container = (
+        (lambda t, a: t == "main" and "page" in (a.get("class") or "").split())
+        if kind == "run"
+        else (lambda t, a: t == "div" and "cp" in (a.get("class") or "").split())
+    )
+    both = views.RUN_BOTH if kind == "run" else views.DIFF_BOTH
 
     def plain(html: str) -> str:
         #: An in-page link may point at the other view's file: compared without the file. The
@@ -126,15 +136,19 @@ def coverage_problems(kind: str, whole: str, what: str, proof: str) -> list[str]
         #: record, which its own test finds on "Proof", and with the line said in its place.
         html = without(without(without(html, 'data-from="contents"'), 'data-withheld="true"'), FROM_TRAIL)
         return re.sub(r'href="[^"#]*#', 'href="#', html)
+
     _inner, items = views.parts(whole, is_container)
     wanted: Counter = Counter()
     names = {}
     for n, part in enumerate(items):
         if views.key(part).startswith("#"):
             continue  # an empty anchor, which goes with its section
-        html = plain(whole[part.start:part.end])
-        shared = (views.key(part) in both or part.tag == "footer"
-                  or (part.tag == "h1" and n == next(i for i, x in enumerate(items) if x.tag == "h1")))
+        html = plain(whole[part.start : part.end])
+        shared = (
+            views.key(part) in both
+            or part.tag == "footer"
+            or (part.tag == "h1" and n == next(i for i, x in enumerate(items) if x.tag == "h1"))
+        )
         wanted[html] += 2 if shared else 1
         names[html] = views.key(part)
     out = []
@@ -146,6 +160,7 @@ def coverage_problems(kind: str, whole: str, what: str, proof: str) -> list[str]
 
 
 # ------------------------------------------------------------------ 1. both views, the default
+
 
 def test_every_run_and_comparison_has_both_views(built, examined):
     folder, store, _seen = built
@@ -176,6 +191,7 @@ def test_the_tabs_are_plain_links(built, examined):
 
 # ------------------------------------------------------------------ 2. every part on one view
 
+
 def test_every_part_is_on_exactly_one_view(built, examined):
     _folder, _store, seen = built
     examined(len(seen), "pages split")
@@ -189,6 +205,7 @@ def test_every_part_is_on_exactly_one_view(built, examined):
 
 
 # ------------------------------------------------------------------ 3. the line, red and withheld
+
 
 def _line(page: str):
     return re.search(r'<p data-section="integrity" data-tone="([a-z]+)">(.*?)</p>', page, re.S)
@@ -228,6 +245,7 @@ def test_the_tampered_run_s_line_is_red_and_its_verdicts_withheld(built, examine
 
 def test_a_run_that_couldn_t_be_checked_is_red_and_withheld(tmp_path, examined):
     from onetrace_console.pages import CASE, RUN_PROOF, render_execution
+
     _folder, store, runs = _load(tmp_path, {"day-1": "day-1"})
     run = _not_verified(runs["day-1"], store)
     pages = render_execution(run, store, generated_at="2026-01-01T00:00:00+00:00").pages
@@ -273,10 +291,14 @@ def kept_problems(whole: str, what: str, proof: str, lead: str) -> list[str]:
 
 def test_a_red_run_s_what_changed_keeps_what_is_said_about_its_record(built, tmp_path, examined):
     from onetrace_console.pages import CASE, RUN_PROOF, render_execution
+
     _folder, _store, seen = built
     #: As drawn: the whole page, both views.
-    red = [(w, a, p) for kind, w, a, p in seen if kind == "run" and 'data-tone="bad"' in a
-           and 'data-section="withheld"' in p]
+    red = [
+        (w, a, p)
+        for kind, w, a, p in seen
+        if kind == "run" and 'data-tone="bad"' in a and 'data-section="withheld"' in p
+    ]
     _f, store, runs = _load(tmp_path, {"day-1": "day-1"})
     run = _not_verified(runs["day-1"], store)
     pages = render_execution(run, store, generated_at="2026-01-01T00:00:00+00:00").pages
@@ -310,9 +332,16 @@ def repeat_problems(what: str, proof: str, whole: str | None = None) -> list[str
         out.append("the command is not with What could be re-checked")
     elif copies[0].replace(" " + FROM_TRAIL, "", 1) != command.group(0):
         out.append("the command on What changed is not the trail's")
-    rest = _text(REPEAT.sub("", trail[trail.index(">") + 1:-len("</section>")]))
-    lines = [_text(x) for x in re.findall(r'<(?:div class="lead"|p class="beside"|pre data-layer="3")[^>]*>(.*?)'
-                                          r'</(?:div|p|pre)>', trail, re.S)]
+    rest = _text(REPEAT.sub("", trail[trail.index(">") + 1 : -len("</section>")]))
+    lines = [
+        _text(x)
+        for x in re.findall(
+            r'<(?:div class="lead"|p class="beside"|pre data-layer="3")[^>]*>(.*?)'
+            r"</(?:div|p|pre)>",
+            trail,
+            re.S,
+        )
+    ]
     if not lines or " ".join(lines) != rest:
         out.append("the trail's other lines were not all read")
     out += [f"a line of the trail on What changed: {line[:60]}" for line in lines if line in _text(what)]
@@ -321,9 +350,13 @@ def repeat_problems(what: str, proof: str, whole: str | None = None) -> list[str
 
 def test_a_red_run_s_what_changed_keeps_the_trail_s_command_and_no_other_line(built, tmp_path, examined):
     from onetrace_console.pages import CASE, RUN_PROOF, render_execution
+
     _folder, _store, seen = built
-    red = [(w, a, p) for kind, w, a, p in seen if kind == "run" and 'data-tone="bad"' in a
-           and 'data-section="withheld"' in p]
+    red = [
+        (w, a, p)
+        for kind, w, a, p in seen
+        if kind == "run" and 'data-tone="bad"' in a and 'data-section="withheld"' in p
+    ]
     _f, store, runs = _load(tmp_path, {"day-1": "day-1"})
     run = _not_verified(runs["day-1"], store)
     pages = render_execution(run, store, generated_at="2026-01-01T00:00:00+00:00").pages
@@ -347,9 +380,11 @@ def test_a_run_whose_records_agree_shows_the_command_once_in_its_trail(built, ex
 def test_a_red_run_s_comparison_and_declined_chips_are_on_proof_only(built, examined):
     """The demo's red run has neither chip: its page, with the chips of runs that have them, split as red."""
     from onetrace_console import views
+
     _folder, _store, seen = built
-    whole = next(w for kind, w, a, p in seen if kind == "run" and 'data-tone="bad"' in a
-                 and 'data-section="withheld"' in p)
+    whole = next(
+        w for kind, w, a, p in seen if kind == "run" and 'data-tone="bad"' in a and 'data-section="withheld"' in p
+    )
     found = {}
     for kind, w, _a, _p in seen:
         for start, end in _elements(w, 'class="chips"') if kind == "run" else ():
@@ -370,7 +405,7 @@ def test_a_run_whose_records_agree_keeps_its_head_whole(built, examined):
     assert any('class="chips"' in w for w, _a in green)
     for whole, what in green:
         assert _head(what) == _head(whole)
-        assert 'data-withheld' not in what
+        assert "data-withheld" not in what
         assert '<section data-section="case">' in what and '<section class="strip' in what
 
 
@@ -387,12 +422,13 @@ def test_a_run_whose_records_agree_has_a_plain_line_and_its_verdicts(built, exam
 
 def test_a_comparison_with_an_unchecked_run_withholds_its_verdicts(tmp_path, examined):
     from onetrace_console.serve import _render_diff_page
+
     _folder, store, runs = _load(tmp_path, {"a": "day-1", "b": "day-2"})
     _not_verified(runs["b"], store)
     c = _compared(store, store.get_run(runs["a"].key), store.get_run(runs["b"].key))
     _render_diff_page(c, store, tmp_path)
     what = (tmp_path / "pages" / "diff" / f"{c.key}.html").read_text(encoding="utf-8")
-    proof = (tmp_path / "pages" / "diff" / f"{c.key}-proof.html").read_text(encoding="utf-8")
+    (tmp_path / "pages" / "diff" / f"{c.key}-proof.html").read_text(encoding="utf-8")
     examined(1, "comparison")
     line = _line(what)
     assert line is not None and line.group(1) == "bad"
@@ -401,11 +437,15 @@ def test_a_comparison_with_an_unchecked_run_withholds_its_verdicts(tmp_path, exa
 
 # ------------------------------------------------------------------ 4. incidents land on Proof
 
+
 def test_incident_pages_link_runs_at_their_proof_view(built, examined):
     folder, _store, _seen = built
     pages = folder / "store" / "pages"
-    found = [(p, href) for p in [pages / "incidents.html", *(pages / "incidents").glob("*.html")]
-             for href in re.findall(r'href="([^"]*runs/[0-9a-f]{64}/[a-z]+\.html)"', p.read_text(encoding="utf-8"))]
+    found = [
+        (p, href)
+        for p in [pages / "incidents.html", *(pages / "incidents").glob("*.html")]
+        for href in re.findall(r'href="([^"]*runs/[0-9a-f]{64}/[a-z]+\.html)"', p.read_text(encoding="utf-8"))
+    ]
     examined(len(found), "run links on incident pages")
     assert found
     for page, href in found:
@@ -415,8 +455,10 @@ def test_incident_pages_link_runs_at_their_proof_view(built, examined):
 
 # ------------------------------------------------------------------ 1 and 5, in a static export
 
+
 def test_both_views_are_in_a_static_export_and_its_scan_passes(built, tmp_path, examined):
     from onetrace_console.export_static import export, external_requests
+
     folder, store, _seen = built
     ids = {r.run_id: r.key for r in store.runs()}
     keys = [ids[n] for n in (TAMPERED, *P7_PAIR)]
@@ -431,6 +473,7 @@ def test_both_views_are_in_a_static_export_and_its_scan_passes(built, tmp_path, 
 
 
 # ------------------------------------------------------------------ sabotages
+
 
 def test_sabotage_a_part_on_both_or_neither_view_is_named(built, examined):
     _folder, _store, seen = built
@@ -449,41 +492,69 @@ def test_sabotage_verdicts_left_on_what_changed_are_named(built, examined):
     ladder = re.search(r'<section data-section="ladder">.*?</section>', proof, re.S).group(0)
     examined(3, "planted views")
     assert withheld_problems(what + timeline, proof, "Contradicts its record")
-    assert any("ladder shown on What changed" in p
-               for p in withheld_problems(what.replace("</footer>", ladder + "</footer>", 1), proof,
-                                          "Contradicts its record"))
+    assert any(
+        "ladder shown on What changed" in p
+        for p in withheld_problems(what.replace("</footer>", ladder + "</footer>", 1), proof, "Contradicts its record")
+    )
     assert withheld_problems(what.replace('data-tone="bad"', 'data-tone="ok"'), proof, "Contradicts its record")
 
 
 def test_sabotage_an_answer_read_from_the_record_on_what_changed_is_named(built, examined):
     folder, store, seen = built
-    whole, what, proof = next((w, a, p) for kind, w, a, p in seen if kind == "run" and 'data-tone="bad"' in a
-                              and 'data-section="withheld"' in p)
+    whole, what, proof = next(
+        (w, a, p)
+        for kind, w, a, p in seen
+        if kind == "run" and 'data-tone="bad"' in a and 'data-section="withheld"' in p
+    )
     approved = re.search(r'<li data-head-rung="approved".*?</li>', proof, re.S).group(0)
     strip = proof[slice(*_elements(proof, 'class="strip')[0])]
     examined(5, "planted views")
-    assert any("approved shown" in p for p in kept_problems(
-        whole, what.replace('<li data-head-rung="signed"', approved + '<li data-head-rung="signed"', 1), proof,
-        "Contradicts its record"))
-    assert any("not kept" in p for p in kept_problems(
-        whole, re.sub(r'<li data-head-rung="signed".*?</li>', "", what, count=1, flags=re.S), proof,
-        "Contradicts its record"))
-    assert any("not one line" in p for p in kept_problems(
-        whole, without(what, 'data-withheld="true"'), proof, "Contradicts its record"))
-    assert any("reproduce" in p or "re-checked" in p for p in kept_problems(
-        whole, without(what, 'data-section="reproduce"'), proof, "Contradicts its record"))
-    assert any("strip shown" in p for p in kept_problems(
-        whole, what.replace("</footer>", strip + "</footer>", 1), proof, "Contradicts its record"))
+    assert any(
+        "approved shown" in p
+        for p in kept_problems(
+            whole,
+            what.replace('<li data-head-rung="signed"', approved + '<li data-head-rung="signed"', 1),
+            proof,
+            "Contradicts its record",
+        )
+    )
+    assert any(
+        "not kept" in p
+        for p in kept_problems(
+            whole,
+            re.sub(r'<li data-head-rung="signed".*?</li>', "", what, count=1, flags=re.S),
+            proof,
+            "Contradicts its record",
+        )
+    )
+    assert any(
+        "not one line" in p
+        for p in kept_problems(whole, without(what, 'data-withheld="true"'), proof, "Contradicts its record")
+    )
+    assert any(
+        "reproduce" in p or "re-checked" in p
+        for p in kept_problems(whole, without(what, 'data-section="reproduce"'), proof, "Contradicts its record")
+    )
+    assert any(
+        "strip shown" in p
+        for p in kept_problems(
+            whole, what.replace("</footer>", strip + "</footer>", 1), proof, "Contradicts its record"
+        )
+    )
 
 
 def test_sabotage_the_trail_s_command_dropped_or_another_line_shown_is_named(built, examined):
     _folder, _store, seen = built
-    whole, what, proof = next((w, a, p) for kind, w, a, p in seen if kind == "run" and 'data-tone="bad"' in a
-                              and 'data-section="withheld"' in p)
+    whole, what, proof = next(
+        (w, a, p)
+        for kind, w, a, p in seen
+        if kind == "run" and 'data-tone="bad"' in a and 'data-section="withheld"' in p
+    )
     lead = re.search(r'<div class="lead">.*?</div>', _trail(proof), re.S).group(0)
     examined(3, "planted views")
     assert any("shown 0 times" in p for p in repeat_problems(without(what, FROM_TRAIL), proof, whole))
-    assert any("a line of the trail" in p
-               for p in repeat_problems(what.replace("</footer>", lead + "</footer>", 1), proof, whole))
-    assert any("not the trail as drawn" in p
-               for p in repeat_problems(what, proof.replace(lead, "", 1), whole))
+    assert any(
+        "a line of the trail" in p
+        for p in repeat_problems(what.replace("</footer>", lead + "</footer>", 1), proof, whole)
+    )
+    assert any("not the trail as drawn" in p for p in repeat_problems(what, proof.replace(lead, "", 1), whole))

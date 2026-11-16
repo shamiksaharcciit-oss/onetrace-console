@@ -6,6 +6,7 @@ that library -- arrives later, with the first piece of work that needed one: a c
 has to have something listening on a port, and nothing before this asked for that. See
 `onetrace_console.serve`'s own docstring for why it took this long.
 """
+
 from __future__ import annotations
 
 import sys
@@ -19,7 +20,7 @@ onetrace-console {version}
   onetrace-console pins        what this build is pinned to
   onetrace-console demo [--open] [--port N] [--quiet]
                                record the demo's runs (small example pipelines, no
-                               network calls) into ./onetrace-console-demo, load them,
+                               network calls) into ./onetrace-console-demo-<version>, load them,
                                compare them, and serve them on 127.0.0.1, printing the
                                pages' addresses; each phase is said on stderr as it
                                happens, unless --quiet
@@ -27,7 +28,7 @@ onetrace-console {version}
                                the same demo, read-only: every write refused, a banner on
                                every page, built in a temporary folder and served on 127.0.0.1
   onetrace-console demo --public --build <new folder> [--runs-from <earlier build>]
-                   [--explanations <folder>] [--site-links <file>]
+                   [--explanations <folder>] [--site-links <file>] [--captures]
                                build the read-only demo into a new folder and exit; a
                                configuration with "public": true serves its store as it is.
                                --runs-from: an earlier build's runs, as its build record vouches
@@ -36,6 +37,9 @@ onetrace-console {version}
                                --site-links: the public site's links into the demo, one per
                                line; a listed comparison page named anew gets a page at its
                                old name
+                               --captures: the capture store (P10's runs whose model calls are
+                               captured at L3, example data) in place of the demo; also
+                               without --build, served as the public demo is
   onetrace-console <runs folder> [--compare A B] [--open] [--port N] [--quiet]
                    [--trust FILE] [--tsa-cert FILE --tsa-root FILE]
                                load every run folder in <runs folder> and serve them on
@@ -58,6 +62,16 @@ onetrace-console {version}
                                create <name>`); there is no web route that does this,
                                because "whoever reaches the first-run page first
                                becomes admin" is a takeover race, not a feature.
+  onetrace-console admin sessions end <account>
+                               end all of the account's sessions, in a running
+                               console too: each of its cookies gets the sign-in
+                               page at its next request.
+  onetrace-console admin unlock <account>
+                               clear the account's sign-in ceiling, in a running
+                               console too: new browsers may try its password again.
+  onetrace-console admin device-key rotate
+                               a new device key: every browser's known-browser
+                               cookie ends, and each signs in as a new browser.
   onetrace-console token create <principal>
                                create an ingester bearer token for <principal>.
                                Prints the raw token to stdout ONCE -- it is stored
@@ -90,6 +104,7 @@ def main(argv: list[str] | None = None) -> int:
         #: The lock ships inside the package, so an installed console can say what it was
         #: tested with; it is the repository's own lock, byte for byte (tests/test_packaging.py).
         from importlib.resources import files
+
         pins = files("onetrace_console") / "requirements.lock"
         if not pins.is_file():
             print("no requirements.lock in this installation", file=sys.stderr)
@@ -98,6 +113,7 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     if argv and argv[0] == "serve":
         from onetrace_console.serve import main as serve_main
+
         return serve_main(argv[1:])
     if argv and argv[:1] == ["admin"]:
         return _admin(argv[1:])
@@ -107,15 +123,18 @@ def main(argv: list[str] | None = None) -> int:
         return _export_static(argv[1:])
     if argv and argv[0] == "demo":
         from onetrace_console.folder_load import main as load_main
+
         return load_main(argv[1:], demo=True)
     if argv and not argv[0].startswith("-"):
         from pathlib import Path
+
         if not Path(argv[0]).exists():
             #: Neither a command nor a path: a mistyped command, said as that, not as a folder problem.
             print(f"onetrace-console: {argv[0]!r} is not a command or a folder", file=sys.stderr)
             print(USAGE.format(version=__version__), file=sys.stderr)
             return 2
         from onetrace_console.folder_load import main as load_main
+
         return load_main(argv, demo=False)
     print(USAGE.format(version=__version__), file=sys.stderr)
     return 2
@@ -125,14 +144,18 @@ def _config_or_none(*, writes: bool = False):
     """The configuration, or None once its refusal and fix are printed. A command that writes
     accounts or tokens is refused for a public configuration, which has neither."""
     from onetrace_console.config import ConfigError, load_from_env
+
     try:
         config = load_from_env()
     except ConfigError as e:
         print(f"refusing: {e}\nfix: {e.fix}", file=sys.stderr)
         return None
     if writes and config.public:
-        print("refusing: the configuration is public -- a read-only demo, with no accounts and no "
-              "tokens.\nfix: run this against a console that is not public.", file=sys.stderr)
+        print(
+            "refusing: the configuration is public -- a read-only demo, with no accounts and no "
+            "tokens.\nfix: run this against a console that is not public.",
+            file=sys.stderr,
+        )
         return None
     return config
 
@@ -148,6 +171,12 @@ def _admin(argv: list[str]) -> int:
     from onetrace_console.accounts import AccountError, AccountStore
     from onetrace_console.serve import ACCOUNTS_DIRNAME
 
+    if argv[:1] == ["sessions"]:
+        return _admin_sessions(argv[1:])
+    if argv[:1] == ["unlock"]:
+        return _admin_unlock(argv[1:])
+    if argv[:1] == ["device-key"]:
+        return _admin_device_key(argv[1:])
     if len(argv) != 2 or argv[0] != "create":
         print("usage: onetrace-console admin create <username>", file=sys.stderr)
         return 2
@@ -172,6 +201,73 @@ def _admin(argv: list[str]) -> int:
     return 0
 
 
+def _admin_sessions(argv: list[str]) -> int:
+    """`onetrace-console admin sessions end <account>`: ends all of the account's sessions. A running
+    console's sessions are in its memory, so the time is written beside the accounts and the console
+    reads it at each request: a session made before it gets the sign-in page."""
+    from pathlib import Path
+
+    from onetrace_console.accounts import AccountError, AccountStore
+    from onetrace_console.serve import ACCOUNTS_DIRNAME
+
+    if len(argv) != 2 or argv[0] != "end":
+        print("usage: onetrace-console admin sessions end <account>", file=sys.stderr)
+        return 2
+    config = _config_or_none(writes=True)
+    if config is None:
+        return 1
+    accounts = AccountStore(Path(config.store_root).resolve() / ACCOUNTS_DIRNAME)
+    try:
+        accounts.end_sessions(argv[1])
+    except AccountError as e:
+        print(f"refusing: {e}", file=sys.stderr)
+        return 1
+    print(f"ended every session of {argv[1]!r}: each gets the sign-in page at its next request")
+    return 0
+
+
+def _admin_unlock(argv: list[str]) -> int:
+    """`onetrace-console admin unlock <account>`: clears the account's sign-in ceiling. The time is
+    written beside the accounts; a running console clears the ceiling at the account's next attempt."""
+    from pathlib import Path
+
+    from onetrace_console.accounts import AccountError, AccountStore
+    from onetrace_console.serve import ACCOUNTS_DIRNAME
+
+    if len(argv) != 1:
+        print("usage: onetrace-console admin unlock <account>", file=sys.stderr)
+        return 2
+    config = _config_or_none(writes=True)
+    if config is None:
+        return 1
+    try:
+        AccountStore(Path(config.store_root).resolve() / ACCOUNTS_DIRNAME).unlock(argv[0])
+    except AccountError as e:
+        print(f"refusing: {e}", file=sys.stderr)
+        return 1
+    print(f"cleared the sign-in ceiling of {argv[0]!r}: new browsers may try its password again")
+    return 0
+
+
+def _admin_device_key(argv: list[str]) -> int:
+    """`onetrace-console admin device-key rotate`: a new device key beside the accounts. Every device
+    cookie made under the old one counts as none, in a running console too. The key is never shown."""
+    from pathlib import Path
+
+    from onetrace_console.device_cookie import rotate_key
+    from onetrace_console.serve import ACCOUNTS_DIRNAME
+
+    if argv != ["rotate"]:
+        print("usage: onetrace-console admin device-key rotate", file=sys.stderr)
+        return 2
+    config = _config_or_none(writes=True)
+    if config is None:
+        return 1
+    rotate_key(Path(config.store_root).resolve() / ACCOUNTS_DIRNAME)
+    print("rotated the device key: every device cookie has ended, and each browser signs in as a new one")
+    return 0
+
+
 def _token(argv: list[str]) -> int:
     """`onetrace-console token create <principal>` / `token revoke <id>`. Like
     `admin create`, this is CLI-only -- there is no web route that
@@ -179,8 +275,8 @@ def _token(argv: list[str]) -> int:
     """
     from pathlib import Path
 
-    from onetrace_console.serve import TOKENS_DIRNAME
     from onetrace_console.ingester_tokens import TokenError, TokenStore
+    from onetrace_console.serve import TOKENS_DIRNAME
 
     config = _config_or_none(writes=True)
     if config is None:
@@ -205,8 +301,7 @@ def _token(argv: list[str]) -> int:
             return 1
         print(f"revoked token {token_id!r}")
         return 0
-    print("usage: onetrace-console token create <principal> | token revoke <id>",
-         file=sys.stderr)
+    print("usage: onetrace-console token create <principal> | token revoke <id>", file=sys.stderr)
     return 2
 
 
@@ -240,8 +335,10 @@ def _export_static(argv: list[str]) -> int:
     print("project ids: 0")
     print("external requests: 0")
     if fence is None:
-        print("fence scan: not run here -- its terms never come to this machine; it runs over "
-              "this folder before anything is hosted")
+        print(
+            "fence scan: not run here -- its terms never come to this machine; it runs over "
+            "this folder before anything is hosted"
+        )
         return 0
     print(f"fence scan: {len(fence)}")
     for hit in fence:

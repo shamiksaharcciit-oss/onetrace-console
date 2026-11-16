@@ -10,6 +10,7 @@ viewer -- passed.
 `tests/test_install_pinned_fresh.py` holds this module to the standard library and runs the
 installer's lookup in a fresh venv with nothing installed.
 """
+
 from __future__ import annotations
 
 import os

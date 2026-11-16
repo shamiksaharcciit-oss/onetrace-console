@@ -5,6 +5,7 @@ Python the console runs from (`sys.executable`) and gives `pip install "onetrace
 in place of "not rendered". A public console still has no such page, and the routes that turn the
 feature on or off still do not exist without the extra.
 """
+
 from __future__ import annotations
 
 import html
@@ -46,9 +47,11 @@ def test_the_page_names_the_python_and_the_install_line(server, monkeypatch):
 
 def test_a_public_console_still_has_no_such_page(server, monkeypatch):
     from onetrace_console.serve import Handler
+
     base, _root = server
     _absent(monkeypatch)
     import dataclasses
+
     monkeypatch.setattr(Handler, "config", dataclasses.replace(Handler.config, public=True))
     status, page = _ask(base + "/neighbours/setup")
     assert status == 404 and "neighbours" not in page.replace("not rendered: neighbours/setup", "")
@@ -56,6 +59,7 @@ def test_a_public_console_still_has_no_such_page(server, monkeypatch):
 
 def test_the_page_never_shows_the_choice_or_a_setting():
     from onetrace_console.neighbours.pages import missing_page
+
     page = missing_page()
     assert 'data-section="choose"' not in page and 'data-section="setting"' not in page
     assert "huggingface" not in page

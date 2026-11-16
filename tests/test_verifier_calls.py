@@ -14,19 +14,25 @@ run recorded in format 0.3 a fourth (`--json --require-complete`), each with the
 trace with its runs root; and since onetrace 0.5.0, the decision files for a gated run, an inner run
 for an agent's, and the verifier named for the verbs.
 """
+
 from __future__ import annotations
 
 import subprocess
 import sys
-from pathlib import Path
 
 import pytest
 
 VERIFIER = "onetrace_verify.cli"
 SDK = "onetrace"
 #: How the verifier and the SDK's verbs refuse a call (not a run): each in its own words.
-REFUSED_CALL = ("unknown option", "one run folder or manifest per call", "unrecognized arguments",
-                "the following arguments are required", "invalid choice", "needs --trust FILE")
+REFUSED_CALL = (
+    "unknown option",
+    "one run folder or manifest per call",
+    "unrecognized arguments",
+    "the following arguments are required",
+    "invalid choice",
+    "needs --trust FILE",
+)
 
 
 def refusal(argv, returncode: int, stderr: str, *_) -> str:
@@ -47,20 +53,33 @@ def _recorded(monkeypatch) -> list[tuple[list[str], int, str, str]]:
         proc = real(cmd, *a, **k)
         argv = [str(c) for c in cmd] if isinstance(cmd, (list, tuple)) else []
         if argv[1:3] in (["-m", VERIFIER], ["-m", SDK]):
-            err, out = (s if isinstance(s, str) else (s or b"").decode("utf-8", "replace")
-                        for s in (proc.stderr, proc.stdout))
+            err, out = (
+                s if isinstance(s, str) else (s or b"").decode("utf-8", "replace") for s in (proc.stderr, proc.stdout)
+            )
             calls.append((argv, proc.returncode, err, out))
         return proc
+
     monkeypatch.setattr(subprocess, "run", run)
     return calls
 
 
 def _form(argv: list[str]) -> tuple[str, ...]:
     """A call's options, its values and folders left out: what it asks for."""
-    takes_value = {"--trust", "--tsa-cert", "--tsa-root", "--headers", "--out", "--runs-root",
-                   "--max-lines", "--verifier", "--decisions", "--permit-issuers", "--nested-run"}
+    takes_value = {
+        "--trust",
+        "--tsa-cert",
+        "--tsa-root",
+        "--headers",
+        "--out",
+        "--runs-root",
+        "--max-lines",
+        "--verifier",
+        "--decisions",
+        "--permit-issuers",
+        "--nested-run",
+    }
     out, skip = [argv[2]] + ([argv[3]] if argv[2] == SDK else []), False
-    for a in argv[4 if argv[2] == SDK else 3:]:
+    for a in argv[4 if argv[2] == SDK else 3 :]:
         if skip:
             skip = False
             continue
@@ -74,6 +93,7 @@ def _form(argv: list[str]) -> tuple[str, ...]:
 def demo_calls(tmp_path_factory):
     from onetrace_console.folder_load import build_public
     from tests.test_checks import _require_installed
+
     _require_installed()
     mp = pytest.MonkeyPatch()
     try:
@@ -89,6 +109,7 @@ def warranty_calls(store, tmp_path, monkeypatch):
     """The SDK's warranty pair, its runs checked with no trust file and compared: the comparison
     follows its changed corpus link, so the trace runs with its runs root."""
     from tests.test_board7 import _pair, _require_warranty
+
     _require_warranty()
     calls = _recorded(monkeypatch)
     _pair(store, tmp_path)
@@ -111,14 +132,18 @@ def test_the_calls_hold_each_form_the_console_builds(demo_calls, warranty_calls,
     forms = {_form(c[0]) for c in demo_calls + warranty_calls}
     examined(len(forms), "forms of call")
     want = {
-        (VERIFIER,), (VERIFIER, "--json"), (VERIFIER, "--json", "--require-artifacts"),
-        (VERIFIER, "--trust"), (VERIFIER, "--json", "--trust"),
+        (VERIFIER,),
+        (VERIFIER, "--json"),
+        (VERIFIER, "--json", "--require-artifacts"),
+        (VERIFIER, "--trust"),
+        (VERIFIER, "--json", "--trust"),
         (VERIFIER, "--json", "--require-artifacts", "--trust"),
         (VERIFIER, "--json", "--require-complete", "--trust"),
         #: Since onetrace 0.5.0: the verifier's copy beside the runs, named for the verbs; the
         #: decision files for a gated run's check; an inner run beside an agent's check and its
         #: comparison.
-        (SDK, "diff", "--verifier", "--out"), (SDK, "localize", "--verifier", "--out"),
+        (SDK, "diff", "--verifier", "--out"),
+        (SDK, "localize", "--verifier", "--out"),
         (SDK, "diff", "--text", "--json", "--no-follow", "--verifier", "--out"),
         (SDK, "diff", "--text", "--json", "--runs-root", "--verifier", "--out"),
         (VERIFIER, "--json", "--require-artifacts", "--trust", "--decisions", "--permit-issuers"),
@@ -128,25 +153,32 @@ def test_the_calls_hold_each_form_the_console_builds(demo_calls, warranty_calls,
     assert want <= forms, sorted(want - forms)
 
 
-def test_a_check_with_a_time_stamp_authority_s_files_is_a_call_the_verifier_accepts(tmp_path, monkeypatch,
-                                                                                    examined):
+def test_a_check_with_a_time_stamp_authority_s_files_is_a_call_the_verifier_accepts(tmp_path, monkeypatch, examined):
     from onetrace_console.checks import check
     from tests.test_checks import _require_installed
     from tests.test_diff_sdk_text_layer import _sdk_run
+
     _require_installed()
     _sdk_run(tmp_path / "run", "calls-tsa")
     for name in ("trust.json", "tsa-cert.pem", "tsa-root-1.pem", "tsa-root-2.pem"):
-        (tmp_path / name).write_text('{"format": "onetrace-trust/0.1", "keys": []}\n'
-                                     if name == "trust.json" else "not a certificate\n", encoding="utf-8")
+        (tmp_path / name).write_text(
+            '{"format": "onetrace-trust/0.1", "keys": []}\n' if name == "trust.json" else "not a certificate\n",
+            encoding="utf-8",
+        )
     calls = _recorded(monkeypatch)
-    check(tmp_path / "run", trust_file=str(tmp_path / "trust.json"), tsa_cert=str(tmp_path / "tsa-cert.pem"),
-          tsa_roots=[str(tmp_path / "tsa-root-1.pem"), str(tmp_path / "tsa-root-2.pem")])
+    check(
+        tmp_path / "run",
+        trust_file=str(tmp_path / "trust.json"),
+        tsa_cert=str(tmp_path / "tsa-cert.pem"),
+        tsa_roots=[str(tmp_path / "tsa-root-1.pem"), str(tmp_path / "tsa-root-2.pem")],
+    )
     examined(len(calls), "verifier calls")
     assert {_form(c[0]) for c in calls} == {
         (VERIFIER, "--trust", "--tsa-cert", "--tsa-root", "--tsa-root"),
         (VERIFIER, "--json", "--trust", "--tsa-cert", "--tsa-root", "--tsa-root"),
         (VERIFIER, "--json", "--require-artifacts", "--trust", "--tsa-cert", "--tsa-root", "--tsa-root"),
-        (VERIFIER, "--json", "--require-complete", "--trust", "--tsa-cert", "--tsa-root", "--tsa-root")}
+        (VERIFIER, "--json", "--require-complete", "--trust", "--tsa-cert", "--tsa-root", "--tsa-root"),
+    }
     assert [refusal(*c) for c in calls if refusal(*c)] == []
 
 
@@ -154,6 +186,7 @@ def row_names(stdout: str) -> set[str]:
     """The names of the rows a verifier call wrote: its --json rows, or its text's `[RESULT ] name`."""
     import json
     import re
+
     try:
         return {r["name"] for r in json.loads(stdout)["rows"]}
     except (ValueError, KeyError, TypeError):
@@ -161,8 +194,11 @@ def row_names(stdout: str) -> set[str]:
 
 
 #: The verifier's requirements, each an option a call must ask for, and the row it then adds.
-REQUIREMENTS = {"--require-signature": "signature required", "--require-trusted": "trusted signature required",
-                "--require-complete": "run complete"}
+REQUIREMENTS = {
+    "--require-signature": "signature required",
+    "--require-trusted": "trusted signature required",
+    "--require-complete": "run complete",
+}
 
 
 def test_the_console_asks_the_verifier_for_one_requirement_only(demo_calls, warranty_calls, examined):
@@ -177,8 +213,15 @@ def test_the_console_asks_the_verifier_for_one_requirement_only(demo_calls, warr
     assert asked == ["--require-complete"], asked
     alone = [c for c in calls if "--require-complete" in c[0]]
     assert all("--json" in c[0] and "--require-artifacts" not in c[0] for c in alone), [c[0][3:] for c in alone]
-    rows = sorted({row for c in calls if "--require-complete" not in c[0]
-                   for row in row_names(c[3]) if row in REQUIREMENTS.values()})
+    rows = sorted(
+        {
+            row
+            for c in calls
+            if "--require-complete" not in c[0]
+            for row in row_names(c[3])
+            if row in REQUIREMENTS.values()
+        }
+    )
     assert rows == [], "a requirement's row in a call that did not ask for it"
 
 
@@ -187,14 +230,19 @@ def test_sabotage_a_requirement_asked_for_adds_its_row(tmp_path, examined):
     text and in its --json rows."""
     from tests.test_checks import _require_installed
     from tests.test_diff_sdk_text_layer import _sdk_run
+
     _require_installed()
     _sdk_run(tmp_path, "calls-require")
     (tmp_path / "trust.json").write_text('{"format": "onetrace-trust/0.1", "keys": []}\n', encoding="utf-8")
     examined(2 * len(REQUIREMENTS), "planted calls")
     for option, row in REQUIREMENTS.items():
         for json_rows in ((), ("--json",)):
-            p = subprocess.run([sys.executable, "-m", VERIFIER, *json_rows, option, "--trust", "trust.json",
-                                "MANIFEST.json"], cwd=tmp_path, capture_output=True, text=True)
+            p = subprocess.run(
+                [sys.executable, "-m", VERIFIER, *json_rows, option, "--trust", "trust.json", "MANIFEST.json"],
+                cwd=tmp_path,
+                capture_output=True,
+                text=True,
+            )
             assert row in row_names(p.stdout), (option, json_rows, p.stdout)
 
 
@@ -205,6 +253,7 @@ def _page_commands() -> list[list[str]]:
 
     import onetrace_console.receipt_page as rp
     from onetrace_console.checks import REPEAT_COMMAND
+
     out = []
     for signed in (False, True):
         for methods in (set(), {"rfc3161"}, {"opentimestamps"}, {"rfc3161", "opentimestamps"}):
@@ -224,6 +273,7 @@ def _page_commands() -> list[list[str]]:
 def test_every_command_a_page_gives_a_reader_is_one_the_verifier_accepts(tmp_path, examined):
     from tests.test_checks import _require_installed
     from tests.test_diff_sdk_text_layer import _sdk_run
+
     _require_installed()
     _sdk_run(tmp_path, "calls-reader")
     commands = _page_commands()
@@ -236,12 +286,15 @@ def test_every_command_a_page_gives_a_reader_is_one_the_verifier_accepts(tmp_pat
     assert refused == []
 
 
-@pytest.mark.parametrize("args", [["--require-signatures", "MANIFEST.json"], ["MANIFEST.json", "second"],
-                                  ["--require-trusted", "MANIFEST.json"]],
-                         ids=["a mistyped option", "a second run argument", "a gate missing its trust file"])
+@pytest.mark.parametrize(
+    "args",
+    [["--require-signatures", "MANIFEST.json"], ["MANIFEST.json", "second"], ["--require-trusted", "MANIFEST.json"]],
+    ids=["a mistyped option", "a second run argument", "a gate missing its trust file"],
+)
 def test_sabotage_a_call_the_verifier_refuses_is_named(tmp_path, args, examined):
     from tests.test_checks import _require_installed
     from tests.test_diff_sdk_text_layer import _sdk_run
+
     _require_installed()
     _sdk_run(tmp_path, "calls-sabotage")
     argv = [sys.executable, "-m", VERIFIER, *args]

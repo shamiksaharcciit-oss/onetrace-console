@@ -12,6 +12,7 @@ atomically, after its sha256 matched); the next confirm checks each file by its 
 only what is missing or does not match. Nothing here is kept on disk: a restart forgets a fetch, and the
 page reads as off until the person confirms again.
 """
+
 from __future__ import annotations
 
 import threading
@@ -25,11 +26,12 @@ REFRESH_SECONDS = 2
 @dataclass
 class Fetch:
     """One store's fetch: the model, how many of its files are checked, and how it ended."""
+
     model: str
     total: int
     checked: int = 0
     running: bool = True
-    refused: str = ""             # the refusal, naming the file, once it failed
+    refused: str = ""  # the refusal, naming the file, once it failed
     thread: threading.Thread | None = field(default=None, repr=False)
 
 
@@ -72,6 +74,7 @@ def start(store, chosen: dict, *, who: str, confirmed: str, after=None, get=None
     The confirmation is checked here, before anything starts, so a wrong one refuses at once with
     nothing fetched. `AlreadyFetching` where one runs for this store."""
     from onetrace_console.neighbours import embedder, settings
+
     if confirmed != settings.confirmation(chosen):
         raise embedder.Refused("the confirmation does not name this embedder; nothing was turned on")
     model = embedder.MODELS[chosen["model"]]
@@ -91,6 +94,7 @@ def start(store, chosen: dict, *, who: str, confirmed: str, after=None, get=None
     def work() -> None:
         import sys
         import traceback
+
         try:
             embedder.fetch(embedder.models_root(store), model, progress=progress, **extra)
             settings.turn_on(store, chosen, who=who, confirmed=confirmed, **extra)
@@ -100,6 +104,7 @@ def start(store, chosen: dict, *, who: str, confirmed: str, after=None, get=None
             return
         except OSError as e:
             from onetrace_console.oserror import said
+
             with _LOCK:
                 state.refused, state.running = said(e), False
             return

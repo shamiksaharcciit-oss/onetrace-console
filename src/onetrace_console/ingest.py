@@ -2,9 +2,8 @@
 
     Server checks before storing anything: every file in the tar matches
     `SHA256SUMS`; the manifest's `chain_head` equals the header's; the `format` is one
-    the store implements (R16). Any failure -> `422` with the row that failed, in the
+    the store implements. Any failure -> `422` with the row that failed, in the
     verifier's own words. Nothing partial is ever stored.
-                                        -- the store and console design note, §1
 
 WHOSE WORDS THESE ARE
 ---------------------
@@ -15,7 +14,7 @@ verifier has been near the run; the verifier's words arrive from the check runne
 
 So the rows below are the **store's** words, in the verifier's row *grammar* so that one
 parser reads both, and each one names `delivery` as its subject so a reader is never
-misled about who found it. Recorded in DESIGN_GAPS.md rather than papered over: dressing
+misled about who found it. Said here rather than papered over: dressing
 our sentence as the verifier's would be the exact move this programme exists to refuse.
 
 THE ROW GRAMMAR
@@ -24,12 +23,10 @@ THE ROW GRAMMAR
 `verify.py` writes it. The viewer's strict reader parses it; a row that does not fit the
 grammar would make the report unreadable rather than be quietly displayed.
 """
+
 from __future__ import annotations
 
 import errno
-from onetrace_console.viewer.depth import MAX_JSON_DEPTH
-
-from onetrace_console.bounded_json import TooDeep, ingest_refusal, load_json_bounded
 import io
 import json
 import os
@@ -39,16 +36,17 @@ import sys
 import tarfile
 import tempfile
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import PurePosixPath
+from typing import cast
 
+from onetrace_console.bounded_json import TooDeep, ingest_refusal, load_json_bounded
 from onetrace_console.preview import PREVIEW_NOT_INGESTED, is_format_refusal, preview_not_run_row
-from onetrace_console.staging import (StagingError, ask_the_verifier, staging,
-                                      write_delivery)
-from onetrace_console.store import (SameFileError, StoredRun, Store, StoreError, digest,
-                                    folder_key, run_key)
+from onetrace_console.staging import StagingError, ask_the_verifier, staging, write_delivery
+from onetrace_console.store import SameFileError, Store, StoredRun, StoreError, digest, folder_key, run_key
+from onetrace_console.viewer.depth import MAX_JSON_DEPTH
 
-#: R16: a format the store implements. Not a guess -- these are the two strings the
+#: A format the store implements. Not a guess -- these are the two strings the
 #: emitter writes, measured from a run the SDK produced, and anything else is refused
 #: rather than read hopefully. A new format is a decision, not a surprise.
 #: Both minors of major 0, because both are real. Measured across the SDK's own bench at
@@ -57,10 +55,10 @@ from onetrace_console.store import (SameFileError, StoredRun, Store, StoreError,
 #: passes and notes `draft-00 checks not performed: record format is stage-receipt/0.0-preview
 #: (Appendix C)`, which is a NOT-RUN with a reason and not a refusal.
 #:
-#: Widened deliberately and recorded in DESIGN_GAPS.md, not drifted into: a store
+#: Widened deliberately, and said so here, not drifted into: a store
 #: that refused the format most of the SDK's own bench is written in would have refused the
 #: only pair that differs by converter version, which is what step 1's second check is about.
-#: R16 is unharmed -- an unknown major is still refused, now in the verifier's own words.
+#: The rule is unharmed -- an unknown major is still refused, now in the verifier's own words.
 #:
 #: 0.2 is accepted because it is what the pinned SDK writes, and the pinned
 #: verifier reads it (major 0). Until then this store refused every run the SDK it pins makes.
@@ -73,15 +71,30 @@ from onetrace_console.store import (SameFileError, StoredRun, Store, StoreError,
 #: the receipts here. An earlier format reads as before; one this list does not name is refused.
 #: 0.4 is what onetrace 0.7 writes, and onetrace-verify 0.7 reads it: every run it closes ends with
 #: a close receipt, which is not a step and is set aside as the verbs set it aside (`viewer.record`).
-MANIFEST_FORMATS = ("stage-receipt-chain/0.4", "stage-receipt-chain/0.3", "stage-receipt-chain/0.2",
-                    "stage-receipt-chain/0.1", "stage-receipt-chain/0.0-preview")
-RECEIPT_FORMATS = ("stage-receipt/0.4", "stage-receipt/0.3", "stage-receipt/0.2", "stage-receipt/0.1",
-                   "stage-receipt/0.0-preview")
+#: 0.5 is what onetrace 0.8 writes, and onetrace-verify 0.8 reads it. Its new members are shown as the
+#: check's own rows say them, as 0.3's are. A recovered close receipt (kind `close-recovered`) is not a
+#: close receipt, as the verbs read it, so it is not set aside.
+MANIFEST_FORMATS = (
+    "stage-receipt-chain/0.5",
+    "stage-receipt-chain/0.4",
+    "stage-receipt-chain/0.3",
+    "stage-receipt-chain/0.2",
+    "stage-receipt-chain/0.1",
+    "stage-receipt-chain/0.0-preview",
+)
+RECEIPT_FORMATS = (
+    "stage-receipt/0.5",
+    "stage-receipt/0.4",
+    "stage-receipt/0.3",
+    "stage-receipt/0.2",
+    "stage-receipt/0.1",
+    "stage-receipt/0.0-preview",
+)
 
 SUMS_NAME = "SHA256SUMS"
 MANIFEST_NAME = "MANIFEST.json"
 
-#: The design note's flag. A finding about the delivery, never a verdict about the record.
+#: A flag on a delivery: a finding about the delivery, never a verdict about the record.
 RUN_ID_REUSED = "run_id reused"
 
 #: The verifier's own row for the `chain_head` check -- one of the three pre-store checks
@@ -103,8 +116,10 @@ class DeliveryRefused(Exception):
 
 
 #: A held run the store is missing an object for, delivered again.
-HELD_MISSING = ("Not stored: this run is already held, but the console is missing {objects} for "
-                "it. A held record is never repaired. Remove the held run, then deliver it again.")
+HELD_MISSING = (
+    "Not stored: this run is already held, but the console is missing {objects} for "
+    "it. A held record is never repaired. Remove the held run, then deliver it again."
+)
 
 
 def row(subject: str, check: str, detail: str = "", result: str = "FAIL") -> str:
@@ -123,6 +138,7 @@ class Rejection:
     caller that wants them structured; `from_verifier` says whose words `body` is, because
     a reader must never have to guess that.
     """
+
     rows: tuple[str, ...]
     body: str = ""
     from_verifier: bool = False
@@ -136,6 +152,7 @@ class Accepted:
     `created` is False when the identity `(run_id, chain_head)` was already stored: the
     note says a repeat delivery is "acknowledged and not stored again".
     """
+
     run: StoredRun
     created: bool
     status: int = 201
@@ -149,7 +166,7 @@ def _is_link_or_special(member: tarfile.TarInfo) -> bool:
 
 
 #: A drive letter is not absolute to `PurePosixPath` or to `os.path.isabs` on a POSIX host
-#: (this container's own), so it is its own explicit check, item 1's third named case.
+#: (this container's own), so it is its own explicit check.
 #: A literal backslash is refused outright for the same reason: `PurePosixPath` does not
 #: treat it as a separator, so `"..\\..\\evil"` has no `..` **part** to catch even though
 #: it is a traversal attempt spelled the Windows way.
@@ -180,9 +197,9 @@ def same_file(name: str) -> str:
 #: The parts of a name Windows cannot hold: its device names (with or without an extension --
 #: `notes/NUL` was written to the null device, and the verifier never saw it), its reserved
 #: characters and the control characters, and a trailing dot or space, which it drops.
-_WINDOWS_DEVICES = frozenset({"CON", "PRN", "AUX", "NUL", "CONIN$", "CONOUT$"}
-                             | {f"{d}{n}" for d in ("COM", "LPT")
-                                for n in "123456789¹²³"})
+_WINDOWS_DEVICES = frozenset(
+    {"CON", "PRN", "AUX", "NUL", "CONIN$", "CONOUT$"} | {f"{d}{n}" for d in ("COM", "LPT") for n in "123456789¹²³"}
+)
 _WINDOWS_RESERVED = re.compile(r'[<>:"|?*\x00-\x1f]')
 #: The 8.3 short-name shape: `~` and digits ending the name before its extension, as in
 #: `01-ZET~1.JSO` or `RECEIP~1`. Windows answers to it for a longer name in the same folder, and
@@ -228,8 +245,7 @@ def _unholdable(name: str) -> str | None:
         if bad:
             return f"holds {bad.group(0)!r}, which is not allowed in a name on this host"
         if _WINDOWS_SHORT_NAME.search(part):
-            return (f"has the part {part!r} in the 8.3 short-name shape, which this host may "
-                    f"read as another file's name")
+            return f"has the part {part!r} in the 8.3 short-name shape, which this host may read as another file's name"
         if part.endswith((".", " ")):
             return "has a part ending in a dot or a space, which this host drops"
         if part.split(".")[0].rstrip(" ").upper() in _WINDOWS_DEVICES:
@@ -285,31 +301,43 @@ def read_tar(data: bytes, *, limits=None) -> dict[str, bytes]:
             for member in tar.getmembers():
                 member_count += 1
                 if member_count > limits.max_members:
-                    raise DeliveryRefused([row(
-                        "delivery", "the archive holds no more than the configured member limit",
-                        f"more than {limits.max_members} members")])
+                    raise DeliveryRefused(
+                        [
+                            row(
+                                "delivery",
+                                "the archive holds no more than the configured member limit",
+                                f"more than {limits.max_members} members",
+                            )
+                        ]
+                    )
 
                 reason = _unsafe_path(member.name)
                 if reason is not None:
-                    rows.append(row("delivery", "archive paths stay inside the run",
-                                    f"{member.name!r} {reason}"))
+                    rows.append(row("delivery", "archive paths stay inside the run", f"{member.name!r} {reason}"))
                     continue
                 if member.isdir():
                     continue
                 reason = _unholdable(member.name)
                 if reason is not None:
-                    rows.append(row("delivery", "each archive path is a name this host can hold",
-                                    f"{member.name!r} {reason}"))
+                    rows.append(
+                        row("delivery", "each archive path is a name this host can hold", f"{member.name!r} {reason}")
+                    )
                     continue
                 if _is_link_or_special(member):
-                    rows.append(row("delivery", "archive holds only regular files",
-                                    f"{member.name!r} is a "
-                                    f"{'symlink' if member.issym() else 'hardlink' if member.islnk() else 'device file' if member.isdev() else 'FIFO'}, "
-                                    f"not a regular file"))
+                    rows.append(
+                        row(
+                            "delivery",
+                            "archive holds only regular files",
+                            f"{member.name!r} is a "
+                            f"{'symlink' if member.issym() else 'hardlink' if member.islnk() else 'device file' if member.isdev() else 'FIFO'}, "
+                            f"not a regular file",
+                        )
+                    )
                     continue
                 if not member.isfile():
-                    rows.append(row("delivery", "archive holds only regular files",
-                                    f"{member.name!r} is not a regular file"))
+                    rows.append(
+                        row("delivery", "archive holds only regular files", f"{member.name!r} is not a regular file")
+                    )
                     continue
 
                 #: Size, checked from the header -- before `extractfile().read()` -- both
@@ -317,16 +345,26 @@ def read_tar(data: bytes, *, limits=None) -> dict[str, bytes]:
                 #: individually small but numerous (or one huge member) is refused before
                 #: its bytes are read either way. This is the archive-bomb guard.
                 if member.size > limits.max_member_size:
-                    raise DeliveryRefused([row(
-                        "delivery", "each member stays inside the configured size limit",
-                        f"{member.name!r} declares {member.size} bytes, "
-                        f"over the {limits.max_member_size}-byte limit")])
+                    raise DeliveryRefused(
+                        [
+                            row(
+                                "delivery",
+                                "each member stays inside the configured size limit",
+                                f"{member.name!r} declares {member.size} bytes, "
+                                f"over the {limits.max_member_size}-byte limit",
+                            )
+                        ]
+                    )
                 if total_size + member.size > limits.max_total_extracted_size:
-                    raise DeliveryRefused([row(
-                        "delivery",
-                        "the archive's total extracted size stays inside the configured limit",
-                        f"over {limits.max_total_extracted_size} bytes once "
-                        f"{member.name!r} is included")])
+                    raise DeliveryRefused(
+                        [
+                            row(
+                                "delivery",
+                                "the archive's total extracted size stays inside the configured limit",
+                                f"over {limits.max_total_extracted_size} bytes once {member.name!r} is included",
+                            )
+                        ]
+                    )
 
                 #: The standard library's own filter, in addition to the two explicit
                 #: checks above -- re-derives path safety by resolving the real
@@ -337,36 +375,46 @@ def read_tar(data: bytes, *, limits=None) -> dict[str, bytes]:
                 except (tarfile.FilterError, ValueError) as e:
                     #: ValueError too: on Windows the filter's `ntpath.commonpath` raises it for
                     #: `notes/a:b.txt`, and the upload answered 500.
-                    rows.append(row("delivery", "the archive passes the safe-extraction filter",
-                                    f"{member.name!r}: {type(e).__name__}: {e}"))
+                    rows.append(
+                        row(
+                            "delivery",
+                            "the archive passes the safe-extraction filter",
+                            f"{member.name!r}: {type(e).__name__}: {e}",
+                        )
+                    )
                     continue
 
                 handle = tar.extractfile(member)
-                if handle is None:                       # pragma: no cover - defensive
-                    rows.append(row("delivery", "every file in the archive is readable",
-                                    f"{member.name!r} could not be read"))
+                if handle is None:  # pragma: no cover - defensive
+                    rows.append(
+                        row("delivery", "every file in the archive is readable", f"{member.name!r} could not be read")
+                    )
                     continue
                 name = PurePosixPath(member.name).as_posix()
                 #: Compared as this host resolves them: on Windows `notes/A.txt`
                 #: and `notes/a.txt` are one file, and staging wrote the second over the first.
                 if same_file(name) in first_named:
                     first = first_named[same_file(name)]
-                    rows.append(row("delivery", "each path appears once",
-                                    f"{name!r} appears more than once" if first == name else
-                                    f"{name!r} names the same file as {first!r} on this host"))
+                    rows.append(
+                        row(
+                            "delivery",
+                            "each path appears once",
+                            f"{name!r} appears more than once"
+                            if first == name
+                            else f"{name!r} names the same file as {first!r} on this host",
+                        )
+                    )
                     continue
                 first_named[same_file(name)] = name
                 blob = handle.read()
                 total_size += len(blob)
                 out[name] = blob
     except tarfile.TarError as e:
-        raise DeliveryRefused([row("delivery", "the archive can be read",
-                                   f"{type(e).__name__}: {e}")]) from None
+        raise DeliveryRefused([row("delivery", "the archive can be read", f"{type(e).__name__}: {e}")]) from None
     if rows:
         raise DeliveryRefused(rows)
     if not out:
-        raise DeliveryRefused([row("delivery", "the archive holds a run",
-                                   "the archive is empty")])
+        raise DeliveryRefused([row("delivery", "the archive holds a run", "the archive is empty")])
     return out
 
 
@@ -392,18 +440,16 @@ def parse_sums(text: bytes, *, name: str = SUMS_NAME) -> dict[str, str]:
             continue
         m = _SUMS_LINE.fullmatch(line)
         if m is None:
-            raise DeliveryRefused([row(name, "each line is a digest and a path",
-                                       f"cannot read {line!r}")])
+            raise DeliveryRefused([row(name, "each line is a digest and a path", f"cannot read {line!r}")])
         path = m["path"].replace("\\", "/")
         if path in first_line:
-            raise DeliveryRefused([row(name, "each path is listed once",
-                                       f"{path!r} is listed twice: {first_line[path]!r} and "
-                                       f"{line!r}")])
+            raise DeliveryRefused(
+                [row(name, "each path is listed once", f"{path!r} is listed twice: {first_line[path]!r} and {line!r}")]
+            )
         first_line[path] = line
         sums[path] = m["want"]
     if not sums:
-        raise DeliveryRefused([row(name, "the sums file lists the run's files",
-                                   "it lists nothing")])
+        raise DeliveryRefused([row(name, "the sums file lists the run's files", "it lists nothing")])
     return sums
 
 
@@ -426,41 +472,39 @@ def check_sums(files: dict[str, bytes]) -> list[str]:
             continue
         got = digest(payload[path])
         if got != want:
-            rows.append(row(path, "bytes match the sums file",
-                            f"sha256 {got} does not match {want}"))
+            rows.append(row(path, "bytes match the sums file", f"sha256 {got} does not match {want}"))
     for path in sorted(set(payload) - set(sums)):
-        rows.append(row(path, f"the file is listed in {SUMS_NAME}",
-                        "it is present but unlisted"))
+        rows.append(row(path, f"the file is listed in {SUMS_NAME}", "it is present but unlisted"))
     return rows
 
 
 def _manifest(files: dict[str, bytes]) -> dict:
     if MANIFEST_NAME not in files:
-        raise DeliveryRefused([row("delivery", f"the delivery carries {MANIFEST_NAME}",
-                                   "it is not in the archive")])
+        raise DeliveryRefused([row("delivery", f"the delivery carries {MANIFEST_NAME}", "it is not in the archive")])
     try:
         obj = load_json_bounded(files[MANIFEST_NAME].decode("utf-8"), MANIFEST_NAME)
     except TooDeep:
         #: The run is refused, in the fixed words, the number from the constant.
-        raise DeliveryRefused([row(MANIFEST_NAME, f"nested at most {MAX_JSON_DEPTH} levels deep",
-                                   ingest_refusal(MANIFEST_NAME))]) from None
+        raise DeliveryRefused(
+            [row(MANIFEST_NAME, f"nested at most {MAX_JSON_DEPTH} levels deep", ingest_refusal(MANIFEST_NAME))]
+        ) from None
     except (UnicodeDecodeError, json.JSONDecodeError, RecursionError) as e:
         #: RecursionError too: a manifest nested past what JSON can read cannot be parsed
-        #: (the 422 set's (b)), and answered 500 (the second confirmation review, N6).
-        raise DeliveryRefused([row(MANIFEST_NAME, "the manifest is readable JSON",
-                                   f"{type(e).__name__}: {e}")]) from None
+        #: (the 422 set's (b)), and was once answered 500.
+        raise DeliveryRefused(
+            [row(MANIFEST_NAME, "the manifest is readable JSON", f"{type(e).__name__}: {e}")]
+        ) from None
     if not isinstance(obj, dict):
-        raise DeliveryRefused([row(MANIFEST_NAME, "the manifest is an object",
-                                   f"it is a {type(obj).__name__}")])
+        raise DeliveryRefused([row(MANIFEST_NAME, "the manifest is an object", f"it is a {type(obj).__name__}")])
     #: A lone surrogate escape in the manifest's identity -- valid JSON syntax, not text -- is
-    #: refused: an identity must be well formed, and it answered 500 (the third confirmation
-    #: review, NEW-2). Only there: anywhere else in the record, a surrogate
+    #: refused: an identity must be well formed, and it answered 500. Only there: anywhere else in the record, a surrogate
     #: is stored as delivered and shown escaped.
     for field in ("run_id", "chain_head"):
         value = obj.get(field)
         if isinstance(value, str) and not _is_text(value):
-            raise DeliveryRefused([row(MANIFEST_NAME, "the manifest's text is valid UTF-8",
-                                       f"its {field} holds a lone surrogate escape")])
+            raise DeliveryRefused(
+                [row(MANIFEST_NAME, "the manifest's text is valid UTF-8", f"its {field} holds a lone surrogate escape")]
+            )
     return obj
 
 
@@ -492,8 +536,9 @@ def last_attempt_failed(attempts: list[tuple], declared: list) -> list[list[str]
     last: dict = {}
     for name, outcome, *rest in attempts:
         last[name] = (outcome, rest[0] if rest else "")
-    return [[name, last[name][1] or ""] for name in dict.fromkeys(declared)
-            if name in last and last[name][0] == "error"]
+    return [
+        [name, last[name][1] or ""] for name in dict.fromkeys(declared) if name in last and last[name][0] == "error"
+    ]
 
 
 def declined_at(attempts: list[tuple], declared: list) -> dict | None:
@@ -511,8 +556,11 @@ def declined_at(attempts: list[tuple], declared: list) -> dict | None:
     if outcome != "refused" or not isinstance(name, str):
         return None
     seen = {a[0] for a in attempts}
-    return {"stage": name, "reason": reason if isinstance(reason, str) else "",
-            "left": [d for d in dict.fromkeys(declared) if d not in seen]}
+    return {
+        "stage": name,
+        "reason": reason if isinstance(reason, str) else "",
+        "left": [d for d in dict.fromkeys(declared) if d not in seen],
+    }
 
 
 def _declared_by(receipt: dict, declared: list[str], seen: set[str]) -> None:
@@ -523,8 +571,9 @@ def _declared_by(receipt: dict, declared: list[str], seen: set[str]) -> None:
     the escaped form a page shows it in: the store's records are UTF-8."""
     from onetrace_console.viewer.page import display
     from onetrace_console.viewer.record import stage_names
+
     names = stage_names(receipt, "declared_stages")
-    for name in (names if isinstance(names, list) else ()):
+    for name in names if isinstance(names, list) else ():
         if isinstance(name, str) and name not in seen:
             seen.add(name)
             declared.append(name if _is_text(name) else display(name))
@@ -541,19 +590,27 @@ def _is_text(value: str) -> bool:
 def _member_named(e: OSError, run_folder) -> str:
     """The delivery's own path for the file a staging write failed on, never the server's."""
     from pathlib import Path
+
     try:
         return repr(Path(e.filename).relative_to(run_folder).as_posix())
     except (TypeError, ValueError):
         return "one of its names"
 
 
-def accept(data: bytes, store: Store, *, headers: dict[str, str] | None = None,
-           received_at: str | None = None, limits=None, run_folder: str = "",
-           shared_head: bool = False) -> Accepted | Rejection:
+def accept(
+    data: bytes,
+    store: Store,
+    *,
+    headers: dict[str, str] | None = None,
+    received_at: str | None = None,
+    limits=None,
+    run_folder: str = "",
+    shared_head: bool = False,
+) -> Accepted | Rejection:
     """Validate a delivery completely, then store it completely, or store nothing.
 
-    `headers` may carry `run_id`, `chain_head` and `format`. The design note has the
-    server compare the manifest's `chain_head` against the header's. Headers are optional
+    `headers` may carry `run_id`, `chain_head` and `format`. The rule is that the
+    server compares the manifest's `chain_head` against the header's. Headers are optional
     here and **checked when present**: a delivery that supplies one and disagrees with its
     own manifest is refused, and a delivery that supplies none is read from the manifest.
     Requiring them would reject a valid run for want of a duplicate of what it contains;
@@ -576,8 +633,9 @@ def accept(data: bytes, store: Store, *, headers: dict[str, str] | None = None,
 
     fmt = manifest.get("format")
     if fmt not in MANIFEST_FORMATS:
-        rows.append(row(MANIFEST_NAME, "format is one this store implements",
-                        f"{fmt!r} is not among {list(MANIFEST_FORMATS)}"))
+        rows.append(
+            row(MANIFEST_NAME, "format is one this store implements", f"{fmt!r} is not among {list(MANIFEST_FORMATS)}")
+        )
     #: `run_id` and `chain_head` ABSENT is case (b), "the format cannot be parsed": the
     #: declared format requires both, and a manifest without them cannot be read as that
     #: format at all -- there is no identity to store the run under. That is a different
@@ -585,11 +643,9 @@ def accept(data: bytes, store: Store, *, headers: dict[str, str] | None = None,
     run_id = manifest.get("run_id")
     chain_head = manifest.get("chain_head")
     if not isinstance(run_id, str) or not run_id:
-        rows.append(row(MANIFEST_NAME, "the format's required run_id can be read",
-                        f"it carries {run_id!r}"))
+        rows.append(row(MANIFEST_NAME, "the format's required run_id can be read", f"it carries {run_id!r}"))
     if not isinstance(chain_head, str) or not chain_head:
-        rows.append(row(MANIFEST_NAME, "the format's required chain_head can be read",
-                        f"it carries {chain_head!r}"))
+        rows.append(row(MANIFEST_NAME, "the format's required chain_head can be read", f"it carries {chain_head!r}"))
 
     chain = manifest.get("chain")
 
@@ -609,7 +665,8 @@ def accept(data: bytes, store: Store, *, headers: dict[str, str] | None = None,
     header_disagreements = tuple(
         f"header {name}={headers[name]!r} disagrees with the manifest's {value!r}"
         for name, value in (("run_id", run_id), ("chain_head", chain_head), ("format", fmt))
-        if headers.get(name) is not None and headers[name] != value)
+        if headers.get(name) is not None and headers[name] != value
+    )
 
     #: Only the files the manifest's `chain` names are receipts. Checking every `*.json`
     #: in the delivery instead would reject a run folder that carries a verb report
@@ -635,6 +692,7 @@ def accept(data: bytes, store: Store, *, headers: dict[str, str] | None = None,
     #: The close receipt that ends a 0.4 chain is not a step (`viewer.record.is_close`): it is
     #: neither a stage delivered nor an attempt, and the stage it declares is not one of the run's.
     from onetrace_console.viewer.record import is_close
+
     last_entry = len(chain) - 1 if isinstance(chain, list) else -1
     for i, entry in enumerate(chain if isinstance(chain, list) else []):
         if not isinstance(entry, dict):
@@ -642,7 +700,7 @@ def accept(data: bytes, store: Store, *, headers: dict[str, str] | None = None,
         path = entry.get("file")
         held = by_file.get(same_file(path)) if isinstance(path, str) else None
         if held is None or held in read:
-            continue          # a missing chain file is the verifier's finding, after storing
+            continue  # a missing chain file is the verifier's finding, after storing
         read.add(held)
         try:
             receipt = load_json_bounded(files[held].decode("utf-8"), held)
@@ -651,13 +709,18 @@ def accept(data: bytes, store: Store, *, headers: dict[str, str] | None = None,
             rows.append(row(held, f"nested at most {MAX_JSON_DEPTH} levels deep", ingest_refusal(held)))
             continue
         except (UnicodeDecodeError, json.JSONDecodeError, RecursionError):
-            continue          # the verifier's business, and it will say so after storing
+            continue  # the verifier's business, and it will say so after storing
         if not isinstance(receipt, dict):
             continue
         receipt_format = receipt.get("format")
         if receipt_format is not None and receipt_format not in RECEIPT_FORMATS:
-            rows.append(row(held, "format is one this store implements",
-                            f"{receipt_format!r} is not among {list(RECEIPT_FORMATS)}"))
+            rows.append(
+                row(
+                    held,
+                    "format is one this store implements",
+                    f"{receipt_format!r} is not among {list(RECEIPT_FORMATS)}",
+                )
+            )
         if receipt_format in RECEIPT_FORMATS and i == last_entry and i > 0 and is_close(receipt):
             pass
         elif receipt_format in RECEIPT_FORMATS:
@@ -665,8 +728,12 @@ def accept(data: bytes, store: Store, *, headers: dict[str, str] | None = None,
             #: `SHA256SUMS` named in the chain read "3 of 3 delivered").
             receipts.add(held)
             stage, outcome = receipt.get("stage"), receipt.get("outcome")
-            attempts.append((stage.get("name") if isinstance(stage, dict) else None,
-                             outcome.get("class") if isinstance(outcome, dict) else None))
+            attempts.append(
+                (
+                    stage.get("name") if isinstance(stage, dict) else None,
+                    outcome.get("class") if isinstance(outcome, dict) else None,
+                )
+            )
         _declared_by(receipt, declared, seen_declared)
 
     #: The three pre-store checks run in a scratch
@@ -683,7 +750,7 @@ def accept(data: bytes, store: Store, *, headers: dict[str, str] | None = None,
     #:   unknown manifest format -> exit 0, AND NO ROW AT ALL
     #:
     #: The last one is why `from_verifier` exists. The reference verifier does not check a
-    #: manifest's format, so for an R16 refusal there is no verifier message to return and
+    #: manifest's format, so for a format refusal there is no verifier message to return and
     #: the body is this store's words, saying so. Reported rather than papered over: a 422
     #: that claimed to be the verifier's sentence when it was ours would be undetectable
     #: from outside, which is the whole reason a refusal carries the verifier's.
@@ -695,7 +762,7 @@ def accept(data: bytes, store: Store, *, headers: dict[str, str] | None = None,
                 said = ask_the_verifier(folder)
             except subprocess.TimeoutExpired:
                 #: A verifier that did not finish is neither damage nor an unknown format, so
-                #: it is not in the 422 set (the third confirmation review, NEW-5): the
+                #: it is not in the 422 set: the
                 #: delivery is stored, and its own check says what it can.
                 said = None
             except SameFileError as e:
@@ -707,19 +774,26 @@ def accept(data: bytes, store: Store, *, headers: dict[str, str] | None = None,
                 if isinstance(e, OSError) and _refused_for_its_name(e):
                     #: A name this host would not write, that `_unholdable` did not foresee:
                     #: the set's (b), as there, named by the delivery's own path.
-                    rows.append(row("delivery", "each archive path is a name this host can hold",
-                                    f"{_member_named(e, scratch / 'run')}: {e.strerror or e}"))
+                    rows.append(
+                        row(
+                            "delivery",
+                            "each archive path is a name this host can hold",
+                            f"{_member_named(e, scratch / 'run')}: {e.strerror or e}",
+                        )
+                    )
                 else:
-                    #: Named without the server's own paths (the third review, NEW-12).
+                    #: Named without the server's own paths.
                     why = e.strerror if isinstance(e, OSError) and e.strerror else e
-                    rows.append(row("delivery", "the delivery can be examined",
-                                    f"{type(e).__name__}: {why}"))
+                    rows.append(row("delivery", "the delivery can be examined", f"{type(e).__name__}: {why}"))
     except StagingError:
         #: The staging area could not be deleted afterwards. Raised past ingest, it answered 500
         #: naming the server's temp path. Logged for the operator, without
         #: the path; what the delivery was found to be stands.
-        print("ingest: a staging area could not be deleted after an upload; look for a "
-              "leftover onetrace staging folder in this host's temp folder", file=sys.stderr)
+        print(
+            "ingest: a staging area could not be deleted after an upload; look for a "
+            "leftover onetrace staging folder in this host's temp folder",
+            file=sys.stderr,
+        )
     # Staging is gone by here, on every path, accepted or rejected, or the log says it is not.
 
     #: **The 422 set is exactly two things**, and `chain_head` is not one of them:
@@ -740,17 +814,18 @@ def accept(data: bytes, store: Store, *, headers: dict[str, str] | None = None,
     #: will move without it. When the verifier drops a format, the store stops ingesting it
     #: the same day, and the 422 carries the verifier's own words.
     if is_format_refusal(said):
-        rows.append(row(MANIFEST_NAME, "the pinned verifier checks this format",
-                        f"the verifier refused {fmt!r}"))
+        rows.append(row(MANIFEST_NAME, "the pinned verifier checks this format", f"the verifier refused {fmt!r}"))
     #: A delivery the 0.2.0 verifier does not check (the preview format) is
     #: not ingested. The body is one console sentence, then the verifier's own row, verbatim --
     #: not the verifier's whole text, so it is not attributed to the verifier.
     preview_row = None if rows else preview_not_run_row(said)
     if preview_row is not None:
-        rows.append(row(MANIFEST_NAME, "the pinned verifier checks this format",
-                        f"the verifier does not check {fmt!r}"))
-        return Rejection(rows=tuple(rows) + (preview_row,),
-                         body=f"{PREVIEW_NOT_INGESTED}\n{preview_row}\n", from_verifier=False)
+        rows.append(
+            row(MANIFEST_NAME, "the pinned verifier checks this format", f"the verifier does not check {fmt!r}")
+        )
+        return Rejection(
+            rows=tuple(rows) + (preview_row,), body=f"{PREVIEW_NOT_INGESTED}\n{preview_row}\n", from_verifier=False
+        )
 
     if rows:
         if said is not None and said.refused:
@@ -758,31 +833,29 @@ def accept(data: bytes, store: Store, *, headers: dict[str, str] | None = None,
             #: Our own rows ride alongside for a caller that wants
             #: them structured; they are never merged into the body, because merging would
             #: put this channel's sentences inside a message attributed to the verifier.
-            return Rejection(rows=tuple(rows) + said.failed_rows(),
-                             body=said.text, from_verifier=True)
+            return Rejection(rows=tuple(rows) + said.failed_rows(), body=said.text, from_verifier=True)
         return Rejection(tuple(rows), body="\n".join(rows) + "\n", from_verifier=False)
 
-    key = (folder_key(run_id, chain_head, run_folder) if run_folder and shared_head
-           else run_key(run_id, chain_head))
+    #: No row refused them: each is a non-empty string, the format one this store implements.
+    run_id, chain_head, fmt = cast(str, run_id), cast(str, chain_head), cast(str, fmt)
+    key = folder_key(run_id, chain_head, run_folder) if run_folder and shared_head else run_key(run_id, chain_head)
     try:
-        held = store.get_run(key)
+        stored = store.get_run(key)
     except StoreError as e:
         #: The store holds this run's record and cannot read it (this once answered 500).
         #: Not the delivery's fault, so not a 422; a conflict with what is stored, said, and
         #: nothing stored or overwritten: a record is never repaired.
         rows = [row("store", "the stored record of this run can be read", str(e))]
         return Rejection(tuple(rows), body="\n".join(rows) + "\n", status=409)
-    if held is not None:
-        gone = store.missing(held)
+    if stored is not None:
+        gone = store.missing(stored)
         if gone:
             #: A held run missing an object is refused, in its words, and
             #: nothing is stored: a held record is never repaired.
-            rows = [row("store", "the stored record of this run holds every object it names",
-                        ", ".join(gone))]
-            return Rejection(tuple(rows), body=HELD_MISSING.format(objects=", ".join(gone)) + "\n",
-                             status=409)
+            rows = [row("store", "the stored record of this run holds every object it names", ", ".join(gone))]
+            return Rejection(tuple(rows), body=HELD_MISSING.format(objects=", ".join(gone)) + "\n", status=409)
         # "A second delivery with the same identity is acknowledged and not stored again."
-        return Accepted(run=held, created=False, status=200)
+        return Accepted(run=stored, created=False, status=200)
 
     flags: list[str] = []
     if any(r.chain_head != chain_head for r in store.runs_with_id(run_id)):
@@ -806,7 +879,7 @@ def accept(data: bytes, store: Store, *, headers: dict[str, str] | None = None,
         chain_head=chain_head,
         format=fmt,
         listing=tuple(listing),
-        received_at=received_at or datetime.now(timezone.utc).isoformat(timespec="seconds"),
+        received_at=received_at or datetime.now(UTC).isoformat(timespec="seconds"),
         flags=tuple(flags),
         pipeline=digest(files[MANIFEST_NAME]),
         declared_stages=tuple(declared[:LIST_CAP]),
@@ -837,8 +910,12 @@ def bundle(run: StoredRun, store: Store, *, public: bool = False) -> bytes:
     would make a reader wonder which copy was the evidence.
     """
     from onetrace_console.kept_inputs import FOLDER, example_allowed
-    left_out = ({path for path, key in run.listing if _under(path, FOLDER)
-                 and not example_allowed("sha256:" + key)} if public else set())
+
+    left_out = (
+        {path for path, key in run.listing if _under(path, FOLDER) and not example_allowed("sha256:" + key)}
+        if public
+        else set()
+    )
     buf = io.BytesIO()
     with tarfile.open(fileobj=buf, mode="w") as tar:
         for path, key in run.listing:
@@ -847,9 +924,11 @@ def bundle(run: StoredRun, store: Store, *, public: bool = False) -> bytes:
             blob = store.get(key)
             if public and same_file(path) == same_file(SUMS_NAME):
                 gone = {same_file(p) for p in left_out}
-                blob = b"".join(line for line in blob.splitlines(keepends=True)
-                                if not (_under(_summed_name(line), FOLDER)
-                                        and same_file(_summed_name(line)) in gone))
+                blob = b"".join(
+                    line
+                    for line in blob.splitlines(keepends=True)
+                    if not (_under(_summed_name(line), FOLDER) and same_file(_summed_name(line)) in gone)
+                )
             info = tarfile.TarInfo(name=path)
             info.size = len(blob)
             info.mtime = 0

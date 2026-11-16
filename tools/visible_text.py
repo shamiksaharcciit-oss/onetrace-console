@@ -20,6 +20,7 @@ console's own chrome and is left out.
 
     python tools/visible_text.py <out.json>     # writes {page: [block, ...]} for this tree
 """
+
 from __future__ import annotations
 
 import json
@@ -32,13 +33,49 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parent.parent
 GENERATED_AT = "2026-10-01T12:00:00+00:00"
 
-BLOCK = {"p", "div", "section", "article", "header", "footer", "main", "nav", "aside", "li",
-         "ul", "ol", "table", "tr", "td", "th", "thead", "tbody", "h1", "h2", "h3", "h4", "h5",
-         "h6", "pre", "details", "summary", "dl", "dt", "dd", "figure", "figcaption", "form",
-         "label", "br", "hr", "blockquote", "caption",
-         #: An SVG <text> is one box's label in the execution graph: its own
-         #: block, not run together with the next box's.
-         "text"}
+BLOCK = {
+    "p",
+    "div",
+    "section",
+    "article",
+    "header",
+    "footer",
+    "main",
+    "nav",
+    "aside",
+    "li",
+    "ul",
+    "ol",
+    "table",
+    "tr",
+    "td",
+    "th",
+    "thead",
+    "tbody",
+    "h1",
+    "h2",
+    "h3",
+    "h4",
+    "h5",
+    "h6",
+    "pre",
+    "details",
+    "summary",
+    "dl",
+    "dt",
+    "dd",
+    "figure",
+    "figcaption",
+    "form",
+    "label",
+    "br",
+    "hr",
+    "blockquote",
+    "caption",
+    #: An SVG <text> is one box's label in the execution graph: its own
+    #: block, not run together with the next box's.
+    "text",
+}
 SKIP = {"script", "style", "head", "title"}
 
 
@@ -113,9 +150,13 @@ def _page_name(name: str) -> str:
 #: The Overview labels pipelines P1, P2 ... by first arrival, read to the second, ties by run key.
 #: Left to the clock, a fast host stored every run in one second and the tie fell to keys that
 #: differ from build to build, so P1 and P2 swapped in some builds (7 of 10 on one Linux host,
-#: at 85950fd). The baseline was taken with r11 first; these keep it first on every host.
-RECEIVED_AT = ("2026-10-01T11:00:01+00:00", "2026-10-01T11:00:02+00:00",
-               "2026-10-01T11:00:03+00:00", "2026-10-01T11:00:04+00:00")
+#: once). The baseline was taken with r11 first; these keep it first on every host.
+RECEIVED_AT = (
+    "2026-10-01T11:00:01+00:00",
+    "2026-10-01T11:00:02+00:00",
+    "2026-10-01T11:00:03+00:00",
+    "2026-10-01T11:00:04+00:00",
+)
 
 
 def _stored_at(files: dict[str, bytes], store, received_at: str):
@@ -124,9 +165,11 @@ def _stored_at(files: dict[str, bytes], store, received_at: str):
     from onetrace_console.ingest import accept
     from tests.conftest import make_tar
     from tests.test_checks import FIXED_RAN_AT, _require_installed
+
     _require_installed()
     from onetrace_console.preview import PREVIEW_FORMAT
     from tests.conftest import preview_veto_off
+
     if json.loads(files["MANIFEST.json"].decode("utf-8")).get("format") == PREVIEW_FORMAT:
         #: A preview fixture is stored directly (a new preview delivery is
         #: refused since 0.2.0); these pages show what the console does with runs it holds.
@@ -151,8 +194,7 @@ def rendered(tmp: Path) -> dict[str, str]:
     from onetrace_console.render import render_all, render_diff
     from onetrace_console.signin import render_signin_page
     from onetrace_console.store import Store
-    from onetrace_console.unreadable import (render_failed_page, render_unchecked_run,
-                                             render_unreadable_run)
+    from onetrace_console.unreadable import render_failed_page, render_unchecked_run, render_unreadable_run
     from tests.conftest import _delivery_paths
     from tests.test_checks import FIXED_RAN_AT
     from tests.test_diff_sdk_text_layer import _forged_pair
@@ -160,8 +202,7 @@ def rendered(tmp: Path) -> dict[str, str]:
 
     store = Store(tmp / "store")
     r11 = REPO / "tests" / "fixtures" / "r11" / "two-minimal-nodes"
-    r11_files = _resummed({p.relative_to(r11).as_posix(): p.read_bytes()
-                           for p in _delivery_paths(r11)})
+    r11_files = _resummed({p.relative_to(r11).as_posix(): p.read_bytes() for p in _delivery_paths(r11)})
     runs = {"r11": _stored_at(r11_files, store, RECEIVED_AT[0])}
     (tmp / "held").mkdir()
     (tmp / "forged").mkdir()
@@ -179,8 +220,7 @@ def rendered(tmp: Path) -> dict[str, str]:
     out["diff[held-a,held-b]"] = render_diff(comparison, store, generated_at=GENERATED_AT)
     for href, html in render_all(store, generated_at=GENERATED_AT).items():
         out[href] = html
-    out["notice/unreadable"] = render_unreadable_run(runs["r11"], "a stated reason",
-                                                     generated_at=GENERATED_AT)
+    out["notice/unreadable"] = render_unreadable_run(runs["r11"], "a stated reason", generated_at=GENERATED_AT)
     out["notice/unchecked"] = render_unchecked_run(runs["r11"], generated_at=GENERATED_AT)
     out["notice/failed"] = render_failed_page("a stated reason", generated_at=GENERATED_AT)
     out["signin"] = render_signin_page(csrf_token="x" * 32)
@@ -198,9 +238,9 @@ def _preview_case(tmp: Path) -> dict[str, str]:
     from onetrace_console.store import Store
     from tests.conftest import _delivery_paths
     from tests.test_unreadable import _resummed
+
     folder = REPO / ".sdk-fixtures" / "exam" / "fixtures" / "ingest-r1" / "run_B"
-    files = _resummed({p.relative_to(folder).as_posix(): p.read_bytes()
-                       for p in _delivery_paths(folder)})
+    files = _resummed({p.relative_to(folder).as_posix(): p.read_bytes() for p in _delivery_paths(folder)})
     store = Store(tmp / "preview-store")
     run = _stored_at(files, store, RECEIVED_AT[0])
     drawn = render_execution(run, store, generated_at=GENERATED_AT).pages
@@ -213,19 +253,24 @@ def _policy_pages(store, tmp: Path) -> dict[str, str]:
     from onetrace_console.onedoor_ext.decisions import accept_export
     from onetrace_console.onedoor_ext.policy_pages import render_policy_pages
     from tests.test_upload_hardening import _member, _tar
+
     fixture = REPO / "tests" / "fixtures" / "onedoor"
-    accept_export(_tar(_member("onedoor-export.jsonl", (fixture / "onedoor-export.jsonl").read_bytes()),
-                       _member("onedoor-export.jsonl.sha256",
-                               (fixture / "onedoor-export.jsonl.sha256").read_bytes())), store)
-    return {f"policy/{k}": v for k, v in
-            render_policy_pages(store, generated_at=GENERATED_AT).items()}
+    accept_export(
+        _tar(
+            _member("onedoor-export.jsonl", (fixture / "onedoor-export.jsonl").read_bytes()),
+            _member("onedoor-export.jsonl.sha256", (fixture / "onedoor-export.jsonl.sha256").read_bytes()),
+        ),
+        store,
+    )
+    return {f"policy/{k}": v for k, v in render_policy_pages(store, generated_at=GENERATED_AT).items()}
 
 
 def main(argv: list[str]) -> int:
     with tempfile.TemporaryDirectory(prefix="visible-text-") as tmp:
         snap = pages(Path(tmp))
-    Path(argv[0]).write_text(json.dumps(snap, indent=1, ensure_ascii=False, sort_keys=True) + "\n",
-                             encoding="utf-8", newline="\n")
+    Path(argv[0]).write_text(
+        json.dumps(snap, indent=1, ensure_ascii=False, sort_keys=True) + "\n", encoding="utf-8", newline="\n"
+    )
     print(f"{len(snap)} pages, {sum(len(v) for v in snap.values())} blocks -> {argv[0]}")
     return 0
 

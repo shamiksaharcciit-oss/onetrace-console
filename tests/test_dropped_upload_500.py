@@ -1,6 +1,6 @@
 """The dropped-upload 500, reproduced first.
 
-Observed in the console's full suite (775ce4b, run 1): a client gave up on `POST /v1/runs` after its
+Observed in the console's full suite, once: a client gave up on `POST /v1/runs` after its
 10 s timeout; the server finished the ingest. Its request read `self.store` -- a class attribute
 every test's server shares -- once in `accept()` and again in `run_and_record()`: between the two
 the next test's server fixture had swapped `Handler.store`, so the run's objects went to one store
@@ -14,21 +14,21 @@ it names is stored; a held run missing an object, delivered again, is refused wi
 repaired; and the store refuses a record whose objects it does not hold, each request keeps one
 store, and compare and every page say what is missing, never a 500.
 """
+
 from __future__ import annotations
 
 import json
 
 import pytest
+
 from tests.http_limits import limit
-
-from tests.test_compare import RUN_C, RUN_C_POPPLER24, _require_exam
 from tests.test_checks import _require_installed
+from tests.test_compare import RUN_C, RUN_C_POPPLER24, _require_exam
 from tests.test_serve import _post, _real_delivery
-
 
 #: On the 0.2.0 branch a new preview-format delivery is refused; these tests
 #: deliver the exam's preview-format run, so they store it the way the console stores a run it holds
-#: (`preview_stored_directly`). Added when the fix was merged into wo-c18-020.
+#: (`preview_stored_directly`).
 pytestmark = pytest.mark.usefixtures("preview_stored_directly")
 
 
@@ -42,6 +42,7 @@ def test_a_record_is_never_written_where_its_objects_are_not(tmp_path):
     from onetrace_console.checks import run_and_record
     from onetrace_console.ingest import accept
     from onetrace_console.store import Store
+
     _require_installed()
     _require_exam()
     first, second = Store(tmp_path / "first"), Store(tmp_path / "second")
@@ -51,13 +52,15 @@ def test_a_record_is_never_written_where_its_objects_are_not(tmp_path):
     except Exception:  # noqa: BLE001 - refusing to write it is an acceptable outcome
         pass
     held = [r for r in second.runs() if r.key == accepted.run.key]
-    assert not held or not _missing(second, held[0]), (
-        "a run record is held without its objects: " + ", ".join(_missing(second, held[0])))
+    assert not held or not _missing(second, held[0]), "a run record is held without its objects: " + ", ".join(
+        _missing(second, held[0])
+    )
 
 
 def test_compare_of_a_run_whose_object_is_missing_is_never_a_500(server):
     """Whatever left a stored run without one of its objects, comparing it is said, not a 500."""
     from onetrace_console.store import Store
+
     _require_installed()
     _require_exam()
     base, root = server
@@ -73,12 +76,14 @@ def test_compare_of_a_run_whose_object_is_missing_is_never_a_500(server):
     #: The run's record for download says the same, as a 409.
     from urllib.error import HTTPError
     from urllib.request import urlopen
+
     try:
         urlopen(f"{base}/runs/{keys[0]}/record.tar", timeout=limit(30))
         raise AssertionError("the record of a run missing an object was served")
     except HTTPError as e:
         assert e.code == 409 and e.read().decode("utf-8") == (
-            "couldn't check: the stored record is missing MANIFEST.json\n")
+            "couldn't check: the stored record is missing MANIFEST.json\n"
+        )
     status, body = _post(base, f"/compare?a={keys[0]}&b={keys[1]}")
     assert status != 500, body[:300]
     #: Compare refuses the pair in the fixed words.
@@ -86,14 +91,17 @@ def test_compare_of_a_run_whose_object_is_missing_is_never_a_500(server):
     assert "couldn't check: the stored record is missing MANIFEST.json" in body.decode("utf-8")
 
 
-MISSING_409 = ("Not stored: this run is already held, but the console is missing {objects} for "
-               "it. A held record is never repaired. Remove the held run, then deliver it again.")
+MISSING_409 = (
+    "Not stored: this run is already held, but the console is missing {objects} for "
+    "it. A held record is never repaired. Remove the held run, then deliver it again."
+)
 
 
 def test_the_store_refuses_a_record_whose_objects_it_does_not_hold(tmp_path):
     """A refusal inside the store; no record is written."""
     from onetrace_console.ingest import accept
     from onetrace_console.store import Store, StoreError
+
     _require_installed()
     _require_exam()
     first, second = Store(tmp_path / "first"), Store(tmp_path / "second")
@@ -110,6 +118,7 @@ def test_a_held_run_missing_an_object_delivered_again_is_refused_409_and_not_rep
     """Refused with 409 and never repaired: nothing is stored."""
     from onetrace_console.ingest import Rejection, accept
     from onetrace_console.store import Store
+
     _require_installed()
     _require_exam()
     store = Store(tmp_path / "store")
@@ -130,6 +139,7 @@ def test_each_request_keeps_the_store_it_started_with(server, monkeypatch):
     from onetrace_console import ingest
     from onetrace_console.serve import Handler
     from onetrace_console.store import Store
+
     _require_installed()
     _require_exam()
     base, root = server
@@ -141,6 +151,7 @@ def test_each_request_keeps_the_store_it_started_with(server, monkeypatch):
         accepted = original(body, store, **kw)
         Handler.store = other
         return accepted
+
     monkeypatch.setattr(ingest, "accept", swapped_meanwhile)
     try:
         status, body = _post(base, "/v1/runs", _real_delivery(RUN_C))
@@ -160,9 +171,11 @@ def test_a_run_missing_an_object_reads_couldnt_check_on_its_pages_and_in_the_cou
     from onetrace_console.ingest import accept
     from onetrace_console.pages import CASE, render_execution
     from onetrace_console.store import Store
+
     _require_installed()
     _require_exam()
     from tests.test_reference_demo import RUNS, _delivery
+
     store = Store(tmp_path / "store")
     #: A run with a verdict of its own under 0.2.0: the reference demo's day 1 (the exam's
     #: preview-format run reads NOT VERIFIED there). Changed at the merge.
@@ -190,6 +203,7 @@ def test_a_raw_run_missing_an_object_renders_could_not_check_not_its_stored_verd
     from onetrace_console.pages import render_execution
     from onetrace_console.store import Store, StoredRun
     from tests.test_reference_demo import RUNS, _delivery
+
     _require_installed()
     store = Store(tmp_path / "store")
     run = run_and_record(accept(_delivery(RUNS / "day-1"), store).run, store)

@@ -10,8 +10,9 @@ section links to it, and it links back.
 It says what release 1 has -- no authorization records for this run -- and nothing about
 what a run's receipts contain or what the pipeline behind them does: this console looks for
 neither. The viewer's independent review found the same over-claim in the Policy sentence
-(its finding 8), so the page is held to it from the start.
+(the case page's Policy sentence), so the page is held to it from the start.
 """
+
 from __future__ import annotations
 
 import json
@@ -50,8 +51,7 @@ def test_the_page_never_reads_as_a_pass_and_is_never_blank(pages):
     for word in ("permitted", "authorized:", "approved", "allowed", "checks passed", "yes"):
         assert word not in text, word
     assert 'data-state="yes"' not in pages[AUTHORIZATION]
-    section = re.search(r'<section data-section="authorization"[^>]*>(.*?)</section>',
-                        pages[AUTHORIZATION], re.S)
+    section = re.search(r'<section data-section="authorization"[^>]*>(.*?)</section>', pages[AUTHORIZATION], re.S)
     assert section and _text(section.group(1)), "the section is on the page and says something"
 
 
@@ -59,14 +59,15 @@ def test_the_page_never_reads_as_a_pass_and_is_never_blank(pages):
 #: it unnoticed: the review of the first version found one ("When a policy engine that speaks
 #: AADP is added, this page shows the whole chain...") presupposing no engine was added and
 #: promising a feature nothing backs, while the phrase-list test below let it through.
-SECTION_WORDS = ('No authorization records for this run That is not a failure of the record. '
-                 'Back to the run Nothing here is counted as a pass. "No records" is shown '
-                 'wherever authorization would appear.')
+SECTION_WORDS = (
+    "No authorization records for this run That is not a failure of the record. "
+    'Back to the run Nothing here is counted as a pass. "No records" is shown '
+    "wherever authorization would appear."
+)
 
 
 def test_the_page_says_exactly_what_release_1_has_and_nothing_more(pages):
-    section = re.search(r'<section data-section="authorization"[^>]*>(.*?)</section>',
-                        pages[AUTHORIZATION], re.S)
+    section = re.search(r'<section data-section="authorization"[^>]*>(.*?)</section>', pages[AUTHORIZATION], re.S)
     assert _text(section.group(1)) == SECTION_WORDS
 
 
@@ -80,8 +81,12 @@ def test_the_page_claims_nothing_it_does_not_check(pages):
     receipts and about a system this console does not look at; the drawing's "proposed an
     action (stage 5)" is its own illustrative run."""
     text = _text(pages[AUTHORIZATION]).lower()
-    for claim in ("nothing in the record shows", "does not yet send its actions",
-                  "proposed an action (stage", "is added, this page shows"):
+    for claim in (
+        "nothing in the record shows",
+        "does not yet send its actions",
+        "proposed an action (stage",
+        "is added, this page shows",
+    ):
         assert claim not in text, claim
 
 
@@ -99,23 +104,26 @@ def test_the_run_and_its_authorization_page_link_to_each_other(pages):
 def test_the_case_page_is_sealed_over_the_link(pages):
     """The link is spliced BEFORE sealing, so the page's own fingerprint covers it."""
     from onetrace_console.viewer import fingerprint
+
     ok, why = fingerprint.check(pages[CASE].encode("utf-8"))
     assert ok, why
 
 
 def test_a_case_page_with_no_policy_section_refuses_rather_than_losing_the_link():
     from onetrace_console.authorization import authorization_link
+
     with pytest.raises(ValueError, match="Policy section"):
         authorization_link("<html><body><main><p>no policy here</p></main></body></html>")
 
 
 def test_a_marker_outside_the_policy_section_neither_hides_a_missing_section_nor_the_link():
-    """Review finding 3: the "already done" guard ran before the Policy check, so a marker
+    """A review found that the "already done" guard ran before the Policy check, so a marker
     anywhere on the page skipped both. It is looked for only inside the Policy section."""
     from onetrace_console.authorization import authorization_link
+
     stale = '<p data-section="authorization-link">stale</p>'
     with pytest.raises(ValueError, match="Policy section"):
-        authorization_link(f"<main>{stale}<section data-section=\"incidents\"></section></main>")
+        authorization_link(f'<main>{stale}<section data-section="incidents"></section></main>')
     page = authorization_link(f'<main>{stale}<section data-section="policy"><p>x</p></section></main>')
     policy = re.search(r'<section data-section="policy">(.*?)</section>', page, re.S).group(1)
     assert 'href="authorization.html"' in policy
@@ -135,45 +143,55 @@ def test_the_page_opens_offline(pages):
     console's own stylesheet, served by the console itself."""
     page = pages[AUTHORIZATION]
     assert not re.search(r'(src|href)="(https?:)?//', page)
-    assert re.findall(r"<link[^>]*>", page, re.I) == ['<link rel="stylesheet" href="/static/console.css">',
-                                                       '<link rel="icon" href="/static/favicon.svg" type="image/svg+xml">']
+    assert re.findall(r"<link[^>]*>", page, re.I) == [
+        '<link rel="stylesheet" href="/static/console.css">',
+        '<link rel="icon" href="/static/favicon.svg" type="image/svg+xml">',
+    ]
     assert "<script src" not in page.lower()
 
 
 def test_the_authorization_page_is_a_viewer_page_in_the_role_table(examined):
     from onetrace_console import roles
+
     examined(1, "GET against the rendered path of a run's authorization page")
     rel = f"runs/{KEY}/authorization.html"
     assert roles.required_role("GET", "/" + rel, rel_for_get=rel) == roles.VIEWER
 
 
 #: A run key is sha256 hex (`store.run_key`), so the row admits exactly that and nothing else --
-#: in particular not `..` (review finding 2: `[^/]+` let `runs/../authorization.html` through
+#: in particular not `..` (a review found `[^/]+` let `runs/../authorization.html` through
 #: to a file at the top of `pages/`).
 KEY = "0123456789abcdef" * 4
 
 
-@pytest.mark.parametrize("rel", [f"runs/{KEY}/authorization.htm",
-                                 f"runs/{KEY}/sub/authorization.html",
-                                 "authorization.html",
-                                 "runs//authorization.html",
-                                 "runs/../authorization.html",
-                                 "runs/..\\x/authorization.html",
-                                 "runs/abc123/authorization.html",
-                                 f"runs/{KEY.upper()}/authorization.html",
-                                 f"runs/{KEY[:-1]}/authorization.html",
-                                 f"runs/{KEY}0/authorization.html"])
+@pytest.mark.parametrize(
+    "rel",
+    [
+        f"runs/{KEY}/authorization.htm",
+        f"runs/{KEY}/sub/authorization.html",
+        "authorization.html",
+        "runs//authorization.html",
+        "runs/../authorization.html",
+        "runs/..\\x/authorization.html",
+        "runs/abc123/authorization.html",
+        f"runs/{KEY.upper()}/authorization.html",
+        f"runs/{KEY[:-1]}/authorization.html",
+        f"runs/{KEY}0/authorization.html",
+    ],
+)
 def test_near_misses_of_the_new_shape_are_still_refused(rel, examined):
     """The new row is one exact shape: nothing next to it opens with it."""
     from onetrace_console import roles
+
     examined(1, f"GET against a near miss {rel!r}")
     with pytest.raises(roles.NoRouteTableEntry):
         roles.required_role("GET", "/" + rel, rel_for_get=rel)
 
 
 def test_ingest_over_http_then_the_authorization_page_is_served(server, files, examined):
-    from tests.test_serve import _get, _post
     from tests.conftest import make_tar
+    from tests.test_serve import _get, _post
+
     base, store_root = server
     status, body = _post(base, "/v1/runs", make_tar(files))
     assert status == 200, body

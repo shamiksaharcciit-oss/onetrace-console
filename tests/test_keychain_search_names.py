@@ -1,6 +1,7 @@
 """The planted-key search (tests/keychain.py) names each file it finds with `/`, on every system, by
 `as_posix()`: the same name for a file under a folder on Windows as on Linux (`named`), held here on a
 Windows path, and on this system's through the search itself."""
+
 from __future__ import annotations
 
 from pathlib import Path, PureWindowsPath
@@ -10,6 +11,7 @@ from tests.keychain import KEY, files_holding
 
 def test_a_windows_file_under_a_folder_is_named_with_a_slash(examined):
     from tests.keychain import named
+
     root = PureWindowsPath("C:/Users/x/AppData/Local/Temp/pytest-1/test0")
     examined(1, "Windows path")
     assert named(root / "store" / "x" / "attempt.json", root) == "store/x/attempt.json"

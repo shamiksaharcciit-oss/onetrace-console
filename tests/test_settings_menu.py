@@ -6,6 +6,7 @@ the menu is the browser's own popover (Esc and a click outside close it, no scri
 Explain" link leaves the sidebar; the setup pages keep their addresses; nothing of a key's value is in the
 menu; a public console and a static export show no gear.
 """
+
 from __future__ import annotations
 
 import dataclasses
@@ -31,22 +32,26 @@ def explain_config(tmp_path, monkeypatch):
     config.parent.mkdir()
     monkeypatch.setenv("ONETRACE_EXPLAIN_CONFIG", str(config))
     from onetrace_console import explain
+
     monkeypatch.setattr(explain, "command", lambda: Path("onetrace-explain"))
     return config
 
 
 def _menu(store=None) -> str:
     from onetrace_console.settings_menu import menu
+
     return menu(store)
 
 
 def _row(html: str, feature: str) -> tuple[str, str, str]:
-    href, state, words = re.search(rf'<a href="([^"]+)" data-setting="{feature}" data-state="([^"]+)">([^<]*)</a>',
-                                   html).groups()
+    href, state, words = re.search(
+        rf'<a href="([^"]+)" data-setting="{feature}" data-state="([^"]+)">([^<]*)</a>', html
+    ).groups()
     return href, state, unescape(words)
 
 
 # ------------------------------------------------------------------ Explain's three states
+
 
 def test_explain_not_set_up_is_no_fault(explain_config):
     explain_config.write_text("", encoding="utf-8")
@@ -56,7 +61,9 @@ def test_explain_not_set_up_is_no_fault(explain_config):
 
 
 def test_explain_key_not_found_puts_the_dot_on_the_gear(explain_config, monkeypatch):
-    explain_config.write_text(f'[model]\nprovider = "anthropic"\nname = "a-model"\nkey_env = "{VAR}"\n', encoding="utf-8")
+    explain_config.write_text(
+        f'[model]\nprovider = "anthropic"\nname = "a-model"\nkey_env = "{VAR}"\n', encoding="utf-8"
+    )
     monkeypatch.delenv(VAR, raising=False)
     html = _menu()
     assert _row(html, "explain") == ("/explain/setup", "broken", "Explain: key not found")
@@ -64,7 +71,9 @@ def test_explain_key_not_found_puts_the_dot_on_the_gear(explain_config, monkeypa
 
 
 def test_explain_on_names_the_model_and_never_a_key(explain_config, monkeypatch):
-    explain_config.write_text(f'[model]\nprovider = "anthropic"\nname = "a-model"\nkey_env = "{VAR}"\n', encoding="utf-8")
+    explain_config.write_text(
+        f'[model]\nprovider = "anthropic"\nname = "a-model"\nkey_env = "{VAR}"\n', encoding="utf-8"
+    )
     monkeypatch.setenv(VAR, KEY_VALUE)
     html = _menu()
     assert _row(html, "explain") == ("/explain/setup", "on", "Explain: on, a-model (anthropic)")
@@ -73,14 +82,17 @@ def test_explain_on_names_the_model_and_never_a_key(explain_config, monkeypatch)
 
 # ------------------------------------------------------------------ neighbours' three states
 
+
 def _store(tmp_path):
     from onetrace_console.store import Store
+
     return Store(tmp_path / "store")
 
 
 def test_neighbours_extra_not_installed_off_and_on(tmp_path, explain_config, monkeypatch):
     from onetrace_console import neighbours
     from onetrace_console.neighbours import settings
+
     explain_config.write_text("", encoding="utf-8")
     store = _store(tmp_path)
     monkeypatch.setattr(neighbours, "installed", lambda: False)
@@ -96,19 +108,26 @@ def test_neighbours_extra_not_installed_off_and_on(tmp_path, explain_config, mon
 
 def test_a_turned_on_local_model_with_a_file_missing_puts_the_dot(tmp_path, explain_config, monkeypatch):
     import hashlib
-    import json
+
     from onetrace_console import neighbours
     from onetrace_console.neighbours import embedder, settings
+
     explain_config.write_text("", encoding="utf-8")
     monkeypatch.setattr(neighbours, "installed", lambda: True)
     data = {"onnx/model.onnx": b"weights", "tokenizer.json": b"{}"}
-    tiny = embedder.Model("tiny", "example/tiny", "0" * 40, "mean", "none",
-                          {p: hashlib.sha256(d).hexdigest() for p, d in data.items()})
+    tiny = embedder.Model(
+        "tiny", "example/tiny", "0" * 40, "mean", "none", {p: hashlib.sha256(d).hexdigest() for p, d in data.items()}
+    )
     monkeypatch.setattr(embedder, "MODELS", {**embedder.MODELS, "tiny": tiny})
     store = _store(tmp_path)
     local = {"kind": "local", "model": "tiny"}
-    settings.turn_on(store, local, who="a test", confirmed=settings.confirmation(local),
-                     get=lambda url: data[url.rsplit(f"{tiny.revision}/", 1)[1]])
+    settings.turn_on(
+        store,
+        local,
+        who="a test",
+        confirmed=settings.confirmation(local),
+        get=lambda url: data[url.rsplit(f"{tiny.revision}/", 1)[1]],
+    )
     assert _row(_menu(store), "neighbours") == ("/neighbours/setup", "on", "Neighbours: on, tiny")
     (embedder.folder(embedder.models_root(store), tiny) / "tokenizer.json").unlink()
     html = _menu(store)
@@ -118,16 +137,21 @@ def test_a_turned_on_local_model_with_a_file_missing_puts_the_dot(tmp_path, expl
 
 # ------------------------------------------------------------------ the button and the menu
 
+
 def test_the_gear_is_a_real_button_named_settings_opening_a_popover(explain_config):
     explain_config.write_text("", encoding="utf-8")
     html = _menu()
-    assert re.search(r'<button type="button" class="gear" popovertarget="settings-menu" aria-label="Settings" '
-                     r'data-frame="gear">', html)
+    assert re.search(
+        r'<button type="button" class="gear btn-secondary" popovertarget="settings-menu" aria-label="Settings" '
+        r'data-frame="gear">',
+        html,
+    )
     assert '<div id="settings-menu" popover data-frame="settings-menu">' in html
     assert "<script" not in html
 
 
 # ------------------------------------------------------------------ over HTTP
+
 
 def _get(url):
     try:
@@ -138,7 +162,9 @@ def _get(url):
 
 
 def test_a_local_console_serves_the_gear_and_the_setup_pages_keep_their_addresses(server, explain_config, monkeypatch):
-    explain_config.write_text(f'[model]\nprovider = "anthropic"\nname = "a-model"\nkey_env = "{VAR}"\n', encoding="utf-8")
+    explain_config.write_text(
+        f'[model]\nprovider = "anthropic"\nname = "a-model"\nkey_env = "{VAR}"\n', encoding="utf-8"
+    )
     monkeypatch.setenv(VAR, KEY_VALUE)
     base, _root = server
     status, home = _get(base + "/")
@@ -155,11 +181,15 @@ def test_a_local_console_serves_the_gear_and_the_setup_pages_keep_their_addresse
 def test_a_public_console_and_a_static_export_show_no_gear(server, monkeypatch):
     from onetrace_console.frame import fill
     from onetrace_console.serve import Handler
+
     base, _root = server
     page = b'<nav class="frame" data-frame></nav>'
     from onetrace_console.viewer.page import FRAME_NAV
+
     page = FRAME_NAV.encode()
-    assert b'data-frame="settings"' not in fill(page, "home.html", onedoor=False, user=None, public=True, setup_link=True)
+    assert b'data-frame="settings"' not in fill(
+        page, "home.html", onedoor=False, user=None, public=True, setup_link=True
+    )
     #: A static export's pages are filled with no setup link: no gear.
     assert b'data-frame="settings"' not in fill(page, "home.html", onedoor=False, user=None)
     monkeypatch.setattr(Handler, "config", dataclasses.replace(Handler.config, public=True))
@@ -191,8 +221,9 @@ with sync_playwright() as p:
 """
 
 
-@pytest.mark.skipif(not BROWSER_PYTHON, reason="ONETRACE_BROWSER_PYTHON names no Python with Playwright's Chromium "
-                                                "(the gate sets it)")
+@pytest.mark.skipif(
+    not BROWSER_PYTHON, reason="ONETRACE_BROWSER_PYTHON names no Python with Playwright's Chromium (the gate sets it)"
+)
 def test_in_a_browser_esc_and_a_click_outside_close_it_and_it_stays_at_the_top_on_a_phone(server, tmp_path):
     base, _root = server
     script = tmp_path / "esc.py"

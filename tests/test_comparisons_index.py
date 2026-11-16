@@ -12,6 +12,7 @@ What it holds:
 - an empty store says that nothing has been compared;
 - it is a viewer page in the role table, and "Comparisons" sits after Runs in the navigation.
 """
+
 from __future__ import annotations
 
 import dataclasses
@@ -33,6 +34,7 @@ def compared(tmp_path):
     from tests.test_checks import FIXED_RAN_AT
     from tests.test_diff_sdk_text_layer import _forged_pair
     from tests.test_unreadable import _stored
+
     store = Store(tmp_path / "store")
     (tmp_path / "pair").mkdir()
     a, b = _forged_pair(tmp_path / "pair")
@@ -62,12 +64,12 @@ def test_the_rows_are_exactly_the_readable_stored_comparisons(compared, examined
 
 
 def test_newest_first_by_the_time_and_ties_by_key(compared, examined):
-    store, base = compared                      # base ran at 2026-09-26T12:00:00+02:00
-    _variant(store, base, "b" * 64, "2026-09-26T11:30:00+00:00")   # 13:30+02: the newest
-    _variant(store, base, "d" * 64, "2026-09-26T11:30:00+00:00")   # the same moment...
-    _variant(store, base, "c" * 64, "2026-09-26T13:30:00+02:00")   # ...written another way
-    _variant(store, base, "a" * 64, "2026-09-25T09:00:00+00:00")   # the oldest
-    _variant(store, base, "0" * 64, "not a time")                   # last, shown as written
+    store, base = compared  # base ran at 2026-09-26T12:00:00+02:00
+    _variant(store, base, "b" * 64, "2026-09-26T11:30:00+00:00")  # 13:30+02: the newest
+    _variant(store, base, "d" * 64, "2026-09-26T11:30:00+00:00")  # the same moment...
+    _variant(store, base, "c" * 64, "2026-09-26T13:30:00+02:00")  # ...written another way
+    _variant(store, base, "a" * 64, "2026-09-25T09:00:00+00:00")  # the oldest
+    _variant(store, base, "0" * 64, "not a time")  # last, shown as written
     page = render_comparisons(store, generated_at=GENERATED_AT)
     order = [key for key, _ in _rows(page)]
     examined(len(order), "rows")
@@ -101,6 +103,7 @@ def test_an_empty_store_says_nothing_has_been_compared(tmp_path, examined):
 
 def test_it_is_rendered_with_every_page(compared, examined):
     from onetrace_console.render import render_all
+
     store, _ = compared
     examined(1, "render")
     assert COMPARISONS in render_all(store, generated_at=GENERATED_AT)
@@ -108,14 +111,16 @@ def test_it_is_rendered_with_every_page(compared, examined):
 
 def test_it_is_a_viewer_page_in_the_role_table(examined):
     from onetrace_console import roles
+
     examined(1, "route")
     assert roles.required_role("GET", f"/{COMPARISONS}", rel_for_get=COMPARISONS) == roles.VIEWER
 
 
 def test_every_link_answers_200_and_the_page_is_framed(compared, server, examined):
     from onetrace_console.serve import Handler, _render_startup_pages
-    from tests.test_signin_flow import _get
     from tests.test_frame import _items
+    from tests.test_signin_flow import _get
+
     store, base = compared
     _variant(store, base, "f" * 64, "2026-09-27T08:00:00+00:00")
     base_url, store_root = server

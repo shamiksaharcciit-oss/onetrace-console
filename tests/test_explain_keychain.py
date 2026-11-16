@@ -20,6 +20,7 @@ Held here:
 No model is called: the model is a server on 127.0.0.1 (tests/keychain.py), the keychain a folder of the
 test's own.
 """
+
 from __future__ import annotations
 
 import json
@@ -30,8 +31,16 @@ from html import unescape
 
 import pytest
 
-from tests.keychain import (planted_key_searched, KEY, explain03, explain03_installed, files_holding, keychain,  # noqa: F401
-                            keyring_lib, model)
+from tests.keychain import (
+    KEY,
+    explain03,  # noqa: F401 - a fixture, requested by name
+    explain03_installed,  # noqa: F401 - a fixture, requested by name
+    files_holding,
+    keychain,  # noqa: F401
+    keyring_lib,  # noqa: F401 - a fixture, requested by name
+    model,  # noqa: F401 - a fixture, requested by name
+    planted_key_searched,  # noqa: F401 - a fixture, requested by name
+)
 from tests.test_explain_panel import REPLIES, pair, tried  # noqa: F401
 from tests.test_explain_setup import _get, _main, local  # noqa: F401
 from tests.test_explain_setup_form import _forms, _post
@@ -52,11 +61,18 @@ def _save(base, **fields):
 
 # ------------------------------------------------------------------ the naming
 
+
 def _their_naming(lib, entries):
-    code = ("import json, sys\nfrom onetrace_explain.providers import KEYRING_SERVICE, keyring_user\n"
-            "print(json.dumps([KEYRING_SERVICE, [keyring_user(p, b) for p, b in json.loads(sys.argv[1])]]))")
-    done = subprocess.run([sys.executable, "-I", "-c", f"import sys; sys.path.insert(0, {str(lib)!r})\n" + code,
-                           json.dumps(entries)], capture_output=True, text=True, timeout=120)
+    code = (
+        "import json, sys\nfrom onetrace_explain.providers import KEYRING_SERVICE, keyring_user\n"
+        "print(json.dumps([KEYRING_SERVICE, [keyring_user(p, b) for p, b in json.loads(sys.argv[1])]]))"
+    )
+    done = subprocess.run(
+        [sys.executable, "-I", "-c", f"import sys; sys.path.insert(0, {str(lib)!r})\n" + code, json.dumps(entries)],
+        capture_output=True,
+        text=True,
+        timeout=120,
+    )
     assert done.returncode == 0, done.stderr
     service, users = json.loads(done.stdout)
     return service, users
@@ -64,6 +80,7 @@ def _their_naming(lib, entries):
 
 def test_the_entry_is_named_as_onetrace_explain_0_3_names_it(explain03, examined):
     from onetrace_console import explain_keychain as K
+
     _, lib = explain03
     service, users = _their_naming(lib, ENTRIES)
     examined(len(ENTRIES), "providers")
@@ -73,6 +90,7 @@ def test_the_entry_is_named_as_onetrace_explain_0_3_names_it(explain03, examined
 
 def test_sabotage_a_naming_of_its_own_is_named(explain03, monkeypatch, examined):
     from onetrace_console import explain_keychain as K
+
     _, lib = explain03
     monkeypatch.setattr(K, "user", lambda p, b="": f"{p}@{b or 'default'}")
     _, users = _their_naming(lib, ENTRIES)
@@ -82,14 +100,20 @@ def test_sabotage_a_naming_of_its_own_is_named(explain03, monkeypatch, examined)
 
 def test_the_console_never_imports_onetrace_explain(examined):
     from pathlib import Path
+
     src = Path(__file__).resolve().parent.parent / "src" / "onetrace_console"
     files = list(src.rglob("*.py"))
     examined(len(files), "source files")
-    assert [p.name for p in files if "import onetrace_explain" in p.read_text(encoding="utf-8")
-            or "from onetrace_explain" in p.read_text(encoding="utf-8")] == []
+    assert [
+        p.name
+        for p in files
+        if "import onetrace_explain" in p.read_text(encoding="utf-8")
+        or "from onetrace_explain" in p.read_text(encoding="utf-8")
+    ] == []
 
 
 # ------------------------------------------------------------------ stored, or not; Replace and Remove
+
 
 def test_the_page_says_a_key_is_stored_with_replace_and_remove_and_never_the_key(local, keychain, examined):
     base, _, _, _, config = local
@@ -99,10 +123,16 @@ def test_the_page_says_a_key_is_stored_with_replace_and_remove_and_never_the_key
     examined(len(forms), "forms")
     assert status == 200 and STORED in unescape(page) and NONE_STORED not in unescape(page)
     assert KEY not in page
-    assert sorted(forms) == ["key", "model", "remove"], sorted(forms)
+    assert sorted(forms) == ["always-stop", "key", "model", "remove"], sorted(forms)
     assert '<input type="password" name="key" autocomplete="new-password"' in forms["key"]
-    assert '<button type="submit" name="action" value="replace">Replace</button>' in forms["key"]
-    assert '<button type="submit" name="action" value="remove">Remove</button>' in forms["remove"]
+    assert (
+        '<button class="btn-secondary" data-busy="Replacing…" type="submit" name="action" value="replace">Replace</button>'
+        in forms["key"]
+    )
+    assert (
+        '<button class="btn-destructive" data-busy="Opening…" type="submit" name="action" value="remove">Remove</button>'
+        in forms["remove"]
+    )
     assert "csrf_token" in forms["key"] and "csrf_token" in forms["remove"]
 
 
@@ -117,6 +147,7 @@ def test_with_none_stored_the_page_says_so_and_offers_no_remove(local, keychain,
 
 def test_replace_keeps_the_new_key_and_remove_takes_it_out(local, keychain, examined):
     import keyring
+
     base, _, _, _, config = local
     _save(base, provider="openai", name="m", base_url="http://127.0.0.1:8080/v1", key=KEY)
     status, page = _post(f"{base}/explain/setup", {"action": "replace", "key": NEW_KEY})
@@ -124,7 +155,10 @@ def test_replace_keeps_the_new_key_and_remove_takes_it_out(local, keychain, exam
     assert status == 200 and NEW_KEY not in page and KEY not in page, page[-1500:]
     assert keyring.get_password("onetrace-explain", "openai:http://127.0.0.1:8080/v1") == NEW_KEY
     assert tomllib.loads(config.read_text(encoding="utf-8"))["model"]["key_source"] == "keyring"
+    #: Remove asks first (its confirmation page, tests/test_explain_remove_confirm.py); its own press removes.
     status, page = _post(f"{base}/explain/setup", {"action": "remove"})
+    token = __import__("re").search(r'name="confirm" value="([0-9a-f]+)"', page).group(1)
+    status, page = _post(f"{base}/explain/setup", {"action": "remove-confirmed", "confirm": token})
     assert status == 200 and NONE_STORED in unescape(page)
     assert keyring.get_password("onetrace-explain", "openai:http://127.0.0.1:8080/v1") is None
 
@@ -140,6 +174,7 @@ def test_a_save_with_no_key_where_one_is_stored_keeps_the_keychain(local, keycha
 
 # ------------------------------------------------------------------ a locked keychain
 
+
 def test_a_locked_keychain_is_said_and_nothing_is_stored_or_written(local, keychain, examined):
     base, _, _, _, config = local
     _save(base, provider="anthropic", name="a-model")
@@ -154,11 +189,13 @@ def test_a_locked_keychain_is_said_and_nothing_is_stored_or_written(local, keych
 
 
 @pytest.mark.parametrize("raised", ["unreadable, other words", "unavailable, the unreadable words"])
-def test_the_setup_page_s_key_line_is_decided_by_the_error_s_type_not_its_words(local, keychain, monkeypatch,
-                                                                               raised, examined):
+def test_the_setup_page_s_key_line_is_decided_by_the_error_s_type_not_its_words(
+    local, keychain, monkeypatch, raised, examined
+):
     """The setup page says the keychain could not be read, by its type, for an Unreadable whatever its
     message says; the words alone, on another Unavailable (no keyring, no keychain), show no key line."""
     from onetrace_console import explain_keychain as K
+
     base, _, _, _, _ = local
     _save(base, provider="anthropic", name="a-model")
 
@@ -187,20 +224,25 @@ def test_a_save_with_no_key_while_locked_is_refused_and_the_file_keeps_its_keych
     (keychain / "locked").write_text("", encoding="utf-8")
     status, said = _save(base, provider="anthropic", name="other")
     examined(1, "a save with no key, the keychain locked")
-    assert status == 400 and "Not saved: the keychain could not be read (KeyringLocked)." in unescape(said), said[-1500:]
+    assert status == 400 and "Not saved: the keychain could not be read (KeyringLocked)." in unescape(said), said[
+        -1500:
+    ]
     assert "Saved" not in unescape(said).replace("Not saved", "")
     assert config.read_text(encoding="utf-8") == before
     assert tomllib.loads(before)["model"]["key_source"] == "keyring"
 
 
-@pytest.mark.parametrize("raised, refused", [("unreadable, other words", True),
-                                             ("unavailable, the unreadable words", False)])
-def test_a_no_key_save_is_decided_by_the_error_s_type_not_its_words(local, keychain, monkeypatch, raised, refused,
-                                                                    examined):
+@pytest.mark.parametrize(
+    "raised, refused", [("unreadable, other words", True), ("unavailable, the unreadable words", False)]
+)
+def test_a_no_key_save_is_decided_by_the_error_s_type_not_its_words(
+    local, keychain, monkeypatch, raised, refused, examined
+):
     """Whether a Save with no key is refused is decided by what the keychain module knows (an Unreadable,
     there but can't be read), not by the message's words: changing the words changes nothing, and the
     words alone, on another Unavailable (no keyring, no keychain), don't refuse."""
     from onetrace_console import explain_keychain as K
+
     base, _, _, _, config = local
     _save(base, provider="anthropic", name="a-model", key=KEY)
     before = config.read_text(encoding="utf-8")
@@ -223,6 +265,7 @@ def test_a_no_key_save_is_decided_by_the_error_s_type_not_its_words(local, keych
 
 def test_only_a_keychain_that_is_there_and_can_t_be_read_raises_unreadable(keychain, examined):
     from onetrace_console import explain_keychain as K
+
     (keychain / "locked").write_text("", encoding="utf-8")
     with pytest.raises(K.Unreadable) as got:
         K.stored("anthropic", "")
@@ -232,12 +275,15 @@ def test_only_a_keychain_that_is_there_and_can_t_be_read_raises_unreadable(keych
 
 
 def test_a_press_with_the_keychain_locked_fails_with_where_it_looked_never_the_key(
-        local, explain03_installed, model, examined):
+    local, explain03_installed, model, examined
+):
     from onetrace_console import explain
+
     base, _, store, comparison, config = local
     _save(base, provider="openai", name="stub-model", base_url=model.base_url, key=KEY)
     import os
     from pathlib import Path
+
     (Path(os.environ["ONETRACE_TEST_KEYCHAIN"]) / "locked").write_text("", encoding="utf-8")
     attempt = explain.explain(store.get_comparison(comparison.key), store, send=True)
     examined(1, "press")
@@ -248,10 +294,13 @@ def test_a_press_with_the_keychain_locked_fails_with_where_it_looked_never_the_k
 
 # ------------------------------------------------------------------ the key, nowhere
 
+
 @pytest.mark.parametrize("answer", ["reply", "echo in a reply", "echo in an error"])
 def test_the_planted_key_is_only_in_the_keychain_and_the_request_s_header(
-        local, explain03_installed, model, keychain, capfd, tmp_path, answer, examined):
+    local, explain03_installed, model, keychain, capfd, tmp_path, answer, examined
+):
     from onetrace_console import explain
+
     base, _, store, comparison, config = local
     if answer == "reply":
         model.text = (REPLIES / "mixed.json").read_text(encoding="utf-8")
@@ -263,6 +312,7 @@ def test_the_planted_key_is_only_in_the_keychain_and_the_request_s_header(
     pages = [_get(f"{base}/explain/setup")[1]]
     explain.explain(store.get_comparison(comparison.key), store, send=True)
     from onetrace_console.render import render_diff
+
     pages.append(render_diff(store.get_comparison(comparison.key), store, generated_at="2026-11-07T00:00:00+00:00"))
     pages.append(_post(f"{base}/explain/setup", {"action": "replace", "key": KEY})[1])
     out, err = capfd.readouterr()
@@ -275,7 +325,7 @@ def test_the_planted_key_is_only_in_the_keychain_and_the_request_s_header(
     assert KEY not in out and KEY not in err
     assert not any(KEY in p for p in pages)
     #: And no 8 of its characters in a row, as onetrace-explain 0.3 holds its own replies.
-    runs = [KEY[i:i + 8] for i in range(len(KEY) - 7)]
+    runs = [KEY[i : i + 8] for i in range(len(KEY) - 7)]
     assert not any(r in p for p in pages for r in runs if r not in ("sk-test-",))
 
 
@@ -283,6 +333,7 @@ def test_sabotage_a_file_holding_the_planted_key_is_named(tmp_path, examined):
     """The search every test here ends with (`planted_key_searched`) finds a file that holds the key, and
     sets aside the keychain's own folder."""
     from tests.keychain import key_problems
+
     (tmp_path / "keychain").mkdir()
     (tmp_path / "keychain" / "entries.json").write_text(KEY, encoding="utf-8")
     (tmp_path / "logs").mkdir()

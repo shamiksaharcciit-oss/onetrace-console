@@ -40,6 +40,7 @@ this script installs -- and so failed on every fresh runner with "No module name
 Usage:
     python tools/install_pinned.py
 """
+
 from __future__ import annotations
 
 import subprocess
@@ -58,11 +59,10 @@ def report_path() -> Path:
     """Where pip's install report goes, from `install_report.py` loaded by its path, never by
     importing `onetrace_console`, whose other modules import the pins this script installs."""
     import importlib.util
-    spec = importlib.util.spec_from_file_location("_onetrace_console_install_report",
-                                                  INSTALL_REPORT_MODULE)
+
+    spec = importlib.util.spec_from_file_location("_onetrace_console_install_report", INSTALL_REPORT_MODULE)
     if spec is None or spec.loader is None or not INSTALL_REPORT_MODULE.is_file():
-        raise SystemExit(f"cannot find {INSTALL_REPORT_MODULE}: run from a checkout of this "
-                         f"repository")
+        raise SystemExit(f"cannot find {INSTALL_REPORT_MODULE}: run from a checkout of this repository")
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module.install_report_path()
@@ -70,13 +70,23 @@ def report_path() -> Path:
 
 def main() -> int:
     dest = report_path()
-    cmd = [sys.executable, "-m", "pip", "install", "--require-hashes", "--force-reinstall",
-           "-r", str(LOCK), "--report", str(dest)]
+    cmd = [
+        sys.executable,
+        "-m",
+        "pip",
+        "install",
+        "--require-hashes",
+        "--force-reinstall",
+        "-r",
+        str(LOCK),
+        "--report",
+        str(dest),
+    ]
     print("running:", " ".join(cmd))
     proc = subprocess.run(cmd, cwd=REPO)
     if proc.returncode != 0:
         return proc.returncode
-    if not dest.is_file():                                       # pragma: no cover
+    if not dest.is_file():  # pragma: no cover
         print(f"pip exited 0 but wrote no report to {dest}", file=sys.stderr)
         return 1
     print(f"installed; build-identity report at {dest}")

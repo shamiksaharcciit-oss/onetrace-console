@@ -4,6 +4,7 @@ each other in the record's order -- across a wrap, down from one row and into th
 drawn where no read is recorded. On a narrow screen the same boxes are a list in reading order,
 each saying whether it reads the box before it.
 """
+
 from __future__ import annotations
 
 import re
@@ -13,16 +14,22 @@ from onetrace_console.viewer.graph import GraphNode, as_list, lay_out, render
 
 def _line(n: int, reads_previous: bool = True, skip: int | None = None) -> list[GraphNode]:
     names = [f"s{i}" for i in range(1, n + 1)]
-    return [GraphNode(node_id=name, name=name, index=i, href=f"#step-{i}",
-                      reads=((names[i - 2],) if i > 1 and reads_previous and i != skip else ()))
-            for i, name in enumerate(names, start=1)]
+    return [
+        GraphNode(
+            node_id=name,
+            name=name,
+            index=i,
+            href=f"#step-{i}",
+            reads=((names[i - 2],) if i > 1 and reads_previous and i != skip else ()),
+        )
+        for i, name in enumerate(names, start=1)
+    ]
 
 
 def link_problems(nodes: list[GraphNode], layout) -> list[str]:
     """The drawn links against the receipts' recorded reads."""
     order = [n.node_id for n in sorted(nodes, key=lambda n: n.index)]
-    want = {(a, b) for a, b in zip(order, order[1:])
-            if a in next(n for n in nodes if n.node_id == b).reads}
+    want = {(a, b) for a, b in zip(order, order[1:]) if a in next(n for n in nodes if n.node_id == b).reads}
     got = set(layout.links)
     out = [f"drawn with no recorded read: {p}" for p in sorted(got - want)]
     out += [f"a recorded read not drawn: {p}" for p in sorted(want - got)]
@@ -69,6 +76,7 @@ def test_the_narrow_list_keeps_every_box_in_order_and_says_what_it_reads(examine
 
 def test_sabotage_an_invented_or_missing_link_is_named(examined):
     from dataclasses import replace
+
     nodes = _line(5, skip=3)
     layout = lay_out(nodes, None, wrap=4)
     invented = replace(layout, links=layout.links + (("s2", "s3"),))
@@ -83,11 +91,17 @@ def test_the_record_s_reads_reach_the_graph(examined):
     from types import SimpleNamespace
 
     from onetrace_console.viewer.model import _graph_nodes
-    steps = [SimpleNamespace(data={"stage": {"name": "a"}, "inputs": [{"name": "q.json"}]},
-                             manifest_stage="a", manifest_index="1"),
-             SimpleNamespace(data={"stage": {"name": "b"}, "inputs": [
-                 {"name": "receipt:a"}, {"name": "a.json"}, {"name": 7}]},
-                 manifest_stage="b", manifest_index="2")]
+
+    steps = [
+        SimpleNamespace(
+            data={"stage": {"name": "a"}, "inputs": [{"name": "q.json"}]}, manifest_stage="a", manifest_index="1"
+        ),
+        SimpleNamespace(
+            data={"stage": {"name": "b"}, "inputs": [{"name": "receipt:a"}, {"name": "a.json"}, {"name": 7}]},
+            manifest_stage="b",
+            manifest_index="2",
+        ),
+    ]
     nodes = _graph_nodes(SimpleNamespace(steps=steps), ())
     examined(len(nodes), "nodes")
     assert [n.reads for n in nodes] == [(), ("a",)]
@@ -102,6 +116,7 @@ def test_the_demo_run_pages_wrap_and_draw_their_recorded_reads(tmp_path_factory,
     from onetrace_console.store import Store
     from onetrace_console.viewer.record import is_close
     from tests.test_checks import _require_installed
+
     _require_installed()
     folder = tmp_path_factory.mktemp("demo") / "demo"
     build_public(folder)
@@ -113,12 +128,13 @@ def test_the_demo_run_pages_wrap_and_draw_their_recorded_reads(tmp_path_factory,
             continue
         rd = folder / "runs" / run.run_id / "receipts"
         #: Its steps' receipts: a format 0.4 run's close receipt is not a step, and draws no box.
-        receipts = [r for r in (json.loads(p.read_text(encoding="utf-8")) for p in sorted(rd.glob("*.json")))
-                    if not is_close(r)]
-        ids = [r["stage"]["name"] + (f'#{r["stage"]["instance"]}' if r["stage"].get("instance") else "")
-               for r in receipts]
-        reads = [{i["name"][8:] for i in r.get("inputs", []) if i["name"].startswith("receipt:")}
-                 for r in receipts]
+        receipts = [
+            r for r in (json.loads(p.read_text(encoding="utf-8")) for p in sorted(rd.glob("*.json"))) if not is_close(r)
+        ]
+        ids = [
+            r["stage"]["name"] + (f"#{r['stage']['instance']}" if r["stage"].get("instance") else "") for r in receipts
+        ]
+        reads = [{i["name"][8:] for i in r.get("inputs", []) if i["name"].startswith("receipt:")} for r in receipts]
         names = [r["stage"]["name"] for r in receipts]
         folded = len(set(names)) != len(names)
         svg = re.search(r'<svg class="graph".*?</svg>', page, re.S).group(0)

@@ -3,7 +3,7 @@
     Objects: content-addressed, immutable. Key = sha256 of the bytes.
     Runs: the folder layout preserved as a listing (`path -> object key`), so
     `GET /v1/runs/{id}/bundle` returns a tar that is byte-identical to what was
-    delivered.                          -- the store and console design note, §2
+    delivered.
 
 THE BYTES ARE NEVER TOUCHED
 ---------------------------
@@ -27,10 +27,10 @@ partial run -- it is unreferenced bytes with a name nobody holds. `ingest` valid
 completely before it writes anything at all, so that case needs an interrupted process to
 arise, not a rejected delivery.
 """
+
 from __future__ import annotations
 
 import hashlib
-from onetrace_console.bounded_json import load_json_bounded
 import json
 import os
 import re
@@ -40,8 +40,10 @@ from contextlib import contextmanager
 from dataclasses import asdict, dataclass, field, replace
 from pathlib import Path
 
+from onetrace_console.bounded_json import load_json_bounded
+
 #: A store id is the sha256 of `run_id\x00chain_head`, so identity is
-#: `(run_id, chain_head)` exactly as the design note requires, and the id can be computed
+#: `(run_id, chain_head)` exactly, and the id can be computed
 #: from the delivery without asking the store anything.
 _KEY_SEPARATOR = b"\x00"
 
@@ -76,8 +78,7 @@ def create_exclusively(target: Path, data: bytes, *, named: str) -> None:
         with open(target, "xb") as fh:
             fh.write(data)
     except FileExistsError:
-        raise SameFileError(f"{named!r} names a file another of the run's paths already wrote "
-                            f"on this host") from None
+        raise SameFileError(f"{named!r} names a file another of the run's paths already wrote on this host") from None
 
 
 def digest(data: bytes) -> str:
@@ -104,8 +105,14 @@ def folder_key(run_id: str, chain_head: str, folder: str) -> str:
     same run and chain head: runs are folders, not chain heads, so each such folder is a run of
     its own, read on its own, and its key -- the address of its pages -- is its folder's. The same
     folder gets the same key whichever of the two is read first."""
-    return digest(run_id.encode("utf-8") + _KEY_SEPARATOR + chain_head.encode("utf-8")
-                  + _KEY_SEPARATOR + b"folder:" + folder.encode("utf-8"))
+    return digest(
+        run_id.encode("utf-8")
+        + _KEY_SEPARATOR
+        + chain_head.encode("utf-8")
+        + _KEY_SEPARATOR
+        + b"folder:"
+        + folder.encode("utf-8")
+    )
 
 
 @dataclass(frozen=True, slots=True)
@@ -115,15 +122,15 @@ class StoredRun:
     `listing` is `path -> object key` in the order the delivery carried, so the bundle
     can be rebuilt byte-for-byte AND file-for-file in the same order.
 
-    `flags` is the design note's `run_id reused` and anything like it: a finding about the
+    `flags` is `run_id reused` and anything like it: a finding about the
     delivery rather than about the record. It is never a verdict -- verdicts come from the
     check runner reading the verifier's own report.
 
     The index fields (`pipeline`, `declared_stages`, `stage_count`) are recorded even
     though nothing in this slice reads them. They are cheap now and expensive to backfill:
     a run stored without them cannot be compared later without re-reading every bundle.
-    See DESIGN_GAPS.md §4.
     """
+
     key: str
     run_id: str
     chain_head: str
@@ -236,12 +243,11 @@ class StoredRun:
 
 #: The field types a run's record is written in. The verdicts are `checks.VERDICTS` and the rung
 #: states `viewer.model`'s own, each with the empty string for "none recorded"; spelled here
-#: because `checks` imports this module (tests/test_round4_fixes.py holds them in step).
+#: because `checks` imports this module (tests/test_fourth_review_fixes.py holds them in step).
 _VERDICTS = ("", "holds", "contradicts", "could_not_check")
 _RUNG_STATES = ("", "yes", "no", "couldnt-check", "not-checked", "not-reached")
 _ANCHOR_READINGS = ("", "yes", "couldnt-check", "failed", "not-anchored")
-_SIGNATURE_READINGS = ("", "yes", "untrusted", "failed", "unsigned", "not-installed",
-                       "couldnt-check", "unreadable")
+_SIGNATURE_READINGS = ("", "yes", "untrusted", "failed", "unsigned", "not-installed", "couldnt-check", "unreadable")
 _COUNTS = ("stage_count", "recorded_count", "delivered_stages", "retries")
 _LISTS = ("flags", "declared_stages")
 
@@ -250,8 +256,8 @@ def _check_fields(d: dict) -> None:
     for name, value in d.items():
         if name == "listing":
             ok = isinstance(value, list) and all(
-                isinstance(p, list) and len(p) == 2 and all(isinstance(x, str) for x in p)
-                for p in value)
+                isinstance(p, list) and len(p) == 2 and all(isinstance(x, str) for x in p) for p in value
+            )
             want = "a list of [path, key] pairs"
         elif name in _LISTS:
             ok = isinstance(value, list) and all(isinstance(x, str) for x in value)
@@ -266,7 +272,7 @@ def _check_fields(d: dict) -> None:
             raise ValueError(f"`{name}` is {_shown(value)}, not {want}")
     #: Every name a record gives that this console later joins into a path: its own key (the
     #: folder its pages are written under), each listing path (where the run is laid out) and
-    #: each object key. A review's probe_store_types2.py: `..\\..\\..\\escaped_key` wrote pages
+    #: each object key. Probed: `..\\..\\..\\escaped_key` once wrote pages
     #: outside the pages folder, and `../../escaped.txt` a file outside the store.
     if "key" in d and not _SHA256.match(d["key"]):
         raise ValueError(f"`key` is {_shown(d['key'])}, not a sha256 run key")
@@ -277,19 +283,14 @@ def _check_fields(d: dict) -> None:
         if not _SHA256.match(key):
             raise ValueError(f"the listing's object key {_shown(key)} is not a sha256 key")
     if d.get("check_verdict", "") not in _VERDICTS:
-        raise ValueError(f"`check_verdict` is {_shown(d['check_verdict'])}, not one of "
-                         f"{list(_VERDICTS[1:])}")
+        raise ValueError(f"`check_verdict` is {_shown(d['check_verdict'])}, not one of {list(_VERDICTS[1:])}")
     if d.get("nothing_missing", "") not in _RUNG_STATES:
-        raise ValueError(f"`nothing_missing` is {_shown(d['nothing_missing'])}, not one of "
-                         f"{list(_RUNG_STATES[1:])}")
+        raise ValueError(f"`nothing_missing` is {_shown(d['nothing_missing'])}, not one of {list(_RUNG_STATES[1:])}")
     if d.get("signed", "") not in _SIGNATURE_READINGS:
-        raise ValueError(f"`signed` is {_shown(d['signed'])}, not one of "
-                         f"{list(_SIGNATURE_READINGS[1:])}")
+        raise ValueError(f"`signed` is {_shown(d['signed'])}, not one of {list(_SIGNATURE_READINGS[1:])}")
     if d.get("anchored", "") not in _ANCHOR_READINGS:
-        raise ValueError(f"`anchored` is {_shown(d['anchored'])}, not one of "
-                         f"{list(_ANCHOR_READINGS[1:])}")
-    if d.get("check_verdict") == "could_not_check" and not (d.get("check_note")
-                                                            or d.get("topology_note")):
+        raise ValueError(f"`anchored` is {_shown(d['anchored'])}, not one of {list(_ANCHOR_READINGS[1:])}")
+    if d.get("check_verdict") == "could_not_check" and not (d.get("check_note") or d.get("topology_note")):
         #: The check runner records a reason with every could_not_check; a record without one
         #: was not written by it, and an incident would have nothing to quote.
         raise ValueError("`check_verdict` is could_not_check with no stated reason")
@@ -324,6 +325,7 @@ class Store:
     index arrives later, the same property should hold: a run's own record stays a file,
     so the store survives its index being deleted, and nothing lives only in the index.
     """
+
     root: Path
     _objects: Path = field(init=False)
     _runs: Path = field(init=False)
@@ -397,7 +399,8 @@ class Store:
                 raise StoreError(
                     f"object {key} already holds different bytes ({len(existing)} on disk, "
                     f"{len(data)} offered). A content address cannot mean two things; this "
-                    f"is corruption or a collision and either way it is not repaired here.")
+                    f"is corruption or a collision and either way it is not repaired here."
+                )
             return key
         path.parent.mkdir(parents=True, exist_ok=True)
         _atomic_write(path, data)
@@ -437,8 +440,9 @@ class Store:
         refused, and nothing is written."""
         gone = self.missing(run)
         if gone:
-            raise StoreError(f"not written: the record of run {run.key} names "
-                             f"{', '.join(gone)}, which this store does not hold")
+            raise StoreError(
+                f"not written: the record of run {run.key} names {', '.join(gone)}, which this store does not hold"
+            )
         _atomic_write(self._run_path(run.key), run.to_json().encode("utf-8"))
         self._forget()
 
@@ -450,9 +454,13 @@ class Store:
         if not gone:
             return run
         #: Its stored rung 1 reading goes too: it was read from objects no longer all here.
-        return replace(run, check_verdict="could_not_check",
-                       check_note=MISSING_OBJECT.format(objects=", ".join(gone)),
-                       agree="", agree_why="")
+        return replace(
+            run,
+            check_verdict="could_not_check",
+            check_note=MISSING_OBJECT.format(objects=", ".join(gone)),
+            agree="",
+            agree_why="",
+        )
 
     def get_run(self, key: str) -> StoredRun | None:
         path = self._run_path(key)
@@ -474,8 +482,7 @@ class Store:
                 read.setdefault("one", {})[key] = run
             return run
         except _UNREADABLE as e:
-            raise StoreError(f"the stored record {path.name} cannot be read: "
-                             f"{_why(e)}") from None
+            raise StoreError(f"the stored record {path.name} cannot be read: {_why(e)}") from None
 
     def runs(self) -> tuple[StoredRun, ...]:
         """Every stored run, newest delivery first; runs sharing an arrival second by run name, A
@@ -485,7 +492,7 @@ class Store:
         A run record this version cannot read -- damaged, wrong-typed, nested past what JSON
         reads, or written by a later version with a field this one does not know -- is left
         out and named in `unreadable_runs`, so Home can say so, instead of stopping every page,
-        ingest and start (the third confirmation review, NEW-6; round 4, S3). It is never
+        ingest and start. It is never
         repaired."""
         read = self._read()
         if read is not None and "runs" in read:
@@ -512,7 +519,6 @@ class Store:
     def runs_with_id(self, run_id: str) -> tuple[StoredRun, ...]:
         return tuple(r for r in self.runs() if r.run_id == run_id)
 
-
     # -------------------------------------------------------------- comparisons
 
     def _comparison_path(self, key: str) -> Path:
@@ -527,14 +533,14 @@ class Store:
 
         Kept in its own directory so that `runs()` cannot accidentally count comparisons —
         Home's numbers are counts of runs, and a count that silently included something else
-        would be the exact failure the design note's prohibitions are about.
+        would be the exact failure the console's five prohibitions are about.
         """
-        _atomic_write(self._comparison_path(comparison.key),
-                      comparison.to_json().encode("utf-8"))
+        _atomic_write(self._comparison_path(comparison.key), comparison.to_json().encode("utf-8"))
         self._forget()
 
     def get_comparison(self, key: str):
         from onetrace_console.compare import StoredComparison
+
         path = self._comparison_path(key)
         if not path.exists():
             return None
@@ -542,11 +548,11 @@ class Store:
             return StoredComparison.from_json(path.read_bytes().decode("utf-8"))
         except _UNREADABLE + (AttributeError,) as e:
             #: As `get_run`: a record it holds and cannot read is said as that, never raised bare.
-            raise StoreError(f"the stored comparison record {path.name} cannot be read: "
-                             f"{_why(e)}") from None
+            raise StoreError(f"the stored comparison record {path.name} cannot be read: {_why(e)}") from None
 
     def comparisons(self) -> tuple:
         from onetrace_console.compare import StoredComparison
+
         read = self._read()
         if read is not None and "comparisons" in read:
             comparisons, self.unreadable_comparisons, self.unreadable_comparison_keys = read["comparisons"]
@@ -581,14 +587,14 @@ class Store:
     def put_drift(self, key: str, record: dict) -> None:
         """Keep what `onetrace drift` wrote over a pipeline's runs (`drift.run_drift`). In its own
         directory, as comparisons are: `runs()` never counts it."""
-        _atomic_write(self._drift_path(key),
-                      json.dumps(record, sort_keys=True, separators=(",", ":")).encode("utf-8"))
+        _atomic_write(self._drift_path(key), json.dumps(record, sort_keys=True, separators=(",", ":")).encode("utf-8"))
 
     def get_drift(self, key: str) -> dict | None:
         path = self._drift_path(key)
         if not path.exists():
             return None
         from onetrace_console.bounded_json import load_json_bounded
+
         try:
             record = load_json_bounded(path.read_bytes().decode("utf-8"), path.name)
         except _UNREADABLE as e:
@@ -613,14 +619,16 @@ class Store:
         return d / f"{key}.json"
 
     def put_kept(self, kind: str, key: str, record: dict) -> None:
-        _atomic_write(self._kept_path(kind, key),
-                      json.dumps(record, sort_keys=True, separators=(",", ":")).encode("utf-8"))
+        _atomic_write(
+            self._kept_path(kind, key), json.dumps(record, sort_keys=True, separators=(",", ":")).encode("utf-8")
+        )
 
     def get_kept(self, kind: str, key: str) -> dict | None:
         path = self._kept_path(kind, key)
         if not path.exists():
             return None
         from onetrace_console.bounded_json import load_json_bounded
+
         try:
             record = load_json_bounded(path.read_bytes().decode("utf-8"), path.name)
         except _UNREADABLE as e:
@@ -660,6 +668,7 @@ class Store:
 
     def get_decision_export(self, key: str):
         from onetrace_console.onedoor_ext.decisions import StoredDecisionExport
+
         path = self._decision_export_path(key)
         if not path.exists():
             return None
@@ -667,11 +676,11 @@ class Store:
 
     def decision_exports(self) -> tuple:
         from onetrace_console.onedoor_ext.decisions import StoredDecisionExport
+
         d = self.root / "decision_exports"
         if not d.is_dir():
             return ()
-        return tuple(StoredDecisionExport.from_json(p.read_bytes().decode("utf-8"))
-                     for p in sorted(d.glob("*.json")))
+        return tuple(StoredDecisionExport.from_json(p.read_bytes().decode("utf-8")) for p in sorted(d.glob("*.json")))
 
     def decision_export_records(self) -> tuple[tuple[str, bytes], ...]:
         """Every decision record as (its filename's stem, its raw bytes), unparsed. The stem

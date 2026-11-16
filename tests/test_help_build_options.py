@@ -4,6 +4,7 @@
 usage's `demo --public --build` entry must name each of them too, so a reader of either finds them all.
 The sabotage below drops one from the usage.
 """
+
 from __future__ import annotations
 
 import os
@@ -16,10 +17,15 @@ REPO = Path(__file__).resolve().parent.parent
 
 
 def _cli(*args: str) -> str:
-    env = {**{k: v for k, v in os.environ.items() if k != "ONETRACE_CONSOLE_CONFIG"},
-           "PYTHONPATH": str(REPO / "src")}
-    done = subprocess.run([sys.executable, "-B", "-m", "onetrace_console", *args], capture_output=True, text=True,
-                          encoding="utf-8", env=env, timeout=120)
+    env = {**{k: v for k, v in os.environ.items() if k != "ONETRACE_CONSOLE_CONFIG"}, "PYTHONPATH": str(REPO / "src")}
+    done = subprocess.run(
+        [sys.executable, "-B", "-m", "onetrace_console", *args],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        env=env,
+        timeout=120,
+    )
     assert done.returncode == 0, done.stderr[-1500:]
     return done.stdout
 
@@ -34,7 +40,7 @@ def build_entry(usage: str) -> str:
     """The top-level usage's `demo --public --build` entry, up to the next command."""
     start = usage.index("onetrace-console demo --public --build")
     end = usage.find("\n  onetrace-console ", start)
-    return usage[start:end if end != -1 else None]
+    return usage[start : end if end != -1 else None]
 
 
 def missing(usage: str, options: list[str]) -> list[str]:

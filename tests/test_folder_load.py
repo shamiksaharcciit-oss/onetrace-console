@@ -6,11 +6,13 @@
 2. A run folder that cannot be delivered is said, with why, and the others still load: one still
    being recorded (onetrace's `.lock` is in it), one holding a link, one whose own SHA256SUMS does
    not match it.
-3. `demo` copies the reference demo's two runs and its trust file into `onetrace-console-demo/`,
+3. `demo` copies the reference demo's two runs and its trust file into this version's own demo folder
+   (`onetrace-console-demo-<version>/`),
    loads both, compares them, and prints the pages' addresses. It ships inside the package, as
    the reference demo's own bytes.
 4. Both listen on 127.0.0.1 only; a browser is opened only with `--open`.
 """
+
 from __future__ import annotations
 
 import hashlib
@@ -24,9 +26,11 @@ import threading
 import urllib.request
 from html import unescape
 from pathlib import Path
-from tests.http_limits import limit
 
 import pytest
+
+from onetrace_console.folder_load import own_demo_folder
+from tests.http_limits import limit
 
 REPO = Path(__file__).resolve().parent.parent
 EXAMPLE = REPO / "examples" / "reference-demo"
@@ -44,12 +48,14 @@ def _load(folder: Path, root: Path, compare=None, trust_file=None):
     from onetrace_console.folder_load import load_folder
     from onetrace_console.store import Store
     from tests.test_checks import _require_installed
+
     _require_installed()
     store = Store(root / "store")
     return store, load_folder(folder, store, Config(trust_file=trust_file), compare=compare)
 
 
 # ------------------------------------------------------------------ 1. the load itself
+
 
 def test_every_run_folder_is_loaded_and_nothing_is_compared(tmp_path, examined):
     store, loaded = _load(_runs(tmp_path), tmp_path)
@@ -73,6 +79,7 @@ def test_compare_a_b_compares_the_two_it_names_a_as_the_baseline(tmp_path, exami
 
 def test_a_comparison_naming_a_folder_not_there_is_refused_before_anything_loads(tmp_path, examined):
     from onetrace_console.folder_load import LoadRefused
+
     examined(1, "comparison naming a missing folder")
     with pytest.raises(LoadRefused) as refused:
         _load(_runs(tmp_path), tmp_path, compare=("day-1", "day-3"))
@@ -82,6 +89,7 @@ def test_a_comparison_naming_a_folder_not_there_is_refused_before_anything_loads
 
 def test_a_folder_with_no_run_folders_is_said(tmp_path, examined):
     from onetrace_console.folder_load import LoadRefused
+
     (tmp_path / "empty").mkdir()
     examined(1, "empty folder")
     with pytest.raises(LoadRefused) as refused:
@@ -90,6 +98,7 @@ def test_a_folder_with_no_run_folders_is_said(tmp_path, examined):
 
 
 # ------------------------------------------------------------------ 2. runs that cannot be delivered
+
 
 def test_a_run_still_being_recorded_is_skipped_and_said(tmp_path, examined):
     folder = _runs(tmp_path)
@@ -114,9 +123,10 @@ def test_a_run_whose_own_sums_match_is_delivered_with_them(tmp_path, examined):
     folder = _runs(tmp_path)
     run = folder / "day-1"
     files = sorted(p for p in run.rglob("*") if p.is_file())
-    (run / "SHA256SUMS").write_text("".join(
-        f"{hashlib.sha256(p.read_bytes()).hexdigest()}  {p.relative_to(run).as_posix()}\n"
-        for p in files), encoding="utf-8")
+    (run / "SHA256SUMS").write_text(
+        "".join(f"{hashlib.sha256(p.read_bytes()).hexdigest()}  {p.relative_to(run).as_posix()}\n" for p in files),
+        encoding="utf-8",
+    )
     _store, loaded = _load(folder, tmp_path)
     examined(1, "run folder with its own sums")
     assert {r.name: r for r in loaded.runs}["day-1"].run is not None
@@ -148,30 +158,39 @@ def test_a_run_holding_a_link_is_refused(tmp_path, examined):
 #: 0.1.1: the package ships the demo store's builder and its trust file,
 #: not runs. The reference demo's committed runs stay in examples/, outside the store.
 
+
 def test_the_package_ships_the_builders_trust_file_and_the_reference_pipeline_as_is(examined):
     from onetrace_console.demo_store import keys
+
     examined(2, "files the builder ships")
-    assert (SHIPPED / "trust.json").read_bytes() == keys.trust_file_bytes(), \
+    assert (SHIPPED / "trust.json").read_bytes() == keys.trust_file_bytes(), (
         "the packaged trust file is the builder's, byte for byte"
-    assert (SHIPPED / "reference_pipeline.py").read_bytes() == (EXAMPLE / "demo.py").read_bytes(), \
+    )
+    assert (SHIPPED / "reference_pipeline.py").read_bytes() == (EXAMPLE / "demo.py").read_bytes(), (
         "P2 runs the reference demo's pipeline unchanged"
-    assert not (REPO / "src" / "onetrace_console" / "reference_demo").exists(), \
-        "no committed runs ship in the package"
+    )
+    assert not (REPO / "src" / "onetrace_console" / "reference_demo").exists(), "no committed runs ship in the package"
 
 
 def test_the_package_data_names_the_demo(examined):
     import tomllib
+
     data = tomllib.loads((REPO / "pyproject.toml").read_text(encoding="utf-8"))
     globs = data["tool"]["setuptools"]["package-data"]["onetrace_console"]
     examined(len(globs), "package-data globs")
     from fnmatch import fnmatch
-    shipped = [p.relative_to(SHIPPED.parent).as_posix() for p in SHIPPED.rglob("*")
-               if p.is_file() and p.suffix != ".py" and "__pycache__" not in p.parts]
+
+    shipped = [
+        p.relative_to(SHIPPED.parent).as_posix()
+        for p in SHIPPED.rglob("*")
+        if p.is_file() and p.suffix != ".py" and "__pycache__" not in p.parts
+    ]
     assert shipped == ["demo_store/trust.json"], shipped
     assert all(any(fnmatch(p, g) for g in globs) for p in shipped), shipped
 
 
 # ------------------------------------------------------------------ 4. the commands, as a user runs them
+
 
 def _free_port() -> int:
     with socket.socket() as s:
@@ -185,13 +204,19 @@ class _Console:
     def __init__(self, cwd: Path, *args: str, env: dict | None = None):
         clean = {k: v for k, v in os.environ.items() if k != "ONETRACE_CONSOLE_CONFIG"}
         clean["PYTHONPATH"] = str(REPO / "src")
-        self.proc = subprocess.Popen([sys.executable, "-B", "-m", "onetrace_console", *args], cwd=cwd,
-                                     stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
-                                     env={**clean, **(env or {})})
+        self.proc = subprocess.Popen(
+            [sys.executable, "-B", "-m", "onetrace_console", *args],
+            cwd=cwd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            env={**clean, **(env or {})},
+        )
         self.lines: list[str] = []
         lines: queue.Queue = queue.Queue()
-        threading.Thread(target=lambda: [lines.put(l) for l in self.proc.stdout] and lines.put(None),
-                         daemon=True).start()
+        threading.Thread(
+            target=lambda: [lines.put(l) for l in self.proc.stdout] and lines.put(None), daemon=True
+        ).start()
         self._queue = lines
 
     def until(self, prefix: str, timeout: float = 600) -> str:
@@ -236,6 +261,7 @@ def console():
         c = _Console(*args, **kw)
         started.append(c)
         return c
+
     yield start
     for c in started:
         c.stop()
@@ -262,17 +288,18 @@ def test_a_folder_load_serves_the_runs_and_the_comparison_it_was_asked_for(tmp_p
 def _demo_runs() -> list[str]:
     """What the demo's `runs/` holds: its run folders, and what the builder writes beside them."""
     from onetrace_console.demo_store import BESIDE_RUNS, runs
+
     return sorted([r.folder for r in runs()] + list(BESIDE_RUNS))
 
 
-def test_the_demo_builds_loads_compares_and_reads_the_signatures_with_its_trust_file(tmp_path, console,
-                                                                                   examined):
+def test_the_demo_builds_loads_compares_and_reads_the_signatures_with_its_trust_file(tmp_path, console, examined):
     from onetrace_console.demo_store import COMPARISONS, keys
+
     port = _free_port()
     c = console(tmp_path, "demo", "--port", str(port))
     overview = c.until("overview:")
     examined(1, "demo")
-    demo = tmp_path / "onetrace-console-demo"
+    demo = tmp_path / own_demo_folder()
     assert sorted(p.name for p in (demo / "runs").iterdir()) == _demo_runs()
     assert (demo / "trust.json").read_bytes() == (SHIPPED / "trust.json").read_bytes()
     assert (demo / "store").is_dir() and not (tmp_path / "store").exists()
@@ -280,8 +307,7 @@ def test_the_demo_builds_loads_compares_and_reads_the_signatures_with_its_trust_
     assert "/diff/" in compared and COMPARISONS[0][0] in compared and COMPARISONS[0][1] in compared
     first = next(l for l in c.lines if l.strip().startswith(COMPARISONS[0][0]))
     receipt = _get(_url(first).replace("case.html", "receipt.html"))
-    assert keys.TRUSTED_LABEL in unescape(receipt), \
-        "the signatures were not read with the demo's trust file"
+    assert keys.TRUSTED_LABEL in unescape(receipt), "the signatures were not read with the demo's trust file"
     assert _url(overview) == f"http://127.0.0.1:{port}/"
 
 
@@ -292,9 +318,9 @@ def test_the_demo_runs_again_in_the_same_folder(tmp_path, console, examined):
         c = console(tmp_path, "demo", "--port", str(port))
         c.until("overview:")
         c.stop()
-        records.append((tmp_path / "onetrace-console-demo" / "BUILD_RECORD.json").read_bytes())
+        records.append((tmp_path / own_demo_folder() / "BUILD_RECORD.json").read_bytes())
     examined(2, "demo starts in one folder")
-    assert sorted(p.name for p in (tmp_path / "onetrace-console-demo" / "runs").iterdir()) == _demo_runs()
+    assert sorted(p.name for p in (tmp_path / own_demo_folder() / "runs").iterdir()) == _demo_runs()
     assert records[0] == records[1], "the second start re-used the runs the first built"
 
 
@@ -303,7 +329,7 @@ def test_the_demo_refuses_a_folder_whose_runs_were_changed(tmp_path, console, ex
     c = console(tmp_path, "demo", "--port", str(_free_port()))
     c.until("overview:")
     c.stop()
-    runs = tmp_path / "onetrace-console-demo" / "runs"
+    runs = tmp_path / own_demo_folder() / "runs"
     (edited,) = sorted(runs.glob("p1-01-*/artifacts/*-answer/answers.json"))
     data = bytearray(edited.read_bytes())
     data[-3] ^= 0x01
@@ -313,24 +339,24 @@ def test_the_demo_refuses_a_folder_whose_runs_were_changed(tmp_path, console, ex
     examined(1, "changed demo folder")
     assert code == 1, out
     rel = edited.relative_to(runs.parent).as_posix()
-    assert f"{rel} was changed" in out and "onetrace-console-demo" in out, out
+    assert f"{rel} was changed" in out and own_demo_folder() in out, out
 
 
 def test_the_demo_refuses_when_a_configuration_file_is_named(tmp_path, console, examined):
-    c = console(tmp_path, "demo", "--port", str(_free_port()),
-                env={"ONETRACE_CONSOLE_CONFIG": str(tmp_path / "config.json")})
+    c = console(
+        tmp_path, "demo", "--port", str(_free_port()), env={"ONETRACE_CONSOLE_CONFIG": str(tmp_path / "config.json")}
+    )
     code, out = c.exited()
     examined(1, "demo with a configuration file named")
     assert code == 1 and "ONETRACE_CONSOLE_CONFIG" in out, out
-    assert not (tmp_path / "onetrace-console-demo").exists()
+    assert not (tmp_path / own_demo_folder()).exists()
 
 
 def _browser(tmp_path: Path) -> tuple[dict, Path]:
     """A stand-in browser: `webbrowser` runs $BROWSER with the address, and this one writes it down."""
     opened = tmp_path / "opened.txt"
     script = tmp_path / "browser.py"
-    script.write_text("import sys, pathlib\npathlib.Path(sys.argv[1]).write_text(sys.argv[2])\n",
-                      encoding="utf-8")
+    script.write_text("import sys, pathlib\npathlib.Path(sys.argv[1]).write_text(sys.argv[2])\n", encoding="utf-8")
     return {"BROWSER": f'"{sys.executable}" "{script}" "{opened}" %s'}, opened
 
 
@@ -360,6 +386,7 @@ def test_a_browser_is_opened_only_when_asked(tmp_path, console, examined, asked)
 
 def test_the_usage_names_both_commands(examined):
     from onetrace_console.__main__ import USAGE
+
     examined(1, "usage text")
     assert "onetrace-console demo" in USAGE
     assert "onetrace-console <runs folder>" in USAGE and "--compare" in USAGE and "--open" in USAGE
@@ -368,8 +395,13 @@ def test_the_usage_names_both_commands(examined):
 def test_a_mistyped_command_says_so_and_shows_the_usage(tmp_path, examined):
     """A first word that is neither a command nor an existing path is a mistyped command, not a
     folder problem: it is said as that, then the usage, and the exit is 2."""
-    out = subprocess.run([sys.executable, "-B", "-m", "onetrace_console", "srve"], cwd=tmp_path,
-                         capture_output=True, text=True, env={**os.environ, "PYTHONPATH": str(REPO / "src")})
+    out = subprocess.run(
+        [sys.executable, "-B", "-m", "onetrace_console", "srve"],
+        cwd=tmp_path,
+        capture_output=True,
+        text=True,
+        env={**os.environ, "PYTHONPATH": str(REPO / "src")},
+    )
     examined(1, "mistyped command")
     assert out.returncode == 2, (out.returncode, out.stderr)
     assert out.stderr.splitlines()[0] == "onetrace-console: 'srve' is not a command or a folder", out.stderr

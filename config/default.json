@@ -19,11 +19,26 @@
     "tls_key_path": "",
     "session_idle_timeout_seconds": 1800,
     "session_absolute_timeout_seconds": 43200,
-    "rate_limit_max_attempts_per_account": 10,
+    "max_sessions_per_account": 3,
     "rate_limit_max_attempts_per_client": 20,
     "rate_limit_window_seconds": 300,
+    "rate_limit_max_attempts_per_device": 5,
+    "rate_limit_max_attempts_per_pair": 5,
+    "rate_limit_pair_window_seconds": 900,
+    "rate_limit_max_attempts_per_account": 100,
+    "rate_limit_account_window_seconds": 3600,
     "rate_limit_max_concurrent_hashes": 2,
-    "insecure_cookie_for_local_dev": false
+    "insecure_cookie_for_local_dev": false,
+    "public_url": "",
+    "trusted_proxies": [],
+    "method": "local",
+    "oidc": {
+      "tenant_id": "",
+      "client_id": "",
+      "client_certificate": "",
+      "client_secret_env": "",
+      "session_max_hours": 8
+    }
   },
   "trust_file": null,
   "tsa_cert": null,
@@ -37,5 +52,6 @@
   "compare_wait_seconds": 20.0,
   "compare_verb_seconds": 30,
   "tracing": {},
-  "tokenizers": []
+  "tokenizers": [],
+  "close_call_margin": 1.0
 }

@@ -8,9 +8,9 @@ instead, and there is one requirements file instead of two -- the online/offline
 because the two source repositories were private and needed credentials; PyPI and a committed
 wheelhouse need neither, so the split has nothing left to do.
 """
+
 from __future__ import annotations
 
-import json
 import re
 import subprocess
 import sys
@@ -24,20 +24,17 @@ PINS_DOC = REPO / "PINS.md"
 
 #: The three hashes this channel has independently verified, named once here. If a pin is
 #: moved, this fails and names what disagreed -- the point of writing them out at all.
-#: The SDK's two: onetrace 0.7.1 and onetrace-verify 0.7.1 from PyPI, each wheel's sha256 written
-#: here by script from PyPI's JSON.
-ONETRACE_WHL_SHA256 = "889ef744a23c3a5ce05489bfe3a0c75ffbc3f97f46e9e28815f6012637f2f995"
-ONETRACE_VERIFY_WHL_SHA256 = "912a1111840a5ad1206385186e2808e1af0fa380406ace7c3b28d9bac92bc05c"
+#: The SDK's two: onetrace 0.8.0 and onetrace-verify 0.8.0, each wheel's sha256 as their release build gave it.
+ONETRACE_WHL_SHA256 = "a2072c5e6c97843cd4a8915b5392dbde696d3a5d59531b0c666473a794760214"
+ONETRACE_VERIFY_WHL_SHA256 = "5a2a60387fb25f35d67fdc0f2d6195d2b11465f4adc20465697574409bdef82d"
 #: The pinned SDK's version, as its distribution and `onetrace.__version__` report it; and the
-#: verifier's, the same (the two are released in series: 0.7.x with 0.7.x).
-PINNED_SDK_VERSION = "0.7.1"
-PINNED_VERIFY_VERSION = "0.7.1"
-ONETRACE_LOCK_KEY = "onetrace==0.7.1"
-ONETRACE_VERIFY_LOCK_KEY = "onetrace-verify==0.7.1"
+#: verifier's, the same (the two are released in series: 0.8.x with 0.8.x).
+PINNED_SDK_VERSION = "0.8.0"
+PINNED_VERIFY_VERSION = "0.8.0"
+ONETRACE_LOCK_KEY = "onetrace==0.8.0"
+ONETRACE_VERIFY_LOCK_KEY = "onetrace-verify==0.8.0"
 
-_REQ = re.compile(
-    r"^(?P<req>\S+)\s*\\?\s*$\n\s*--hash=sha256:(?P<sha>[0-9a-f]{64})",
-    re.MULTILINE)
+_REQ = re.compile(r"^(?P<req>\S+)\s*\\?\s*$\n\s*--hash=sha256:(?P<sha>[0-9a-f]{64})", re.MULTILINE)
 
 
 def lock_entries() -> dict[str, str]:
@@ -48,18 +45,44 @@ def lock_entries() -> dict[str, str]:
 
 #: The verifier's crypto extra, exactly the versions the SDK pins at 0.2.0;
 #: tests/test_signed_run.py holds each one's hashes.
-CRYPTO_PINS = {"asn1crypto==1.5.1", "cffi==2.1.1", "cryptography==50.0.1", "pycparser==3.0",
-                 "rfc3161-client==1.0.9"}
+CRYPTO_PINS = {"asn1crypto==1.5.1", "cffi==2.1.1", "cryptography==50.0.1", "pycparser==3.0", "rfc3161-client==1.0.9"}
+#: The ID token's signature and claims, for sign-in through Microsoft Entra ID: PyJWT 2.15.1 from PyPI,
+#: its wheel's sha256 and its sdist's, written here from PyPI's JSON. It reuses the pinned cryptography.
+PYJWT_LOCK_KEY = "pyjwt==2.15.1"
+PYJWT_WHL_SHA256 = "42d59d631f7768a1028a64c7ff581a9bf7519804daf91fc5b6c56e30eec5e193"
+PYJWT_SDIST_SHA256 = "4f259e80cdfb6b3fc18a7de51fd1ef9ec79652f25019bae68975ca2468a34df8"
 
 
 def test_the_lock_file_pins_exactly_these_things_by_hash(examined):
     entries = lock_entries()
     examined(len(entries), "hash-pinned requirements")
-    assert set(entries) == {
-        ONETRACE_LOCK_KEY,
-        ONETRACE_VERIFY_LOCK_KEY,
-    } | CRYPTO_PINS, (f"the lock file pins {sorted(entries)}; the SDK's two distributions and "
-                       f"the crypto extra's five are expected")
+    assert (
+        set(entries)
+        == {
+            ONETRACE_LOCK_KEY,
+            ONETRACE_VERIFY_LOCK_KEY,
+            PYJWT_LOCK_KEY,
+        }
+        | CRYPTO_PINS
+    ), (
+        f"the lock file pins {sorted(entries)}; the SDK's two distributions, the crypto extra's five and PyJWT "
+        f"are expected"
+    )
+
+
+def test_pyjwt_is_pinned_by_its_wheel_and_sdist_and_asks_for_nothing_unpinned(examined):
+    """Its wheel's and its sdist's hashes, as PyPI lists them; the package names `pyjwt[crypto]`,
+    whose one requirement on Python 3.11 and later, cryptography, the lock already pins."""
+    import tomllib
+
+    text = LOCK.read_text(encoding="utf-8")
+    block = re.search(r"^pyjwt==2\.15\.1 \\\n((?:\s+--hash=sha256:[0-9a-f]{64}[^\n]*\n?)+)", text, re.M)
+    examined(3, "the lock's PyJWT hashes, the dependency, cryptography pinned")
+    assert block is not None, "requirements.lock has no pyjwt==2.15.1 block"
+    assert set(re.findall(r"sha256:([0-9a-f]{64})", block.group(1))) == {PYJWT_WHL_SHA256, PYJWT_SDIST_SHA256}
+    deps = tomllib.loads((REPO / "pyproject.toml").read_text(encoding="utf-8"))["project"]["dependencies"]
+    assert "pyjwt[crypto]==2.15.1" in deps, deps
+    assert "cryptography==50.0.1" in CRYPTO_PINS
 
 
 def test_onetrace_is_pinned_to_the_wheel_this_channel_verified(examined):
@@ -77,11 +100,14 @@ def test_onetrace_verify_is_pinned_to_the_wheel_this_channel_verified(examined):
 def test_the_sdk_s_doctor_reads_the_pinned_pair_as_compatible(tmp_path, examined):
     """`onetrace doctor`, in an empty folder, on what this console installs: its compatibility
     line names the two pinned versions and says they are compatible, by the SDK's own table."""
-    p = subprocess.run([sys.executable, "-m", "onetrace", "doctor"], cwd=tmp_path, capture_output=True,
-                       text=True, timeout=120)
+    p = subprocess.run(
+        [sys.executable, "-m", "onetrace", "doctor"], cwd=tmp_path, capture_output=True, text=True, timeout=120
+    )
     examined(1, "doctor's compatibility line")
-    line = (f"[ok]  onetrace and onetrace-verify: onetrace {PINNED_SDK_VERSION}, "
-            f"onetrace-verify {PINNED_VERIFY_VERSION}: compatible")
+    line = (
+        f"[ok]  onetrace and onetrace-verify: onetrace {PINNED_SDK_VERSION}, "
+        f"onetrace-verify {PINNED_VERIFY_VERSION}: compatible"
+    )
     assert line in [l.strip() for l in p.stdout.splitlines()], p.stdout
     assert p.returncode == 0, p.stdout + p.stderr
 
@@ -112,7 +138,8 @@ def test_a_wrong_hash_fails_the_install(examined):
         pytest.fail(
             f"the local wheel cache is not there or does not match: {WHEEL_CACHE}\n"
             f"    python tools/fetch_wheel_cache.py\n"
-            f"This refuses rather than skips, and rather than falling back to the network.")
+            f"This refuses rather than skips, and rather than falling back to the network."
+        )
 
     examined(1, "wrong-hash install attempts")
     text = LOCK.read_text(encoding="utf-8")
@@ -127,19 +154,34 @@ def test_a_wrong_hash_fails_the_install(examined):
         bad_lock = tmp_path / "requirements.bad.lock"
         bad_lock.write_text(bad_text, encoding="utf-8")
         proc = subprocess.run(
-            [sys.executable, "-m", "pip", "install", "--require-hashes",
-             "--no-index", "--find-links", str(WHEEL_CACHE),
-             "--target", str(tmp_path / "target"), "-r", str(bad_lock)],
-            cwd=REPO, capture_output=True, text=True, timeout=30)
-    assert proc.returncode != 0, (
-        f"a wrong hash was accepted by pip; exit {proc.returncode}\n{proc.stdout}")
+            [
+                sys.executable,
+                "-m",
+                "pip",
+                "install",
+                "--require-hashes",
+                "--no-index",
+                "--find-links",
+                str(WHEEL_CACHE),
+                "--target",
+                str(tmp_path / "target"),
+                "-r",
+                str(bad_lock),
+            ],
+            cwd=REPO,
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+    assert proc.returncode != 0, f"a wrong hash was accepted by pip; exit {proc.returncode}\n{proc.stdout}"
     combined = proc.stdout + proc.stderr
     assert "do not match the hashes" in combined.lower(), combined
 
 
-@pytest.mark.skipif(not PINS_DOC.is_file(),
-                    reason="PINS.md is the repository's own record of its pins and is left out "
-                           "of the public tree")
+@pytest.mark.skipif(
+    not PINS_DOC.is_file(),
+    reason="PINS.md is the repository's own record of its pins and is left out of the public tree",
+)
 def test_the_pins_document_names_both_hashes(examined):
     doc = PINS_DOC.read_text(encoding="utf-8")
     shas = (ONETRACE_WHL_SHA256, ONETRACE_VERIFY_WHL_SHA256)
@@ -148,28 +190,46 @@ def test_the_pins_document_names_both_hashes(examined):
         assert sha in doc, f"PINS.md does not name {sha}"
 
 
-@pytest.mark.skipif(not PINS_DOC.is_file(),
-                    reason="PINS.md is the repository's own record of its pins and is left out "
-                           "of the public tree")
-def test_the_pins_document_names_the_0_7_1_release_s_four_files_and_keeps_the_earlier_releases(examined):
-    """The current section names 0.7.1's four files and says nothing of an index they are not on;
-    the development wheels' section is gone; the sections before still name 0.6.1's, 0.6.0's,
+@pytest.mark.skipif(
+    not PINS_DOC.is_file(),
+    reason="PINS.md is the repository's own record of its pins and is left out of the public tree",
+)
+def test_the_pins_document_names_the_0_8_0_release_s_four_files_and_keeps_the_earlier_releases(examined):
+    """The current section names 0.8.0's four files and says nothing of an index they are not on;
+    the development wheels' section is gone; the sections before still name 0.7.1's, 0.6.1's, 0.6.0's,
     0.5.0's, 0.4.0's and 0.3.0's four."""
-    from tests.test_pin_012 import (RELEASE_0_3_0, RELEASE_0_4_0, RELEASE_0_5_0, RELEASE_0_6_0, RELEASE_0_6_1,
-                                    RELEASE_0_7_1)
+    from tests.test_pin_012 import (
+        RELEASE_0_3_0,
+        RELEASE_0_4_0,
+        RELEASE_0_5_0,
+        RELEASE_0_6_0,
+        RELEASE_0_6_1,
+        RELEASE_0_7_1,
+        RELEASE_0_8_0,
+    )
+
     doc = PINS_DOC.read_text(encoding="utf-8")
     now, before = doc.split("\n## Before", 1)
-    examined(len(RELEASE_0_7_1) + len(RELEASE_0_6_1) + len(RELEASE_0_6_0) + len(RELEASE_0_5_0)
-             + len(RELEASE_0_4_0) + len(RELEASE_0_3_0), "files checked against PINS.md")
-    for name, sha in RELEASE_0_7_1.items():
+    examined(
+        len(RELEASE_0_8_0)
+        + len(RELEASE_0_7_1)
+        + len(RELEASE_0_6_1)
+        + len(RELEASE_0_6_0)
+        + len(RELEASE_0_5_0)
+        + len(RELEASE_0_4_0)
+        + len(RELEASE_0_3_0),
+        "files checked against PINS.md",
+    )
+    for name, sha in RELEASE_0_8_0.items():
         assert sha in now, f"PINS.md's current section does not name {name}"
     assert "on no index" not in now and "--find-links" not in now and "development wheel" not in now
-    for name, sha in {**RELEASE_0_6_1, **RELEASE_0_6_0, **RELEASE_0_5_0, **RELEASE_0_4_0, **RELEASE_0_3_0}.items():
+    earlier = {**RELEASE_0_7_1, **RELEASE_0_6_1, **RELEASE_0_6_0, **RELEASE_0_5_0, **RELEASE_0_4_0, **RELEASE_0_3_0}
+    for name, sha in earlier.items():
         assert sha in before, f"PINS.md no longer names {name}"
 
 
 def test_no_pythonpath_clone_apparatus_remains(examined):
-    """"Remove the PYTHONPATH clones and the pins to source trees." Checked, not
+    """ "Remove the PYTHONPATH clones and the pins to source trees." Checked, not
     promised: none of the files that used to make that mechanism work exist any more."""
     gone = ["requirements.local", "tools/make_pins.py", ".pins"]
     examined(len(gone), "removed paths checked for absence")
@@ -178,14 +238,13 @@ def test_no_pythonpath_clone_apparatus_remains(examined):
 
 
 def test_a_stored_comparison_keyed_on_a_commit_is_never_returned_as_a_hit():
-    """"Stored reports keyed on commit:<sha> keys are recomputed, not relabelled."
+    """ "Stored reports keyed on commit:<sha> keys are recomputed, not relabelled."
 
     Nothing in this repository's own history is migrated by hand -- store/ is gitignored, so
     there is no committed data to migrate -- but the CODE PATH that makes an old key a miss
     rather than a silent hit is asserted here rather than trusted from the
     original test alone.
     """
-    from dataclasses import replace
 
     from onetrace_console.compare import comparison_key
     from tests.test_checks import _require_installed
@@ -198,20 +257,25 @@ def test_a_stored_comparison_keyed_on_a_commit_is_never_returned_as_a_hit():
     # a commit-shaped one will never match a wheel-shaped one.
     from onetrace_console.compare import sdk_build_digest, sdk_distribution_version
 
-    old_style_key = comparison_key("a" * 64, "b" * 64, sdk_distribution_version(),
-                                   "commit:0000000000000000000000000000000000000000")
-    real_key = comparison_key("a" * 64, "b" * 64, sdk_distribution_version(),
-                              sdk_build_digest())
+    old_style_key = comparison_key(
+        "a" * 64, "b" * 64, sdk_distribution_version(), "commit:0000000000000000000000000000000000000000"
+    )
+    real_key = comparison_key("a" * 64, "b" * 64, sdk_distribution_version(), sdk_build_digest())
     assert old_style_key != real_key, (
         "a comparison keyed under a commit-shaped build digest collided with the real, "
-        "wheel-shaped key -- it should be impossible for these to match")
+        "wheel-shaped key -- it should be impossible for these to match"
+    )
 
 
 # ------------------------------------------------------- nothing is vendored or copied
 
 #: Files that may mention these names without being a copy of them.
 ALLOWED_TO_NAME_THEM = {
-    "requirements.lock", "PINS.md", "README.md", "DESIGN_GAPS.md", "pyproject.toml",
+    "requirements.lock",
+    "PINS.md",
+    "README.md",
+    "DESIGN_GAPS.md",
+    "pyproject.toml",
     ".gitignore",
 }
 
@@ -223,7 +287,7 @@ def tracked_files() -> list[str]:
 
 
 def test_no_source_from_canary_or_onetrace_is_committed_here(examined):
-    """"Don't vendor it" and "don't copy it", as a check rather than a promise.
+    """ "Don't vendor it" and "don't copy it", as a check rather than a promise.
 
     The SDK's source is never copied here: a `.py` file with these names committed anywhere is
     a copy. The viewer is not in this list: it moved into this package (src/onetrace_console/viewer/,
@@ -232,11 +296,15 @@ def test_no_source_from_canary_or_onetrace_is_committed_here(examined):
     files = tracked_files()
     examined(len(files), "tracked files scanned")
     assert files, "git ls-files reported nothing; this test would pass vacuously"
-    copied = [f for f in files
-              if Path(f).name in {"verify.py", "canonicalize.py", "verify_roots.py",
-                                  "sdk_verify.py", "verifier_call.py"}
-              or (Path(f).parts[:1] in (("viewer",), ("onetrace",), ("src", "onetrace"))
-                  and not f.startswith("tests/fixtures/"))]
+    copied = [
+        f
+        for f in files
+        if Path(f).name in {"verify.py", "canonicalize.py", "verify_roots.py", "sdk_verify.py", "verifier_call.py"}
+        or (
+            Path(f).parts[:1] in (("viewer",), ("onetrace",), ("src", "onetrace"))
+            and not f.startswith("tests/fixtures/")
+        )
+    ]
     assert not copied, f"source from a pinned repository is committed here: {copied}"
 
 
@@ -249,16 +317,17 @@ def test_a_pinned_package_never_resolves_to_a_file_tracked_here(package):
     asked, rather than guessed from a path's shape.
     """
     import importlib.util
+
     try:
         spec = importlib.util.find_spec(package)
     except (ImportError, ValueError):
-        return                      # not importable at all: exactly right
+        return  # not importable at all: exactly right
     if spec is None or not spec.origin:
         return
     origin = Path(spec.origin).resolve()
     assert not _tracked_here(origin), (
-        f"{package} resolves to {origin}, which is TRACKED in this repository. Depend on "
-        f"it, don't copy it.")
+        f"{package} resolves to {origin}, which is TRACKED in this repository. Depend on it, don't copy it."
+    )
 
 
 def _tracked_here(path: Path) -> bool:
@@ -266,8 +335,7 @@ def _tracked_here(path: Path) -> bool:
         rel = path.relative_to(REPO)
     except ValueError:
         return False
-    r = subprocess.run(["git", "ls-files", "--error-unmatch", rel.as_posix()],
-                       cwd=REPO, capture_output=True, text=True)
+    r = subprocess.run(["git", "ls-files", "--error-unmatch", rel.as_posix()], cwd=REPO, capture_output=True, text=True)
     return r.returncode == 0
 
 
@@ -278,9 +346,13 @@ _INSTALLS = re.compile(r"installs from PyPI alone: `onetrace` (\S+) and `onetrac
 def readme_pin_problems(name: str, text: str) -> list[str]:
     """The versions a README says the console installs, against the exact pins in pyproject.toml."""
     import tomllib
+
     deps = tomllib.loads((REPO / "pyproject.toml").read_text(encoding="utf-8"))["project"]["dependencies"]
-    pinned = dict(re.match(r"([a-z-]+)(?:\[\w+\])?==(\S+)", d).groups() for d in deps
-                  if d.startswith(("onetrace==", "onetrace-verify")))
+    pinned = dict(
+        re.match(r"([a-z-]+)(?:\[\w+\])?==(\S+)", d).groups()
+        for d in deps
+        if d.startswith(("onetrace==", "onetrace-verify"))
+    )
     said = _INSTALLS.findall(text)
     if said != [(pinned["onetrace"], pinned["onetrace-verify"])]:
         return [f"{name} says it installs {said}, pyproject.toml pins {pinned}"]

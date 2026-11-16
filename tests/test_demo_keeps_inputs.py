@@ -12,11 +12,12 @@ Held here, on the public demo built once a session (`shared_demo`):
   console may show it;
 - a run of each pipeline but P2 opens its step page with the kept text shown (the input view);
 - the 15 comparisons the build stores give the verdicts and first differences they gave before
-  (`tests/fixtures/demo_070/verdicts.json`, from the build at 23e8176), row for row; the 16th, beside the
+  (`tests/fixtures/demo_070/verdicts.json`, from 0.7.0's demo build), row for row; the 16th, beside the
   kept runs of the hosted demo, is built from those kept runs, which this change does not touch;
 - `onetrace-verify` gives every run the exit it gave before (`verify.tsv`, from the same build): every
   run passes but the five the demo breaks on purpose.
 """
+
 from __future__ import annotations
 
 import hashlib
@@ -60,6 +61,7 @@ def outside_inputs(run: Path) -> list[dict]:
 @pytest.fixture(scope="module")
 def runs(shared_demo) -> dict[str, Path]:
     from onetrace_console.demo_store import runs as specs
+
     folder = shared_demo["folder"] / "runs"
     return {s.folder: folder / s.folder for s in specs()}
 
@@ -67,6 +69,7 @@ def runs(shared_demo) -> dict[str, Path]:
 @pytest.fixture(scope="module")
 def pipeline_of():
     from onetrace_console.demo_store import runs as specs
+
     return {s.folder: s.pipeline for s in specs()}
 
 
@@ -79,10 +82,16 @@ def keep_problems(runs: dict[str, Path], pipeline_of: dict[str, str]) -> list[st
             continue
         if not any(r["outside"] for r in rows):
             out.append(f"{name}: no input from outside the run")
-        out += [f"{name}: {r['step']} does not keep {r['input']}" for r in rows if r["outside"] and not r["kept"]
-                and (pipeline_of[name], r["input"]) not in NOT_KEPT]
-        out += [f"{name}: {r['step']} keeps {r['input']}, an earlier step's output" for r in rows
-                if r["kept"] and not r["outside"]]
+        out += [
+            f"{name}: {r['step']} does not keep {r['input']}"
+            for r in rows
+            if r["outside"] and not r["kept"] and (pipeline_of[name], r["input"]) not in NOT_KEPT
+        ]
+        out += [
+            f"{name}: {r['step']} keeps {r['input']}, an earlier step's output"
+            for r in rows
+            if r["kept"] and not r["outside"]
+        ]
     return out
 
 
@@ -93,6 +102,7 @@ def test_every_pipeline_but_p2_keeps_each_outside_input_and_none_an_earlier_outp
 
 def test_sabotage_a_removed_kept_file_is_named(runs, pipeline_of, tmp_path, examined):
     import shutil
+
     name = "p5-32-pump-baseline"
     copy = tmp_path / name
     shutil.copytree(runs[name], copy)
@@ -104,19 +114,28 @@ def test_sabotage_a_removed_kept_file_is_named(runs, pipeline_of, tmp_path, exam
 
 def test_every_kept_input_is_the_builder_s_own_example_data(runs, examined):
     from onetrace_console.demo_store import example_input_digests
-    kept = {"sha256:" + hashlib.sha256(p.read_bytes()).hexdigest()
-            for r in runs.values() for p in (r / "inputs").glob("*/*.json")} if runs else set()
+
+    kept = (
+        {
+            "sha256:" + hashlib.sha256(p.read_bytes()).hexdigest()
+            for r in runs.values()
+            for p in (r / "inputs").glob("*/*.json")
+        }
+        if runs
+        else set()
+    )
     allowed = example_input_digests()
     examined(len(kept), "kept inputs' digests")
     assert kept and kept <= allowed and allowed <= kept, (sorted(kept - allowed), sorted(allowed - kept))
 
 
 def test_a_run_of_each_pipeline_but_p2_opens_its_step_page_with_the_kept_text(shared_demo, examined):
+    from onetrace_console.demo_store import runs as specs
     from onetrace_console.frame import rendering
     from onetrace_console.overview import pipelines
     from onetrace_console.pages import render_execution
     from onetrace_console.store import Store
-    from onetrace_console.demo_store import runs as specs
+
     store = Store(shared_demo["folder"] / "store" / "store")
     by_id = {s.run_id or s.folder: s.pipeline for s in specs()}
     seen, missing = [], []
@@ -127,8 +146,11 @@ def test_a_run_of_each_pipeline_but_p2_opens_its_step_page_with_the_kept_text(sh
         with rendering(onedoor=False, sign_in=False, public=False):
             pages = render_execution(run, store, generated_at=GENERATED_AT).pages
         seen.append(p.label)
-        if not any("<pre data-kept-text>" in h and "</pre>" in h.split("<pre data-kept-text>", 1)[1][:20000]
-                   for n, h in pages.items() if n.startswith("stage-")):
+        if not any(
+            "<pre data-kept-text>" in h and "</pre>" in h.split("<pre data-kept-text>", 1)[1][:20000]
+            for n, h in pages.items()
+            if n.startswith("stage-")
+        ):
             missing.append(f"{p.label} ({run.run_id})")
     examined(len(seen), "pipelines")
     assert len(seen) == 10 and missing == [], missing
@@ -138,6 +160,7 @@ def verdicts(root: Path) -> dict:
     """Each stored comparison's verdict, by its two run ids: per verb, its exit and refusal, and its
     report's envelope, exit, reason, stages identical before, first difference and cause."""
     from onetrace_console.store import Store
+
     st = Store(root / "store" / "store")
     ids = {r.key: r.run_id for r in st.runs()}
     out = {}
@@ -149,10 +172,14 @@ def verdicts(root: Path) -> dict:
                 if name in ("diff.json", "localize.json"):
                     d = json.loads(st.get(key))
                     cause = d.get("cause")
-                    reps[name] = {"envelope": d.get("envelope"), "exit": d.get("exit"), "reason": d.get("reason"),
-                                  "identical_before": d.get("stages_identical_before_first_difference"),
-                                  "first_difference": d.get("first_difference"),
-                                  "cause": cause.get("kind") if isinstance(cause, dict) else cause}
+                    reps[name] = {
+                        "envelope": d.get("envelope"),
+                        "exit": d.get("exit"),
+                        "reason": d.get("reason"),
+                        "identical_before": d.get("stages_identical_before_first_difference"),
+                        "first_difference": d.get("first_difference"),
+                        "cause": cause.get("kind") if isinstance(cause, dict) else cause,
+                    }
             row[v.verb] = {"exit": v.exit_status, "refused": v.refused, "reports": reps}
         out[f"{ids.get(c.run_a)} -> {ids.get(c.run_b)}"] = row
     return out
@@ -169,15 +196,24 @@ def test_the_15_comparisons_give_the_verdicts_they_gave_before_row_for_row(share
 def test_onetrace_verify_gives_every_run_the_exit_it_gave_before(shared_demo, runs, examined):
     before = dict(line.split("\t") for line in (FIXTURES / "verify.tsv").read_text(encoding="utf-8").splitlines())
     from tests.console_scripts import required_script
+
     verify = required_script("onetrace-verify")
     trust = shared_demo["folder"] / "trust.json"
     now = {}
     for name, run in sorted(runs.items()):
-        done = subprocess.run([str(verify), "--require-artifacts", "--trust", str(trust), str(run)],
-                              capture_output=True, text=True, timeout=300)
+        done = subprocess.run(
+            [str(verify), "--require-artifacts", "--trust", str(trust), str(run)],
+            capture_output=True,
+            text=True,
+            timeout=300,
+        )
         now[name] = str(done.returncode)
     examined(len(now), "runs")
     assert now == {k: v for k, v in before.items() if k in runs} and len(now) == len(runs)
     assert sorted(k for k, v in now.items() if v != "0") == [
-        "p1-14-candidate-set3-byte-changed", "p1-15-candidate-set4-file-deleted", "p1-16-candidate-set5-no-artifacts",
-        "p7-41-cold-chain-decision-tampered", "p8-49-invoice-paid-on-deny"]
+        "p1-14-candidate-set3-byte-changed",
+        "p1-15-candidate-set4-file-deleted",
+        "p1-16-candidate-set5-no-artifacts",
+        "p7-41-cold-chain-decision-tampered",
+        "p8-49-invoice-paid-on-deny",
+    ]

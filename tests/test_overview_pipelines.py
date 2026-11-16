@@ -14,6 +14,7 @@ Checked on the demo's own Overview, as a public console serves it:
 
 Each check is a function returning the problems it finds; each has its sabotage.
 """
+
 from __future__ import annotations
 
 import html
@@ -29,11 +30,13 @@ DEMO: dict = {}
 def demo(shared_demo):
     from onetrace_console.store import Store
     from tests.test_checks import _require_installed
+
     _require_installed()
     folder = shared_demo["folder"]
     pages = folder / "store" / "pages"
-    DEMO.update(store=Store(folder / "store" / "store"), pages=pages,
-                home=(pages / "home.html").read_text(encoding="utf-8"))
+    DEMO.update(
+        store=Store(folder / "store" / "store"), pages=pages, home=(pages / "home.html").read_text(encoding="utf-8")
+    )
     return DEMO
 
 
@@ -53,6 +56,7 @@ def _kpi(card: str) -> int | None:
 
 def tile_problems(page: str, store) -> list[str]:
     from onetrace_console.overview import ATTENTION_KINDS, ATTENTION_WORDS, needs_attention, pipelines
+
     out = []
     cards = re.findall(r'<div data-card="([^"]+)">', page)
     if cards != ["pipelines", "runs", "records-agree", "need-attention"]:
@@ -68,8 +72,7 @@ def tile_problems(page: str, store) -> list[str]:
         out.append(f"Need attention tile {_kpi(tile)}, the panel {panel.group(1) if panel else None}")
     kinds = Counter(k for k, _ in listed)
     want = [(ATTENTION_WORDS[k], kinds[k]) for k in ATTENTION_KINDS if kinds[k]]
-    got = [(html.unescape(w), int(n)) for w, n in
-           re.findall(r'<span data-kind="[\w-]+">([^<]+): (\d+)</span>', tile)]
+    got = [(html.unescape(w), int(n)) for w, n in re.findall(r'<span data-kind="[\w-]+">([^<]+): (\d+)</span>', tile)]
     if got != want:
         out.append(f"Need attention parts {got}, {want}")
     return out
@@ -77,11 +80,11 @@ def tile_problems(page: str, store) -> list[str]:
 
 def bar_problems(page: str, store) -> list[str]:
     from onetrace_console import records
+
     tile = _card(page, "records-agree")
     got = [(s, int(n)) for s, n in re.findall(r'data-bar-part="([\w-]+)" data-count="(\d+)"', tile)]
     runs = store.runs()
-    want = [(s, len(records.runs_in(runs, store, s))) for s in records.STATES
-            if records.runs_in(runs, store, s)]
+    want = [(s, len(records.runs_in(runs, store, s))) for s in records.STATES if records.runs_in(runs, store, s)]
     out = [] if got == want else [f"bar {got}, the states {want}"]
     if sum(n for _, n in got) != len(runs):
         out.append(f"the bar's parts hold {sum(n for _, n in got)} of {len(runs)} runs")
@@ -89,14 +92,18 @@ def bar_problems(page: str, store) -> list[str]:
 
 
 def _cards(page: str) -> list[tuple[str, str, str]]:
-    return re.findall(r'<a class="pcard" data-pipeline-card="(P\d+)" href="([^"]+)">(.*?)</a>\s*(?=<a class="pcard"|</div>)',
-                      page, re.S)
+    return re.findall(
+        r'<a class="pcard" data-pipeline-card="(P\d+)" href="([^"]+)">(.*?)</a>\s*(?=<a class="pcard"|</div>)',
+        page,
+        re.S,
+    )
 
 
 def card_problems(page: str, store, read=None) -> list[str]:
     from onetrace_console import records
     from onetrace_console.overview import pipelines
     from onetrace_console.pipeline_pages import count_line, page_href
+
     out = []
     found = pipelines(store)
     cards = _cards(page)
@@ -124,6 +131,7 @@ def card_problems(page: str, store, read=None) -> list[str]:
 
 def legend_problems(page: str) -> list[str]:
     from onetrace_console.pipeline_pages import MARK_SHAPES
+
     out = []
     if page.count('data-section="legend"') != 1:
         out.append(f"{page.count('data-section=' + chr(34) + 'legend' + chr(34))} legends")
@@ -158,6 +166,7 @@ def test_the_builder_s_names_on_a_public_demo_only(demo):
     from onetrace_console import demo_store
     from onetrace_console.overview import pipelines
     from onetrace_console.render import render_home
+
     store = demo["store"]
     named = dict(re.findall(r'data-pipeline-card="(P\d+)".*?<span data-name>([^<]+)</span>', demo["home"], re.S))
     want = {p.label: demo_store.name_of(r.run_id for r in p.runs) for p in pipelines(store)}
@@ -167,21 +176,35 @@ def test_the_builder_s_names_on_a_public_demo_only(demo):
 
 # ------------------------------------------------------------------------------- sabotages
 
+
 def test_sabotage_a_tile_off_by_one_or_out_of_order_is_named(demo):
     page = demo["home"]
     tile = _card(page, "need-attention")
-    off = page.replace(tile, re.sub(r'<span class="kpi">(\d+)</span>',
-                                    lambda m: f'<span class="kpi">{int(m.group(1)) + 1}</span>', tile, count=1))
+    off = page.replace(
+        tile,
+        re.sub(
+            r'<span class="kpi">(\d+)</span>',
+            lambda m: f'<span class="kpi">{int(m.group(1)) + 1}</span>',
+            tile,
+            count=1,
+        ),
+    )
     assert any("Need attention tile" in p for p in tile_problems(off, demo["store"]))
-    swapped = page.replace('<div data-card="pipelines">', '<div data-card="x">', 1) \
-        .replace('<div data-card="runs">', '<div data-card="pipelines">', 1) \
+    swapped = (
+        page.replace('<div data-card="pipelines">', '<div data-card="x">', 1)
+        .replace('<div data-card="runs">', '<div data-card="pipelines">', 1)
         .replace('<div data-card="x">', '<div data-card="runs">', 1)
+    )
     assert any(p.startswith("tiles") for p in tile_problems(swapped, demo["store"]))
 
 
 def test_sabotage_a_bar_part_wrong_is_named(demo):
-    page = re.sub(r'(data-bar-part="yes" data-count=")(\d+)', lambda m: m.group(1) + str(int(m.group(2)) - 1),
-                  demo["home"], count=1)
+    page = re.sub(
+        r'(data-bar-part="yes" data-count=")(\d+)',
+        lambda m: m.group(1) + str(int(m.group(2)) - 1),
+        demo["home"],
+        count=1,
+    )
     assert bar_problems(page, demo["store"])
 
 
@@ -191,15 +214,17 @@ def test_sabotage_a_mark_swapped_or_a_card_dropped_is_named(demo):
     swapped = page[:i] + page[i:].replace('data-mark="no"', 'data-mark="yes"', 1)
     assert any("marks" in p for p in card_problems(swapped, demo["store"]))
     first = _cards(page)[0]
-    dropped = re.sub(r'<a class="pcard" data-pipeline-card="P1".*?</a>\s*(?=<a class="pcard")', "", page,
-                     count=1, flags=re.S)
+    dropped = re.sub(
+        r'<a class="pcard" data-pipeline-card="P1".*?</a>\s*(?=<a class="pcard")', "", page, count=1, flags=re.S
+    )
     assert dropped != page and any(p.startswith("cards") for p in card_problems(dropped, demo["store"]))
     del first
 
 
 def test_sabotage_a_second_legend_is_named(demo):
-    page = demo["home"].replace('<div data-section="legend">', '<div data-section="legend"></div>'
-                                '<div data-section="legend">', 1)
+    page = demo["home"].replace(
+        '<div data-section="legend">', '<div data-section="legend"></div><div data-section="legend">', 1
+    )
     assert legend_problems(page)
 
 
@@ -207,4 +232,5 @@ def test_sabotage_a_card_s_marks_unlike_its_page_is_named(demo):
     def read(rel):
         text = _read(rel)
         return text.replace('data-state="yes"', 'data-state="no"', 1) if rel == "pipeline-p1.html" else text
+
     assert any("its page's tiles" in p for p in card_problems(demo["home"], demo["store"], read))

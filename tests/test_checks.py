@@ -9,6 +9,7 @@ The order's checks, each with a test named after it:
 The first is deliberately not asserted by the code that produces the bytes: the test runs
 the console script itself, in a separate process, and compares.
 """
+
 from __future__ import annotations
 
 import hashlib
@@ -22,10 +23,18 @@ from pathlib import Path
 import pytest
 
 from onetrace_console import checks
-from onetrace_console.checks import (CONTRADICTS, COULD_NOT_CHECK, HOLDS,
-                                     TOPOLOGY_NO_EDGE_ROWS, VERIFIER_MODULES,
-                                     CheckRunnerError, check, materialise,
-                                     run_and_record, shipped_verifier)
+from onetrace_console.checks import (
+    CONTRADICTS,
+    COULD_NOT_CHECK,
+    HOLDS,
+    TOPOLOGY_NO_EDGE_ROWS,
+    VERIFIER_MODULES,
+    CheckRunnerError,
+    check,
+    materialise,
+    run_and_record,
+    shipped_verifier,
+)
 from onetrace_console.ingest import MANIFEST_NAME, SUMS_NAME, accept
 from tests.conftest import make_tar
 
@@ -50,14 +59,16 @@ def _require_installed():
     #: 30 tests into errors that said "not installed" about a verifier that was installed.
     try:
         from onetrace_console.checks import shipped_verifier
+
         shipped_verifier()
-    except Exception:                       # noqa: BLE001 - reported, not swallowed
+    except Exception:  # noqa: BLE001 - reported, not swallowed
         missing.append("the verifier (tried " + ", ".join(VERIFIER_MODULES) + ")")
     if missing:
         pytest.fail(
             f"not importable: {missing}. The pinned distributions are not installed.\n"
             f"    python -m pip install -r requirements.lock --require-hashes\n"
-            f"This refuses rather than skips (see the module docstring).")
+            f"This refuses rather than skips (see the module docstring)."
+        )
 
 
 @pytest.fixture
@@ -69,6 +80,7 @@ def stored(delivery, store):
 
 
 # ------------------------------------------------------- the verifier's own report
+
 
 def test_the_verifier_is_located_by_import_and_not_by_a_path():
     """It must come from the pinned distribution, never from a copy committed here.
@@ -87,7 +99,8 @@ def test_the_verifier_is_located_by_import_and_not_by_a_path():
     assert verifier.is_file()
     assert not _is_tracked_here(verifier), (
         f"the verifier resolves to {verifier}, which is TRACKED in this repository. "
-        f"Step 0 says depend on it, not copy it")
+        f"Step 0 says depend on it, not copy it"
+    )
 
 
 def test_a_run_that_holds_is_recorded_as_holding(stored, store):
@@ -100,8 +113,7 @@ def test_a_run_that_holds_is_recorded_as_holding(stored, store):
     assert "->  PASS" in envelope["stdout"]
 
 
-def test_the_stored_report_is_byte_identical_to_running_the_command_by_hand(stored, store,
-                                                                           tmp_path):
+def test_the_stored_report_is_byte_identical_to_running_the_command_by_hand(stored, store, tmp_path):
     """Step 3's check, and the comparison is made by a separate process.
 
     `onetrace-verify .` is also the command the page shows a reader. Asserting that the
@@ -113,10 +125,11 @@ def test_the_stored_report_is_byte_identical_to_running_the_command_by_hand(stor
 
     folder = materialise(run, store, tmp_path / "byhand")
     from tests.console_scripts import console_script
+
     script = console_script("onetrace-verify")
     if script is not None:
         argv = [str(script), "."]
-    else:                                  # the same entry point, without relying on PATH
+    else:  # the same entry point, without relying on PATH
         argv = [sys.executable, "-m", "onetrace_verify.cli", "."]
 
     # The child runs with `cwd=folder`, so a RELATIVE PYTHONPATH entry resolves against the
@@ -131,7 +144,9 @@ def test_the_stored_report_is_byte_identical_to_running_the_command_by_hand(stor
     if env.get("PYTHONPATH"):
         env["PYTHONPATH"] = os.pathsep.join(
             str((REPO / part).resolve()) if not Path(part).is_absolute() else part
-            for part in env["PYTHONPATH"].split(os.pathsep) if part)
+            for part in env["PYTHONPATH"].split(os.pathsep)
+            if part
+        )
     by_hand = subprocess.run(argv, cwd=folder, capture_output=True, env=env)
 
     # Before comparing, refuse an empty by-hand run. Two empty strings compare equal, so
@@ -140,18 +155,21 @@ def test_the_stored_report_is_byte_identical_to_running_the_command_by_hand(stor
     assert by_hand.stdout.strip(), (
         f"the by-hand command produced no output at all, so there is nothing to compare "
         f"against the stored report. Ran: {' '.join(argv)} in {folder}; "
-        f"exit {by_hand.returncode}; stderr: {by_hand.stderr.decode('utf-8', 'replace')[:400]}")
+        f"exit {by_hand.returncode}; stderr: {by_hand.stderr.decode('utf-8', 'replace')[:400]}"
+    )
 
     #: The console reads the verifier's output with each \r\n written as
     #: \n (Windows prints \r\n to the pipe); the hand run is compared as the console reads it, by the
     #: same function, and every other byte stays strict.
     from onetrace_console.viewer.report import _lf
+
     assert "\r" not in stored_stdout
     assert _lf(by_hand.stdout.decode("utf-8")) == stored_stdout, (
-        "the stored report is not what the command produces. Ran: "
-        f"{' '.join(argv)} in {folder}")
+        f"the stored report is not what the command produces. Ran: {' '.join(argv)} in {folder}"
+    )
     assert str(by_hand.returncode) == run.check_exit, (
-        f"by hand exited {by_hand.returncode}, the record says {run.check_exit}")
+        f"by hand exited {by_hand.returncode}, the record says {run.check_exit}"
+    )
     shutil.rmtree(folder, ignore_errors=True)
 
 
@@ -168,6 +186,7 @@ def test_running_the_check_twice_stores_one_report_object(stored, store):
 
 # ---------------------------------------------- a contradicting run contradicts
 
+
 def test_a_contradicting_run_is_recorded_as_contradicting(files, store):
     """A receipt whose bytes no longer match the digest the manifest recorded.
 
@@ -179,23 +198,20 @@ def test_a_contradicting_run_is_recorded_as_contradicting(files, store):
     receipt = json.loads(files["receipts/01-zeta.json"].decode("utf-8"))
     receipt["run_id"] = receipt.get("run_id", "") + "-tampered"
     files["receipts/01-zeta.json"] = json.dumps(receipt, separators=(",", ":")).encode("utf-8")
-    lines = [f"{hashlib.sha256(b).hexdigest()}  {p}"
-             for p, b in files.items() if p != SUMS_NAME]
+    lines = [f"{hashlib.sha256(b).hexdigest()}  {p}" for p, b in files.items() if p != SUMS_NAME]
     files[SUMS_NAME] = ("\n".join(lines) + "\n").encode("utf-8")
 
     accepted = accept(make_tar(files), store)
     assert accepted.run is not None, getattr(accepted, "rows", accepted)
 
     run = run_and_record(accepted.run, store, ran_at=FIXED_RAN_AT)
-    assert run.check_verdict == CONTRADICTS, (
-        f"the verifier's report was read as {run.check_verdict!r}")
+    assert run.check_verdict == CONTRADICTS, f"the verifier's report was read as {run.check_verdict!r}"
     assert run.check_exit != "0"
     stdout = json.loads(store.get(run.check_report).decode("utf-8"))["stdout"]
     assert "[FAIL   ]" in stdout, stdout[:400]
 
 
-def test_an_unreadable_report_is_could_not_check_and_never_contradicts(stored, store,
-                                                                      monkeypatch):
+def test_an_unreadable_report_is_could_not_check_and_never_contradicts(stored, store, monkeypatch):
     """The three-outcome rule at the runner.
 
     A report the console cannot read tells it nothing about the record. Calling that
@@ -206,15 +222,21 @@ def test_an_unreadable_report_is_could_not_check_and_never_contradicts(stored, s
 
     #: The check runs as the installed CLI (`capture_cli`).
     def unreadable(run_dir, *, outputs, timeout=120, **_):
-        return {"format": "onetrace-viewer/check-report/0.1",
-                "ran_at": FIXED_RAN_AT, "command": ["onetrace-verify", "."],
-                "cwd_note": "run_folder", "exit_status": "0",
-                "stdout": "this is not the verifier's row grammar at all\n", "stderr": ""}
+        return {
+            "format": "onetrace-viewer/check-report/0.1",
+            "ran_at": FIXED_RAN_AT,
+            "command": ["onetrace-verify", "."],
+            "cwd_note": "run_folder",
+            "exit_status": "0",
+            "stdout": "this is not the verifier's row grammar at all\n",
+            "stderr": "",
+        }
 
     monkeypatch.setattr(vr, "capture_cli", unreadable)
     monkeypatch.setattr(checks, "shipped_verifier", lambda: Path("verify.py"))
 
     import tempfile
+
     with tempfile.TemporaryDirectory() as tmp:
         folder = materialise(stored, store, Path(tmp) / "run")
         result = check(folder, ran_at=FIXED_RAN_AT)
@@ -225,10 +247,10 @@ def test_an_unreadable_report_is_could_not_check_and_never_contradicts(stored, s
 
 # ------------------------------------------------- the topology check, and its absence
 
+
 def test_the_fixture_declares_edges_so_the_topology_case_is_real(files):
     manifest = json.loads(files[MANIFEST_NAME].decode("utf-8"))
-    assert manifest.get("edges"), (
-        "the fixture no longer declares edges, so the topology tests below prove nothing")
+    assert manifest.get("edges"), "the fixture no longer declares edges, so the topology tests below prove nothing"
 
 
 def test_the_runs_links_are_left_to_the_verifiers_own_edge_rows(stored, store, tmp_path):
@@ -264,7 +286,6 @@ def _is_tracked_here(path: Path) -> bool:
     try:
         rel = path.resolve().relative_to(repo)
     except ValueError:
-        return False                      # not under this repository at all
-    r = subprocess.run(["git", "ls-files", "--error-unmatch", rel.as_posix()],
-                       cwd=repo, capture_output=True, text=True)
+        return False  # not under this repository at all
+    r = subprocess.run(["git", "ls-files", "--error-unmatch", rel.as_posix()], cwd=repo, capture_output=True, text=True)
     return r.returncode == 0

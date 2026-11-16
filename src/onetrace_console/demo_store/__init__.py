@@ -48,11 +48,12 @@ prevented by the builder being the only thing that writes the demo, not by the r
 
 Anchoring is not part of the demo: every run reads "not anchored", as the SDK records it.
 """
+
 from __future__ import annotations
 
 import hashlib
-import os
 import json
+import os
 import shutil
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -61,6 +62,8 @@ from onetrace_console.demo_store import app_traces, keys
 
 BUILD_RECORD = "BUILD_RECORD.json"
 BUILD_FORMAT = "onetrace-console-demo-build/0.1"
+#: This builder's name in its build record (`write_build_record`); the capture store's is `captures.NAME`.
+NAME = "demo"
 TRUST_NAME = "trust.json"
 RUNS_DIRNAME = "runs"
 #: What the builder writes beside the run folders, in `runs/`: P8's decision export, its sidecar and
@@ -72,27 +75,37 @@ BESIDE_RUNS = ("decisions.jsonl", "decisions.jsonl.sha256", "permit-issuers.json
 class RunSpec:
     """One run of the demo: its folder (also its run id, unless `run_id` says otherwise), the
     pipeline and its arguments, the key that signs it, and the action taken after it closed."""
+
     folder: str
     pipeline: str
     args: dict = field(default_factory=dict)
-    sign: str = "trusted"                   # "trusted", "untrusted" or "" (unsigned)
-    after: str = ""                         # "", "tamper", "delete-one", "no-artifacts",
+    sign: str = "trusted"  # "trusted", "untrusted" or "" (unsigned)
+    after: str = ""  # "", "tamper", "delete-one", "no-artifacts",
     #                                         "tamper-decision"
     run_id: str = ""
 
 
 def _p1(n: int, kind: str, qs: str, **kw) -> RunSpec:
     from onetrace_console.demo_store import refund_policy as p1
+
     settings = p1.BASELINE if kind == "baseline" else p1.CANDIDATE
     tail = kw.pop("tail", "")
-    return RunSpec(f"p1-{n:02d}-{kind}-set{qs}{tail}", "p1",
-                   {"settings": settings, "question_set": qs, "fault": kw.pop("fault", "")}, **kw)
+    return RunSpec(
+        f"p1-{n:02d}-{kind}-set{qs}{tail}",
+        "p1",
+        {"settings": settings, "question_set": qs, "fault": kw.pop("fault", "")},
+        **kw,
+    )
 
 
 def _p3(n: int, ticket: str, rules: str, **kw) -> RunSpec:
     tail = kw.pop("tail", "")
-    return RunSpec(f"p3-{n:02d}-{ticket.lower()}-rules{rules}{tail}", "p3",
-                   {"ticket": ticket, "rules": rules, "fault": kw.pop("fault", "")}, **kw)
+    return RunSpec(
+        f"p3-{n:02d}-{ticket.lower()}-rules{rules}{tail}",
+        "p3",
+        {"ticket": ticket, "rules": rules, "fault": kw.pop("fault", "")},
+        **kw,
+    )
 
 
 def runs() -> list[RunSpec]:
@@ -111,7 +124,10 @@ def runs() -> list[RunSpec]:
         _p1(20, "candidate", "6", tail="-answer-failed", fault="answer-last"),
         RunSpec("p2-21-demo-run-1", "p2", {"day": 1}, run_id="demo-run-1"),
         RunSpec("p2-22-demo-run-2", "p2", {"day": 2}, run_id="demo-run-2"),
-        _p3(23, "T-1", "1"), _p3(24, "T-2", "1"), _p3(25, "T-3", "1"), _p3(26, "T-4", "1"),
+        _p3(23, "T-1", "1"),
+        _p3(24, "T-2", "1"),
+        _p3(25, "T-3", "1"),
+        _p3(26, "T-4", "1"),
         _p3(27, "T-1", "2"),
         _p3(28, "T-3", "1", tail="-lookup-retried", fault="lookup-once"),
         RunSpec("p4-29-reply-30-days", "p4", {"refund_days": "30"}),
@@ -122,8 +138,7 @@ def runs() -> list[RunSpec]:
         RunSpec("p5-33-pump-offset-changed", "p5", {"offset_mg": "40", "firmware": "3.1", "slot": "02:30"}),
         RunSpec("p5-34-pump-firmware-changed", "p5", {"offset_mg": "0", "firmware": "3.2", "slot": "02:30"}),
         #: Declined at work_order by its own rule: the slot is outside the maintenance window.
-        RunSpec("p5-35-pump-outside-window-declined", "p5",
-                {"offset_mg": "0", "firmware": "3.1", "slot": "14:00"}),
+        RunSpec("p5-35-pump-outside-window-declined", "p5", {"offset_mg": "0", "firmware": "3.1", "slot": "14:00"}),
         RunSpec("p6-36-fill-baseline", "p6", {"frame": "full", "exposure_tenths": "10"}),
         RunSpec("p6-37-fill-exposure-changed", "p6", {"frame": "full", "exposure_tenths": "12"}),
         RunSpec("p6-38-fill-below-reject-line", "p6", {"frame": "low", "exposure_tenths": "10"}),
@@ -140,16 +155,17 @@ def runs() -> list[RunSpec]:
         RunSpec("p9-48-torque-one-bolt-low", "p9", {"firmware": "4.2", "low_bolt": True}),
         #: P8's gated step broken on purpose (onetrace 0.5): paid on a denied decision; and a
         #: permit for another amount than the payment the step records.
-        RunSpec("p8-49-invoice-paid-on-deny", "p8", {"invoice": "base", "tolerance_bp": "500",
-                                                     "plant": "pay-on-deny"}),
-        RunSpec("p8-50-invoice-permit-other-amount", "p8", {"invoice": "base", "tolerance_bp": "500",
-                                                            "plant": "permit-other-amount"}),
+        RunSpec("p8-49-invoice-paid-on-deny", "p8", {"invoice": "base", "tolerance_bp": "500", "plant": "pay-on-deny"}),
+        RunSpec(
+            "p8-50-invoice-permit-other-amount",
+            "p8",
+            {"invoice": "base", "tolerance_bp": "500", "plant": "permit-other-amount"},
+        ),
         #: P10, an agent whose step calls a sub-agent run, and P11, the sub-agent's runs, which each
         #: agent run records (`agent_settle`); named so each agent run arrives before its sub-agent's.
         RunSpec("pz-51-agent-baseline", "p10", {"inner": "pz-52-agent-baseline-subagent", "amount": "10"}),
         RunSpec("pz-52-agent-baseline-subagent", "p11", {"of": "pz-51-agent-baseline"}),
-        RunSpec("pz-53-agent-amount-changed", "p10", {"inner": "pz-54-agent-amount-changed-subagent",
-                                                      "amount": "20"}),
+        RunSpec("pz-53-agent-amount-changed", "p10", {"inner": "pz-54-agent-amount-changed-subagent", "amount": "20"}),
         RunSpec("pz-54-agent-amount-changed-subagent", "p11", {"of": "pz-53-agent-amount-changed"}),
     ]
     return out
@@ -166,10 +182,19 @@ EXAMPLE_DATA = ("p1", "p3", "p4", "p5", "p6", "p7", "p8", "p9", "p10", "p11")
 
 #: Each pipeline's name, as its own module's first line gives it. A public demo shows it beside the
 #: console's label; a local console shows the label only.
-PIPELINE_NAMES = {"p1": "refund-policy Q&A", "p2": "reference demo pipeline", "p3": "ticket triage",
-                  "p4": "support reply", "p5": "pump maintenance", "p6": "fill-level inspection",
-                  "p7": "cold-chain release", "p8": "invoice match", "p9": "wheel-bolt torque check",
-                  "p10": "agent with a sub-agent", "p11": "sub-agent (called by the agent)"}
+PIPELINE_NAMES = {
+    "p1": "refund-policy Q&A",
+    "p2": "reference demo pipeline",
+    "p3": "ticket triage",
+    "p4": "support reply",
+    "p5": "pump maintenance",
+    "p6": "fill-level inspection",
+    "p7": "cold-chain release",
+    "p8": "invoice match",
+    "p9": "wheel-bolt torque check",
+    "p10": "agent with a sub-agent",
+    "p11": "sub-agent (called by the agent)",
+}
 
 
 def name_of(run_ids) -> str | None:
@@ -179,52 +204,94 @@ def name_of(run_ids) -> str | None:
     found = {by_id.get(r) for r in run_ids}
     if len(found) != 1 or None in found:
         return None
-    return PIPELINE_NAMES[found.pop()]
+    return PIPELINE_NAMES[found.pop()]  # type: ignore[index]  # None is not in found here
 
 
 def _module(pipeline: str):
-    from onetrace_console.demo_store import (agent_settle, cold_chain, fill_inspection, invoice_match,
-                                             pump_maintenance, refund_policy, support_reply, ticket_triage,
-                                             torque_check)
-    return {"p1": refund_policy, "p3": ticket_triage, "p4": support_reply, "p5": pump_maintenance,
-            "p6": fill_inspection, "p7": cold_chain, "p8": invoice_match, "p9": torque_check,
-            "p10": agent_settle, "p11": agent_settle}[pipeline]
+    from onetrace_console.demo_store import (
+        agent_settle,
+        cold_chain,
+        fill_inspection,
+        invoice_match,
+        pump_maintenance,
+        refund_policy,
+        support_reply,
+        ticket_triage,
+        torque_check,
+    )
+
+    return {
+        "p1": refund_policy,
+        "p3": ticket_triage,
+        "p4": support_reply,
+        "p5": pump_maintenance,
+        "p6": fill_inspection,
+        "p7": cold_chain,
+        "p8": invoice_match,
+        "p9": torque_check,
+        "p10": agent_settle,
+        "p11": agent_settle,
+    }[pipeline]
 
 
 def example_input_digests() -> frozenset:
     """The sha256 of every kept input the builder invents for a run of an EXAMPLE_DATA pipeline,
     from the pipelines' own code: "sha256:<hex>"."""
-    return frozenset("sha256:" + hashlib.sha256(data).hexdigest()
-                     for spec in runs() if spec.pipeline in EXAMPLE_DATA
-                     for data in _module(spec.pipeline).kept_inputs(spec.args))
+    return frozenset(
+        "sha256:" + hashlib.sha256(data).hexdigest()
+        for spec in runs()
+        if spec.pipeline in EXAMPLE_DATA
+        for data in _module(spec.pipeline).kept_inputs(spec.args)
+    )
+
+
+def example_digests_for(folder: Path) -> frozenset:
+    """The example data of the builder `folder`'s build record names: the capture store's (`captures`) where it
+    names that builder, the demo's own otherwise."""
+    from onetrace_console.bounded_json import load_json_bounded
+
+    try:
+        said = load_json_bounded((Path(folder) / BUILD_RECORD).read_text(encoding="utf-8"), BUILD_RECORD)
+    except (OSError, ValueError, RecursionError):
+        said = {}
+    if isinstance(said, dict) and said.get("builder") == "captures":
+        from onetrace_console.demo_store import captures
+
+        return captures.example_input_digests()
+    return example_input_digests()
 
 
 class allowing_examples:
     """While open, the example inputs' digests are the ones a public console may show -- only where
     `folder`'s build record vouches for every byte under it; otherwise none."""
 
-    def __init__(self, folder: Path):
+    def __init__(self, folder: Path, *, vouched: bool | None = None):
         self.folder = Path(folder)
         self.allowed = False
         self._before = None
+        #: The record already checked by the caller, just now and clean (a public console's start): not read again.
+        self._vouched = vouched
 
     def __enter__(self):
         from onetrace_console import kept_inputs
-        self.allowed = not check_build_record(self.folder)
-        self._before = kept_inputs.set_examples(example_input_digests() if self.allowed else ())
+
+        self.allowed = self._vouched if self._vouched is not None else not check_build_record(self.folder)
+        self._before = kept_inputs.set_examples(example_digests_for(self.folder) if self.allowed else ())
         return self
 
     def __exit__(self, *exc):
         from onetrace_console import kept_inputs
+
         kept_inputs.set_examples(self._before)
         return False
 
 
-def serve_examples(folder: Path) -> bool:
+def serve_examples(folder: Path, *, vouched: bool | None = None) -> bool:
     """For a public console serving the demo built in `folder`, for as long as it runs: the example
     inputs may be shown and downloaded only where the build record vouches for every byte. Returns
-    whether they may."""
-    allowing = allowing_examples(folder)
+    whether they may. `vouched`: the start's own check of the record (`public.start_refusal`), which has
+    just passed, so the record is not read again (it was read twice at every start)."""
+    allowing = allowing_examples(folder, vouched=vouched)
     allowing.__enter__()
     return allowing.allowed
 
@@ -275,8 +342,9 @@ COMPARISONS = [
 RECORDED_BESIDE_KEPT = [
     RunSpec("pz-55-agent-baseline-1-0", "p10", {"inner": "pz-56-agent-baseline-1-0-subagent", "amount": "10"}),
     RunSpec("pz-56-agent-baseline-1-0-subagent", "p11", {"of": "pz-55-agent-baseline-1-0"}),
-    RunSpec("pz-57-agent-amount-changed-1-0", "p10", {"inner": "pz-58-agent-amount-changed-1-0-subagent",
-                                                      "amount": "20"}),
+    RunSpec(
+        "pz-57-agent-amount-changed-1-0", "p10", {"inner": "pz-58-agent-amount-changed-1-0-subagent", "amount": "20"}
+    ),
     RunSpec("pz-58-agent-amount-changed-1-0-subagent", "p11", {"of": "pz-57-agent-amount-changed-1-0"}),
 ]
 COMPARISONS_BESIDE_KEPT = [("pz-55-agent-baseline-1-0", "pz-57-agent-amount-changed-1-0")]
@@ -300,37 +368,47 @@ def _record(spec: RunSpec, run_dir: Path, issuer=None) -> None:
     run_id = spec.run_id or spec.folder
     if spec.pipeline == "p1":
         from onetrace_console.demo_store import refund_policy
-        refund_policy.main(run_dir, run_id, spec.args["settings"], spec.args["question_set"],
-                           fault=spec.args["fault"])
+
+        refund_policy.main(run_dir, run_id, spec.args["settings"], spec.args["question_set"], fault=spec.args["fault"])
     elif spec.pipeline == "p2":
         from onetrace_console.demo_store import reference_pipeline
+
         reference_pipeline.main(str(run_dir), run_id, spec.args["day"])
     elif spec.pipeline == "p3":
         from onetrace_console.demo_store import ticket_triage
-        ticket_triage.main(run_dir, run_id, spec.args["ticket"], spec.args["rules"],
-                           fault=spec.args["fault"])
+
+        ticket_triage.main(run_dir, run_id, spec.args["ticket"], spec.args["rules"], fault=spec.args["fault"])
     elif spec.pipeline == "p4":
         from onetrace_console.demo_store import support_reply
+
         support_reply.main(run_dir, run_id, spec.args["refund_days"])
     elif spec.pipeline == "p5":
         from onetrace_console.demo_store import pump_maintenance
+
         pump_maintenance.main(run_dir, run_id, **spec.args)
     elif spec.pipeline == "p6":
         from onetrace_console.demo_store import fill_inspection
+
         fill_inspection.main(run_dir, run_id, **spec.args)
     elif spec.pipeline == "p7":
         from onetrace_console.demo_store import cold_chain
+
         cold_chain.main(run_dir, run_id, **spec.args)
     elif spec.pipeline == "p8":
         from onetrace_console.demo_store import invoice_match
+
         invoice_match.main(run_dir, run_id, issuer=issuer, **spec.args)
     elif spec.pipeline == "p10":
         from onetrace_console.demo_store import agent_settle
-        agent_settle.main(run_dir.parent, run_id, spec.args["inner"], spec.args["amount"])
+
+        agent_settle.main(
+            run_dir.parent, run_id, spec.args["inner"], spec.args["amount"], capture=spec.args.get("capture")
+        )
     elif spec.pipeline == "p11":
-        return                  # recorded by its agent run, `p10`
+        return  # recorded by its agent run, `p10`
     elif spec.pipeline == "p9":
         from onetrace_console.demo_store import torque_check
+
         torque_check.main(run_dir, run_id, **spec.args)
     else:
         raise ValueError(f"no pipeline {spec.pipeline!r}")
@@ -354,19 +432,17 @@ PLANTED = {
     "p1-19-baseline-set4-untrusted-key": "Signed with a key the demo's trust file does not name.",
     "p1-20-candidate-set6-answer-failed": "Its answer stage made to fail, so the run's last attempt failed.",
     "p3-28-t-3-rules1-lookup-retried": "Its account lookup made to fail once, then run again.",
-    "p7-41-cold-chain-decision-tampered": "One byte of its recorded release decision changed after "
-                                          "the run closed.",
+    "p7-41-cold-chain-decision-tampered": "One byte of its recorded release decision changed after the run closed.",
     "p8-49-invoice-paid-on-deny": "Its gated step paid on a decision that denied it.",
     "p8-50-invoice-permit-other-amount": "Its gated step carried a permit for another amount than the "
-                                         "payment it recorded.",
+    "payment it recorded.",
 }
 
 
 def planted(spec: RunSpec) -> bool:
     """Whether the builder breaks the run on purpose: acts on it after it closed, signs it
     otherwise than with the trusted key, or makes one of its stages fail."""
-    return (bool(spec.after) or spec.sign != "trusted" or bool(spec.args.get("fault"))
-            or bool(spec.args.get("plant")))
+    return bool(spec.after) or spec.sign != "trusted" or bool(spec.args.get("fault")) or bool(spec.args.get("plant"))
 
 
 def about_signing(spec: RunSpec) -> bool:
@@ -381,15 +457,15 @@ def _after(spec: RunSpec, run_dir: Path) -> None:
         path = _answers_file(run_dir)
         data = bytearray(path.read_bytes())
         i = max(j for j, b in enumerate(data) if chr(b).isalpha())
-        data[i] = ord(chr(data[i]).swapcase())            # one byte of a recorded output
+        data[i] = ord(chr(data[i]).swapcase())  # one byte of a recorded output
         path.write_bytes(bytes(data))
     elif spec.after == "delete-one":
-        _answers_file(run_dir).unlink()                    # one recorded output file
+        _answers_file(run_dir).unlink()  # one recorded output file
     elif spec.after == "no-artifacts":
-        shutil.rmtree(run_dir / "artifacts")               # every recorded output file
+        shutil.rmtree(run_dir / "artifacts")  # every recorded output file
     elif spec.after == "tamper-decision":
         (path,) = sorted(run_dir.glob("artifacts/*-release/decision.json"))
-        path.write_bytes(path.read_bytes().replace(b"release", b"Release", 1))   # one byte
+        path.write_bytes(path.read_bytes().replace(b"release", b"Release", 1))  # one byte
     elif spec.after:
         raise ValueError(f"no action {spec.after!r}")
 
@@ -406,15 +482,21 @@ def write_traces(runs: Path, folders) -> None:
     run the export refuses has no file, and the panel says so."""
     import subprocess
     import sys
+
     from onetrace_console.child import utf8_env
+
     out = runs / "traces"
     out.mkdir(parents=True, exist_ok=True)
     for name in folders:
         if not (runs / name / "MANIFEST.json").is_file():
             continue
-        subprocess.run([sys.executable, "-m", "onetrace", "export", "otel", name, "--out",
-                        str(Path("traces") / f"{name}.json")], cwd=runs, capture_output=True, timeout=120,
-                       env=utf8_env())
+        subprocess.run(
+            [sys.executable, "-m", "onetrace", "export", "otel", name, "--out", str(Path("traces") / f"{name}.json")],
+            cwd=runs,
+            capture_output=True,
+            timeout=120,
+            env=utf8_env(),
+        )
 
 
 def build(folder: Path) -> list[RunSpec]:
@@ -426,15 +508,20 @@ def build(folder: Path) -> list[RunSpec]:
     specs = runs()
     #: onetrace 0.5: the build's onedoor issuer (P8's gated step), and a span per run.
     from onetrace_console.demo_store.onedoor_demo import Issuer
+
     issuer = Issuer()
     before = os.environ.get("TRACEPARENT")
     from onetrace_console import startup_progress
+
     pipelines = len({s.folder.split("-", 1)[0] for s in specs})
     try:
         with startup_progress.phase(
-                "recording the demo's runs", len(specs),
-                done=lambda n, took: f"recording the demo's runs: {pipelines} pipelines \u2026 {n} runs, "
-                                     f"{startup_progress.seconds(took)}") as step:
+            "recording the demo's runs",
+            len(specs),
+            done=lambda n, took: (
+                f"recording the demo's runs: {pipelines} pipelines \u2026 {n} runs, {startup_progress.seconds(took)}"
+            ),
+        ) as step:
             for spec in specs:
                 run_dir = folder / RUNS_DIRNAME / spec.folder
                 #: Every run recorded inside a span of its own: a W3C traceparent made from its folder,
@@ -470,8 +557,10 @@ def build_from(folder: Path, earlier: Path) -> None:
         raise FileExistsError(f"{folder} is not a new, empty folder")
     problems = check_build_record(earlier, only=(RUNS_DIRNAME, TRUST_NAME))
     if problems:
-        raise ValueError(f"{earlier} is not the demo as its builder made it: {'; '.join(problems[:5])}"
-                         f"{' and more' if len(problems) > 5 else ''}")
+        raise ValueError(
+            f"{earlier} is not the demo as its builder made it: {'; '.join(problems[:5])}"
+            f"{' and more' if len(problems) > 5 else ''}"
+        )
     for p in (earlier / RUNS_DIRNAME).rglob("*"):
         if p.is_symlink():
             raise ValueError(f"{earlier} holds a link, {p.relative_to(earlier)}; a build copies files only")
@@ -504,12 +593,15 @@ def _digest(path: Path) -> str:
 
 
 def _covered(folder: Path, covers) -> dict[str, Path]:
+    """{path under `folder`, as the record writes it: each file under `covers`}. Each path is read once, as a
+    string under the folder's own (`relative_to` per file was a third of the start's check)."""
     found: dict[str, Path] = {}
+    base = len(folder.as_posix().rstrip("/")) + 1
     for root in covers:
         top = folder / root
         paths = [top] if top.is_file() else sorted(p for p in top.rglob("*") if p.is_file())
         for p in paths:
-            found[p.relative_to(folder).as_posix()] = p
+            found[p.as_posix()[base:]] = p
     return found
 
 
@@ -518,12 +610,24 @@ def _covered(folder: Path, covers) -> dict[str, Path]:
 NOT_BUILT = "store/compared/"
 
 
-def write_build_record(folder: Path, covers) -> None:
-    """The sha256 of every file under `covers` (paths in `folder`), as `BUILD_RECORD.json`."""
+def write_build_record(folder: Path, covers, builder: str = NAME) -> None:
+    """The sha256 of every file under `covers` (paths in `folder`), as `BUILD_RECORD.json`, naming its `builder`, the
+    console version that built it and the onetrace version its runs were recorded with. A record with no version is
+    an earlier console's."""
+    from importlib import metadata
+
+    from onetrace_console import __version__
+
     files = {rel: _digest(p) for rel, p in _covered(folder, covers).items()}
-    record = {"format": BUILD_FORMAT, "covers": sorted(covers), "files": files}
-    (folder / BUILD_RECORD).write_text(json.dumps(record, indent=1, sort_keys=True) + "\n",
-                                       encoding="utf-8")
+    record = {
+        "format": BUILD_FORMAT,
+        "builder": builder,
+        "console_version": __version__,
+        "onetrace_version": metadata.version("onetrace"),
+        "covers": sorted(covers),
+        "files": files,
+    }
+    (folder / BUILD_RECORD).write_text(json.dumps(record, indent=1, sort_keys=True) + "\n", encoding="utf-8")
 
 
 def check_build_record(folder: Path, only: tuple[str, ...] | None = None) -> list[str]:
@@ -535,11 +639,11 @@ def check_build_record(folder: Path, only: tuple[str, ...] | None = None) -> lis
     folder = Path(folder)
     path = folder / BUILD_RECORD
     from onetrace_console.bounded_json import load_json_bounded
+
     try:
         record = load_json_bounded(path.read_text(encoding="utf-8"), BUILD_RECORD)
         covers, files = record["covers"], record["files"]
-        if record.get("format") != BUILD_FORMAT or not isinstance(files, dict) \
-                or not isinstance(covers, list):
+        if record.get("format") != BUILD_FORMAT or not isinstance(files, dict) or not isinstance(covers, list):
             raise ValueError
     except FileNotFoundError:
         return [f"{BUILD_RECORD} is missing, so nothing in {folder} is vouched for"]
@@ -550,13 +654,11 @@ def check_build_record(folder: Path, only: tuple[str, ...] | None = None) -> lis
         if missing:
             return [f"{BUILD_RECORD} does not cover {', '.join(missing)}"]
         covers = list(only)
-        files = {rel: d for rel, d in files.items()
-                 if any(rel == root or rel.startswith(root + "/") for root in only)}
+        files = {rel: d for rel, d in files.items() if any(rel == root or rel.startswith(root + "/") for root in only)}
     have = {rel: p for rel, p in _covered(folder, covers).items() if not rel.startswith(NOT_BUILT)}
     problems = [f"{rel} was removed" for rel in sorted(set(files) - set(have))]
     problems += [f"{rel} was added" for rel in sorted(set(have) - set(files))]
-    problems += [f"{rel} was changed" for rel in sorted(set(files) & set(have))
-                 if _digest(have[rel]) != files[rel]]
+    problems += [f"{rel} was changed" for rel in sorted(set(files) & set(have)) if _digest(have[rel]) != files[rel]]
     return problems
 
 
@@ -566,12 +668,14 @@ def deliver(folder: Path, store, config):
     from dataclasses import replace
 
     from onetrace_console.folder_load import _compare, load_folder
+
     loaded = load_folder(Path(folder) / RUNS_DIRNAME, store, config)
     first, note = None, ""
     #: The comparisons whose two runs are there: a build from an earlier build's runs
     #: (`--runs-from`) holds that build's pipelines only.
     names = {r.name for r in loaded.runs}
     from onetrace_console import startup_progress
+
     pairs = [p for p in COMPARISONS + COMPARISONS_BESIDE_KEPT if set(p) <= names]
     with startup_progress.phase("comparing pairs", len(pairs)) as step:
         for i, pair in enumerate(pairs):

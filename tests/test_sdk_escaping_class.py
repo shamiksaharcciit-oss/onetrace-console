@@ -6,9 +6,11 @@ before a record could draw a line of the Diff page.
 Measured over every code point, U+0000 to U+10FFFF, as an earlier report did (2,123 escaped by
 `display`; 2,285 by the SDK, 163 of them format characters `display` leaves as they are).
 """
+
 from __future__ import annotations
 
 from onetrace.escaping import ESCAPED_RANGES, escaped
+
 from onetrace_console.viewer.page import display
 
 
@@ -28,8 +30,9 @@ def test_the_sdk_escapes_everything_the_console_did(examined):
     console, sdk = _escaped_by(display), _escaped_by(escaped)
     examined(0x110000, "code points compared")
     missing = sorted(console - sdk)
-    assert not missing, ("the SDK leaves these as they are and the console escaped them: "
-                         + ", ".join(f"U+{cp:04X}" for cp in missing[:20]))
+    assert not missing, "the SDK leaves these as they are and the console escaped them: " + ", ".join(
+        f"U+{cp:04X}" for cp in missing[:20]
+    )
     assert len(sdk) >= 2285, f"the SDK's class narrowed: {len(sdk)} code points"
 
 

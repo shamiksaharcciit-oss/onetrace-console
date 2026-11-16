@@ -6,6 +6,7 @@ backlog as a named item: a store on Windows at a deep path fails. It will be
 fixed in the order that adds a Windows install path. The report's reproduction
 is kept as its test case."* This file is that test case.
 """
+
 from __future__ import annotations
 
 import sys
@@ -40,11 +41,12 @@ def test_backlog_windows_max_path_in_store_file_naming(tmp_path, examined):
     try:
         deep.mkdir(parents=True, exist_ok=True)
         store = Store(deep / "store")
-        run = StoredRun(key="a" * 64, run_id="r", chain_head="c", format="f",
-                        listing=(), received_at="now")
+        run = StoredRun(key="a" * 64, run_id="r", chain_head="c", format="f", listing=(), received_at="now")
         store.put_run(run)
     except (FileNotFoundError, OSError):
-        return   # reproduced -- the known, backlogged limitation
+        return  # reproduced -- the known, backlogged limitation
 
-    pytest.skip("this machine has Windows long-path support enabled (or an "
-               "equivalent), so the 260-character limit did not reproduce here")
+    pytest.skip(
+        "this machine has Windows long-path support enabled (or an "
+        "equivalent), so the 260-character limit did not reproduce here"
+    )

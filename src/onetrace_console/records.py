@@ -14,6 +14,7 @@ it reads `state` here and nothing else, so a run reads one way everywhere:
 The verifier's own verdict ("Verified" and the rest) is the verifier's output: it is shown only where
 a page presents that output, never as a count of runs.
 """
+
 from __future__ import annotations
 
 from onetrace_console.store import Store, StoredRun
@@ -22,11 +23,21 @@ YES, NO, COULDNT, NOT_CHECKED, NO_VERDICT = "yes", "no", "couldnt-check", "not-c
 #: In the order every summary counts them.
 STATES = (YES, NO, COULDNT, NOT_CHECKED, NO_VERDICT)
 #: What a summary counts each state under, and what a one-line list says of one run.
-LABEL = {YES: "Records agree", NO: "Contradicts its record", COULDNT: "Couldn't check",
-         NOT_CHECKED: "Not checked", NO_VERDICT: "No verdict recorded"}
+LABEL = {
+    YES: "Records agree",
+    NO: "Contradicts its record",
+    COULDNT: "Couldn't check",
+    NOT_CHECKED: "Not checked",
+    NO_VERDICT: "No verdict recorded",
+}
 #: Each state as a count says it in a sentence: "28 of 31 records agree".
-COUNTED = {YES: "records agree", NO: "contradict their record", COULDNT: "couldn't check",
-           NOT_CHECKED: "not checked", NO_VERDICT: "no verdict recorded"}
+COUNTED = {
+    YES: "records agree",
+    NO: "contradict their record",
+    COULDNT: "couldn't check",
+    NOT_CHECKED: "not checked",
+    NO_VERDICT: "no verdict recorded",
+}
 #: The one reason a count says: a check that held, without the run's output files required.
 HELD_WITHOUT = "held without its output files required"
 
@@ -56,11 +67,13 @@ def state(run: StoredRun, store: Store) -> str:
     if run.agree in (YES, NO, COULDNT, NOT_CHECKED):
         return run.agree
     from onetrace_console.checks import CONTRADICTS, HOLDS
+
     if run.check_verdict == CONTRADICTS:
         return NO
     if run.check_verdict != HOLDS:
         return COULDNT
     from onetrace_console.home import artifacts_required, outputs_required_exit
+
     if artifacts_required(run, store):
         return YES
     return NO if outputs_required_exit(run, store) not in (None, "0") else NOT_CHECKED
@@ -74,6 +87,7 @@ def why(run: StoredRun, store: Store) -> str:
     if run.agree:
         return HELD_WITHOUT if run.agree_why == "no-outputs" else ""
     from onetrace_console.checks import HOLDS
+
     return HELD_WITHOUT if run.check_verdict == HOLDS else ""
 
 
@@ -90,8 +104,9 @@ def runs_in(runs, store: Store, wanted: str) -> tuple[StoredRun, ...]:
 
 #: A comparison with a side whose rung 1 reads "Couldn't check": what the SDK's `diff` says of
 #: the pair is never shown as a finding. {name}: that run, {role}: baseline or candidate.
-UNCHECKED_SIDE = ("Couldn't check {name}, the {role}: its own check could not be done, so this "
-                  "comparison shows no verdict.")
+UNCHECKED_SIDE = (
+    "Couldn't check {name}, the {role}: its own check could not be done, so this comparison shows no verdict."
+)
 #: The run page's reason, in its "Couldn't be checked from here" frame.
 UNCHECKED_MARKS = "{name}, the {role}, couldn't be checked, so this comparison shows no verdict"
 #: The start-up list's line for such a comparison. {names}: the folders, " and "-joined.
@@ -104,8 +119,10 @@ def unchecked_sides(comparison, store: Store) -> tuple[tuple[str, StoredRun], ..
     verifier refuses identical to its baseline, so a pair with such a side shows no verdict from
     `diff`: every page that reads a comparison asks this first."""
     out = []
-    for role, key in (("baseline", getattr(comparison, "run_a", None)),
-                      ("candidate", getattr(comparison, "run_b", None))):
+    for role, key in (
+        ("baseline", getattr(comparison, "run_a", None)),
+        ("candidate", getattr(comparison, "run_b", None)),
+    ):
         if not key:
             continue
         try:

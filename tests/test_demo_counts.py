@@ -10,6 +10,7 @@ runs and its comparisons, and the README and the PyPI description the runs it br
 pipelines its Runs card showed when it was taken, and those are the builder's. Each check has its
 sabotage.
 """
+
 from __future__ import annotations
 
 import re
@@ -28,6 +29,7 @@ DOCS = ("README.md", "PYPI_DESCRIPTION.md")
 
 def banner_problems(page: str, pipelines: int) -> list[str]:
     from onetrace_console.public import count_word
+
     said = re.findall(r'<p data-frame="banner">(.*?)</p>', page, re.S)
     if len(said) != 1:
         return [f"the banner is there {len(said)} times"]
@@ -40,6 +42,7 @@ def banner_problems(page: str, pipelines: int) -> list[str]:
 def doc_problems(name: str, text: str) -> list[str]:
     from onetrace_console.demo_store import COMPARISONS, PLANTED, pipeline_names, runs
     from onetrace_console.public import count_word
+
     out = []
     wanted = [(r"(\w+) small example pipelines", count_word(len(pipeline_names())), "pipelines")]
     if name in DOCS:
@@ -47,8 +50,13 @@ def doc_problems(name: str, text: str) -> list[str]:
         #: The Overview image's description: the runs the image shows are the demo's.
         wanted.append((r"the demo's (\w+) runs", str(len(runs())), "runs"))
         #: The runs the builder breaks on purpose, one line each in its own list.
-        wanted.append((r"(\w+) of its runs are broken on purpose when the demo is built",
-                       count_word(len(PLANTED)).capitalize(), "runs broken on purpose"))
+        wanted.append(
+            (
+                r"(\w+) of its runs are broken on purpose when the demo is built",
+                count_word(len(PLANTED)).capitalize(),
+                "runs broken on purpose",
+            )
+        )
     else:
         #: The changelog's newest entry that says what the demo records: a release that leaves the
         #: demo's counts as they were (0.1.2's fixes) doesn't say them again.
@@ -68,13 +76,14 @@ OVERVIEW = REPO / "docs" / "screenshots" / "overview.png"
 def image_problems(png: bytes) -> list[str]:
     """The Overview image's Description text chunk: well formed, and the builder's runs and pipelines."""
     from onetrace_console.demo_store import pipeline_names, runs
+
     if png[:8] != b"\x89PNG\r\n\x1a\n":
         return ["not a PNG"]
     said, at = None, 8
     while at < len(png):
-        (size,) = struct.unpack(">I", png[at:at + 4])
-        kind, data = png[at + 4:at + 8], png[at + 8:at + 8 + size]
-        if struct.unpack(">I", png[at + 8 + size:at + 12 + size])[0] != zlib.crc32(kind + data):
+        (size,) = struct.unpack(">I", png[at : at + 4])
+        kind, data = png[at + 4 : at + 8], png[at + 8 : at + 8 + size]
+        if struct.unpack(">I", png[at + 8 + size : at + 12 + size])[0] != zlib.crc32(kind + data):
             return [f"a {kind!r} chunk's CRC does not hold"]
         if kind == b"tEXt" and data.startswith(b"Description\x00"):
             said = data.split(b"\x00", 1)[1].decode("latin-1")
@@ -95,7 +104,7 @@ def _with_description(png: bytes, said: str | None) -> bytes:
     """The image with its Description chunk (right after IHDR) replaced by `said`, or taken out."""
     (size,) = struct.unpack(">I", png[33:37])
     assert png[37:41] == b"tEXt"
-    rest = png[:33] + png[45 + size:]
+    rest = png[:33] + png[45 + size :]
     if said is None:
         return rest
     data = b"Description\x00" + said.encode("latin-1")
@@ -117,6 +126,7 @@ def test_every_public_page_s_banner_counts_the_store_s_pipelines(served, examine
     from onetrace_console.demo_store import pipeline_names
     from onetrace_console.overview import pipelines
     from onetrace_console.store import Store
+
     base, folder, _c = served
     found = len(pipelines(Store(folder / "store" / "store")))
     assert found == len(pipeline_names()), "the store holds the builder's pipelines"
@@ -137,6 +147,7 @@ def test_each_document_counts_what_the_builder_makes(name, examined):
 def test_sabotage_each_check_catches_its_fault(served, monkeypatch, examined):  # noqa: F811
     from onetrace_console import demo_store
     from onetrace_console.frame import banner
+
     page = container_check.fetch(served[0], "/home.html")[2].decode("utf-8")
     caught = 0
     #: The count typed into the banner's words, as it was: three.
@@ -149,10 +160,12 @@ def test_sabotage_each_check_catches_its_fault(served, monkeypatch, examined):  
     assert banner_problems(banner(), len(names)) != []
     monkeypatch.undo()
     caught += 1
-    for name, old, new in [("README.md", "from 11 small", "from ten small"),
-                           ("PYPI_DESCRIPTION.md", "stores 15 comparisons", "stores 14 comparisons"),
-                           ("README.md", "the demo's 54 runs", "the demo's 48 runs"),
-                           ("CHANGELOG.md", "records 54 runs", "records 48 runs")]:
+    for name, old, new in [
+        ("README.md", "from 11 small", "from ten small"),
+        ("PYPI_DESCRIPTION.md", "stores 15 comparisons", "stores 14 comparisons"),
+        ("README.md", "the demo's 54 runs", "the demo's 48 runs"),
+        ("CHANGELOG.md", "records 54 runs", "records 48 runs"),
+    ]:
         text = (REPO / name).read_text(encoding="utf-8")
         assert old in text, name
         assert doc_problems(name, text.replace(old, new)) != [], name
@@ -162,6 +175,7 @@ def test_sabotage_each_check_catches_its_fault(served, monkeypatch, examined):  
 
 def test_sabotage_a_run_planted_and_not_counted_in_the_documents_is_named(monkeypatch):
     from onetrace_console import demo_store
+
     planted = dict(demo_store.PLANTED, **{"p6-36-fill-baseline": "One more run broken on purpose."})
     monkeypatch.setattr(demo_store, "PLANTED", planted)
     for name in DOCS:

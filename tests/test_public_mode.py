@@ -20,6 +20,7 @@ served by a real console started with a configuration file that says `"public": 
 7. the built store is the demo: the package's runs byte for byte, their comparison, every page,
    and, once its permissions are the image's, the serving user cannot write it.
 """
+
 from __future__ import annotations
 
 import hashlib
@@ -32,10 +33,10 @@ import sys
 import tempfile
 import urllib.request
 from pathlib import Path
-from tests.http_limits import limit
 
 import pytest
 
+from tests.http_limits import limit
 from tests.test_folder_load import REPO, _Console, _free_port
 from tools import container_check
 
@@ -45,15 +46,18 @@ PACKAGE_DEMO = REPO / "src" / "onetrace_console" / "demo_store"
 def _tree(root: Path) -> dict[str, tuple[str, int]]:
     """Every file under `root`, its sha256 and when it was last written: what "the store did not
     change" compares. The time too, since a page drawn again can be the same bytes."""
-    return {p.relative_to(root).as_posix(): (hashlib.sha256(p.read_bytes()).hexdigest(),
-                                             p.stat().st_mtime_ns)
-            for p in sorted(root.rglob("*")) if p.is_file()}
+    return {
+        p.relative_to(root).as_posix(): (hashlib.sha256(p.read_bytes()).hexdigest(), p.stat().st_mtime_ns)
+        for p in sorted(root.rglob("*"))
+        if p.is_file()
+    }
 
 
 @pytest.fixture(scope="module")
 def built(shared_cli_demo) -> Path:
     """The public demo, built once into a new folder as the image builds it."""
     from tests.test_checks import _require_installed
+
     _require_installed()
     folder = shared_cli_demo["folder"]
     return folder
@@ -64,9 +68,15 @@ def _clean_env() -> dict[str, str]:
 
 
 def _config(tmp_path: Path, folder: Path, **keys) -> Path:
-    data = {"public": True, "host": "127.0.0.1", "port": _free_port(),
-            "store_root": str(folder / "store"), "trust_file": str(folder / "trust.json"),
-            "sign_in": {"enabled": False}, **keys}
+    data = {
+        "public": True,
+        "host": "127.0.0.1",
+        "port": _free_port(),
+        "store_root": str(folder / "store"),
+        "trust_file": str(folder / "trust.json"),
+        "sign_in": {"enabled": False},
+        **keys,
+    }
     path = tmp_path / "public.json"
     path.write_text(json.dumps(data), encoding="utf-8")
     return path
@@ -96,8 +106,10 @@ def _pages(folder: Path) -> list[str]:
 
 # ------------------------------------------------------------------------------- 1. the switch
 
+
 def test_without_the_key_nothing_changes(server, tmp_path, examined):
     from onetrace_console.config import Config, load
+
     plain = tmp_path / "plain.json"
     plain.write_text(json.dumps({"store_root": str(tmp_path / "s")}), encoding="utf-8")
     assert Config().public is False and load(plain).public is False
@@ -110,6 +122,7 @@ def test_without_the_key_nothing_changes(server, tmp_path, examined):
     #: Without the key, none of public mode's own headers; the content policy every console sends
     #: (its fonts and scripts its own) is the local one.
     from onetrace_console.public import content_security_policy
+
     assert "strict-transport-security" not in headers and "x-frame-options" not in headers
     assert headers.get("content-security-policy") == content_security_policy(local=True)
 
@@ -117,6 +130,7 @@ def test_without_the_key_nothing_changes(server, tmp_path, examined):
 @pytest.mark.parametrize("value", ["true", 1, None, [], {}])
 def test_the_key_is_refused_unless_true_or_false(tmp_path, value, examined):
     from onetrace_console.config import ConfigError, load
+
     path = tmp_path / "c.json"
     path.write_text(json.dumps({"public": value}), encoding="utf-8")
     examined(1, "configuration")
@@ -191,6 +205,7 @@ def test_public_over_a_store_with_no_pages_is_refused_and_draws_none(built, tmp_
 
 # ---------------------------------------------------------------- 2. every write, refused unread
 
+
 @pytest.mark.parametrize("route", container_check.ROUTES)
 def test_each_write_route_is_refused_before_its_body_is_read(served, route, examined):
     base, folder, _c = served
@@ -199,6 +214,7 @@ def test_each_write_route_is_refused_before_its_body_is_read(served, route, exam
     examined(1, f"POST {route}")
     assert container_check.refusal_problems(status, body, seconds) == [], (status, body, seconds)
     from onetrace_console.public import REFUSAL
+
     assert body.decode("utf-8").strip() == REFUSAL
     assert _tree(folder) == before
 
@@ -215,6 +231,7 @@ def test_a_refusal_is_the_same_with_a_body_sent_in_full(served, examined):
 
 
 # --------------------------------------------------------------------- 3. the access log, on stdout
+
 
 def test_the_access_log_is_standard_output_and_nothing_is_written(served, examined):
     base, folder, c = served
@@ -236,6 +253,7 @@ def _raw(base: str, request: bytes) -> int:
     import re
     import socket
     from urllib.parse import urlsplit
+
     url = urlsplit(base)
     with socket.create_connection((url.hostname, url.port), timeout=30) as s:
         s.sendall(request)
@@ -266,8 +284,12 @@ def test_a_public_consoles_output_is_its_access_log_and_nothing_else(built, monk
     saved = {n: Handler.__dict__[n] for n in names if n in Handler.__dict__}
     root = built / "store"
     Handler.store_root, Handler.store = root, Store(root / "store")
-    Handler.config = Config(public=True, store_root=str(root), trust_file=str(built / "trust.json"),
-                            sign_in={**Config().sign_in, "enabled": False})
+    Handler.config = Config(
+        public=True,
+        store_root=str(root),
+        trust_file=str(built / "trust.json"),
+        sign_in={**Config().sign_in, "enabled": False},
+    )
     Handler.access_log, Handler.local_port, Handler.timeout = StdoutAccessLog(stream=out), None, 30
     httpd = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
     thread = threading.Thread(target=httpd.serve_forever, daemon=True)
@@ -300,8 +322,7 @@ def test_a_public_consoles_output_is_its_access_log_and_nothing_else(built, monk
     assert not any("127.0.0.1" in line for line in lines), lines
 
 
-def test_a_request_that_raises_is_one_json_error_line_and_the_console_serves_on(built, monkeypatch,
-                                                                              examined):
+def test_a_request_that_raises_is_one_json_error_line_and_the_console_serves_on(built, monkeypatch, examined):
     """In-process, on the console's own server class, with its output caught: a page whose drawing
     raises inside the handler. The output holds exactly one line that is not an access-log entry:
     one JSON error line -- when, "error", the exception's type, the traceback -- naming no client
@@ -320,13 +341,18 @@ def test_a_request_that_raises_is_one_json_error_line_and_the_console_serves_on(
 
     def broken(*args, **kwargs):
         raise RuntimeError("the page could not be filled")
+
     monkeypatch.setattr(frame, "fill", broken)
     names = ("store_root", "store", "config", "access_log", "local_port", "timeout")
     saved = {n: Handler.__dict__[n] for n in names if n in Handler.__dict__}
     root = built / "store"
     Handler.store_root, Handler.store = root, Store(root / "store")
-    Handler.config = Config(public=True, store_root=str(root), trust_file=str(built / "trust.json"),
-                            sign_in={**Config().sign_in, "enabled": False})
+    Handler.config = Config(
+        public=True,
+        store_root=str(root),
+        trust_file=str(built / "trust.json"),
+        sign_in={**Config().sign_in, "enabled": False},
+    )
     Handler.access_log, Handler.local_port, Handler.timeout = StdoutAccessLog(stream=out), None, 30
     httpd = ConsoleServer(("127.0.0.1", 0), Handler)
     port = httpd.server_address[1]
@@ -362,15 +388,20 @@ def test_a_request_that_raises_is_one_json_error_line_and_the_console_serves_on(
 def test_the_log_check_names_a_line_in_the_standard_librarys_form(examined):
     """The check's own sabotage: the standard library's request line, an error line, and an entry
     with a sixth field are each named; the two start lines and five-field entries pass."""
-    entry = json.dumps({"at": "t", "principal": "anonymous", "method": "GET", "path": "/",
-                        "status": 200})
-    clean = ["onetrace-console serving on http://0.0.0.0:8080 (store root: /srv)",
-             "onetrace-console public mode: read-only.", entry, entry]
-    planted = [*clean,
-               '172.17.0.1 - "GET /home.html HTTP/1.1" 200 -',
-               "172.17.0.1 - code 501, message Unsupported method ('PUT')",
-               json.dumps({**json.loads(entry), "client": "172.17.0.1"}),
-               "onetrace-console public mode: read-only."]
+    entry = json.dumps({"at": "t", "principal": "anonymous", "method": "GET", "path": "/", "status": 200})
+    clean = [
+        "onetrace-console serving on http://0.0.0.0:8080 (store root: /srv)",
+        "onetrace-console public mode: read-only.",
+        entry,
+        entry,
+    ]
+    planted = [
+        *clean,
+        '172.17.0.1 - "GET /home.html HTTP/1.1" 200 -',
+        "172.17.0.1 - code 501, message Unsupported method ('PUT')",
+        json.dumps({**json.loads(entry), "client": "172.17.0.1"}),
+        "onetrace-console public mode: read-only.",
+    ]
     examined(len(planted), "lines")
     assert container_check.log_problems(clean) == []
     found = container_check.log_problems(planted)
@@ -379,18 +410,23 @@ def test_the_log_check_names_a_line_in_the_standard_librarys_form(examined):
 
 # ------------------------------------------------------------------------- 4. the CLI's writes
 
-@pytest.mark.parametrize("command", [["admin", "create", "someone"], ["token", "create", "someone"],
-                                     ["token", "revoke", "0"]])
-def test_the_account_and_token_commands_refuse_a_public_configuration(built, tmp_path, command,
-                                                                      examined):
+
+@pytest.mark.parametrize(
+    "command", [["admin", "create", "someone"], ["token", "create", "someone"], ["token", "revoke", "0"]]
+)
+def test_the_account_and_token_commands_refuse_a_public_configuration(built, tmp_path, command, examined):
     root = tmp_path / "root"
     config = _config(tmp_path, built)
     data = json.loads(config.read_text(encoding="utf-8"))
     config.write_text(json.dumps({**data, "store_root": str(root)}), encoding="utf-8")
-    out = subprocess.run([sys.executable, "-B", "-m", "onetrace_console", *command],
-                         input="a password long enough to be accepted\n", capture_output=True, text=True, timeout=60,
-                         env={**_clean_env(), "PYTHONPATH": str(REPO / "src"),
-                              "ONETRACE_CONSOLE_CONFIG": str(config)})
+    out = subprocess.run(
+        [sys.executable, "-B", "-m", "onetrace_console", *command],
+        input="a password long enough to be accepted\n",
+        capture_output=True,
+        text=True,
+        timeout=60,
+        env={**_clean_env(), "PYTHONPATH": str(REPO / "src"), "ONETRACE_CONSOLE_CONFIG": str(config)},
+    )
     examined(1, " ".join(command))
     assert out.returncode == 1, out.stdout + out.stderr
     assert "the configuration is public" in out.stderr, out.stderr
@@ -399,8 +435,10 @@ def test_the_account_and_token_commands_refuse_a_public_configuration(built, tmp
 
 # ------------------------------------------------------------------ 5. every page, as served
 
+
 def test_every_page_answers_with_the_banner_and_every_header(served, examined):
     from onetrace_console.public import security_headers
+
     base, folder, _c = served
     pages = _pages(folder)
     examined(len(pages), "pages served")
@@ -435,11 +473,13 @@ def test_the_policy_names_the_one_inline_script_and_the_checker_catches_another(
     from onetrace_console.frame import THEME_HEAD_SCRIPT, THEME_SCRIPT
     from onetrace_console.viewer.page import PRINT_SCRIPT
     from onetrace_console.words import RELATIVE_TIME_SCRIPT
+
     #: The runs list carries the print helper, the relative times and the theme switch's two
     #: scripts, each once, each named.
     assert body.count(b"<script>") == 4
-    assert all(body.count(s.encode()) == 1 for s in (PRINT_SCRIPT, RELATIVE_TIME_SCRIPT,
-                                                     THEME_HEAD_SCRIPT, THEME_SCRIPT))
+    assert all(
+        body.count(s.encode()) == 1 for s in (PRINT_SCRIPT, RELATIVE_TIME_SCRIPT, THEME_HEAD_SCRIPT, THEME_SCRIPT)
+    )
     assert container_check.page_problems(status, headers, body) == []
     planted = body.replace(b"</body>", b"<script>alert(1)</script></body>", 1)
     problems = container_check.page_problems(status, headers, planted)
@@ -448,6 +488,7 @@ def test_the_policy_names_the_one_inline_script_and_the_checker_catches_another(
 
 def test_the_checkers_words_are_the_consoles(examined):
     from onetrace_console.public import BANNER, REFUSAL, security_headers
+
     examined(3, "fixed words")
     assert BANNER.startswith(container_check.BANNER) or container_check.BANNER.startswith(BANNER)
     assert REFUSAL.startswith(container_check.REFUSED)
@@ -459,6 +500,7 @@ def test_a_runs_record_download_is_a_read_and_answers(served, examined):
     keys = sorted(p.name for p in (folder / "store" / "pages" / "runs").iterdir() if p.is_dir())
     examined(len(keys), "record downloads")
     from onetrace_console.demo_store import runs
+
     assert len(keys) == len(runs()), keys
     for key in keys:
         status, headers, body = container_check.fetch(base, f"/runs/{key}/record.tar")
@@ -467,13 +509,14 @@ def test_a_runs_record_download_is_a_read_and_answers(served, examined):
 
 
 def test_no_public_page_shows_a_word_no_page_may_show(served, examined):
-    from tests.test_ux_screens import MONTHS, NOT_ON_A_PAGE, _text
+    from tests.test_ux_screens import MONTHS, NOT_ON_A_PAGE, scanned_text
+
     base, folder, _c = served
     pages = _pages(folder)
     examined(len(pages), "public pages read")
     found = []
     for rel in pages:
-        text = _text(container_check.fetch(base, "/" + rel)[2].decode("utf-8"))
+        text = scanned_text(container_check.fetch(base, "/" + rel)[2].decode("utf-8"))
         found += [f"{rel}: {name}" for name, rx in NOT_ON_A_PAGE.items() if rx.search(text)]
         found += [f"{rel}: a month by name" for _ in MONTHS.finditer(text)]
     assert not found, found
@@ -481,8 +524,10 @@ def test_no_public_page_shows_a_word_no_page_may_show(served, examined):
 
 # --------------------------------------------------------------------------- 6. no listing
 
-@pytest.mark.parametrize("path", ["/runs", "/runs/", "/diff", "/diff/", "/static/", "/static/fonts/",
-                                  "/store/", "/pages/", "/access_log/"])
+
+@pytest.mark.parametrize(
+    "path", ["/runs", "/runs/", "/diff", "/diff/", "/static/", "/static/fonts/", "/store/", "/pages/", "/access_log/"]
+)
 def test_a_folder_is_never_listed(served, path, examined):
     base, _folder, _c = served
     status, headers, body = container_check.fetch(base, path)
@@ -492,6 +537,7 @@ def test_a_folder_is_never_listed(served, path, examined):
 
 
 # ------------------------------------------------------------------ 7. the built store is the demo
+
 
 def test_a_public_start_writes_nothing_and_draws_nothing(built, tmp_path, examined):
     """Started and serving, a public console has written no file under the store: not a page
@@ -518,6 +564,7 @@ def test_the_built_store_is_the_builders_demo_compared_and_drawn(built, examined
     every byte of it."""
     from onetrace_console.demo_store import BESIDE_RUNS, COMPARISONS, check_build_record, runs
     from onetrace_console.store import Store
+
     assert sorted(p.name for p in (built / "runs").iterdir()) == sorted([r.folder for r in runs()] + list(BESIDE_RUNS))
     assert (built / "trust.json").read_bytes() == (PACKAGE_DEMO / "trust.json").read_bytes()
     assert check_build_record(built) == []
@@ -534,8 +581,7 @@ def test_the_built_store_is_the_builders_demo_compared_and_drawn(built, examined
         assert {f"runs/{run.key}/{n}" for n in ("answer.html", "case.html")} <= pages
 
 
-@pytest.mark.parametrize("where", ["store/pages/home.html", "runs/p1-01-baseline-set1/MANIFEST.json",
-                                   "trust.json"])
+@pytest.mark.parametrize("where", ["store/pages/home.html", "runs/p1-01-baseline-set1/MANIFEST.json", "trust.json"])
 def test_public_over_a_demo_edited_after_its_build_is_refused(built, tmp_path, where, examined):
     """One byte changed anywhere the build record covers, and a public console doesn't start."""
     copy = tmp_path / "demo"
@@ -556,12 +602,20 @@ def test_public_over_a_demo_edited_after_its_build_is_refused(built, tmp_path, w
 def test_building_into_a_folder_that_is_not_new_and_empty_is_refused(tmp_path, examined):
     (tmp_path / "taken").mkdir()
     (tmp_path / "taken" / "x").write_text("x", encoding="utf-8")
-    out = subprocess.run([sys.executable, "-B", "-m", "onetrace_console", "demo", "--public",
-                          "--build", str(tmp_path / "taken")], capture_output=True, text=True,
-                         timeout=120, env={**_clean_env(), "PYTHONPATH": str(REPO / "src")})
-    no_public = subprocess.run([sys.executable, "-B", "-m", "onetrace_console", "demo", "--build",
-                                str(tmp_path / "new")], capture_output=True, text=True,
-                               timeout=120, env={**_clean_env(), "PYTHONPATH": str(REPO / "src")})
+    out = subprocess.run(
+        [sys.executable, "-B", "-m", "onetrace_console", "demo", "--public", "--build", str(tmp_path / "taken")],
+        capture_output=True,
+        text=True,
+        timeout=120,
+        env={**_clean_env(), "PYTHONPATH": str(REPO / "src")},
+    )
+    no_public = subprocess.run(
+        [sys.executable, "-B", "-m", "onetrace_console", "demo", "--build", str(tmp_path / "new")],
+        capture_output=True,
+        text=True,
+        timeout=120,
+        env={**_clean_env(), "PYTHONPATH": str(REPO / "src")},
+    )
     examined(2, "builds")
     assert out.returncode == 1 and "not a new, empty folder" in out.stderr, out.stderr
     assert no_public.returncode == 2 and "give --public" in no_public.stderr, no_public.stderr
@@ -594,8 +648,7 @@ def _probe(store: Path, uid: int | None) -> list[str]:
     file's own flag is tried."""
     files_only = "1" if os.name == "nt" else "0"
     args = [sys.executable, "-B", "-c", _PROBE, str(store), files_only]
-    out = subprocess.run(args + ([str(uid)] if uid is not None else []), capture_output=True,
-                         text=True, timeout=60)
+    out = subprocess.run(args + ([str(uid)] if uid is not None else []), capture_output=True, text=True, timeout=60)
     assert out.returncode == 0, out.stderr
     made = store / "pages" / "new.html"
     if made.exists():
@@ -650,8 +703,9 @@ def test_once_locked_the_serving_user_cannot_write_the_store(built, examined):
             seen["as the image: root's, no write bit"] = _probe(store, serving)
             _unlock(store)
         examined(sum(len(v) for v in seen.values()), "writes tried")
-        assert seen.pop("control: the serving user's, writable") == want, \
+        assert seen.pop("control: the serving user's, writable") == want, (
             "the probe cannot write even an unlocked store"
+        )
         assert seen == {k: refused for k in seen}, seen
     finally:
         _unlock(work)
@@ -659,6 +713,7 @@ def test_once_locked_the_serving_user_cannot_write_the_store(built, examined):
 
 
 # --------------------------------------------------------------- the demo command, as a user runs it
+
 
 def test_demo_public_serves_the_read_only_demo_on_this_machine(tmp_path, console, examined):
     port = _free_port()
@@ -681,6 +736,7 @@ def console():
         c = _Console(*args, **kw)
         started.append(c)
         return c
+
     yield start
     for c in started:
         c.stop()

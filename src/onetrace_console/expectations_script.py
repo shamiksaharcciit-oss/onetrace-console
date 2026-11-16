@@ -8,6 +8,7 @@ refusal is said beside the button, in the console's words. Named by hash in the 
 Content-Security-Policy only; no public page carries it. Without the script the button and the field
 stay hidden.
 """
+
 EXPECTATIONS_SCRIPT = (
     "<script>document.querySelectorAll('button[data-expectations-after-post]').forEach(function(b){"
     "b.hidden=false;var p=b.parentNode,s=p.querySelector('[data-expectations-after-said]'),"
@@ -22,4 +23,5 @@ EXPECTATIONS_SCRIPT = (
     "function(){return{ok:false,j:{error:'the console answered '+r.status}}})})"
     ".then(function(x){if(x.ok){location.reload();return}"
     "b.disabled=false;if(s){s.textContent=String(x.j.error||'Not checked')}},"
-    "function(){b.disabled=false;if(s){s.textContent='The console could not be reached.'}})})})</script>")
+    "function(){b.disabled=false;if(s){s.textContent='The console could not be reached.'}})})})</script>"
+)

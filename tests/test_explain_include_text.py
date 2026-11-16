@@ -5,6 +5,7 @@ A checkbox beside Send, off by default and remembered per comparison only, passe
 or JSON, up to 8 KiB each, as items of a kind of their own (`text`), so the first send of text to an
 address is asked about as any new kind is. "Show the packet" shows the text before anything goes.
 """
+
 from __future__ import annotations
 
 import json
@@ -31,6 +32,7 @@ def _box(panel: str) -> str:
 
 def test_off_by_default_and_off_sends_no_text(pair):
     from onetrace_console import explain
+
     store, comparison, config = pair
     _model(config, "openai:a-model")
     got = explain.prepare(comparison, store)
@@ -44,6 +46,7 @@ def test_off_by_default_and_off_sends_no_text(pair):
 
 def test_on_the_first_time_asks_with_the_text_kind_and_the_packet_shows_it(pair):
     from onetrace_console import explain
+
     store, comparison, config = pair
     _model(config, "openai:a-model")
     explain.set_include_text(store, comparison.key, True)
@@ -54,8 +57,10 @@ def test_on_the_first_time_asks_with_the_text_kind_and_the_packet_shows_it(pair)
     panel = _panel(_diff(store, comparison))
     assert " checked" in _box(panel)
     question = re.search(r'<div data-explain="first-send">(.*?)</div>', panel, re.S).group(1)
-    assert ('<li data-kind="text">the kept text of outputs that differ: text and JSON outputs, up to 8 KiB each '
-            "(<code>text</code>)</li>") in question
+    assert (
+        '<li data-kind="text">the kept text of outputs that differ: text and JSON outputs, up to 8 KiB each '
+        "(<code>text</code>)</li>"
+    ) in question
     #: Show the packet shows the text before anything goes.
     shown = explain.packet(comparison, store)
     assert shown["command"].endswith("--include-text") and _items(shown, "text")
@@ -68,6 +73,7 @@ def test_on_the_first_time_asks_with_the_text_kind_and_the_packet_shows_it(pair)
 
 def test_on_after_confirming_it_does_not_ask_again_for_that_address(pair):
     from onetrace_console import explain
+
     store, comparison, config = pair
     _model(config, "openai:a-model")
     explain.set_include_text(store, comparison.key, True)
@@ -82,6 +88,7 @@ def test_on_after_confirming_it_does_not_ask_again_for_that_address(pair):
 
 def test_the_choice_is_per_comparison_and_a_change_prepares_again(pair):
     from onetrace_console import explain
+
     store, comparison, config = pair
     _model(config, "openai:a-model")
     explain.prepare(comparison, store)
@@ -96,8 +103,10 @@ def test_the_choice_is_per_comparison_and_a_change_prepares_again(pair):
 
 def test_over_http_the_checkbox_keeps_the_choice(server, pair, monkeypatch):
     import urllib.request
+
     from onetrace_console import explain
     from onetrace_console.serve import Handler
+
     store, comparison, config = pair
     base, _root = server
     monkeypatch.setattr(Handler, "store", store)

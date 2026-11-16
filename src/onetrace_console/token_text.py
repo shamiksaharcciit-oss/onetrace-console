@@ -24,6 +24,7 @@ A folder or a file name the console was given is said as written, its backslashe
 (`words.path_text`): on Windows they are its separators. The rest of each line is escaped as a
 record's words are (`words.escape`).
 """
+
 from __future__ import annotations
 
 import hashlib
@@ -46,9 +47,11 @@ NO_PACKAGE = "the tokenizers package is not installed (the console's [neighbours
 NOT_READ = "its tokenizer.json is not one the tokenizers package reads ({why})"
 NOT_DECODED = "not decoded: {why}"
 
-SEARCH = ("Each word is searched for, as a literal string, in the kept inputs of this step and of the steps "
-          "it came from: the steps whose stored output or receipt one of its inputs matches, and theirs. "
-          "A string match says nothing about meaning.")
+SEARCH = (
+    "Each word is searched for, as a literal string, in the kept inputs of this step and of the steps "
+    "it came from: the steps whose stored output or receipt one of its inputs matches, and theirs. "
+    "A string match says nothing about meaning."
+)
 SEARCHED = "Searched: {inputs}."
 SEARCHED_NONE = "Searched: no kept input."
 NOT_KEPT = "not kept, not searched: {inputs}"
@@ -85,6 +88,7 @@ def _html(template: str, paths: tuple = (), **values) -> str:
 class Input:
     """One input searched, or not, for a step's word: its name, its step, and its kept text or None
     with the reason it is not searched (`not-kept` or the kept-input reading's words)."""
+
     name: str
     step: str
     text: str | None
@@ -102,6 +106,7 @@ def _sha256(data: bytes) -> str:
 def hashed(folder: str, files: tuple) -> tuple[str, dict[str, bytes]]:
     """(the tokenizer digest of the named files, {name: bytes}); `Refused` where one is not read."""
     from onetrace.model_call import manifest_digest
+
     blobs = {}
     for name in files:
         path = Path(folder) / name
@@ -115,9 +120,12 @@ def hashed(folder: str, files: tuple) -> tuple[str, dict[str, bytes]]:
 
 
 def recorded_digest(record: dict) -> str | None:
-    """The record's `tokenizer.digest`, where observed or declared."""
+    """The record's `tokenizer.digest`, where observed or declared, in onetrace's own words for each (`OBSERVED`,
+    `DECLARED`: "declared, not observed"); "declared" alone is read too."""
+    from onetrace.model_call.record import DECLARED, OBSERVED
+
     v = record.get("tokenizer.digest")
-    if isinstance(v, dict) and v.get("status") in ("observed", "declared") and isinstance(v.get("value"), str):
+    if isinstance(v, dict) and v.get("status") in (OBSERVED, DECLARED, "declared") and isinstance(v.get("value"), str):
         return v["value"]
     return None
 
@@ -133,17 +141,18 @@ class Decoder:
 
     def label_html(self) -> str:
         """The label as a page shows it: the folder and the files as written."""
-        return escape(DECODED).format(digest=escape(self.digest), folder=path_text(self.folder),
-                                      files=", ".join(path_text(f) for f in self.files))
+        return escape(DECODED).format(
+            digest=escape(self.digest), folder=path_text(self.folder), files=", ".join(path_text(f) for f in self.files)
+        )
 
     def word(self, ids: list[str], n: int) -> str:
         """Step n's token as text, read in the context of the steps just before it."""
         lo = max(0, n - CONTEXT)
-        nums = [int(i) for i in ids[lo:n + 1]]
+        nums = [int(i) for i in ids[lo : n + 1]]
         before = self._tok.decode(nums[:-1], skip_special_tokens=False)
         with_it = self._tok.decode(nums, skip_special_tokens=False)
         if with_it.startswith(before):
-            return with_it[len(before):]
+            return with_it[len(before) :]
         return self._tok.decode(nums[-1:], skip_special_tokens=False)
 
 
@@ -170,7 +179,7 @@ def decoder(record: dict, named: tuple) -> tuple[Decoder | None, str, list[str]]
     want = recorded_digest(record)
     if want is None:
         return None, NO_DIGEST, []
-    refused = []
+    refused: list[str] = []
     for folder, files in named:
         try:
             got, blobs = hashed(folder, tuple(files))
@@ -198,8 +207,10 @@ def search_note(searched: list[Input]) -> str:
     kept = [i.label() for i in searched if i.text is not None]
     not_kept = [i.label() for i in searched if i.text is None and not i.kept]
     other = [f"{i.label()}, {i.why}" for i in searched if i.text is None and i.kept]
-    out = (f'<p class="label" data-search-note>{escape(SEARCH)}</p>'
-           f'<p data-searched>{escape(SEARCHED.format(inputs=", ".join(kept)) if kept else SEARCHED_NONE)}</p>')
+    out = (
+        f'<p class="label" data-search-note>{escape(SEARCH)}</p>'
+        f"<p data-searched>{escape(SEARCHED.format(inputs=', '.join(kept)) if kept else SEARCHED_NONE)}</p>"
+    )
     if not_kept:
         out += f'<p data-not-searched="not-kept">{escape(NOT_KEPT.format(inputs=", ".join(not_kept)))}</p>'
     if other:
@@ -212,8 +223,9 @@ def cells(dec: Decoder, ids: list[str], n: int, searched: list[Input] | None = N
     try:
         word = dec.word(ids, n)
     except Exception as e:  # noqa: BLE001 - an id the tokenizer does not hold is said, never guessed
-        return (f'<td data-decoded="no">{escape(NOT_DECODED.format(why=e))}</td>'
-                + ("<td></td>" if searched is not None else ""))
+        return f'<td data-decoded="no">{escape(NOT_DECODED.format(why=e))}</td>' + (
+            "<td></td>" if searched is not None else ""
+        )
     out = f'<td data-decoded="yes"><code class="token-text">{escape(word)}</code></td>'
     if searched is None:
         return out

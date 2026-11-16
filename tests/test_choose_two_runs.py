@@ -7,6 +7,7 @@ the store's own, escaped, as plain text, and on a local console a Compare button
 request. No page carries a form or an input, its only buttons are those, and no GET makes a
 comparison. A public console lists only the pairs it holds, has no button, and says so.
 """
+
 from __future__ import annotations
 
 import re
@@ -24,6 +25,7 @@ HOSTILE = '<script>alert("x")</script> & "quoted" \'name\''
 def _pages(store, *, public: bool = False) -> dict[str, str]:
     from onetrace_console.frame import rendering
     from onetrace_console.render import render_all
+
     with rendering(onedoor=False, sign_in=True, public=public):
         return render_all(store, generated_at=GENERATED_AT)
 
@@ -67,6 +69,7 @@ def pair_problems(page: str, a_key: str, held: dict, others: set[str]) -> list[s
 
 def _held(store) -> dict:
     from onetrace_console.choose_pages import held_comparisons
+
     return held_comparisons(store)
 
 
@@ -74,6 +77,7 @@ def test_a_pipelines_page_lists_its_runs_newest_first_each_choosing_itself(three
     comparison, store, hostile = three
     from onetrace_console.overview import pipelines
     from onetrace_console.store import arrival_order
+
     (p,) = pipelines(store)
     page = _pages(store)[choose_href(p.label)]
     examined(len(p.runs), "runs on the pipeline's page")
@@ -86,6 +90,7 @@ def test_a_pipelines_page_lists_its_runs_newest_first_each_choosing_itself(three
 def test_run_a_lists_every_other_run_once_with_its_comparison_or_the_request(three, examined):
     comparison, store, hostile = three
     from onetrace_console.overview import pipelines
+
     (p,) = pipelines(store)
     pages, held = _pages(store), _held(store)
     examined(len(p.runs), "run A pages")
@@ -102,6 +107,7 @@ def test_run_a_lists_every_other_run_once_with_its_comparison_or_the_request(thr
 def test_the_request_carries_the_stores_keys_and_a_hostile_name_stays_text(three, examined):
     comparison, store, hostile = three
     from onetrace_console.overview import pipelines
+
     (p,) = pipelines(store)
     pages = _pages(store)
     page = pages[pair_href(p.label, comparison.run_a)]
@@ -110,6 +116,7 @@ def test_the_request_carries_the_stores_keys_and_a_hostile_name_stays_text(three
     #: The console's own scripts, each named in the policy by its hash, are the page's only ones.
     from onetrace_console.compare_script import COMPARE_SCRIPT
     from onetrace_console.public import inline_scripts
+
     rest = page
     for script in inline_scripts() + (COMPARE_SCRIPT,):
         rest = rest.replace(script, "")
@@ -122,19 +129,21 @@ def test_the_request_carries_the_stores_keys_and_a_hostile_name_stays_text(three
 def test_sabotage_a_request_with_a_wrong_key_is_named(three, examined):
     comparison, store, hostile = three
     from onetrace_console.overview import pipelines
+
     (p,) = pipelines(store)
     page = _pages(store)[pair_href(p.label, comparison.run_a)]
     others = {r.key for r in p.runs} - {comparison.run_a}
     examined(2, "sabotaged pages")
-    swapped = page.replace(f"a={comparison.run_a}&amp;b={hostile.key}",
-                           f"a={hostile.key}&amp;b={comparison.run_a}")
+    swapped = page.replace(f"a={comparison.run_a}&amp;b={hostile.key}", f"a={hostile.key}&amp;b={comparison.run_a}")
     assert swapped != page
     assert any("the request is" in x for x in pair_problems(swapped, comparison.run_a, _held(store), others))
     unlinked = page.replace(f'href="diff/{comparison.key}.html"', 'href="comparisons.html"')
     assert any("not linked" in x for x in pair_problems(unlinked, comparison.run_a, _held(store), others))
 
 
-COMPARE_BUTTON = re.compile(r'<button type="button" hidden data-compare-post="/compare\?a=([0-9a-f]{64})&amp;b=([0-9a-f]{64})">Compare</button>')
+COMPARE_BUTTON = re.compile(
+    r'<button class="btn-secondary" data-busy="Comparing…" data-busy-wait="the comparison" type="button" hidden data-compare-post="/compare\?a=([0-9a-f]{64})&amp;b=([0-9a-f]{64})">Compare</button>'
+)
 
 
 def test_no_page_carries_a_form_or_an_input_and_its_only_button_is_compare(three, examined):
@@ -154,11 +163,14 @@ def test_a_compare_button_is_offered_only_for_a_pair_not_compared_and_carries_it
     comparison, store, hostile = three
     from onetrace_console.compare_script import COMPARE_SCRIPT
     from onetrace_console.overview import pipelines
+
     (p,) = pipelines(store)
     page = _pages(store)[pair_href(p.label, comparison.run_a)]
     examined(2, "rows")
-    rows = {state: cells for _, state, cells in
-            re.findall(r'<tr data-run="([0-9a-f]{64})" data-pair="([a-z-]+)">(.*?)</tr>', page, re.S)}
+    rows = {
+        state: cells
+        for _, state, cells in re.findall(r'<tr data-run="([0-9a-f]{64})" data-pair="([a-z-]+)">(.*?)</tr>', page, re.S)
+    }
     assert "<button" not in rows["compared"] and "<button" in rows["not-compared"]
     assert page.count(COMPARE_SCRIPT) == 1
 
@@ -166,6 +178,7 @@ def test_a_compare_button_is_offered_only_for_a_pair_not_compared_and_carries_it
 def test_sabotage_a_button_without_its_request_is_named(three, examined):
     comparison, store, hostile = three
     from onetrace_console.overview import pipelines
+
     (p,) = pipelines(store)
     page = _pages(store)[pair_href(p.label, comparison.run_a)]
     examined(1, "sabotaged page")
@@ -177,6 +190,7 @@ def test_sabotage_a_button_without_its_request_is_named(three, examined):
 def test_a_public_console_carries_no_compare_button_or_script(three, examined):
     comparison, store, hostile = three
     from onetrace_console.compare_script import COMPARE_SCRIPT
+
     pages = {k: v for k, v in _pages(store, public=True).items() if k.startswith("choose-")}
     examined(len(pages), "public choose pages")
     for name, html in pages.items():
@@ -186,6 +200,7 @@ def test_a_public_console_carries_no_compare_button_or_script(three, examined):
 def test_a_public_console_lists_only_the_pairs_it_holds_and_says_so(three, examined):
     comparison, store, hostile = three
     from onetrace_console.overview import pipelines
+
     (p,) = pipelines(store)
     pages = _pages(store, public=True)
     examined(len(p.runs), "public run A pages")
@@ -199,6 +214,7 @@ def test_a_public_console_lists_only_the_pairs_it_holds_and_says_so(three, exami
 
 def test_the_role_table_serves_them_to_a_viewer_and_nothing_else_like_them(examined):
     from onetrace_console import roles
+
     examined(4, "paths")
     assert roles.required_role("GET", "/choose-p1.html") == roles.VIEWER
     assert roles.required_role("GET", "/" + pair_href("P12", "ab" * 32)) == roles.VIEWER
@@ -211,6 +227,7 @@ def test_the_comparisons_page_opens_each_pipelines_page(three, examined):
     comparison, store, hostile = three
     from onetrace_console.overview import pipelines
     from onetrace_console.render import COMPARISONS
+
     pages = _pages(store)
     examined(len(pipelines(store)), "pipelines")
     for p in pipelines(store):
@@ -219,6 +236,7 @@ def test_the_comparisons_page_opens_each_pipelines_page(three, examined):
 
 
 # ------------------------------------------------------------------ the cap on run B's list
+
 
 def cap_problems(page: str, a_key: str, held: dict, others_newest_first: list[str], cap: int) -> list[str]:
     """Run B's list under the console's list cap: every pair this console holds a comparison of,
@@ -229,8 +247,10 @@ def cap_problems(page: str, a_key: str, held: dict, others_newest_first: list[st
     rest = [k for k in others_newest_first if (a_key, k) not in held]
     want = compared + rest[:cap]
     if [k for k, _ in rows] != want:
-        out.append(f"lists {len(rows)} runs as run B, not the {len(compared)} compared then the "
-                   f"newest {min(cap, len(rest))} of the rest")
+        out.append(
+            f"lists {len(rows)} runs as run B, not the {len(compared)} compared then the "
+            f"newest {min(cap, len(rest))} of the rest"
+        )
     more = len(rest) - cap
     said = re.findall(r'data-section="more">([^<]*)<', page)
     if more > 0 and said != [f"…and {more} more."]:
@@ -244,6 +264,7 @@ def cap_problems(page: str, a_key: str, held: dict, others_newest_first: list[st
 def many(three, monkeypatch):
     """The three runs and a dozen more of the same pipeline, under a cap of 5."""
     import onetrace_console.choose_pages as choose
+
     comparison, store, hostile = three
     b = store.get_run(comparison.run_b)
     for i in range(12):
@@ -255,6 +276,7 @@ def many(three, monkeypatch):
 def _others(store, a_key) -> list[str]:
     from onetrace_console.overview import pipelines
     from onetrace_console.store import arrival_order
+
     (p,) = pipelines(store)
     return [r.key for r in arrival_order(p.runs, newest_first=True) if r.key != a_key]
 
@@ -262,6 +284,7 @@ def _others(store, a_key) -> list[str]:
 def test_run_bs_list_keeps_every_compared_pair_and_caps_the_rest(many, examined):
     comparison, store = many
     from onetrace_console.overview import pipelines
+
     (p,) = pipelines(store)
     pages, held = _pages(store), _held(store)
     examined(len(p.runs), "run A pages under the cap")
@@ -276,6 +299,7 @@ def test_run_bs_list_keeps_every_compared_pair_and_caps_the_rest(many, examined)
 def test_sabotage_a_cap_that_drops_a_compared_pair_or_the_count_is_named(many, examined):
     comparison, store = many
     from onetrace_console.overview import pipelines
+
     (p,) = pipelines(store)
     page = _pages(store)[pair_href(p.label, comparison.run_a)]
     others, held = _others(store, comparison.run_a), _held(store)
@@ -318,6 +342,7 @@ def test_the_pipeline_page_lists_the_newest_runs_under_the_cap(many, examined):
     comparison, store = many
     from onetrace_console.overview import pipelines
     from onetrace_console.store import arrival_order
+
     (p,) = pipelines(store)
     page = _pages(store)[choose_href(p.label)]
     newest = [r.key for r in arrival_order(p.runs, newest_first=True)]
@@ -327,14 +352,16 @@ def test_the_pipeline_page_lists_the_newest_runs_under_the_cap(many, examined):
 
 def test_every_runs_own_page_offers_it_as_run_a(three, examined):
     comparison, store, hostile = three
+    from onetrace_console.checks import run_and_record
     from onetrace_console.overview import pipelines
     from onetrace_console.pages import CASE, render_execution
-    from onetrace_console.checks import run_and_record
     from tests.test_checks import FIXED_RAN_AT
+
     #: A page is drawn for a run that was checked: the fixture's two real runs, checked here (its
     #: third run is a stored copy with no record of its own to check).
-    checked = [run_and_record(store.get_run(k), store, ran_at=FIXED_RAN_AT)
-               for k in (comparison.run_a, comparison.run_b)]
+    checked = [
+        run_and_record(store.get_run(k), store, ran_at=FIXED_RAN_AT) for k in (comparison.run_a, comparison.run_b)
+    ]
     (p,) = pipelines(store)
     examined(len(checked), "run pages")
     assert len(checked) == 2
@@ -348,6 +375,7 @@ def test_sabotage_the_run_a_cap_and_the_own_page_link_are_each_named(many, exami
     from onetrace_console.overview import pipelines
     from onetrace_console.pages import CASE, render_execution
     from onetrace_console.store import arrival_order
+
     (p,) = pipelines(store)
     page = _pages(store)[choose_href(p.label)]
     newest = [r.key for r in arrival_order(p.runs, newest_first=True)]
@@ -358,6 +386,7 @@ def test_sabotage_the_run_a_cap_and_the_own_page_link_are_each_named(many, exami
     assert uncounted != page and pipeline_cap_problems(uncounted, p.label, newest, 5)
     from onetrace_console.checks import run_and_record
     from tests.test_checks import FIXED_RAN_AT
+
     run = run_and_record(store.get_run(comparison.run_a), store, ran_at=FIXED_RAN_AT)
     case = render_execution(run, store, generated_at=GENERATED_AT).pages[CASE]
     unlinked = case.replace(pair_href(p.label, run.key), "comparisons.html")

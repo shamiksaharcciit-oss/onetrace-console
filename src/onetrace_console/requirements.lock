@@ -6,21 +6,20 @@
 # console name the exact SDK build a comparison ran with (`onetrace_console.compare.sdk_build_digest()`).
 # A plain `pip install` works as well: the console then names the build from the installed files.
 #
-# onetrace 0.7.1 and onetrace-verify 0.7.1 from PyPI, each pinned by the sha256 of every file PyPI
-# lists for it, its wheel's then its sdist's, read from PyPI's own JSON. onetrace 0.7.1 asks for
-# onetrace-verify >=0.7.1,<0.8. No credentials are needed to install them. See PINS.md for the history.
-onetrace==0.7.1 \
-    --hash=sha256:889ef744a23c3a5ce05489bfe3a0c75ffbc3f97f46e9e28815f6012637f2f995 \
-    --hash=sha256:62c3effa214ea40977ebeb7748208a0ce4c7e6d837083532b8e54d1752eb57f2
-onetrace-verify==0.7.1 \
-    --hash=sha256:912a1111840a5ad1206385186e2808e1af0fa380406ace7c3b28d9bac92bc05c \
-    --hash=sha256:fc0a38ab636f2cf5f9253140e5f5e5bcd4a03a2d887631dff8a6ee4a83bcc03c
+# onetrace 0.8.0 and onetrace-verify 0.8.0, each pinned by the sha256 of both its release files, its
+# wheel's then its sdist's: the files PyPI receives for 0.8.0, as their build gave them. onetrace 0.8.0
+# asks for onetrace-verify >=0.8.0,<0.9. No credentials are needed to install them.
+onetrace==0.8.0 \
+    --hash=sha256:a2072c5e6c97843cd4a8915b5392dbde696d3a5d59531b0c666473a794760214 \
+    --hash=sha256:b9887f201a5a037a3691cc2bcb424b28f8a951efed52417332694429e7901028
+onetrace-verify==0.8.0 \
+    --hash=sha256:5a2a60387fb25f35d67fdc0f2d6195d2b11465f4adc20465697574409bdef82d \
+    --hash=sha256:883db2fea3bcb9b57facb8f2a7bd27abb084a7d6e5a89b81862d25361f091edc
 
-# onetrace-verify's crypto extra, which checks signatures: exactly the versions 0.7.1 pins in its
+# onetrace-verify's crypto extra, which checks signatures: exactly the versions 0.8.0 pins in its
 # own metadata (Provides-Extra: crypto), each with the hash of every wheel of that version a CPython
 # 3.12 or 3.13 install on Linux x86_64 or Windows x64 can select, from PyPI's JSON. pip installs its
-# platform's file and refuses any other. typing-extensions is needed below Python 3.11 only. See
-# PINS.md.
+# platform's file and refuses any other. typing-extensions is needed below Python 3.11 only.
 asn1crypto==1.5.1 \
     --hash=sha256:db4e40728b728508912cbb3d44f19ce188f218e9eba635821bb4b68564f8fd67
 cffi==2.1.1 \
@@ -42,3 +41,10 @@ pycparser==3.0 \
 rfc3161-client==1.0.9 \
     --hash=sha256:fac3f440a507555e684dc5daba75e33dc08f0f45fdefa48448f19001233a6b21 \
     --hash=sha256:908f6a775da4bdce1d39f825a4431f389542696078ef3e4ed911a068bcaf1792
+
+# The ID token's signature and claims, for sign-in through Microsoft Entra ID (sign_in.method oidc):
+# PyJWT 2.15.1 from PyPI, its wheel's then its sdist's sha256, read from PyPI's JSON. On Python 3.11
+# and later it needs nothing but cryptography, pinned above, which it uses for RS256.
+pyjwt==2.15.1 \
+    --hash=sha256:42d59d631f7768a1028a64c7ff581a9bf7519804daf91fc5b6c56e30eec5e193 \
+    --hash=sha256:4f259e80cdfb6b3fc18a7de51fd1ef9ec79652f25019bae68975ca2468a34df8

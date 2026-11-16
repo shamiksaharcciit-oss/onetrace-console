@@ -11,6 +11,7 @@ Never a digest, a setting, a receipt, a manifest or any other part of a record: 
 files' own words. Each is keyed by its recorded digest, so equal digests are equal by the record and
 need no embedding.
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -25,6 +26,7 @@ NOT_KEPT = "not kept"
 @dataclass(frozen=True)
 class Part:
     """One input or output of one step: its recorded name and digest, and its kept text or None."""
+
     step: str
     index: str
     kind: str
@@ -39,11 +41,13 @@ class Part:
 
 def _version(steps):
     from onetrace_console.kept_inputs import recorded_with
+
     return recorded_with(steps)
 
 
 def _output_text(blob: bytes | None, digest: str, media: str) -> str | None:
     from onetrace_console.stage_pages import _is_text, _verified
+
     if blob is None or not _verified(blob, digest) or not _is_text(media):
         return None
     try:
@@ -61,9 +65,11 @@ def _output_text(blob: bytes | None, digest: str, media: str) -> str | None:
 
 def parts(run, store) -> list[Part]:
     """Every input and output of every step of `run`, in the chain's order, each with its kept text."""
-    from onetrace_console.kept_inputs import FOLDER as KEPT_FOLDER, _stem, read_kept
+    from onetrace_console.kept_inputs import FOLDER as KEPT_FOLDER
+    from onetrace_console.kept_inputs import _stem, read_kept
     from onetrace_console.run_panels import manifest_of
     from onetrace_console.stage_pages import _artifact_path, _files, _read, _stage_name, _steps
+
     files, steps = _files(run, store), _steps(run, store)
     version = _version(steps)
 
@@ -79,10 +85,18 @@ def parts(run, store) -> list[Part]:
             k = read_kept(item, receipt, s["file"], read, version)
             name = str(item.get("name", ""))
             shown = k is not None and k.state == "shown"
-            own.append(Part(_stage_name(receipt), str(s["index"]), INPUT, name, str(item.get("digest", "")),
-                            k.text if shown else None,
-                            read(f"{KEPT_FOLDER}/{_stem(s['file'])}/{name}.json") if shown else None,
-                            str(item.get("trust_class", ""))))
+            own.append(
+                Part(
+                    _stage_name(receipt),
+                    str(s["index"]),
+                    INPUT,
+                    name,
+                    str(item.get("digest", "")),
+                    k.text if shown else None,  # type: ignore[union-attr]  # shown only where the kept file was read
+                    read(f"{KEPT_FOLDER}/{_stem(s['file'])}/{name}.json") if shown else None,
+                    str(item.get("trust_class", "")),
+                )
+            )
     keeps = any(p.text is not None for p in own)
     outputs_kept = manifest_of(run, store).get("outputs_kept") != "none"
     out: list[Part] = []
@@ -97,8 +111,18 @@ def parts(run, store) -> list[Part]:
             mine = next((p for p in own if (p.index, p.name) == (str(s["index"]), name)), None)
             source = mine if mine is not None and mine.text is not None else produced.get(digest)
             kept = keeps and source is not None and source.text is not None
-            out.append(Part(stage, str(s["index"]), INPUT, name, digest, source.text if kept else None,
-                            source.data if kept else None, str(item.get("trust_class", ""))))
+            out.append(
+                Part(
+                    stage,
+                    str(s["index"]),
+                    INPUT,
+                    name,
+                    digest,
+                    source.text if kept else None,  # type: ignore[union-attr]  # kept only where its source was found
+                    source.data if kept else None,  # type: ignore[union-attr]  # as above
+                    str(item.get("trust_class", "")),
+                )
+            )
         for item in receipt.get("outputs") or []:
             if not isinstance(item, dict):
                 continue
@@ -107,8 +131,16 @@ def parts(run, store) -> list[Part]:
             if keeps and outputs_kept:
                 blob = read(_artifact_path(s["file"], name))
                 text = _output_text(blob, digest, str(item.get("media_type", "")))
-            part = Part(stage, str(s["index"]), OUTPUT, name, digest, text, blob if text is not None else None,
-                        str(item.get("trust_class", "")))
+            part = Part(
+                stage,
+                str(s["index"]),
+                OUTPUT,
+                name,
+                digest,
+                text,
+                blob if text is not None else None,
+                str(item.get("trust_class", "")),
+            )
             produced.setdefault(digest, part)
             out.append(part)
     return out

@@ -1,6 +1,7 @@
 """Token create/revoke, CLI-only -- the same shape as `admin
 create`. The raw token is printed exactly once, never persisted.
 """
+
 from __future__ import annotations
 
 import shutil
@@ -23,8 +24,7 @@ def _configured(monkeypatch, tmp_path, store_root: Path | None = None) -> Path:
     return store_root
 
 
-def test_token_create_prints_the_raw_token_once_and_stores_only_a_hash(
-        tmp_path, monkeypatch, capsys, examined):
+def test_token_create_prints_the_raw_token_once_and_stores_only_a_hash(tmp_path, monkeypatch, capsys, examined):
     from onetrace_console.ingester_tokens import TokenStore
 
     store_root = _configured(monkeypatch, tmp_path)
@@ -91,22 +91,34 @@ def test_sabotage_a_token_route_added_to_a_copy_makes_the_no_route_test_fail(tmp
 
     serve_py = copy_root / "src" / "onetrace_console" / "serve.py"
     text = serve_py.read_text(encoding="utf-8")
-    needle = 'elif split.path == "/signin" and self.config.sign_in.get("enabled"):'
+    needle = 'elif split.path == "/signin" and self.config.sign_in.get("enabled") and not self._oidc():'
     assert needle in text, "the anchor this sabotage inserts beside has moved or been reworded"
     sabotaged = text.replace(
         needle,
         'elif split.path == "/token-create":\n'
-        '                self._handle_token_create(body)  # sabotage: a web route for tokens\n'
-        '            ' + needle,
-        1)
+        "                self._handle_token_create(body)  # sabotage: a web route for tokens\n"
+        "            " + needle,
+        1,
+    )
     serve_py.write_text(sabotaged, encoding="utf-8")
 
     examined(1, "a copy of serve.py with a token route inserted, run through the real test")
     env = dict(__import__("os").environ, PYTHONPATH=str(copy_root / "src"))
     result = subprocess.run(
-        [sys.executable, "-m", "pytest",
-         "tests/test_token_cli.py::test_no_route_in_serve_py_creates_or_revokes_a_token", "-q"],
-        cwd=str(copy_root), env=env, capture_output=True, text=True, timeout=60)
+        [
+            sys.executable,
+            "-m",
+            "pytest",
+            "tests/test_token_cli.py::test_no_route_in_serve_py_creates_or_revokes_a_token",
+            "-q",
+        ],
+        cwd=str(copy_root),
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=60,
+    )
     assert result.returncode != 0, (
         "the no-token-route test PASSED against a tree with a token route added -- "
-        "the sabotage did not fire:\n" + result.stdout[-2000:] + result.stderr[-2000:])
+        "the sabotage did not fire:\n" + result.stdout[-2000:] + result.stderr[-2000:]
+    )

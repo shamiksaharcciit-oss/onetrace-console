@@ -7,6 +7,7 @@ corpus trace are tests/test_textdiff_more.py's.
 The documents here are the SDK's own: `python -m onetrace diff A B --text --json --no-follow` run
 over the warranty pair from the hash-checked development sdist (`tools/fetch_sdk_fixtures.py`).
 """
+
 from __future__ import annotations
 
 import copy
@@ -20,19 +21,19 @@ from pathlib import Path
 
 import pytest
 
-from onetrace_console.textdiff_view import FORMAT, TextDiffUnreadable, read_textdiff, render_textdiff
-from tools.fetch_sdk_fixtures import WARRANTY, check as fixtures_ready
 #: The SDK run as the console runs it (compare.py): UTF-8 forced on the child's output, so the bytes
 #: compared are the console's, on a machine whose default encoding is not UTF-8 too.
 from onetrace_console.child import utf8_env  # noqa: E402
+from onetrace_console.textdiff_view import FORMAT, TextDiffUnreadable, read_textdiff, render_textdiff
+from tools.fetch_sdk_fixtures import WARRANTY
+from tools.fetch_sdk_fixtures import check as fixtures_ready
 
 RUNS = WARRANTY / "runs"
 
 
 def _require_warranty():
     if not fixtures_ready():
-        pytest.fail("the SDK's fixtures are not there or do not match:\n"
-                    "    python tools/fetch_sdk_fixtures.py")
+        pytest.fail("the SDK's fixtures are not there or do not match:\n    python tools/fetch_sdk_fixtures.py")
 
 
 def _sdk_textdiff(baseline: Path, candidate: Path) -> str:
@@ -40,10 +41,27 @@ def _sdk_textdiff(baseline: Path, candidate: Path) -> str:
     goes to a temporary folder: without it the SDK writes `onetrace-report/` where it runs, which
     is this repository."""
     import tempfile
+
     with tempfile.TemporaryDirectory(prefix="onetrace-textdiff-") as out:
-        proc = subprocess.run([sys.executable, "-m", "onetrace", "diff", str(baseline),
-                               str(candidate), "--text", "--json", "--no-follow", "--out", out],
-                              capture_output=True, text=True, encoding="utf-8", env=utf8_env())
+        proc = subprocess.run(
+            [
+                sys.executable,
+                "-m",
+                "onetrace",
+                "diff",
+                str(baseline),
+                str(candidate),
+                "--text",
+                "--json",
+                "--no-follow",
+                "--out",
+                out,
+            ],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            env=utf8_env(),
+        )
     assert proc.stdout.strip(), proc.stderr[-600:]
     return proc.stdout
 
@@ -62,6 +80,7 @@ def _node(html: str, node: str) -> str:
 
 
 # ------------------------------------------------------------------ the golden: twelve -> six
+
 
 def test_the_golden_warranty_pair_renders_twelve_to_six(golden, examined):
     html = render_textdiff(golden)
@@ -90,21 +109,26 @@ def test_text_is_shown_as_the_sdk_escaped_it_once(golden):
     """The prompt's text holds the SDK's own escapes (`\\n` inside a JSON string): drawn as given,
     HTML-escaped once, never doubled."""
     prompt = _node(render_textdiff(golden), "prompt")
-    raw = next(line["text"] for out in golden["nodes"][1]["outputs"] for h in out["hunks"]
-               for line in h["lines"] if line["op"] == "-")
+    raw = next(
+        line["text"]
+        for out in golden["nodes"][1]["outputs"]
+        for h in out["hunks"]
+        for line in h["lines"]
+        if line["op"] == "-"
+    )
     assert "\\n" in raw
     assert "\\n" in unescape(prompt) and "\\\\n" not in unescape(prompt)
 
 
 # ------------------------------------------------------------------ never an unverified output
 
+
 def test_a_tampered_artifact_shows_not_shown_never_its_text(tmp_path, examined):
     """ed5: "a tampered artifact shows 'not shown', never text"."""
     _require_warranty()
     tampered = tmp_path / "query-v2"
     shutil.copytree(RUNS / "query-v2", tampered)
-    (tampered / "artifacts" / "03-answer" / "return.json").write_bytes(
-        b'"The warranty covers sixty months.\\n"')
+    (tampered / "artifacts" / "03-answer" / "return.json").write_bytes(b'"The warranty covers sixty months.\\n"')
     doc = read_textdiff(_sdk_textdiff(RUNS / "query-v1", tampered))
     html = render_textdiff(doc)
     examined(1, "tampered pair drawn")
@@ -148,6 +172,7 @@ def test_an_unverified_output_is_never_drawn_even_handed_lines(golden):
 
 
 # ------------------------------------------------------------------ the reader, strictly
+
 
 def _refused(doc, match: str) -> None:
     with pytest.raises(TextDiffUnreadable, match=match):
@@ -193,6 +218,7 @@ def settings_problems(html: str) -> list[str]:
     """A stage's settings lines in the text diff: each setting by its short name (its whole path in
     the tooltip), with an arrow; a recorded fingerprint (a digest) only under its Details."""
     import re as _re
+
     out = []
     main, _, details = html.partition("<details data-settings-details>")
     for line in _re.findall(r"<p data-settings>(.*?)</p>", main, _re.S):
@@ -207,8 +233,12 @@ def settings_problems(html: str) -> list[str]:
 
 def test_settings_lines_by_short_name_fingerprints_under_details(examined):
     from onetrace_console.textdiff_view import _settings
-    lines = ["settings: 2 changed", "  instrument.config_digest: aaa2d6fad586 -> a034738a4cba",
-             "  constants.chunk_size: 1024 -> 512"]
+
+    lines = [
+        "settings: 2 changed",
+        "  instrument.config_digest: aaa2d6fad586 -> a034738a4cba",
+        "  constants.chunk_size: 1024 -> 512",
+    ]
     html = _settings(lines)
     examined(len(lines), "settings lines")
     assert settings_problems(html) == []

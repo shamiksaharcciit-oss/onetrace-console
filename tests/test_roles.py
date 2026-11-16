@@ -1,4 +1,5 @@
 """Role enforcement, from one place, per the design note §3 table."""
+
 from __future__ import annotations
 
 import pytest
@@ -14,23 +15,26 @@ def test_health_and_signin_and_signout_need_no_principal(examined):
     assert roles.required_role("POST", "/signout") is None
 
 
-@pytest.mark.parametrize("rel", [
-    "home.html",
-    "counts.html",
-    "executions-all.html",
-    "executions-run-id-reused.html",
-    "executions-most-recent.html",
-    "incidents.html",
-    "incidents-r-c010.html",
-    "runs/abc123/answer.html",
-    "runs/abc123/case.html",
-    "runs/" + "0123456789abcdef" * 4 + "/authorization.html",
-    "diff/def456.html",
-    "policy.html",
-    "policy/req-1.html",
-    "policy-verdict-observe.html",
-    "policy-issuer-onedoor.html",
-])
+@pytest.mark.parametrize(
+    "rel",
+    [
+        "home.html",
+        "counts.html",
+        "executions-all.html",
+        "executions-run-id-reused.html",
+        "executions-most-recent.html",
+        "incidents.html",
+        "incidents-r-c010.html",
+        "runs/abc123/answer.html",
+        "runs/abc123/case.html",
+        "runs/" + "0123456789abcdef" * 4 + "/authorization.html",
+        "diff/def456.html",
+        "policy.html",
+        "policy/req-1.html",
+        "policy-verdict-observe.html",
+        "policy-issuer-onedoor.html",
+    ],
+)
 def test_every_rendered_page_shape_is_viewer(rel, examined):
     """One sub-case per GET row of the design note's own table."""
     examined(1, f"GET against the rendered path {rel!r}")
@@ -76,9 +80,10 @@ def test_sabotage_a_route_with_no_table_entry_is_missed_by_a_catch_all(examined)
     would NOT catch a route missing from the real table -- proving the real
     `required_role`'s own raise is what item 7's test actually depends on.
     """
+
     def sabotaged_required_role(method, path, *, rel_for_get=None):
         if method == "GET":
-            return roles.VIEWER          # a defaulted-open stand-in, the sabotage
+            return roles.VIEWER  # a defaulted-open stand-in, the sabotage
         return roles.required_role(method, path, rel_for_get=rel_for_get)
 
     examined(1, "a hypothetical new page shape, through the sabotaged stand-in")
@@ -97,13 +102,15 @@ def test_every_page_the_console_renders_has_a_viewer_row(tmp_path, examined):
     from onetrace_console.store import Store
     from tests.test_checks import FIXED_RAN_AT, _require_installed
     from tests.test_stage_pages import DEMO, _stored
+
     _require_installed()
     store = Store(tmp_path / "store")
     a, b = _stored(DEMO / "day-1", store), _stored(DEMO / "day-2", store)
     compare(a, b, store, ran_at=FIXED_RAN_AT)
     _render_startup_pages(store, tmp_path, _local_config(Config()))
-    pages = sorted(p.relative_to(tmp_path / PAGES_DIRNAME).as_posix()
-                   for p in (tmp_path / PAGES_DIRNAME).rglob("*") if p.is_file())
+    pages = sorted(
+        p.relative_to(tmp_path / PAGES_DIRNAME).as_posix() for p in (tmp_path / PAGES_DIRNAME).rglob("*") if p.is_file()
+    )
     assert "counts.html" in pages and any(p.startswith("diff/") for p in pages), pages
     examined(len(pages), "rendered pages checked against the role table")
     unrouted = []

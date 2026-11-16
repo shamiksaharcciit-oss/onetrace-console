@@ -1,0 +1,18 @@
+Suggested explanation — AI-generated, may be wrong
+model: anthropic:claude-sonnet-4-6
+
+- where to look first: The first difference is located at the `split` node, which is the only node flagged as diverged; all upstream nodes (`load_docs`) are identical.
+  shown by: comparison/verdict, node/split, node/load_docs
+- where to look first: The `chunk_size` constant differs between runs: baseline uses `1024` and candidate uses `512`, and the two instruments have different config digests (`sha256:aaa2d6fad5864b8cba214fa5faa00631cb0095a469199a7082748a2a98eaea7e` vs `sha256:a034738a4cba13157b75e97e84345b2eef08cb70ed9bf6464ee524c044d22df4`), confirming a configuration change in the splitter.
+  shown by: node/split/constant/chunk_size, node/split/instrument
+  to check: `chunk_size` changed from `1024` to `512` at `split`; set it back and run again to check
+- ruled out: The `load_docs` node, its instrument, inputs, and outputs are all identical, ruling out any document-loading difference.
+  shown by: node/load_docs, node/load_docs/instrument, node/load_docs/input/documents, node/load_docs/output/documents.json
+
+dropped: 3 quotes a value its cites don't hold
+
+checks onetrace can run (a lead is confirmed or ruled out only by what these report):
+  onetrace localize a b --for split
+  onetrace match a
+  onetrace diff a b --text --stage split
+  onetrace reproduce a split --runner <your runner>

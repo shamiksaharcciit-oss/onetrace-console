@@ -14,11 +14,11 @@ keeps the rule:
    other text, whatever its configuration says (the exception is decided by the builder's code,
    which no setting reaches).
 """
+
 from __future__ import annotations
 
 import html
 import io
-import json
 import re
 import shutil
 import tarfile
@@ -37,6 +37,7 @@ def _text(page: str) -> str:
 @pytest.fixture(scope="module")
 def built(shared_demo) -> Path:
     from tests.test_checks import _require_installed
+
     _require_installed()
     folder = shared_demo["folder"]
     return folder
@@ -44,6 +45,7 @@ def built(shared_demo) -> Path:
 
 def _run(folder: Path, name: str):
     from onetrace_console.store import Store
+
     store = Store(folder / "store" / "store")
     (run,) = [r for r in store.runs() if r.run_id == name]
     return run, store
@@ -62,6 +64,7 @@ def test_the_public_demo_shows_the_kept_ticket_and_its_download_includes_it(buil
     from onetrace_console.demo_store import allowing_examples, support_reply
     from onetrace_console.ingest import bundle
     from onetrace_console.kept_inputs import EXAMPLE_RECORD
+
     run, store = _run(built, P4_RUN)
     page = _intake_page(built, run)
     examined(1, "the P4 run's intake step page")
@@ -78,6 +81,7 @@ def test_the_public_demo_shows_the_kept_ticket_and_its_download_includes_it(buil
 def test_one_byte_changed_after_the_build_is_refused_and_the_exception_is_off(built, tmp_path, examined):
     from onetrace_console.demo_store import allowing_examples, check_build_record
     from onetrace_console.ingest import bundle
+
     copy = tmp_path / "demo"
     shutil.copytree(built, copy)
     (kept,) = (copy / "runs" / P4_RUN / "inputs").rglob("*.json")
@@ -96,12 +100,17 @@ def test_one_byte_changed_after_the_build_is_refused_and_the_exception_is_off(bu
 def test_the_public_console_refuses_to_start_on_a_changed_demo(built, tmp_path, examined):
     from onetrace_console.config import Config
     from onetrace_console.public import start_refusal
+
     copy = tmp_path / "demo"
     shutil.copytree(built, copy)
     (kept,) = (copy / "runs" / P4_RUN / "inputs").rglob("*.json")
     kept.write_bytes(kept.read_bytes().replace(b"kettle", b"Kettle", 1))
-    config = Config(public=True, store_root=str(copy / "store"), trust_file=str(copy / "trust.json"),
-                    sign_in={**Config().sign_in, "enabled": False})
+    config = Config(
+        public=True,
+        store_root=str(copy / "store"),
+        trust_file=str(copy / "trust.json"),
+        sign_in={**Config().sign_in, "enabled": False},
+    )
     examined(1, "start refused")
     refused = start_refusal(config, copy / "store")
     assert refused is not None and "was changed" in refused.message
@@ -110,6 +119,7 @@ def test_the_public_console_refuses_to_start_on_a_changed_demo(built, tmp_path, 
 def _record(folder: Path, ticket: str | None) -> Path:
     """A run of P4's own pipeline outside the demo; `ticket` replaces the invented ticket."""
     from onetrace_console.demo_store import support_reply
+
     run_dir = folder / "runs" / "my-reply"
     if ticket is None:
         support_reply.main(run_dir, "my-reply", "30")
@@ -123,8 +133,9 @@ def _record(folder: Path, ticket: str | None) -> Path:
     return folder / "runs"
 
 
-@pytest.mark.parametrize("ticket", [None, "A real customer's message, never to be shown."],
-                         ids=["the-demo-s-own-bytes", "other-text"])
+@pytest.mark.parametrize(
+    "ticket", [None, "A real customer's message, never to be shown."], ids=["the-demo-s-own-bytes", "other-text"]
+)
 def test_a_store_that_is_not_the_demo_never_shows_or_downloads_kept_inputs(tmp_path, ticket, examined):
     from onetrace_console.config import Config
     from onetrace_console.demo_store import allowing_examples
@@ -135,6 +146,7 @@ def test_a_store_that_is_not_the_demo_never_shows_or_downloads_kept_inputs(tmp_p
     from onetrace_console.pages import render_execution
     from onetrace_console.store import Store
     from tests.test_checks import _require_installed
+
     _require_installed()
     runs = _record(tmp_path, ticket)
     store = Store(tmp_path / "store")

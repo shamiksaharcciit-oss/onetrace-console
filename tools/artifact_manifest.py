@@ -27,6 +27,7 @@ Usage:
 `--check` recomputes and compares instead of writing, so a manifest can be re-proved against
 the files it claims to describe.
 """
+
 from __future__ import annotations
 
 import hashlib
@@ -47,9 +48,7 @@ def members(path: Path) -> list[dict]:
             for info in z.infolist():
                 if not info.is_dir():
                     blob = z.read(info)
-                    out.append({"path": info.filename,
-                                "sha256": hashlib.sha256(blob).hexdigest(),
-                                "size": len(blob)})
+                    out.append({"path": info.filename, "sha256": hashlib.sha256(blob).hexdigest(), "size": len(blob)})
     else:
         # Streamed: `getmembers()` then `extractfile()` is random access on a gzip stream, so
         # tarfile re-decompresses from the start for every member (measured: minutes, not
@@ -59,9 +58,7 @@ def members(path: Path) -> list[dict]:
                 if m.isfile():
                     f = t.extractfile(m)
                     blob = f.read() if f else b""
-                    out.append({"path": m.name,
-                                "sha256": hashlib.sha256(blob).hexdigest(),
-                                "size": len(blob)})
+                    out.append({"path": m.name, "sha256": hashlib.sha256(blob).hexdigest(), "size": len(blob)})
     out.sort(key=lambda d: d["path"])
     return out
 

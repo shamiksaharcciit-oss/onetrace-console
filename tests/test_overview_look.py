@@ -8,6 +8,7 @@ the page rules reaching only the pages that carry `.cp`. That the text is unchan
 `tests/test_visible_text.py`'s, and every count opening exactly what it counted is
 `tests/test_home_and_diff.py`'s.
 """
+
 from __future__ import annotations
 
 import re
@@ -15,7 +16,7 @@ from html import unescape
 
 from onetrace_console.render import COUNTS, HOME, render_all
 from tests.test_home_and_diff import GENERATED_AT, ten_runs  # noqa: F401
-from tests.test_overview import _section, _text
+from tests.test_overview import _section
 
 
 def _pages(ten_runs):
@@ -26,19 +27,20 @@ def _pages(ten_runs):
 def test_the_overview_is_board_1_s_layout(ten_runs, examined):
     _, pages = _pages(ten_runs)
     home = pages[HOME]
-    main = home[home.index("<main>"):home.index("</main>")]
+    main = home[home.index("<main>") : home.index("</main>")]
     assert '<div class="cp">' in main and main.count('class="cp"') == 1
     cards = re.findall(r'<div data-card="([^"]+)">', _section(home, "cards"))
     assert cards == ["pipelines", "runs", "records-agree", "need-attention"]
-    panels = re.search(r'<div class="panels">(.*?)</div>\s*<section data-section="recent-runs"',
-                       home, re.S)
+    panels = re.search(r'<div class="panels">(.*?)</div>\s*<section data-section="recent-runs"', home, re.S)
     assert panels, "no panels row before the recent runs"
     inside = re.findall(r'<section data-section="([^"]+)"', panels.group(1))
     assert inside == ["evidence", "needs-attention"], inside
-    order = re.findall(r'data-section="(cards|evidence|needs-attention|recent-runs|pipelines|'
-                       r'by-day|all-counts)"', home)
-    assert order == ["cards", "evidence", "needs-attention", "recent-runs", "pipelines",
-                     "by-day", "all-counts"], order
+    order = re.findall(
+        r'data-section="(cards|evidence|needs-attention|recent-runs|pipelines|'
+        r'by-day|all-counts)"',
+        home,
+    )
+    assert order == ["cards", "evidence", "needs-attention", "recent-runs", "pipelines", "by-day", "all-counts"], order
     examined(len(order), "Overview blocks placed")
 
 
@@ -48,10 +50,17 @@ def test_each_card_leads_with_one_short_line_and_keeps_its_denominator(ten_runs,
     Every count still says what it is out of."""
     from onetrace_console.home import tallies
     from onetrace_console.overview import ATTENTION_RULE, needs_attention, pipelines
+
     store, pages = _pages(ten_runs)
     home = pages[HOME]
-    leads = dict(re.findall(r'<div data-card="([^"]+)"><h3>[^<]*</h3><p class="lead"><a [^>]*>'
-                            r'(.*?)</a>', home, re.S))
+    leads = dict(
+        re.findall(
+            r'<div data-card="([^"]+)"><h3>[^<]*</h3><p class="lead"><a [^>]*>'
+            r"(.*?)</a>",
+            home,
+            re.S,
+        )
+    )
     examined(len(leads), "cards")
     by = {t.slug: t for t in tallies(store)}
     total, found = len(store.runs()), len(pipelines(store))
@@ -85,10 +94,10 @@ def test_each_card_leads_with_one_short_line_and_keeps_its_denominator(ten_runs,
 
 def test_each_pill_s_colour_comes_from_the_state_it_stands_for(ten_runs, examined, monkeypatch):
     from onetrace_console import home as home_module
-    from onetrace_console.checks import CONTRADICTS, COULD_NOT_CHECK, HOLDS
     from onetrace_console import records
     from onetrace_console.overview import ATTENTION_WORDS, vs_baseline
     from onetrace_console.render import ATTENTION_TONE, BASELINE_TONE
+
     #: Every run in the recent-runs table, so every comparison state the fixture holds is read,
     #: whichever five arrived last.
     monkeypatch.setattr(home_module, "MOST_RECENT", len(ten_runs[0].runs()))
@@ -104,26 +113,29 @@ def test_each_pill_s_colour_comes_from_the_state_it_stands_for(ten_runs, examine
     assert ATTENTION_TONE["missing-stage"] == "bad"
     assert BASELINE_TONE["couldnt-check"] != BASELINE_TONE["changed"]
     assert ATTENTION_TONE["not-checked"] == "cc"
-    items = re.findall(r'<li data-attention="([^"]+)">(.*?)</li>',
-                       _section(home, "needs-attention"), re.S)
+    items = re.findall(r'<li data-attention="([^"]+)">(.*?)</li>', _section(home, "needs-attention"), re.S)
     assert items, "the fixture needs a run needing attention"
     for kind, html in items:
         pill = re.search(r'<span class="pill (\w+)">([^<]*)</span>', html)
-        assert (pill.group(1), unescape(pill.group(2))) == (ATTENTION_TONE[kind],
-                                                            ATTENTION_WORDS[kind]), (kind, html)
+        assert (pill.group(1), unescape(pill.group(2))) == (ATTENTION_TONE[kind], ATTENTION_WORDS[kind]), (kind, html)
     rows = dict(re.findall(r'<tr data-recent="([^"]+)">(.*?)</tr>', home, re.S))
     from onetrace_console import tones
+
     states = set()
     for run in store.runs():
         if run.key not in rows:
             continue
-        pills = [(tone, unescape(words)) for tone, words in
-                 re.findall(r'<span class="pill (\w+)">([^<]*)</span>', rows[run.key])]
+        pills = [
+            (tone, unescape(words))
+            for tone, words in re.findall(r'<span class="pill (\w+)">([^<]*)</span>', rows[run.key])
+        ]
         state, words = vs_baseline(run, store)
         states.add(state)
         assert pills[0] == (BASELINE_TONE[state], words), (run.run_id, pills)
-        assert pills[1] == (tones.tone(tones.RUNG, records.state(run, store)),
-                            records.said(run, store)), (run.run_id, pills)
+        assert pills[1] == (tones.tone(tones.RUNG, records.state(run, store)), records.said(run, store)), (
+            run.run_id,
+            pills,
+        )
     examined(len(items) + len(rows), "pills read")
     assert len(rows) == len(store.runs())
     assert len(states) >= 2, f"the fixture holds one comparison state only: {states}"
@@ -131,6 +143,7 @@ def test_each_pill_s_colour_comes_from_the_state_it_stands_for(ten_runs, examine
 
 def test_the_all_counts_page_is_one_link_from_the_overview_and_carries_every_count(ten_runs):
     from onetrace_console.home import incident_tallies, tallies
+
     store, pages = _pages(ten_runs)
     assert re.search(rf'<a href="{COUNTS}">All counts</a>', pages[HOME])
     page = pages[COUNTS]
@@ -142,6 +155,7 @@ def test_the_all_counts_page_is_one_link_from_the_overview_and_carries_every_cou
 def test_the_console_page_rules_reach_only_the_pages_that_carry_cp():
     """Scoped, so no other page moves with this part; and in the skin's tokens only."""
     from onetrace_console.frame import PAGE_CSS, stylesheet
+
     assert PAGE_CSS in stylesheet().decode("utf-8")
     rules = re.findall(r"([^{}]+)\{[^{}]*\}", PAGE_CSS)
     assert len(rules) > 20
@@ -149,17 +163,18 @@ def test_the_console_page_rules_reach_only_the_pages_that_carry_cp():
         #: Split on the commas between selectors, not those inside an `:is(...)`.
         for selector in re.split(r",(?![^()]*\))", selectors):
             selector = selector.strip()
-            assert selector.startswith(".cp") or selector.startswith(".shell>main:has(>.cp)"), (
-                selector)
+            assert selector.startswith(".cp") or selector.startswith(".shell>main:has(>.cp)"), selector
     sizes = set(re.findall(r"font-size:([^;}]+)", PAGE_CSS))
     #: Board 1's sizes: its tokens, and 15px (the panels' headings and "of N"), which the skin
     #: has no token for.
-    assert sizes <= {"var(--fs-h1)", "var(--fs-kpi)", "var(--fs-nav)", "var(--fs-body)",
-                     "var(--fs-small)", "15px"}, sizes
+    assert sizes <= {"var(--fs-h1)", "var(--fs-kpi)", "var(--fs-nav)", "var(--fs-body)", "var(--fs-small)", "15px"}, (
+        sizes
+    )
 
 
 def test_the_all_counts_page_is_served_under_overview(server):
     import urllib.request
+
     base, _ = server
     with urllib.request.urlopen(base + "/counts.html") as resp:
         page = resp.read().decode("utf-8")
@@ -175,40 +190,49 @@ def test_every_page_the_console_draws_carries_the_skin_and_no_viewer_page_does(t
     from onetrace_console.incident_pages import INCIDENTS
     from onetrace_console.pages import render_execution
     from onetrace_console.render import COMPARISONS
+
     store, pages = _pages(ten_runs)
     console = [HOME, COUNTS, INCIDENTS, COMPARISONS] + [p for p in pages if p.startswith("incidents-")]
     from onetrace_console.render import render_diff
+
     compared = store.comparisons()
     assert compared, "the fixture holds no comparison, so the compare page is not read"
     pages = {**pages, "diff": render_diff(compared[0], store, generated_at=GENERATED_AT)}
     console.append("diff")
     for name in console:
-        main = pages[name][pages[name].index("<main>"):pages[name].index("</main>")]
+        main = pages[name][pages[name].index("<main>") : pages[name].index("</main>")]
         assert main.count('class="cp"') == 1, name
         assert re.match(r'<main>\s*(<p data-preview[^>]*>.*?</p>\s*)?<div class="cp">', main, re.S), name
     from onetrace_console.pages import AUTHORIZATION, CASE
-    from onetrace_console.unreadable import (render_failed_page, render_unchecked_run,
-                                             render_unreadable_run)
+    from onetrace_console.unreadable import render_failed_page, render_unchecked_run, render_unreadable_run
+
     checked = next(r for r in store.runs() if r.check_report)
     run_pages = render_execution(checked, store, generated_at=GENERATED_AT).pages
     #: The authorization page and the notices are the console's own (board 3).
-    pages = {**pages, "authorization": run_pages[AUTHORIZATION],
-             "unreadable": render_unreadable_run(checked, "a reason", generated_at=GENERATED_AT),
-             "unchecked": render_unchecked_run(checked, generated_at=GENERATED_AT),
-             "failed": render_failed_page("a reason", generated_at=GENERATED_AT)}
+    pages = {
+        **pages,
+        "authorization": run_pages[AUTHORIZATION],
+        "unreadable": render_unreadable_run(checked, "a reason", generated_at=GENERATED_AT),
+        "unchecked": render_unchecked_run(checked, generated_at=GENERATED_AT),
+        "failed": render_failed_page("a reason", generated_at=GENERATED_AT),
+    }
     #: Each stage page (board 4) is the console's own too.
     #: And the run receipt (board 5).
     from onetrace_console.receipt_page import RECEIPT
+
     stages = sorted(n for n in run_pages if n.startswith("stage-")) + [RECEIPT]
     assert len(stages) > 1, "the run has no stage page, so none is read"
     pages.update({f"run/{n}": run_pages[n] for n in stages})
     console += ["authorization", "unreadable", "unchecked", "failed"] + [f"run/{n}" for n in stages]
-    for name in console[-(4 + len(stages)):]:
-        main = pages[name][pages[name].index("<main>"):pages[name].index("</main>")]
+    for name in console[-(4 + len(stages)) :]:
+        main = pages[name][pages[name].index("<main>") : pages[name].index("</main>")]
         assert main.count('class="cp"') == 1, name
     viewer = [p for p in pages if p.startswith("executions-")]
-    viewer += [html for name, html in run_pages.items()
-               if name not in (AUTHORIZATION, RECEIPT) and not name.startswith("stage-")]
+    viewer += [
+        html
+        for name, html in run_pages.items()
+        if name not in (AUTHORIZATION, RECEIPT) and not name.startswith("stage-")
+    ]
     assert run_pages[CASE] in viewer
     for page in viewer:
         assert 'class="cp"' not in page
@@ -220,9 +244,12 @@ def test_a_needs_attention_item_keeps_its_run_name_on_a_line_and_puts_its_time_u
     squeezed the name until the name broke a few characters to a line. The item wraps instead: the
     name keeps at least 16em, and the time goes under it, to the right, when there is no room."""
     from onetrace_console.frame import stylesheet
+
     css = stylesheet().decode("utf-8")
-    rules = (r"\.cp \[data-attention\]\{flex-wrap:wrap\}",
-             r"\.cp \[data-attention\]>span:first-child\{flex:1 1 16em;min-width:0\}",
-             r"\.cp \[data-attention\]>\.value\{margin-left:auto\}")
+    rules = (
+        r"\.cp \[data-attention\]\{flex-wrap:wrap\}",
+        r"\.cp \[data-attention\]>span:first-child\{flex:1 1 16em;min-width:0\}",
+        r"\.cp \[data-attention\]>\.value\{margin-left:auto\}",
+    )
     examined(len(rules), "rules")
     assert all(re.search(r, css) for r in rules), [r for r in rules if not re.search(r, css)]

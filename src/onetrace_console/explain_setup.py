@@ -16,9 +16,13 @@ it always sends, the two command-line flags that add or hold back, that the cons
 button passes neither, and that its `openai` provider takes an OpenAI-compatible server on this
 machine.
 """
+
 from __future__ import annotations
 
 import os
+import secrets
+import threading
+import time
 from pathlib import Path
 
 from onetrace_console.words import escape
@@ -26,9 +30,11 @@ from onetrace_console.words import escape
 PATH = "/explain/setup"
 LINK = "Set up Explain"
 TITLE = "Set up Explain"
-INTRO = ("Explain asks a model you choose for a suggestion about a comparison, beside what the console "
-         "checked. It is optional. This page shows how it is set up; its form saves your choice to "
-         "onetrace-explain's configuration.")
+INTRO = (
+    "Explain asks a model you choose for a suggestion about a comparison, beside what the console "
+    "checked. It is optional. This page shows how it is set up; its form saves your choice to "
+    "onetrace-explain's configuration."
+)
 STEPS = ("Pick a model", "Choose what it sees", "Turn it on")
 SET_HERE = "Set your model here."
 #: The kinds every packet holds, in words, as onetrace-explain 0.1.0 builds it.
@@ -39,26 +45,33 @@ ALWAYS_SENT = (
     "each stage's outcome class",
     "each input's and output's name, digest and size in bytes, and whether it differs",
     "each setting that differs, with both values",
-    "where the comparison holds them: its --for result, its end outputs, the inputs that differ, "
-    "and a mask's digest",
+    "where the comparison holds them: its --for result, its end outputs, the inputs that differ, and a mask's digest",
 )
-STAYS = ("whole run folders", "signatures and keys", "runs outside this comparison",
-         "anything on a public console")
-OPTIONAL = (("--include-text", "adds the kept text of each output that differs, up to 8 KiB each. Prompts "
-             "and documents are kept text, so this sends them."),
-            ("--redact NAME", "sends the setting NAME by its name and digests only, never its value."))
-BUTTON_USES = ("The console's Explain button prepares the packet and sends nothing; its Send button, named with "
-               "the address, sends the kinds above, and the kept text only where \"Include the kept text of "
-               "outputs that differ\" beside it is ticked (--include-text). It never passes --redact: to hold a "
-               "value back, run onetrace-explain yourself with the flag.")
+STAYS = ("whole run folders", "signatures and keys", "runs outside this comparison", "anything on a public console")
+OPTIONAL = (
+    (
+        "--include-text",
+        "adds the kept text of each output that differs, up to 8 KiB each. Prompts "
+        "and documents are kept text, so this sends them.",
+    ),
+    ("--redact NAME", "sends the setting NAME by its name and digests only, never its value."),
+)
+BUTTON_USES = (
+    "The console's Explain button prepares the packet and sends nothing; its Send button, named with "
+    'the address, sends the kinds above, and the kept text only where "Include the kept text of '
+    'outputs that differ" beside it is ticked (--include-text). It never passes --redact: to hold a '
+    "value back, run onetrace-explain yourself with the flag."
+)
 #: The install line beside the console (console 0.7.0): onetrace-explain 0.3, which reads the key from the
 #: keychain, with its keyring extra. Never a dependency of the console.
 INSTALL = 'pip install "onetrace-explain[keyring]>=0.3"'
 #: Where the key is (console 0.7.0): the keychain or the variable; the console reads the keychain only to
 #: say whether a key is stored.
-WHERE_THE_KEY_IS = ("The key stays with you: in this user's keychain, kept with the form below, or in the variable "
-                    "your configuration names. onetrace-explain reads it there when it sends. The console keeps and "
-                    "shows no key, and reads the keychain only to say whether one is stored.")
+WHERE_THE_KEY_IS = (
+    "The key stays with you: in this user's keychain, kept with the form below, or in the variable "
+    "your configuration names. onetrace-explain reads it there when it sends. The console keeps and "
+    "shows no key, and reads the keychain only to say whether one is stored."
+)
 #: The form (console 0.7.0).
 PROVIDERS = (("anthropic", "anthropic"), ("openai", "openai: any OpenAI-compatible address, one on this machine too"))
 FORM_HEAD = "Set it here"
@@ -81,25 +94,45 @@ KEY_UNREADABLE = "The keychain could not be read ({why}): unlock it, and load th
 REPLACE = "Replace"
 REMOVE = "Remove"
 FIELD_NEW_KEY = "New key"
+#: With a key stored, beside the model form's Save, which has no key field then.
+SAVE_KEEPS = "Save keeps the stored key."
+#: The line above the stored key's Remove, on its own row.
+REMOVE_HEAD = "Remove the stored key"
+#: Remove's confirmation page: its question, and its two presses.
+CONFIRM_ASK = "Remove the key stored for {provider} at {address}? Explain will need a key again before it can send."
+CANCEL = "Cancel"
+#: A confirmation page's token holds this long, and once.
+CONFIRM_SECONDS = 600
+_CONFIRMS: dict[str, float] = {}
+#: The tokens used, each with when: a second confirm with one is answered with REMOVED_ALREADY.
+_USED: dict[str, float] = {}
+REMOVED_ALREADY = "Nothing to remove: the key was removed already."
+_CONFIRMS_LOCK = threading.Lock()
 REPLACED = "The key for this provider is replaced in the keychain."
 REMOVED = "The key for this provider is removed from the keychain."
 NO_MODEL_YET = "Save a model first: the key is kept for the provider the file names."
 NOT_DONE = "Nothing changed: {why}."
 #: A key no request can carry (onetrace-explain 0.3's own rule): refused before it reaches the keychain.
-UNSENDABLE = ("the key holds a line end, another control character or a character outside ASCII, which no "
-              "request can carry: paste it again without it")
+UNSENDABLE = (
+    "the key holds a line end, another control character or a character outside ASCII, which no "
+    "request can carry: paste it again without it"
+)
 #: What the page says of the keychain where the key can be kept there (console 0.7.0), in these words.
-KEYCHAIN_WORDS = ("The key is kept by your operating system's keychain, under this user's login. Anyone who can "
-                  "run code as this user can read it, as with an environment variable. The console stores no key.")
+KEYCHAIN_WORDS = (
+    "The key is kept by your operating system's keychain, under this user's login. Anyone who can "
+    "run code as this user can read it, as with an environment variable. The console stores no key."
+)
 #: No keychain (console 0.7.0): keyring not importable in the console's Python, or no keychain that works.
 KEYRING_EXTRA = '"onetrace-explain[keyring]"'
 NO_KEYCHAIN = "No keychain here: {why}."
 NO_KEYCHAIN_PYTHON = "This console runs from:"
 NO_KEYCHAIN_INSTALL = "To keep the key in this user's keychain, install the keychain's extra into that Python:"
 NO_KEYCHAIN_TODAY = "Until then, set the key in the variable key_env names, as in the example above."
-PROMISES = ("A claim without a cite in the record is left out.",
-            "An explanation never changes a verdict, an exit code or a CI gate.",
-            "Every explanation is recorded as its own run.")
+PROMISES = (
+    "A claim without a cite in the record is left out.",
+    "An explanation never changes a verdict, an exit code or a CI gate.",
+    "Every explanation is recorded as its own run.",
+)
 
 #: The setup page's look, in the console's stylesheet (`frame.stylesheet`).
 SETUP_CSS = """
@@ -119,6 +152,11 @@ SETUP_CSS = """
 .cp .setup .setup-field{display:flex;flex-direction:column;gap:4px;min-width:0}
 .cp .setup .setup-field :is(input,select){width:100%;min-width:0;max-width:100%}
 .cp .setup form[data-setup-form] button{align-self:flex-start}
+.cp .setup .setup-actions{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px}
+.cp .setup form[data-setup-form="key"]{flex-direction:row;flex-wrap:wrap;align-items:flex-end}
+.cp .setup form[data-setup-form="key"] .setup-field{flex:1 1 14rem}
+.cp .setup [data-setup="remove-key"]{margin-top:20px}
+.cp .setup [data-setup="remove-key"] p{margin:0 0 8px}
 """
 
 
@@ -131,23 +169,83 @@ def _as_written(text: str) -> str:
     """A path of this machine, or the model it names, as written, to be copied: `verbatim`, so a
     Windows path's backslashes are shown as they are (a record's word shows each one doubled)."""
     from onetrace_console.words import verbatim
+
     return verbatim(text)
 
 
 def _code_block(text: str) -> str:
     """An example to copy, its lines as lines (`verbatim`, as a layer shown as written)."""
     from onetrace_console.words import verbatim
+
     return f"<pre><code>{verbatim(text)}</code></pre>"
+
+
+def confirm_token() -> str:
+    """A new confirmation token for Remove's confirmation page: single-use, for CONFIRM_SECONDS."""
+    token = secrets.token_hex(16)
+    now = time.monotonic()
+    with _CONFIRMS_LOCK:
+        for old in [t for t, at in _CONFIRMS.items() if now - at > CONFIRM_SECONDS]:
+            del _CONFIRMS[old]
+        _CONFIRMS[token] = now
+    return token
+
+
+def take_confirm(token: str) -> str:
+    """ "fresh" where `token` is a confirmation page's own, unused and in time (used up by asking); "used" where it
+    was taken already, within CONFIRM_SECONDS; "" otherwise."""
+    now = time.monotonic()
+    with _CONFIRMS_LOCK:
+        for old in [t for t, at in _USED.items() if now - at > CONFIRM_SECONDS]:
+            del _USED[old]
+        at = _CONFIRMS.pop(token, None)
+        if at is not None and now - at <= CONFIRM_SECONDS:
+            _USED[token] = now
+            return "fresh"
+        return "used" if token in _USED else ""
+
+
+def confirm_page(store) -> str:
+    """Remove's confirmation page: the question naming the provider and the address its key is stored for; Remove
+    (destructive), posting this page's own token; Cancel (secondary), back to the page. No script."""
+    from onetrace_console import explain
+    from onetrace_console.frame import CSRF_SLOT
+    from onetrace_console.render import _document
+
+    m = explain.model_config()
+    if m is None:
+        return page(store, said=NO_MODEL_YET)
+    ask = CONFIRM_ASK.format(provider=str(m["provider"]), address=explain.host(explain.endpoint(m)))
+    body = (
+        f'<div class="setup"><h1>{escape(REMOVE_HEAD)}</h1><p data-setup="confirm-remove">{escape(ask)}</p>'
+        f'<div class="setup-actions" data-busy-scope>'
+        f'<form method="post" action="/explain/setup#{FORM_SECTION}" data-setup-form="remove-confirm">{CSRF_SLOT}'
+        f'<input type="hidden" name="confirm" value="{confirm_token()}">'
+        f'<button class="btn-destructive" data-busy="Removing…" type="submit" name="action" value="remove-confirmed">{escape(REMOVE)}</button>'
+        f"</form>"
+        f'<form method="get" action="/explain/setup" data-setup-form="cancel">'
+        f'<button class="btn-secondary" data-busy="Going back…" type="submit">{escape(CANCEL)}</button></form>'
+        f"</div></div>"
+    )
+    return _document(TITLE, f'<div class="cp">{body}</div>')
 
 
 def save(form: dict) -> tuple[int, str, list[str] | None]:
     """Save, from the form: (the status, what the page says, the [model] lines written or None)."""
     import re as _re
+
     from onetrace_console import explain_config_write as W
     from onetrace_console import explain_keychain as K
     from onetrace_console.oserror import said as os_said
+
     action = form.get("action", "save")
-    if action in ("replace", "remove"):
+    if action == "remove-confirmed":
+        #: Only the confirmation page's own press removes (the server takes its token first).
+        return _key_action("remove", "")
+    if action == "remove":
+        #: The first press asks (`confirm_page`); it never removes.
+        return 409, REMOVE_HEAD, None
+    if action == "replace":
         return _key_action(action, form.get("key", ""))
     provider = form.get("provider", "")
     name = form.get("name", "").strip()
@@ -199,9 +297,11 @@ def unsendable(key: str) -> bool:
 
 def _key_action(action: str, key: str) -> tuple[int, str, list[str] | None]:
     """Replace or Remove: the key for the provider and base_url the file names."""
-    from onetrace_console import explain, explain_config_write as W
+    from onetrace_console import explain
+    from onetrace_console import explain_config_write as W
     from onetrace_console import explain_keychain as K
     from onetrace_console.oserror import said as os_said
+
     m = explain.model_config()
     if m is None:
         return 400, NO_MODEL_YET, None
@@ -227,36 +327,46 @@ def _key_action(action: str, key: str) -> tuple[int, str, list[str] | None]:
     return 200, REPLACED, lines
 
 
-def _key_state(model: dict | None) -> str:
-    """Whether a key is stored for the provider the file names, with Replace and Remove where one is:
-    its presence only, read from the keychain; nothing where no model is named or keyring is absent."""
+def _key_state(model: dict | None) -> tuple[str, str]:
+    """(the key's state, its section): whether a key is stored for the provider the file names, with Replace and
+    Remove where one is: its presence only, read from the keychain. The state is "stored", "none", "unreadable", or ""
+    where no model is named or keyring is absent (no section)."""
     from onetrace_console import explain_keychain as K
     from onetrace_console.frame import CSRF_SLOT
+
     if model is None:
-        return ""
+        return "", ""
     try:
         has = K.stored(str(model["provider"]), str(model.get("base_url") or ""))
     except K.Unavailable as e:
         #: A keychain that is there and can't be read (locked) is said by its type; no keyring, or no
         #: keychain, shows no key line.
         if not isinstance(e, K.Unreadable):
-            return ""
+            return "", ""
         why = e.kind or type(e).__name__
-        return f'<p data-setup="key-state" data-key="unreadable">{escape(KEY_UNREADABLE.format(why=why))}</p>'
+        return "unreadable", (
+            f'<p data-setup="key-state" data-key="unreadable">{escape(KEY_UNREADABLE.format(why=why))}</p>'
+        )
     if not has:
-        return f'<p data-setup="key-state" data-key="none">{escape(KEY_NONE)}</p>'
-    return (f'<p data-setup="key-state" data-key="stored">{escape(KEY_STORED)}</p>'
-            f'<form method="post" action="/explain/setup" data-setup-form="key">{CSRF_SLOT}'
-            f'<label class="setup-field"><span>{escape(FIELD_NEW_KEY)}</span>'
-            f'<input type="password" name="key" autocomplete="new-password" spellcheck="false" required></label>'
-            f'<button type="submit" name="action" value="replace">{escape(REPLACE)}</button></form>'
-            f'<form method="post" action="/explain/setup" data-setup-form="remove">{CSRF_SLOT}'
-            f'<button type="submit" name="action" value="remove">{escape(REMOVE)}</button></form>')
+        return "none", f'<p data-setup="key-state" data-key="none">{escape(KEY_NONE)}</p>'
+    return "stored", (
+        f'<p data-setup="key-state" data-key="stored">{escape(KEY_STORED)}</p>'
+        f'<form method="post" action="/explain/setup#{FORM_SECTION}" data-setup-form="key" '
+        f'data-in-place="{FORM_SECTION}">{CSRF_SLOT}'
+        f'<label class="setup-field"><span>{escape(FIELD_NEW_KEY)}</span>'
+        f'<input type="password" name="key" autocomplete="new-password" spellcheck="false" required></label>'
+        f'<button class="btn-secondary" data-busy="Replacing…" type="submit" name="action" value="replace">{escape(REPLACE)}</button></form>'
+        f'<div data-setup="remove-key"><p>{escape(REMOVE_HEAD)}</p>'
+        f'<form method="post" action="/explain/setup" data-setup-form="remove">{CSRF_SLOT}'
+        f'<button class="btn-destructive" data-busy="Opening…" type="submit" name="action" value="remove">{escape(REMOVE)}</button></form>'
+        f"</div>"
+    )
 
 
 def no_keychain() -> str | None:
     """Why no key can be kept in a keychain here, or None where one works (a locked one works)."""
     from onetrace_console import explain_keychain as K
+
     try:
         K._keyring()
     except K.Unavailable as e:
@@ -267,47 +377,72 @@ def no_keychain() -> str | None:
 def _no_keychain(why: str) -> str:
     """The page's words where there is no keychain: why, the Python, its install line, today's way."""
     import sys
+
     from onetrace_console.neighbours.pages import _install_named
     from onetrace_console.words import verbatim
-    return (f'<div data-setup="no-keychain"><p>{escape(NO_KEYCHAIN.format(why=why))}</p>'
-            f'<p>{escape(NO_KEYCHAIN_PYTHON)} <code>{verbatim(sys.executable or "(not known)")}</code></p>'
-            f'<p>{escape(NO_KEYCHAIN_INSTALL)}</p>'
-            f'<pre><code>pip install {escape(KEYRING_EXTRA)}</code></pre>'
-            + _install_named(verbatim, KEYRING_EXTRA)
-            + f'<p>{escape(NO_KEYCHAIN_TODAY)}</p></div>')
+
+    return (
+        f'<div data-setup="no-keychain"><p>{escape(NO_KEYCHAIN.format(why=why))}</p>'
+        f"<p>{escape(NO_KEYCHAIN_PYTHON)} <code>{verbatim(sys.executable or '(not known)')}</code></p>"
+        f"<p>{escape(NO_KEYCHAIN_INSTALL)}</p>"
+        f"<pre><code>pip install {escape(KEYRING_EXTRA)}</code></pre>"
+        + _install_named(verbatim, KEYRING_EXTRA)
+        + f"<p>{escape(NO_KEYCHAIN_TODAY)}</p></div>"
+    )
 
 
-def _form(model: dict | None, *, keychain: bool = True) -> str:
+def _form(model: dict | None, *, keychain: bool = True, key_stored: bool = False) -> str:
     """The form: the provider chosen and the name as the file has them; base_url and the key empty (the
-    page shows no base_url, and never a key). No key field where there is no keychain (`keychain`)."""
+    page shows no base_url, and never a key). No key field where there is no keychain (`keychain`), or where a key
+    is stored (`key_stored`): then Save keeps it, and says so beside the button."""
     from onetrace_console.frame import CSRF_SLOT
+
     chosen = (model or {}).get("provider")
-    options = "".join(f'<option value="{v}"{" selected" if v == chosen else ""}>{escape(w)}</option>'
-                      for v, w in PROVIDERS)
+    options = "".join(
+        f'<option value="{v}"{" selected" if v == chosen else ""}>{escape(w)}</option>' for v, w in PROVIDERS
+    )
     name = escape(str((model or {}).get("name") or ""), quote=True)
-    return (f'<form method="post" action="/explain/setup" data-setup-form="model">{CSRF_SLOT}'
-            f'<label class="setup-field"><span>{escape(FIELD_PROVIDER)}</span>'
-            f'<select name="provider">{options}</select></label>'
-            f'<label class="setup-field"><span>{escape(FIELD_NAME)}</span>'
-            f'<input type="text" name="name" value="{name}" autocomplete="off" spellcheck="false" required></label>'
-            f'<label class="setup-field"><span>{escape(FIELD_BASE_URL)}</span>'
-            f'<input type="url" name="base_url" placeholder="http://127.0.0.1:8080/v1" autocomplete="off" '
-            f'spellcheck="false"></label>'
-            + (f'<label class="setup-field"><span>{escape(FIELD_KEY)}</span>'
-               f'<input type="password" name="key" autocomplete="new-password" spellcheck="false"></label>'
-               if keychain else "")
-            + f'<button type="submit" name="action" value="save">{escape(SAVE)}</button></form>')
+    return (
+        f'<form method="post" action="/explain/setup#{FORM_SECTION}" data-setup-form="model" '
+        f'data-in-place="{FORM_SECTION}">{CSRF_SLOT}'
+        f'<label class="setup-field"><span>{escape(FIELD_PROVIDER)}</span>'
+        f'<select name="provider">{options}</select></label>'
+        f'<label class="setup-field"><span>{escape(FIELD_NAME)}</span>'
+        f'<input type="text" name="name" value="{name}" autocomplete="off" spellcheck="false" required></label>'
+        f'<label class="setup-field"><span>{escape(FIELD_BASE_URL)}</span>'
+        f'<input type="url" name="base_url" placeholder="http://127.0.0.1:8080/v1" autocomplete="off" '
+        f'spellcheck="false"></label>'
+        + (
+            f'<label class="setup-field"><span>{escape(FIELD_KEY)}</span>'
+            f'<input type="password" name="key" autocomplete="new-password" spellcheck="false"></label>'
+            if keychain and not key_stored
+            else ""
+        )
+        + '<div class="setup-actions">'
+        + f'<button class="btn-primary" data-busy="Saving…" type="submit" name="action" value="save">{escape(SAVE)}</button>'
+        + (f' <span data-setup="save-keeps">{escape(SAVE_KEEPS)}</span>' if key_stored else "")
+        + "</div></form>"
+    )
 
 
-def _said(said: str, written: list[str] | None) -> str:
+#: The sections a press updates in place: the "Set it here" card (the model's form, the key's
+#: Replace, and Remove's confirm, which lands there), and "Always stop before sending". Each form names its section
+#: (`data-in-place`); with script, the busy state's script swaps in that section from the answer, and without it the
+#: answer opens at the section's anchor (the form's action ends `#<its id>`).
+FORM_SECTION, STOP_SECTION = "setup-form", "always-stop"
+
+
+def _said(said: str, written: list[str] | None, *, in_section: bool = False) -> str:
+    """What a press did: at the page's top, or (`in_section`) at the top of the section it updated, as its status
+    line, announced to a screen reader."""
     if not said:
         return ""
     from onetrace_console.words import verbatim
-    out = f'<p data-setup="said" role="status">{verbatim(said)}</p>'
+
+    out = f'<p data-setup="said" data-status role="status" aria-live="polite">{verbatim(said)}</p>'
     if written:
-        out += (f'<pre data-setup="written"><code>{verbatim("".join(written))}</code></pre>'
-                f'<p>{escape(KEPT_REST)}</p>')
-    return f'<section class="step" data-section="setup-said">{out}</section>'
+        out += f'<pre data-setup="written"><code>{verbatim("".join(written))}</code></pre><p>{escape(KEPT_REST)}</p>'
+    return out if in_section else f'<section class="step" data-section="setup-said">{out}</section>'
 
 
 def _model_form(model: dict | None) -> str:
@@ -316,72 +451,119 @@ def _model_form(model: dict | None) -> str:
     why = no_keychain()
     if why is not None:
         return _form(model, keychain=False) + _no_keychain(why)
-    return (_form(model) + f'<p data-setup="keychain-words">{escape(KEYCHAIN_WORDS)}</p>'
-            + _key_state(model))
+    state, section = _key_state(model)
+    return (
+        _form(model, key_stored=state == "stored")
+        + f'<p data-setup="keychain-words">{escape(KEYCHAIN_WORDS)}</p>'
+        + section
+    )
 
 
-def body(store, *, said: str = "", written: list[str] | None = None) -> str:
+def body(store, *, said: str = "", written: list[str] | None = None, at: str = "") -> str:
     """The page's content: the three steps, the form in the first. `store` names the comparisons whose
-    Show the packet previews the request; `said` and `written`, what a Save did."""
+    Show the packet previews the request; `said` and `written`, what a Save did, said in the section `at` names
+    (`FORM_SECTION`, `STOP_SECTION`) or, with none, at the page's top."""
+    here = {at: _said(said, written, in_section=True)} if at in (FORM_SECTION, STOP_SECTION) else {}
     from onetrace_console import explain
+    from onetrace_console.frame import CSRF_SLOT
+
     path = str(config_path())
     model = explain.configured_model()
     named = model != explain.UNNAMED_MODEL
     installed = explain.command() is not None
     steps = "".join(f'<li><a href="#step-{n}">{n} · {escape(w)}</a></li>' for n, w in enumerate(STEPS, start=1))
-    provider = (f'<p data-setup="model">onetrace-explain\'s configuration names <code>{_as_written(model)}</code>.</p>'
-                f'<p data-setup="file">It reads <code>{_as_written(path)}</code>.</p>'
-                if named else
-                f'<p data-setup="model">No model is named in <code>{_as_written(path)}</code>. {escape(SET_HERE)}</p>')
+    provider = (
+        f'<p data-setup="model">onetrace-explain\'s configuration names <code>{_as_written(model)}</code>.</p>'
+        f'<p data-setup="file">It reads <code>{_as_written(path)}</code>.</p>'
+        if named
+        else f'<p data-setup="model">No model is named in <code>{_as_written(path)}</code>. {escape(SET_HERE)}</p>'
+    )
     #: The variable `key_env` names, and whether it is set where the console started: never its value
     #: (console 0.6.1 item 8).
     provider += explain.key_lines(explain.key_status())
-    one = (f'<section class="step" id="step-1" data-step="1"><h2>1 · {escape(STEPS[0])}</h2><div class="choices">'
-           f'<div class="choice" data-choice="provider"><h3>Your model provider</h3>{provider}'
-           f"<p>{escape(WHERE_THE_KEY_IS)}</p>"
-           + _code_block('[model]\nprovider = "anthropic"\nname = "<model name>"\nkey_env = "<the variable holding your key>"')
-           + "</div>"
-           '<div class="choice" data-choice="this-machine"><h3>On this machine</h3>'
-           "<p>onetrace-explain's <code>openai</code> provider takes any OpenAI-compatible address, a model "
-           "server on this machine included, with no key. The request then goes to this machine only.</p>"
-           + _code_block('[model]\nprovider = "openai"\nname = "<model name>"\nbase_url = "http://127.0.0.1:<port>/v1"\nkey_env = ""')
-           + "</div></div>"
-           f'<div class="choice" data-choice="form"><h3>{escape(FORM_HEAD)}</h3>'
-           + _model_form(explain.model_config()) + "</div></section>")
+    one = (
+        f'<section class="step" id="step-1" data-step="1"><h2>1 · {escape(STEPS[0])}</h2><div class="choices">'
+        f'<div class="choice" data-choice="provider"><h3>Your model provider</h3>{provider}'
+        f"<p>{escape(WHERE_THE_KEY_IS)}</p>"
+        + _code_block(
+            '[model]\nprovider = "anthropic"\nname = "<model name>"\nkey_env = "<the variable holding your key>"'
+        )
+        + "</div>"
+        '<div class="choice" data-choice="this-machine"><h3>On this machine</h3>'
+        "<p>onetrace-explain's <code>openai</code> provider takes any OpenAI-compatible address, a model "
+        "server on this machine included, with no key. The request then goes to this machine only.</p>"
+        + _code_block(
+            '[model]\nprovider = "openai"\nname = "<model name>"\nbase_url = "http://127.0.0.1:<port>/v1"\nkey_env = ""'
+        )
+        + "</div></div>"
+        f'<div class="choice" data-choice="form" id="{FORM_SECTION}"><h3>{escape(FORM_HEAD)}</h3>'
+        + here.get(FORM_SECTION, "")
+        + _model_form(explain.model_config())
+        + "</div></section>"
+    )
     stays = "".join(f"<li>{escape(x)}</li>" for x in STAYS)
     sent = "".join(f"<li>{escape(x)}</li>" for x in ALWAYS_SENT)
     flags = "".join(f"<li><code>{escape(f)}</code> {escape(w)}</li>" for f, w in OPTIONAL)
     comparisons = sorted(store.comparisons(), key=lambda c: c.key) if store is not None else []
-    links = "".join(f'<li><a href="/diff/{escape(c.key)}.html#explain" class="mono">{escape(c.key[:12])}</a></li>'
-                    for c in comparisons)
-    preview = ("<p>On a comparison's page, <strong>Show the packet</strong> shows the request exactly as it would "
-               "be sent, and sends nothing.</p>"
-               + (f'<details data-setup="comparisons"><summary>Choose a comparison ({len(comparisons)})</summary>'
-                  f'<ul class="plain">{links}</ul></details>' if comparisons else
-                  "<p>This console holds no comparison yet.</p>"))
-    two = (f'<section class="step" id="step-2" data-step="2"><h2>2 · {escape(STEPS[1])}</h2>'
-           f'<p class="label">Always stays with you</p><ul data-setup="stays">{stays}</ul>'
-           f'<p class="label">Sent to the model</p><ul data-setup="sent">{sent}</ul>'
-           f'<p class="label">Only when you pass the flag</p><ul data-setup="optional">{flags}</ul>'
-           f'<p data-setup="button-uses">{escape(BUTTON_USES)}</p>'
-           f'<p class="label">Preview the exact request</p>{preview}</section>')
+    links = "".join(
+        f'<li><a href="/diff/{escape(c.key)}.html#explain" class="mono">{escape(c.key[:12])}</a></li>'
+        for c in comparisons
+    )
+    preview = (
+        "<p>On a comparison's page, <strong>Show the packet</strong> shows the request exactly as it would "
+        "be sent, and sends nothing.</p>"
+        + (
+            f'<details data-setup="comparisons"><summary>Choose a comparison ({len(comparisons)})</summary>'
+            f'<ul class="plain">{links}</ul></details>'
+            if comparisons
+            else "<p>This console holds no comparison yet.</p>"
+        )
+    )
+    two = (
+        f'<section class="step" id="step-2" data-step="2"><h2>2 · {escape(STEPS[1])}</h2>'
+        f'<p class="label">Always stays with you</p><ul data-setup="stays">{stays}</ul>'
+        f'<p class="label">Sent to the model</p><ul data-setup="sent">{sent}</ul>'
+        f'<p class="label">Only when you pass the flag</p><ul data-setup="optional">{flags}</ul>'
+        f'<p data-setup="button-uses">{escape(BUTTON_USES)}</p>'
+        f'<p class="label">Preview the exact request</p>{preview}</section>'
+    )
     promises = "".join(f"<li>{escape(p)}</li>" for p in PROMISES)
-    three = (f'<section class="step" id="step-3" data-step="3"><h2>3 · {escape(STEPS[2])}</h2>'
-             f'<ul data-setup="promises">{promises}</ul>'
-             '<p class="label">Then, yourself</p><ol data-setup="todo">'
-             f"<li>{_code_block(INSTALL)}</li>"
-             f"<li>Set <code>[model]</code> in <code>{_as_written(path)}</code>, as in step 1.</li>"
-             "<li>Keep your key in this user's keychain with the form in step 1, or set it in your own "
-             "environment, in the variable <code>key_env</code> names.</li></ol>"
-             + (f'<p data-setup="installed">onetrace-explain is installed with this console.</p>' if installed else
-                f'<p data-setup="installed">{escape(explain.NOT_INSTALLED)}</p>')
-             + "</section>")
-    return (f'<div class="setup" data-section="explain-setup"><h1>{escape(TITLE)}</h1><p>{escape(INTRO)}</p>'
-            f'{_said(said, written)}'
-            f'<ol class="steps" aria-label="The three steps">{steps}</ol>{one}{two}{three}</div>')
+    on = explain.always_stop(store)
+    stop = (
+        f'<div id="{STOP_SECTION}">{here.get(STOP_SECTION, "")}'
+        f'<form method="post" action="/explain/setup#{STOP_SECTION}" data-setup-form="always-stop" '
+        f'data-in-place="{STOP_SECTION}">{CSRF_SLOT}'
+        f'<p><label><input type="checkbox" name="always_stop" value="yes"{" checked" if on else ""}> '
+        f"{escape(explain.ALWAYS_STOP)}</label></p>"
+        f'<p class="hint">{escape(explain.ALWAYS_STOP_HINT)}</p>'
+        f'<button class="btn-secondary" data-busy="Saving…" type="submit" name="action" value="always-stop">'
+        f"{escape(SAVE)}</button></form></div>"
+    )
+    three = (
+        f'<section class="step" id="step-3" data-step="3"><h2>3 · {escape(STEPS[2])}</h2>'
+        f'<ul data-setup="promises">{promises}</ul>{stop}'
+        '<p class="label">Then, yourself</p><ol data-setup="todo">'
+        f"<li>{_code_block(INSTALL)}</li>"
+        f"<li>Set <code>[model]</code> in <code>{_as_written(path)}</code>, as in step 1.</li>"
+        "<li>Keep your key in this user's keychain with the form in step 1, or set it in your own "
+        "environment, in the variable <code>key_env</code> names.</li></ol>"
+        + (
+            '<p data-setup="installed">onetrace-explain is installed with this console.</p>'
+            if installed
+            else f'<p data-setup="installed">{escape(explain.NOT_INSTALLED)}</p>'
+        )
+        + "</section>"
+    )
+    return (
+        f'<div class="setup" data-section="explain-setup"><h1>{escape(TITLE)}</h1><p>{escape(INTRO)}</p>'
+        f"{'' if here else _said(said, written)}"
+        f'<ol class="steps" aria-label="The three steps">{steps}</ol>{one}{two}{three}</div>'
+    )
 
 
-def page(store, *, said: str = "", written: list[str] | None = None) -> str:
-    """The whole page, its frame empty for the server to fill as it does every page's."""
+def page(store, *, said: str = "", written: list[str] | None = None, at: str = "") -> str:
+    """The whole page, its frame empty for the server to fill as it does every page's; what a press said in the
+    section it updated (`at`)."""
     from onetrace_console.render import _document
-    return _document(TITLE, f'<div class="cp">{body(store, said=said, written=written)}</div>')
+
+    return _document(TITLE, f'<div class="cp">{body(store, said=said, written=written, at=at)}</div>')

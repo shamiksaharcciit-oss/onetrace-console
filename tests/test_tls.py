@@ -4,6 +4,7 @@ generated once, with `openssl` (a test-fixture tool here, not a runtime dependen
 the shipped console never invokes it; see `tools/fetch_wheel_cache.py`'s own docstring
 for the same reasoning about `pip`).
 """
+
 from __future__ import annotations
 
 import shutil
@@ -14,17 +15,18 @@ import urllib.request
 from http.server import ThreadingHTTPServer
 
 import pytest
-from tests.http_limits import limit
 
 from onetrace_console.config import Config
 from onetrace_console.serve import Handler, _render_all_pages
 from onetrace_console.signin import build_ssl_context
 from onetrace_console.store import Store
+from tests.http_limits import limit
 from tests.test_checks import _require_installed
 
-pytestmark = pytest.mark.skipif(shutil.which("openssl") is None,
-                                reason="this test's own fixture cert needs openssl; the "
-                                      "console itself never invokes it at runtime")
+pytestmark = pytest.mark.skipif(
+    shutil.which("openssl") is None,
+    reason="this test's own fixture cert needs openssl; the console itself never invokes it at runtime",
+)
 
 
 @pytest.fixture(scope="module")
@@ -32,9 +34,26 @@ def self_signed_cert(tmp_path_factory):
     d = tmp_path_factory.mktemp("tls")
     cert, key = d / "cert.pem", d / "key.pem"
     subprocess.run(
-        ["openssl", "req", "-x509", "-newkey", "rsa:2048", "-keyout", str(key),
-         "-out", str(cert), "-days", "1", "-nodes", "-subj", "/CN=localhost"],
-        check=True, capture_output=True, timeout=30)
+        [
+            "openssl",
+            "req",
+            "-x509",
+            "-newkey",
+            "rsa:2048",
+            "-keyout",
+            str(key),
+            "-out",
+            str(cert),
+            "-days",
+            "1",
+            "-nodes",
+            "-subj",
+            "/CN=localhost",
+        ],
+        check=True,
+        capture_output=True,
+        timeout=30,
+    )
     return str(cert), str(key)
 
 
@@ -49,6 +68,7 @@ def test_a_tls_configured_server_actually_serves_https(self_signed_cert, tmp_pat
     Handler.store = Store(store_root / "store")
     Handler.config = config
     from onetrace_console.access_log import AccessLog
+
     Handler.access_log = AccessLog(store_root / "access_log", max_segment_bytes=5_000_000)
     _render_all_pages(Handler.store, store_root, config)
 
@@ -62,10 +82,9 @@ def test_a_tls_configured_server_actually_serves_https(self_signed_cert, tmp_pat
     try:
         client_ctx = ssl.create_default_context()
         client_ctx.check_hostname = False
-        client_ctx.verify_mode = ssl.CERT_NONE   # self-signed test cert; not the point here
+        client_ctx.verify_mode = ssl.CERT_NONE  # self-signed test cert; not the point here
         examined(1, "a plain HTTPS request against the TLS-wrapped server")
-        with urllib.request.urlopen(f"https://127.0.0.1:{port}/health", timeout=limit(10),
-                                    context=client_ctx) as resp:
+        with urllib.request.urlopen(f"https://127.0.0.1:{port}/health", timeout=limit(10), context=client_ctx) as resp:
             assert resp.status == 200
             assert resp.read() == b"ok\n"
     finally:
@@ -89,6 +108,7 @@ def test_a_tls11_only_client_is_refused(self_signed_cert, tmp_path, examined):
     Handler.store = Store(store_root / "store")
     Handler.config = config
     from onetrace_console.access_log import AccessLog
+
     Handler.access_log = AccessLog(store_root / "access_log", max_segment_bytes=5_000_000)
     _render_all_pages(Handler.store, store_root, config)
 
@@ -109,8 +129,7 @@ def test_a_tls11_only_client_is_refused(self_signed_cert, tmp_path, examined):
             pytest.skip(f"this OpenSSL build cannot construct a TLS 1.1-only client: {e}")
         examined(1, "a handshake attempt restricted to TLS 1.1 only")
         with pytest.raises((ssl.SSLError, OSError)):
-            with urllib.request.urlopen(f"https://127.0.0.1:{port}/health", timeout=limit(10),
-                                        context=client_ctx):
+            with urllib.request.urlopen(f"https://127.0.0.1:{port}/health", timeout=limit(10), context=client_ctx):
                 pass
     finally:
         httpd.shutdown()

@@ -8,6 +8,7 @@ where the README states it; an entry a later one supersedes has none. Both readm
 key added since 0.5.0.
 Each rule has its own sabotage below.
 """
+
 from __future__ import annotations
 
 import re
@@ -20,7 +21,7 @@ import pytest
 from onetrace_console.config import Config
 
 REPO = Path(__file__).resolve().parent.parent
-RELEASE = "0.7.0"
+RELEASE = "0.8.0"
 #: The package's own version: the next release, whose heading says "(not released)" until the release
 #: step drops it. Every other version's heading is plain.
 VERSION = tomllib.loads((REPO / "pyproject.toml").read_text(encoding="utf-8"))["project"]["version"]
@@ -41,40 +42,61 @@ CLAIMS_061 = [
     ("Progress while the console starts", "option", "`--quiet` keeps them silent"),
     ("The Explain panel reads as a flow", "feature", "- **The Explain panel's flow:**"),
     ("The first-send question in plain words", "wording", None),
-    ("A key variable not set says where to look", "feature",
-     "the variable its `key_env` names, and whether it is set, never its value"),
+    (
+        "A key variable not set says where to look",
+        "feature",
+        "the variable its `key_env` names, and whether it is set, never its value",
+    ),
     ("Lead: where to look first", "wording", None),
     ("Backticks as code", "fix", None),
-    ("A check the page already ran reads as run", "feature", "A check the page already ran reads \"Run on this page\""),
-    ("Include the kept text of outputs that differ", "feature",
-     "A checkbox beside Send, off by default, includes the kept text of outputs that differ"),
+    ("A check the page already ran reads as run", "feature", 'A check the page already ran reads "Run on this page"'),
+    (
+        "Include the kept text of outputs that differ",
+        "feature",
+        "A checkbox beside Send, off by default, includes the kept text of outputs that differ",
+    ),
     ("A settings button at the top right", "feature", "- **Settings, top right:**"),
 ]
 #: 0.6.0's, held as they were.
 CLAIMS_060 = [
-    ("One line at the first difference names what kind of thing differs there", "feature",
-     "- **The kind of difference:**"),
+    (
+        "One line at the first difference names what kind of thing differs there",
+        "feature",
+        "- **The kind of difference:**",
+    ),
     ("A JSON output's members that differ, by path", "feature", "- **JSON outputs, by member:**"),
-    ("The first run to leave the reference, by step or after a time", "feature",
-     "- **The first run to leave the reference:**"),
+    (
+        "The first run to leave the reference, by step or after a time",
+        "feature",
+        "- **The first run to leave the reference:**",
+    ),
     ("A step's span tree, from the app's own traces", "feature", "- **A step's spans:**"),
     ("The app's spans at the first difference, ranked", "feature", "- **Spans at the first difference:**"),
     ("The demo's app traces, example data", "demo data", None),
-    ("A run's configuration against its pipeline's reference run", "feature",
-     "- **A run's configuration against the reference run:**"),
+    (
+        "A run's configuration against its pipeline's reference run",
+        "feature",
+        "- **A run's configuration against the reference run:**",
+    ),
     ("A model step's token as text, on a local console", "feature", "- **A model step's token as text:**"),
 ]
 #: 0.5.1's, held as they were.
 CLAIMS_051 = [
     ("onetrace 0.6.1 and onetrace-verify 0.6.1", "pins", "`onetrace` 0.6.1 and `onetrace-verify` 0.6.1"),
-    ("An earlier console's comparison page says when its pair was compared again", "feature",
-     "Since 0.5.1 the earlier page says so, and links to the newer one"),
+    (
+        "An earlier console's comparison page says when its pair was compared again",
+        "feature",
+        "Since 0.5.1 the earlier page says so, and links to the newer one",
+    ),
     ("The operator README says what the container image leaves out", "docs, in the operator README", None),
     ("A read interface over the console store", "feature", "## Reading a store from another program"),
     ("The run index is `onetrace-console-run-index/0.2`", "format", None),
     ("The hosted demo keeps both of the public site's links", "demo data", None),
-    ("A run's page links each model-call record to its view", "feature",
-     "On a run's page, each record under \"What came out\" links to its section on the step's page"),
+    (
+        "A run's page links each model-call record to its view",
+        "feature",
+        "On a run's page, each record under \"What came out\" links to its section on the step's page",
+    ),
     ("Shipped comments and docstrings are reworded", "wording", None),
 ]
 #: 0.5.0's, held as they were but for the pins 0.5.1 moves.
@@ -98,27 +120,118 @@ CLAIMS_050 = [
     ("Neighbours by input", "extra", "## Neighbours by input (optional, local only)"),
     ("The Overview opens with its four count cards", "feature", "the Overview opens with its four count cards"),
     ("A run's span context", "feature", "- **Span context:**"),
-    ("A run whose model-call records are in a draft format", "feature",
-     "A run whose records are in the draft format says so in one line"),
+    (
+        "A run whose model-call records are in a draft format",
+        "feature",
+        "A run whose records are in the draft format says so in one line",
+    ),
     ("The hosted demo records P10", "demo data", None),
     ("`demo --public --build --site-links FILE`", "option", "- `--site-links FILE`"),
     ("Verdicts as runs arrive", "feature", "- **Verdicts as runs arrive.**"),
     ("Compare on the public demo", "feature", "## Compare on the public demo"),
     ("The console's listen queue", "fix", None),
     ("A graph run that recorded no plan", "fix", None),
-    ("A plain `pip install` names the onetrace build alike", "fix",
-     "So a pinned install and a plain one name the same comparison differently."),
+    (
+        "A plain `pip install` names the onetrace build alike",
+        "fix",
+        "So a pinned install and a plain one name the same comparison differently.",
+    ),
     ("A run's incident takes", "fix", "An incident's page has a new address; the old address no longer answers."),
 ]
 #: The earlier releases' tables, by release.
-EARLIER = {"0.6.1": CLAIMS_061, "0.6.0": CLAIMS_060, "0.5.1": CLAIMS_051, "0.5.0": CLAIMS_050}
-#: This release's (0.7.0), under `## [Unreleased]` until its version was set.
+#: This release's (0.8.0), under `## [Unreleased]` until its version was set.
 CLAIMS: list = [
+    ("A signed-in write from another origin is refused", "fix", None),
+    ("Sessions per account", "fix", None),
+    ("The sign-in limit behind a proxy", "fix", None),
+    ("The settings row names the model again", "fix", None),
+    ("Explain uses only its own environment's onetrace-explain", "fix", None),
+    ("A tokenizer zip with two files of one name is refused, naming both", "fix", None),
+    ("An unrecorded gap says what would include the run", "fix", None),
+    ("The skin's tokens are a module of their own", "fix", None),
+    ("A run's Authorization page lists its gated steps", "feature", "**A run's Authorization page:**"),
+    ("A stranger's guesses can't keep an account's owner out", "fix", None),
+    ("A run folder's `.lock` is read for what it names", "page", None),
+    ("OPERATOR_README's configuration example holds every key", "fix", None),
+    (
+        "L3 at the first difference, and model-call records in 1.1",
+        "feature",
+        "- **Logits rows at the first difference:**",
+    ),
+    ("L2 at the first difference", "feature", "- **Candidates at the first difference:**"),
+    ("Close calls on a model step", "feature", "- **Close calls:**"),
+    ("The capture store", "demo data", None),
+    ("Upgrading no longer shows the previous release's demo", "fix", None),
+    ("One button style", "fix", None),
+    ("One key field on Set up Explain", "fix", None),
+    ("Remove asks first", "fix", None),
+    ("Fields follow the theme", "fix", None),
+    ("A press counts once", "fix", None),
+    ("Buttons show that they're working", "fix", None),
+    ("The Tokenizers page leads somewhere", "fix", None),
+    ("A model at an IPv6 address", "fix", None),
+    ("Explain in one press where you have already agreed", "fix", None),
+    ("Mark as benchmark answers sooner", "fix", None),
+    ("Small actions answer in place", "fix", None),
+    ("The demo and the capture store link to each other", "demo data", None),
+    ("The hosted demo's runs keep their inputs", "demo data", None),
+    ("Sign-in through Microsoft Entra ID: its settings", "feature", "**Sign-in through Microsoft Entra ID:**"),
+    ("PyJWT 2.15.1", "pins", None),
+    (
+        "Sign-in through Microsoft Entra ID: what the console asks Entra for",
+        "feature",
+        "**Sign-in through Microsoft Entra ID:**",
+    ),
+    ("Sign-in through Microsoft Entra ID: the ID token's checks", "feature", "**Sign-in through Microsoft Entra ID:**"),
+    ("Sign-in through Microsoft Entra ID: who, and which role", "feature", "**Sign-in through Microsoft Entra ID:**"),
+    ("Sign-in through Microsoft Entra ID: what each role may do", "feature", "**Sign-in through Microsoft Entra ID:**"),
+    ("Sign in through Microsoft Entra ID", "feature", "**Sign-in through Microsoft Entra ID:**"),
+    (
+        "OPERATOR_README says how to set up sign-in through Microsoft Entra ID",
+        "feature",
+        "**Sign-in through Microsoft Entra ID:**",
+    ),
+    ("Sign out, in the settings menu", "fix", None),
+    ("The sign-in page follows the theme", "fix", None),
+    ("Runs recorded by onetrace 0.8 open", "feature", "- Runs recorded by onetrace 0.8, in its format 0.5"),
+    (
+        "What a format 0.5 run's records do not show, as the check says it",
+        "feature",
+        "the lines its check writes on what a format 0.5 run's records do not show",
+    ),
+    ("onetrace 0.8.0 and onetrace-verify 0.8.0", "pins", "`onetrace` 0.8.0 and `onetrace-verify` 0.8.0"),
+    ("A step's model-call record in 1.1 opens on its page", "fix", None),
+    ("A declared tokenizer digest is read", "fix", None),
+    (
+        "The hosted views wait for onetrace",
+        "fix",
+        "- **The hosted form:** the candidates' text at the first difference",
+    ),
+    ("A public console starts sooner", "fix", None),
+    ("A decision whose delivery could not be read is drawn as that", "fix", None),
+    ("A decision with no request id gets no link, and its row says so", "fix", None),
+    ("The test setup's wheel-cache fetch fills the cache", "fix", None),
+    ("The watched folder's state was answered to anyone, on a folder console with a configuration file", "fix", None),
+    ("A request that failed was answered with the error's own words", "fix", None),
+    (
+        "The README says where onedoor's decisions are shown, and PyPI's page links home",
+        "feature",
+        "**onedoor's decisions, beside the steps.**",
+    ),
+    ("Three errors about a report of the wrong shape say what to do", "wording", None),
+    ("A sign-in just after ending an account's sessions stays signed in", "fix", None),
+]
+#: 0.7.0's, held as they were.
+CLAIMS_070: list = [
     ("The same release files on Windows as on Linux", "fix", None),
     ("The PowerShell install line quotes by PowerShell's rules", "fix", None),
     ("Runs recorded by onetrace 0.7 open", "feature", "- Runs recorded by onetrace 0.7, in its format 0.4"),
     ("onetrace 0.7.1 and onetrace-verify 0.7.1", "pins", "`onetrace` 0.7.1 and `onetrace-verify` 0.7.1"),
-    ("Runs recorded without configuration open", "feature", "- Runs recorded without configuration, by onetrace-auto, open"),
+    (
+        "Runs recorded without configuration open",
+        "feature",
+        "- Runs recorded without configuration, by onetrace-auto, open",
+    ),
     ("Whether a run closed, and how it ended", "feature", "- Whether a run closed, and how it ended,"),
     ("Step expectations", "feature", "- Step expectations: a run's page lists each step's declared expectations"),
     ("Expectations declared after the run", "feature", "- Expectations declared after the run: on a local console"),
@@ -129,7 +242,7 @@ CLAIMS: list = [
     ("The first-run-to-leave page says how to read it in plain words", "wording", None),
     ("The reference line is one line", "fix", None),
     ("Each gap on the first-run-to-leave page gives its reason", "page", None),
-    ("One \"Find the first run to leave after\" control", "page", None),
+    ('One "Find the first run to leave after" control', "page", None),
     ("Start-up progress on Windows PowerShell 5.1's console", "fix", None),
     ("The Compare picker keeps each label with its select", "fix", None),
     ("The app's spans at a differing step, attribute by attribute", "page", None),
@@ -140,7 +253,11 @@ CLAIMS: list = [
     ("Who can read the key, said on the page", "wording", None),
     ("onetrace-explain 0.3 with its keyring extra, beside the console", "wording", None),
     ("A key no request can carry is refused", "fix", None),
-    ("Every demo pipeline keeps its inputs", "feature", "Every pipeline but the reference demo's keeps the inputs its steps read"),
+    (
+        "Every demo pipeline keeps its inputs",
+        "feature",
+        "Every pipeline but the reference demo's keeps the inputs its steps read",
+    ),
     ("A static export's first-run-to-leave control is shown disabled", "fix", None),
     ("onetrace-explain 0.3.0 beside the console, as released", "pins", 'pip install "onetrace-explain[keyring]>=0.3"'),
     ("The sign-in limit counts a rolling window", "fix", None),
@@ -149,16 +266,27 @@ CLAIMS: list = [
     ("A static export has no live Compare", "fix", None),
     ("CSRF values are compared in constant time", "fix", None),
 ]
+EARLIER = {"0.7.0": CLAIMS_070, "0.6.1": CLAIMS_061, "0.6.0": CLAIMS_060, "0.5.1": CLAIMS_051, "0.5.0": CLAIMS_050}
 #: The configuration keys added since 0.5.0, each named in the README.
-NEW_KEYS = ["compare_cache", "compare_client_header", "compare_per_minute", "compare_running", "compare_queue",
-            "compare_wait_seconds", "compare_verb_seconds", "tracing", "tokenizers"]
+NEW_KEYS = [
+    "compare_cache",
+    "compare_client_header",
+    "compare_per_minute",
+    "compare_running",
+    "compare_queue",
+    "compare_wait_seconds",
+    "compare_verb_seconds",
+    "tracing",
+    "tokenizers",
+    "close_call_margin",
+]
 
 
 def leads(changelog: str, release: str = RELEASE) -> list[str]:
     """The bold leads of a release's CHANGELOG entries, in order."""
     start = changelog.index(f"## [{release}]")
     end = changelog.find("\n## [", start + 1)
-    section = changelog[start:end if end != -1 else None]
+    section = changelog[start : end if end != -1 else None]
     return re.findall(r"^- \*\*(.+?)\*\*", section, re.MULTILINE)
 
 
@@ -171,26 +299,41 @@ def claim_problems(changelog: str, readmes: dict[str, str]) -> list[str]:
     """Where an entry has no place in its release's table, or a held one's words are missing from a readme."""
     out = []
     for release, claims in tables().items():
-        out += [f"CLAIMS gives the {kind} {lead!r} no README words" for lead, kind, words in claims
-                if kind in HELD and words is None]
+        out += [
+            f"CLAIMS gives the {kind} {lead!r} no README words"
+            for lead, kind, words in claims
+            if kind in HELD and words is None
+        ]
         found = leads(changelog, release)
         for lead in found:
             matched = [c for c in claims if lead.startswith(c[0])]
             if len(matched) != 1:
                 out.append(f"the entry {lead!r} is in CLAIMS {len(matched)} times")
-        out += [f"CLAIMS names {c[0]!r}, which no entry starts with" for c in claims
-                if not any(lead.startswith(c[0]) for lead in found)]
+        out += [
+            f"CLAIMS names {c[0]!r}, which no entry starts with"
+            for c in claims
+            if not any(lead.startswith(c[0]) for lead in found)
+        ]
     for name, text in readmes.items():
-        out += [f"{name} does not hold {words!r} ({lead})" for claims in tables().values()
-                for lead, kind, words in claims if words is not None and words not in text]
-        out += [f"{name} does not name the key {key!r}" for key in NEW_KEYS if f"`{key}`" not in text
-                and f'"{key}"' not in text]
+        out += [
+            f"{name} does not hold {words!r} ({lead})"
+            for claims in tables().values()
+            for lead, kind, words in claims
+            if words is not None and words not in text
+        ]
+        out += [
+            f"{name} does not name the key {key!r}"
+            for key in NEW_KEYS
+            if f"`{key}`" not in text and f'"{key}"' not in text
+        ]
     return out
 
 
 def _read() -> tuple[str, dict[str, str]]:
-    return ((REPO / "CHANGELOG.md").read_text(encoding="utf-8"),
-            {n: (REPO / n).read_text(encoding="utf-8") for n in READMES})
+    return (
+        (REPO / "CHANGELOG.md").read_text(encoding="utf-8"),
+        {n: (REPO / n).read_text(encoding="utf-8") for n in READMES},
+    )
 
 
 def test_every_entry_of_the_release_has_its_place_in_both_readmes(examined):
@@ -214,9 +357,17 @@ def test_sabotage_an_entry_with_no_place_is_named(examined):
     assert "the entry 'A new option.' is in CLAIMS 0 times" in claim_problems(planted, readmes)
 
 
-@pytest.mark.parametrize("lead", ["Compare on the public demo", "A run's span context",
-                                  "`demo --public --build --site-links FILE`", "Upgrading from 0.4.0",
-                                  "A run's incident takes", "onetrace 0.6.1 and onetrace-verify 0.6.1"])
+@pytest.mark.parametrize(
+    "lead",
+    [
+        "Compare on the public demo",
+        "A run's span context",
+        "`demo --public --build --site-links FILE`",
+        "Upgrading from 0.4.0",
+        "A run's incident takes",
+        "onetrace 0.6.1 and onetrace-verify 0.6.1",
+    ],
+)
 def test_sabotage_a_readme_missing_a_section_is_named(lead, examined):
     changelog, readmes = _read()
     words = next(w for claims in tables().values() for c, _, w in claims if c == lead)

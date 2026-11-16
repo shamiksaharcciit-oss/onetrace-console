@@ -10,24 +10,27 @@ escape exactly the same ones. Every page this console draws escapes through here
 included: they hold none of those characters, so escaping them changes nothing, and a page has
 one escape rather than a choice of two.
 """
+
 from __future__ import annotations
 
-from html import escape as _html_escape
 import html as _html
 import re
+from datetime import UTC
+from html import escape as _html_escape
 
 #: The authorization rung's evidence on every page: this console records no authorization, and
 #: says so plainly.
 NO_AUTHORIZATION = "This console does not record authorization."
 #: The Overview's row for "Action authorized, effect confirmed": where each run's own page reads it.
-AUTHORIZED_OVERVIEW = ("Read on each run's page from onetrace-verify's decisions rows, where the run "
-                       "declares a gated step or cites a decision; no records where it does neither.")
+AUTHORIZED_OVERVIEW = (
+    "Read on each run's page from onetrace-verify's decisions rows, where the run "
+    "declares a gated step or cites a decision; no records where it does neither."
+)
 
 
 #: A check's verdict as a reader reads it. The stored values (`checks.HOLDS` and the rest) stay as
 #: they are; a page or the command line shows these words for them.
-VERDICT_WORDS = {"holds": "Verified", "contradicts": "Contradicts its record",
-                 "could_not_check": "Couldn't check"}
+VERDICT_WORDS = {"holds": "Verified", "contradicts": "Contradicts its record", "could_not_check": "Couldn't check"}
 NO_VERDICT = "No verdict recorded"
 #: A pipeline with no reference: the one line each page that reads against a reference says, each
 #: page then saying how one is made.
@@ -37,14 +40,15 @@ NO_REFERENCE_YET = "This pipeline has no reference yet."
 def _instant(value):
     """A recorded time as an instant in UTC, or None where the value does not read as a time
     with its zone -- never guessed at."""
-    from datetime import datetime, timezone
+    from datetime import datetime
+
     try:
         when = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
     except ValueError:
         return None
     if when.tzinfo is None:
         return None
-    return when.astimezone(timezone.utc)
+    return when.astimezone(UTC)
 
 
 def short_time(value: str) -> str:
@@ -60,8 +64,9 @@ def clock(value: str) -> str:
     when = _instant(value)
     if when is None:
         return str(value)
-    return when.strftime("%H:%M:%S") + (f".{when.microsecond // 1000:03d}"
-                                         if "." in str(value).split("T", 1)[-1] else "")
+    return when.strftime("%H:%M:%S") + (
+        f".{when.microsecond // 1000:03d}" if "." in str(value).split("T", 1)[-1] else ""
+    )
 
 
 #: The one script a console page may add to its times (the Overview's): after each `<time>`, how
@@ -75,24 +80,28 @@ RELATIVE_TIME_SCRIPT = (
     "var w=s<60?'just now':s<3600?Math.floor(s/60)+' min ago':"
     "s<86400?Math.floor(s/3600)+' h ago':Math.floor(s/86400)+' d ago';"
     "var e=document.createElement('span');e.className='rel';e.textContent=' \u00b7 '+w;"
-    "t.after(e)})</script>")
+    "t.after(e)})</script>"
+)
 
 
 #: The watched folder's notice (`watch.py`): every few seconds it asks the console what the
 #: watcher has (`GET /v1/folder`) and, when new runs have been taken in since the page was drawn,
 #: shows "2 new runs. Show them" -- never reloading or moving the page under the reader. The line
 #: saying when the folder was last read is kept current too. Without the script the page says
-#: when it was drawn, and a reload shows the new runs.
+#: when it was drawn, and a reload shows the new runs. An answer that is not the state (a redirect to
+#: sign-in once a session has ended, a refusal) stops the poll, quietly: nothing is shown on the page.
 WATCH_SCRIPT = (
     "<script>(function(){var s=document.querySelector('[data-section=watched]');if(!s)return;"
     "var v=+s.getAttribute('data-version'),t=+s.getAttribute('data-taken'),"
-    "ms=1000*+s.getAttribute('data-interval');function poll(){fetch('/v1/folder',"
-    "{cache:'no-store'}).then(function(r){return r.ok?r.json():null}).then(function(d){if(!d)"
+    "ms=1000*+s.getAttribute('data-interval'),i;function poll(){fetch('/v1/folder',"
+    "{cache:'no-store',redirect:'manual'}).then(function(r){if(!r.ok){clearInterval(i);return null}"
+    "return r.json()}).then(function(d){if(!d)"
     "return;var l=s.querySelector('[data-part=last-read]');if(l&&d.last_read){l.setAttribute("
     "'datetime',d.last_read);l.textContent=d.last_read.replace('T',' ').replace('+00:00',' UTC')}"
     "if(d.version>v){var n=d.taken-t,p=s.querySelector('[data-part=notice]');p.hidden=false;"
     "p.firstChild.textContent=(n>0?n+(n==1?' new run. ':' new runs. '):'The folder changed. ');}"
-    "}).catch(function(){})}setInterval(poll,Math.max(ms,1000))})()</script>")
+    "}).catch(function(){clearInterval(i)})}i=setInterval(poll,Math.max(ms,1000))})()</script>"
+)
 
 
 def time_html(value, *, attrs: str = "", text: str | None = None) -> str:
@@ -101,16 +110,17 @@ def time_html(value, *, attrs: str = "", text: str | None = None) -> str:
     if _instant(value) is None:
         return escape(str(value))
     shown = short_time(value) if text is None else text
-    return (f'<time{(" " + attrs) if attrs else ""} datetime="{escape(str(value))}" '
-            f'title="{escape(str(value))}">{escape(shown)}</time>')
+    return (
+        f'<time{(" " + attrs) if attrs else ""} datetime="{escape(str(value))}" '
+        f'title="{escape(str(value))}">{escape(shown)}</time>'
+    )
 
 
 def span_html(started, ended, *, attrs: str = "") -> str:
     """A start and an end: the first in the full form, the second its time alone when it falls
     on the same UTC date, so the date is said once."""
     a, b = _instant(started), _instant(ended)
-    second = (short_time(ended)[11:] if a is not None and b is not None and a.date() == b.date()
-              else None)
+    second = short_time(ended)[11:] if a is not None and b is not None and a.date() == b.date() else None
     return f"{time_html(started, attrs=attrs)} → {time_html(ended, attrs=attrs, text=second)}"
 
 
@@ -118,8 +128,10 @@ def scroll_region(inner: str, label: str, name: str) -> str:
     """A table in a region of its own, named for a screen reader and reached by a keyboard. In the
     console, on a narrow screen, its rows stack, each cell under its column's header (`labelled`),
     so nothing in it is cut off and nothing scrolls sideways; the free file keeps the scroll."""
-    return (f'<div class="scroll-frame"><div class="scroll-x" data-scroll="{escape(name)}" '
-            f'tabindex="0" role="region" aria-label="{escape(label)}">{labelled(inner)}</div></div>')
+    return (
+        f'<div class="scroll-frame"><div class="scroll-x" data-scroll="{escape(name)}" '
+        f'tabindex="0" role="region" aria-label="{escape(label)}">{labelled(inner)}</div></div>'
+    )
 
 
 _THEAD = re.compile(r"<thead>(.*?)</thead>", re.S)
@@ -135,16 +147,23 @@ def labelled(inner: str) -> str:
     head = _THEAD.search(inner)
     if head is None:
         return inner
-    labels = [" ".join(_html.unescape(re.sub(r"<[^>]+>", " ", h)).split())
-              for h in re.findall(r"<th\b[^>]*>(.*?)</th>", head.group(1), re.S)]
+    labels = [
+        " ".join(_html.unescape(re.sub(r"<[^>]+>", " ", h)).split())
+        for h in re.findall(r"<th\b[^>]*>(.*?)</th>", head.group(1), re.S)
+    ]
     if not any(labels):
         return inner
 
     def row(m: re.Match) -> str:
         n = iter(range(10_000))
-        cells = _CELL.sub(lambda c: (f'<td data-label="{_html_escape(labels[i], quote=True)}"'
-                                     if (i := next(n)) < len(labels) and labels[i] else "<td"),
-                          m.group(2))
+        cells = _CELL.sub(
+            lambda c: (
+                f'<td data-label="{_html_escape(labels[i], quote=True)}"'
+                if (i := next(n)) < len(labels) and labels[i]
+                else "<td"
+            ),
+            m.group(2),
+        )
         return m.group(1) + cells + m.group(3)
 
     return _TBODY.sub(lambda b: b.group(1) + _ROW.sub(row, b.group(2)) + b.group(3), inner, count=1)
@@ -153,13 +172,14 @@ def labelled(inner: str) -> str:
 def generated_footer(generated_at) -> str:
     """The footer of a page the console draws: when, and the one product name and version."""
     from onetrace_console import __version__
-    return (f"<footer><p>Generated {time_html(generated_at)} by "
-            f"onetrace-console {escape(__version__)}.</p></footer>")
+
+    return f"<footer><p>Generated {time_html(generated_at)} by onetrace-console {escape(__version__)}.</p></footer>"
 
 
 def escape(text, quote: bool = True) -> str:
     """HTML-escaped, with a record's control, bidirectional and surrogate characters shown."""
     from onetrace_console.viewer.page import display
+
     return _html_escape(display(text), quote=quote)
 
 
@@ -169,6 +189,7 @@ def named(text, href: str | None = None) -> str:
     how many more there are and that the whole value is in the run's record, a download of it
     where `href` names one. Keys and comparisons use the whole value."""
     from onetrace_console.viewer.model import NAME_CAP
+
     text = str(text)
     return escape(text[:NAME_CAP]) + rest(text, href)
 
@@ -178,6 +199,7 @@ def rest(text, href: str | None = None) -> str:
     whole. For a word inside a link, where a second link cannot go, it follows the link."""
     from onetrace_console.viewer.model import NAME_CAP
     from onetrace_console.viewer.sentences import template
+
     text = str(text)
     if len(text) <= NAME_CAP:
         return ""
@@ -190,6 +212,7 @@ def rest(text, href: str | None = None) -> str:
 def shown_name(text) -> str:
     """`named` for plain text -- a page title, a sentence built around a name: no markup."""
     from onetrace_console.viewer.model import name_shown
+
     return name_shown(text)
 
 
@@ -205,6 +228,7 @@ def verbatim_rows(text) -> str:
     4.9 MB each. The whole row stays in the check report the run keeps."""
     from onetrace_console.viewer.model import NAME_CAP
     from onetrace_console.viewer.sentences import template
+
     rows = []
     for row in str(text).split("\n"):
         if len(row) > NAME_CAP:
@@ -219,6 +243,7 @@ def path_text(path) -> str:
     kept single. `escape` doubles a backslash so that a record's words can't draw as a control
     character; a path is not a record's words, and on Windows its backslashes are its separators."""
     from onetrace_console.viewer.page import _UNSHOWN
+
     return _html_escape(_UNSHOWN.sub(lambda m: f"\\u{ord(m.group(0)):04x}", str(path)))
 
 
@@ -226,6 +251,7 @@ def verbatim(text) -> str:
     """For a layer that shows words as written (`<pre>`): as `escape`, keeping line breaks and
     tabs, which are how those words are laid out."""
     from onetrace_console.viewer.page import display
+
     return _html_escape(display(text, lines=True))
 
 
@@ -234,6 +260,7 @@ def run_named(store, key: str) -> str:
     `demo-run-2 · 1880b4aa455b` -- so a reader can tell two names are one run. Where the run's
     record cannot be read there is no run id to show, and none is invented: its key alone."""
     from onetrace_console.store import StoreError
+
     try:
         run = store.get_run(key)
     except StoreError:

@@ -1,0 +1,44 @@
+{
+ "checks": [
+  {
+   "check": "for",
+   "node": "read_tool_log"
+  },
+  {
+   "check": "match",
+   "run": "candidate"
+  }
+ ],
+ "checks_dropped": {},
+ "claims": [
+  {
+   "cites": [
+    "node/read_tool_log/constant/tool_firmware"
+   ],
+   "kind": "lead",
+   "text": "The only difference detected between the two runs is the `tool_firmware` constant, which changed from `4.2` in the baseline to `4.3` in the candidate."
+  },
+  {
+   "cites": [
+    "node/read_tool_log/input/tool_log.csv"
+   ],
+   "kind": "note",
+   "text": "Despite the firmware version change, the input file `tool_log.csv` is identical between runs, so the firmware change did not alter the raw log data captured."
+  },
+  {
+   "cites": [
+    "node/read_tool_log/output/torques.json",
+    "node/torque_check/output/check.json",
+    "node/station_decision/output/decision.json"
+   ],
+   "kind": "ruled out",
+   "text": "All pipeline outputs (`torques.json`, `check.json`, `decision.json`) are byte-for-byte identical between runs, meaning the firmware version change had no downstream effect on results."
+  }
+ ],
+ "dropped": {
+  "quotes a value its cites don't hold": "1"
+ },
+ "label": "Suggested explanation \u2014 AI-generated, may be wrong",
+ "model": "anthropic:claude-sonnet-4-6",
+ "record": "2026-11-10T16-23-34.933404Z"
+}

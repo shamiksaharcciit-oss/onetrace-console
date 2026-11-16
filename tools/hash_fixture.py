@@ -1,9 +1,10 @@
 """Write a SHA256SUMS sidecar for a fixture directory. Digests are computed, never typed
-(X-11): this is the one place that writes `tests/fixtures/r11/SHA256SUMS`.
+which makes this the one place that writes `tests/fixtures/r11/SHA256SUMS`.
 
 Usage:
     python tools/hash_fixture.py <directory> <sidecar-path>
 """
+
 from __future__ import annotations
 
 import hashlib

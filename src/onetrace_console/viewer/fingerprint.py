@@ -1,8 +1,8 @@
-"""This file's fingerprint, printed in its own footer (019 §1.3, §6(d)).
+"""This file's fingerprint, printed in its own footer, so a reader can tell one page from another.
 
 WHY NOT SIMPLY THE FILE'S SHA-256
 ---------------------------------
-019 §1.3: "The file's own SHA-256 is printed in its footer." Read literally that cannot be
+The rule is that the file's own SHA-256 is printed in its footer. Read literally that cannot be
 done: a file that contains the hash of its own bytes would have to be a fixed point of
 SHA-256. The record format meets the same wall and forbids the attempt outright
 (`canonicalize.py` rule 7; rejection vector R09: *a record may not contain the proof of its

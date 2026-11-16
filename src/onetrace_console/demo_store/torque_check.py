@@ -16,6 +16,7 @@ newton-metre, so nothing is rounded.
 The demo's runs of it: a baseline; a run whose tool firmware version changed while its readings did
 not; and a run where one bolt reads below the window, so the wheel goes to rework.
 """
+
 from __future__ import annotations
 
 import json
@@ -60,8 +61,14 @@ def main(out_dir, run_id: str, firmware: str, low_bolt: bool) -> None:
     out.mkdir(parents=True, exist_ok=True)
     csv_path = out / "tool_log.csv"
     csv_path.write_bytes(tool_log_csv(low_bolt).encode("utf-8"))
-    rec = Recorder(out_dir, run_id=run_id, declared_stages=STAGES, manifest=Path(__file__),
-                   policy="fail-closed", anchor_reason="a demo record; anchoring is not part of this demo")
+    rec = Recorder(
+        out_dir,
+        run_id=run_id,
+        declared_stages=STAGES,
+        manifest=Path(__file__),
+        policy="fail-closed",
+        anchor_reason="a demo record; anchoring is not part of this demo",
+    )
 
     def read_tool_log(ctx):
         data = kept_text(csv_path)
@@ -77,25 +84,38 @@ def main(out_dir, run_id: str, firmware: str, low_bolt: bool) -> None:
     def torque_check(ctx, got):
         ctx.read_receipt("read_tool_log")
         torques = ctx.read_json(got)["torque_nm"]
-        outside = [{"bolt": str(i), "torque_nm": t} for i, t in enumerate(torques, start=1)
-                   if not LOW <= _tenths(t) <= HIGH]
-        return ctx.write_json("check.json", {"window_nm": f"{_nm(LOW)} to {_nm(HIGH)}",
-                                             "outside": outside})
+        outside = [
+            {"bolt": str(i), "torque_nm": t} for i, t in enumerate(torques, start=1) if not LOW <= _tenths(t) <= HIGH
+        ]
+        return ctx.write_json("check.json", {"window_nm": f"{_nm(LOW)} to {_nm(HIGH)}", "outside": outside})
 
     def station_decision(ctx, checked):
         ctx.read_receipt("torque_check")
         outside = ctx.read_json(checked)["outside"]
-        return ctx.write_json("decision.json", {"decision": "rework" if outside else "pass",
-                                                "bolts_outside": str(len(outside))})
+        return ctx.write_json(
+            "decision.json", {"decision": "rework" if outside else "pass", "bolts_outside": str(len(outside))}
+        )
 
-    got = rec.run_node("read_tool_log", None, Instrument("tightening-tool-log", "reader", "1.0.0",
-                                                         {"source": "tool_log.csv"}), read_tool_log)
-    checked = rec.run_node("torque_check", None, Instrument("torque-window-check", "checker", "1.0.0",
-                                                            {"window_nm": f"{_nm(LOW)} to {_nm(HIGH)}"}),
-                           torque_check, got)
-    rec.run_node("station_decision", None, Instrument("station-rule", "rule", "1.0.0",
-                                                      {"rule": "pass only with every bolt in the window"}),
-                 station_decision, checked)
+    got = rec.run_node(
+        "read_tool_log",
+        None,
+        Instrument("tightening-tool-log", "reader", "1.0.0", {"source": "tool_log.csv"}),
+        read_tool_log,
+    )
+    checked = rec.run_node(
+        "torque_check",
+        None,
+        Instrument("torque-window-check", "checker", "1.0.0", {"window_nm": f"{_nm(LOW)} to {_nm(HIGH)}"}),
+        torque_check,
+        got,
+    )
+    rec.run_node(
+        "station_decision",
+        None,
+        Instrument("station-rule", "rule", "1.0.0", {"rule": "pass only with every bolt in the window"}),
+        station_decision,
+        checked,
+    )
     rec.close()
 
 
@@ -103,6 +123,7 @@ def kept_inputs(args: dict) -> list[bytes]:
     """The bytes of every input a run with `args` keeps: the tool's log, as `main` writes it
     (invented example data)."""
     return [json.dumps(tool_log_csv(args["low_bolt"])).encode("utf-8")]
+
 
 def kept_text(path) -> bytes:
     """A file this pipeline reads from outside the run, as its step reads it and keeps it: a JSON string

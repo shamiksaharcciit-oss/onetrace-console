@@ -96,7 +96,7 @@ def main(argv: list[str] | None = None) -> int:
             try:
                 ok, why = fingerprint.check(page.read_bytes())
             except (OSError, UnicodeDecodeError, ValueError) as e:
-                # A page that cannot be read is said, not raised (the third review, NEW-14).
+                # A page that cannot be read is said, not raised.
                 ok, why = False, f"cannot be read: {said(e) if isinstance(e, OSError) else e}"
             print(shown(f"{'matches' if ok else 'DOES NOT MATCH':15} {page}: {why}"))
             worst = worst if ok else 1
@@ -105,8 +105,8 @@ def main(argv: list[str] | None = None) -> int:
     try:
         if args.command == "executions":
             # The runs are the ones named on the command line. Nothing is discovered, no
-            # directory is walked, no store is queried: C036 item 2's list is a list of what
-            # it was given, which is what keeps it inside 019 §0's fence.
+            # directory is walked, no store is queried: the list is a list of what it was
+            # given, which is what keeps it inside the viewer's fence (it reads only what it is handed).
             #: A list's rows, not whole page models.
             models = [list_row(read_record(r)) for r in args.runs]
             args.out.mkdir(parents=True, exist_ok=True)
@@ -149,8 +149,8 @@ def main(argv: list[str] | None = None) -> int:
         print(f"cannot read the check's report: {e}", file=sys.stderr)
         return 2
     except OSError as e:
-        # A folder or file the pages cannot be read from or written to (the third review,
-        # NEW-14: `--out` naming a file printed a traceback).
+        # A folder or file the pages cannot be read from or written to (`--out` naming a
+        # file once printed a traceback).
         print(shown(f"cannot read or write a file: {said(e)}"), file=sys.stderr)
         return 2
     for path in written:

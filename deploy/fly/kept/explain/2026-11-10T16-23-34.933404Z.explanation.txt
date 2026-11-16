@@ -1,0 +1,16 @@
+Suggested explanation — AI-generated, may be wrong
+model: anthropic:claude-sonnet-4-6
+
+- where to look first: The only difference detected between the two runs is the `tool_firmware` constant, which changed from `4.2` in the baseline to `4.3` in the candidate.
+  shown by: node/read_tool_log/constant/tool_firmware
+  to check: `tool_firmware` changed from `4.2` to `4.3` at `read_tool_log`; set it back and run again to check
+- note: Despite the firmware version change, the input file `tool_log.csv` is identical between runs, so the firmware change did not alter the raw log data captured.
+  shown by: node/read_tool_log/input/tool_log.csv
+- ruled out: All pipeline outputs (`torques.json`, `check.json`, `decision.json`) are byte-for-byte identical between runs, meaning the firmware version change had no downstream effect on results.
+  shown by: node/read_tool_log/output/torques.json, node/torque_check/output/check.json, node/station_decision/output/decision.json
+
+dropped: 1 quotes a value its cites don't hold
+
+checks onetrace can run (a lead is confirmed or ruled out only by what these report):
+  onetrace localize a b --for read_tool_log
+  onetrace match b

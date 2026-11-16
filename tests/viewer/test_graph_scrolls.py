@@ -12,6 +12,7 @@ overlay or are hidden (headless Chromium, macOS), so nothing showed there were n
 edge. The panel's scrollbar is now styled, which Chromium and Safari always draw, with the
 standard properties for browsers without `::-webkit-scrollbar`.
 """
+
 from __future__ import annotations
 
 import re
@@ -34,8 +35,7 @@ def _body(selector: str) -> str:
 
 
 def test_the_graph_panel_scrolls_and_nothing_hides_its_overflow():
-    assert re.search(r"(^|;)overflow-x:(auto|scroll)(;|$)", _body(".graph-box")), \
-        "the graph panel does not scroll"
+    assert re.search(r"(^|;)overflow-x:(auto|scroll)(;|$)", _body(".graph-box")), "the graph panel does not scroll"
     rules = _rules(CSS) + _rules(FRAME_CSS)
     assert len(rules) > 50, "the stylesheets were not read"
     hiding = [s for s, b in rules if re.search(r"overflow(-x)?:\s*(hidden|clip)", b)]
@@ -48,21 +48,20 @@ def test_the_panels_scrollbar_is_drawn():
     assert height and int(height.group(1)) >= 8, "the scrollbar has no drawn height"
     assert "background:var(" in _body(".graph-box::-webkit-scrollbar-thumb")
     assert "background:var(" in _body(".graph-box::-webkit-scrollbar-track")
-    fallback = re.search(r"@supports not selector\(::-webkit-scrollbar\)\{\.graph-box\{([^{}]*)\}\}",
-                         CSS)
+    fallback = re.search(r"@supports not selector\(::-webkit-scrollbar\)\{\.graph-box\{([^{}]*)\}\}", CSS)
     assert fallback and "scrollbar-color:" in fallback.group(1), "no scrollbar for other browsers"
 
 
 def test_every_node_of_a_wide_straight_line_is_inside_what_the_panel_scrolls_over():
     """The scroll reaches every node: each box lies inside the drawing's own width and height."""
-    nodes = [GraphNode(node_id=f"stage-{i}", name=f"stage-{i}", index=i, href=f"#step-{i}")
-             for i in range(1, 10)]
+    nodes = [GraphNode(node_id=f"stage-{i}", name=f"stage-{i}", index=i, href=f"#step-{i}") for i in range(1, 10)]
     layout = lay_out(nodes, None)
     drawn = svg(layout)
     width, height = map(int, re.search(r'<svg[^>]* width="(\d+)" height="(\d+)"', drawn).groups())
-    boxes = [tuple(map(int, b)) for b in
-             re.findall(r'<rect class="node" x="(\d+)" y="(\d+)" width="(\d+)" height="(\d+)"',
-                        drawn)]
+    boxes = [
+        tuple(map(int, b))
+        for b in re.findall(r'<rect class="node" x="(\d+)" y="(\d+)" width="(\d+)" height="(\d+)"', drawn)
+    ]
     assert len(boxes) == 9 and width > 1098, "not wider than the widest panel: proves nothing"
     for x, y, w, h in boxes:
         assert w == BOX_W and 0 <= x and x + w <= width and 0 <= y and y + h <= height

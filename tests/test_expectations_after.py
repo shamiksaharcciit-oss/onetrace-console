@@ -7,6 +7,7 @@ The run is `tests/onetrace_runs/0.7.1/expect/calibrate-holds`, and the file `aft
 it, written by onetrace's own `onetrace expect write`: three entries, one that holds, one that fails,
 and one about a step the run does not record.
 """
+
 from __future__ import annotations
 
 import hashlib
@@ -30,6 +31,7 @@ SEAL = json.loads(FILE.read_text(encoding="utf-8"))["seal"]
 @pytest.fixture(scope="module", autouse=True)
 def _installed():
     from tests.test_checks import _require_installed
+
     _require_installed()
 
 
@@ -41,29 +43,39 @@ def _text(block: str) -> str:
 def _stored(store, name: str = "calibrate-holds"):
     from onetrace_console.checks import run_and_record
     from onetrace_console.ingest import accept
+
     return run_and_record(accept(_tar(EXPECT / name), store).run, store, ran_at=RAN_AT)
 
 
 def _sections(run, store) -> dict[str, str]:
     from onetrace_console.pages import render_execution
+
     pages = render_execution(store.get_run(run.key), store, generated_at="2026-10-04T12:00:00+00:00").pages
     out = {}
     for name in ("expectations", "expectations-after"):
-        found = [m.group(0) for p in ("case.html", "proof.html")
-                 for m in [re.search(rf'<section data-section="{name}".*?</section>', pages[p], re.S)] if m]
+        found = [
+            m.group(0)
+            for p in ("case.html", "proof.html")
+            for m in [re.search(rf'<section data-section="{name}".*?</section>', pages[p], re.S)]
+            if m
+        ]
         out[name] = found[0] if found else ""
     return out
 
 
 def test_a_run_checked_against_a_named_file_keeps_the_verifier_s_rows_in_the_store_not_the_record(store, examined):
     from onetrace_console import expectations_after
+
     run = _stored(store)
     before = [(p, store.get(k)) for p, k in store.get_run(run.key).listing]
     entry = expectations_after.check(store, run, str(FILE))
     examined(len(entry["rows"]), "rows kept")
     assert [(r["name"].split(" (")[0], r["result"]) for r in entry["rows"]] == [
-        ("expectations file", "PASS"), ("expect calibrate.after-under-450", "PASS"),
-        ("expect calibrate.after-serial", "FAIL"), ("expect missing.after-missing-step", "FAIL")]
+        ("expectations file", "PASS"),
+        ("expect calibrate.after-under-450", "PASS"),
+        ("expect calibrate.after-serial", "FAIL"),
+        ("expect missing.after-missing-step", "FAIL"),
+    ]
     assert all(f"(declared after the run, {SEAL})" in r["name"] for r in entry["rows"][1:])
     assert entry["seal"] == SEAL and entry["file"] == FILE.name
     assert entry["file_sha256"] == hashlib.sha256(FILE.read_bytes()).hexdigest()
@@ -74,6 +86,7 @@ def test_a_run_checked_against_a_named_file_keeps_the_verifier_s_rows_in_the_sto
 
 def test_the_rows_are_shown_apart_and_labelled_declared_after_the_run(store, examined):
     from onetrace_console import expectations_after
+
     run = _stored(store)
     expectations_after.check(store, run, str(FILE))
     secs = _sections(run, store)
@@ -84,13 +97,17 @@ def test_the_rows_are_shown_apart_and_labelled_declared_after_the_run(store, exa
     assert f"Checked against {FILE.name}, its seal {SEAL}," in after
     assert "1 of 3 expectations held." in after
     assert expectations_after.SAYS_NOTHING in after
-    assert f"FAIL expect missing.after-missing-step (declared after the run, {SEAL}) — the run records no step 'missing'" in after
+    assert (
+        f"FAIL expect missing.after-missing-step (declared after the run, {SEAL}) — the run records no step 'missing'"
+        in after
+    )
     assert re.findall(r'<p data-expectations="count">(.*?)</p>', secs["expectations"]) == ["4 of 5 expectations held."]
 
 
 @pytest.mark.parametrize("why", ["relative", "missing", "too large", "not json", "another format", "a 0.3 run"])
 def test_a_file_it_does_not_read_is_refused_in_words_and_nothing_is_kept(why, store, tmp_path, monkeypatch, examined):
     from onetrace_console import expectations_after
+
     run = _stored(store)
     named = str(FILE)
     if why == "relative":
@@ -108,8 +125,10 @@ def test_a_file_it_does_not_read_is_refused_in_words_and_nothing_is_kept(why, st
     elif why == "a 0.3 run":
         from onetrace_console.checks import run_and_record
         from onetrace_console.ingest import accept
-        run = run_and_record(accept(_tar(EXPECT.parent.parent / "0.6.1" / "refund-closed"), store).run, store,
-                             ran_at=RAN_AT)
+
+        run = run_and_record(
+            accept(_tar(EXPECT.parent.parent / "0.6.1" / "refund-closed"), store).run, store, ran_at=RAN_AT
+        )
     examined(1, f"a file refused: {why}")
     with pytest.raises(expectations_after.ExpectationsError) as e:
         expectations_after.check(store, run, named)
@@ -119,9 +138,10 @@ def test_a_file_it_does_not_read_is_refused_in_words_and_nothing_is_kept(why, st
 
 def test_a_public_page_has_no_press_and_an_export_keeps_what_was_kept_read_only(store, examined):
     from onetrace_console import expectations_after
-    from onetrace_console.export_static import without_run_tools
-    from onetrace_console.public import content_security_policy, _script_hash
     from onetrace_console.expectations_script import EXPECTATIONS_SCRIPT
+    from onetrace_console.export_static import without_run_tools
+    from onetrace_console.public import _script_hash, content_security_policy
+
     run = _stored(store)
     examined(4, "pages and policies")
     assert expectations_after.section(run, store, public=True) == ""
@@ -138,28 +158,36 @@ def test_a_public_page_has_no_press_and_an_export_keeps_what_was_kept_read_only(
 def test_the_press_on_a_local_console_checks_keeps_and_draws_the_page_again(tmp_path, examined):
     from onetrace_console.store import Store
     from tests.test_folder_load import _Console, _free_port
+
     root = tmp_path / "console"
     store = Store(root / "store")
     run = _stored(store)
     port = _free_port()
     config = tmp_path / "local.json"
-    config.write_text(json.dumps({"host": "127.0.0.1", "port": port, "store_root": str(root),
-                                  "sign_in": {"enabled": False}}), encoding="utf-8")
+    config.write_text(
+        json.dumps({"host": "127.0.0.1", "port": port, "store_root": str(root), "sign_in": {"enabled": False}}),
+        encoding="utf-8",
+    )
     base = f"http://127.0.0.1:{port}"
 
     def post(query: str, body: bytes) -> tuple[int, dict]:
-        req = urllib.request.Request(f"{base}/expectations?{query}", data=body, method="POST",
-                                     headers={"Content-Type": "application/json"})
+        req = urllib.request.Request(
+            f"{base}/expectations?{query}", data=body, method="POST", headers={"Content-Type": "application/json"}
+        )
         try:
             with urllib.request.urlopen(req, timeout=limit(300)) as r:
                 return r.status, json.loads(r.read())
         except urllib.error.HTTPError as e:
             return e.code, json.loads(e.read())
+
     c = _Console(tmp_path, "serve", env={"ONETRACE_CONSOLE_CONFIG": str(config)})
     try:
         c.until("onetrace-console serving on")
-        refused = [post("run=nope", b'{"path": "/x"}'), post(f"run={run.key}", b"[1]"),
-                   post(f"run={run.key}", json.dumps({"path": "relative.json"}).encode())]
+        refused = [
+            post("run=nope", b'{"path": "/x"}'),
+            post(f"run={run.key}", b"[1]"),
+            post(f"run={run.key}", json.dumps({"path": "relative.json"}).encode()),
+        ]
         done = post(f"run={run.key}", json.dumps({"path": str(FILE)}).encode())
         with urllib.request.urlopen(f"{base}/runs/{run.key}/case.html", timeout=limit(60)) as r:
             page = r.read().decode("utf-8")
@@ -175,6 +203,7 @@ def test_the_press_on_a_local_console_checks_keeps_and_draws_the_page_again(tmp_
 
 def test_sabotage_rows_shown_without_their_label_are_named(store, monkeypatch, examined):
     from onetrace_console import expectations_after
+
     run = _stored(store)
     expectations_after.check(store, run, str(FILE))
     monkeypatch.setattr(expectations_after, "LABEL", "checked")

@@ -20,12 +20,12 @@ Exit 0 only if every check holds. Needs Docker and openssl; the pytest suite doe
 
     python tools/container_tls_check.py [--port 18443]
 """
+
 from __future__ import annotations
 
 import argparse
 import ssl
 import subprocess
-import sys
 import tempfile
 import time
 import urllib.error
@@ -37,8 +37,7 @@ IMAGE = "onetrace-console:tls-check"
 
 
 def run(*args: str, check: bool = True) -> subprocess.CompletedProcess:
-    return subprocess.run(list(args), capture_output=True, text=True, encoding="utf-8",
-                          errors="replace", check=check)
+    return subprocess.run(list(args), capture_output=True, text=True, encoding="utf-8", errors="replace", check=check)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -54,8 +53,22 @@ def main(argv: list[str] | None = None) -> int:
     with tempfile.TemporaryDirectory(prefix="onetrace-tls-check-") as tmp:
         tls = Path(tmp) / "tls"
         tls.mkdir()
-        run("openssl", "req", "-x509", "-newkey", "rsa:2048", "-keyout", str(tls / "key.pem"),
-            "-out", str(tls / "cert.pem"), "-days", "1", "-nodes", "-subj", "/CN=localhost")
+        run(
+            "openssl",
+            "req",
+            "-x509",
+            "-newkey",
+            "rsa:2048",
+            "-keyout",
+            str(tls / "key.pem"),
+            "-out",
+            str(tls / "cert.pem"),
+            "-days",
+            "1",
+            "-nodes",
+            "-subj",
+            "/CN=localhost",
+        )
         # The container runs as a non-root user; a mounted key must be readable by it.
         for f in tls.iterdir():
             f.chmod(0o644)
@@ -67,22 +80,35 @@ def main(argv: list[str] | None = None) -> int:
             return 1
         try:
             # --- with a certificate: reachable over TLS from the host, and only over TLS
-            run("docker", "run", "-d", "--name", "tls-check-with", "--read-only",
-                "--tmpfs", "/tmp:rw,size=64m", "-v", "tls-check-data:/data",
-                "-v", f"{tls}:/etc/onetrace-console/tls:ro",
-                "-p", f"127.0.0.1:{args.port}:8080", IMAGE)
+            run(
+                "docker",
+                "run",
+                "-d",
+                "--name",
+                "tls-check-with",
+                "--read-only",
+                "--tmpfs",
+                "/tmp:rw,size=64m",
+                "-v",
+                "tls-check-data:/data",
+                "-v",
+                f"{tls}:/etc/onetrace-console/tls:ro",
+                "-p",
+                f"127.0.0.1:{args.port}:8080",
+                IMAGE,
+            )
             unverified = ssl._create_unverified_context()
             answer = None
             for _ in range(60):
                 try:
-                    with urllib.request.urlopen(f"https://127.0.0.1:{args.port}/health",
-                                                timeout=3, context=unverified) as r:
+                    with urllib.request.urlopen(
+                        f"https://127.0.0.1:{args.port}/health", timeout=3, context=unverified
+                    ) as r:
                         answer = (r.status, r.read())
                         break
                 except (urllib.error.URLError, ConnectionError, OSError):
                     time.sleep(1)
-            said(answer == (200, b"ok\n"),
-                 f"with a mounted certificate, the host reaches /health over TLS: {answer}")
+            said(answer == (200, b"ok\n"), f"with a mounted certificate, the host reaches /health over TLS: {answer}")
             try:
                 with urllib.request.urlopen(f"http://127.0.0.1:{args.port}/health", timeout=3) as r:
                     plain = f"answered {r.status}"
@@ -93,27 +119,41 @@ def main(argv: list[str] | None = None) -> int:
             #: after the 30 s interval, so it is waited for, up to two intervals and a retry.
             state = ""
             for _ in range(100):
-                state = run("docker", "inspect", "-f", "{{.State.Health.Status}}",
-                            "tls-check-with", check=False).stdout.strip()
+                state = run(
+                    "docker", "inspect", "-f", "{{.State.Health.Status}}", "tls-check-with", check=False
+                ).stdout.strip()
                 if state in ("healthy", "unhealthy"):
                     break
                 time.sleep(1)
             said(state == "healthy", f"its own HEALTHCHECK reads: {state or 'not reported'}")
 
             # --- without a certificate: refuses to start, in words, with its fix line
-            run("docker", "run", "--name", "tls-check-without", "--read-only",
-                "--tmpfs", "/tmp:rw,size=64m", "-v", "tls-check-data2:/data", IMAGE, check=False)
-            code = run("docker", "inspect", "-f", "{{.State.ExitCode}}", "tls-check-without",
-                       check=False).stdout.strip()
+            run(
+                "docker",
+                "run",
+                "--name",
+                "tls-check-without",
+                "--read-only",
+                "--tmpfs",
+                "/tmp:rw,size=64m",
+                "-v",
+                "tls-check-data2:/data",
+                IMAGE,
+                check=False,
+            )
+            code = run(
+                "docker", "inspect", "-f", "{{.State.ExitCode}}", "tls-check-without", check=False
+            ).stdout.strip()
             logs = run("docker", "logs", "tls-check-without", check=False)
             text = logs.stdout + logs.stderr
             said(code == "1", f"without a certificate it exits 1 (exit code {code})")
-            said("refusing to start: no TLS certificate at /etc/onetrace-console/tls/cert.pem"
-                 in text, "it says which file is missing")
+            said(
+                "refusing to start: no TLS certificate at /etc/onetrace-console/tls/cert.pem" in text,
+                "it says which file is missing",
+            )
             said("\nfix: " in text, "it carries a fix: line")
             said("Traceback" not in text, "it prints no traceback")
-            print("        its words: " + " | ".join(line for line in text.splitlines() if line),
-                  flush=True)
+            print("        its words: " + " | ".join(line for line in text.splitlines() if line), flush=True)
         finally:
             for name in ("tls-check-with", "tls-check-without"):
                 run("docker", "rm", "-f", name, check=False)

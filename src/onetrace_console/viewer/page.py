@@ -8,13 +8,13 @@ and neither `viewer.record` nor `viewer.report`: every value on the page arrives
 the model. `viewer/tests/test_structure.py` asserts this, so "never re-derive for display"
 is a property of what this file can reach.
 
-THE FENCE (019 §0, §1.3; 021 §3 item 1)
----------------------------------------
+THE FENCE
+---------
 Static HTML, inline CSS, one small inline script, no external asset of any kind: no link,
 no font fetch, no image, no URL. The page opens from disk with the network off.
 
-NO BUTTONS (spec §2.1; 021 §3 item 4)
-------------------------------------
+NO BUTTONS
+----------
 Layers 2–4 are native `<details>` elements: the page is the same page with JavaScript off,
 only less convenient. The one script opens every layer before printing, so a printout
 carries the whole record rather than its summary.
@@ -23,7 +23,7 @@ WHOSE WORDS
 -----------
 A `Text` from the model renders by its source: the page's own words as text, the record's
 and the check's words as marked quotations (`data-words`), counts and times as values. The
-vocabulary rule (019 §4) is tested over the page's own words only; a quotation is not ours
+vocabulary rule is tested over the page's own words only; a quotation is not ours
 to translate.
 """
 from __future__ import annotations
@@ -253,7 +253,7 @@ def display(text: str, *, lines: bool = False) -> str:
 
 
 def escape(text: str, quote: bool = True) -> str:
-    """The page's one escape: HTML, and a record's words shown by `display` (NEW-11)."""
+    """The page's one escape: HTML, and a record's words shown by `display`."""
     return _html_escape(display(text), quote=quote)
 
 
@@ -608,9 +608,9 @@ def _strip(m: PageModel) -> str:
 
 def _rung(r: Rung) -> str:
     """One rung: its question, then its state and its evidence together, "state · evidence" --
-    so each rung reads as 28n §2 words the authorization rung, "No records · needs an AADP
+    so each rung reads as the authorization rung is worded, "No records · needs an AADP
     policy engine". `data-state` carries the state for a reader of the markup; no rung is
-    painted (C034 §4.4: colour for verdicts only)."""
+    painted (colour is for verdicts only)."""
     evidence = " ".join(_line(e) for e in r.evidence)
     #: A rung with no state word -- "Ran as approved" on a straight-line run, drawn
     #: with no badge -- is its evidence alone.
@@ -723,15 +723,14 @@ def _report_block(m: PageModel) -> str:
 def _also(sibling: str | None, title_key: str) -> str:
     """A relative link to the other view of this same run, generated beside this one.
 
-    Decided after C036 item 1 flagged it: *relative links between pages generated
-    together, about the same run or the same comparison, are not the fenced application shell*
-    — C034 §1 fenced the shell because it needs a backend (search, a signed-in user and
-    organisation, navigation between stores), and a link resolved at generation time needs none
-    of that. The constraint stays for anything implying a different store or a different run
+    Relative links between pages generated together, about the same run or the same comparison,
+    are not the fenced application shell: the shell is fenced as it needs a backend (search, a
+    signed-in user and organisation, navigation between stores), and a link resolved at
+    generation time needs none of that. The constraint stays for anything implying a different store or a different run
     set than the one generated.
 
-    The link's words are the destination's own ruled title (`title.answer`/`title.case`,
-    adopted by C023 §4), so navigation added no vocabulary. `sibling=None` renders no link,
+    The link's words are the destination's own title (`title.answer`/`title.case`, from the
+    wording table), so navigation added no vocabulary. `sibling=None` renders no link,
     which is what a page generated on its own gets.
     """
     if not sibling:
@@ -742,7 +741,7 @@ def _also(sibling: str | None, title_key: str) -> str:
 
 def render_answer(m: PageModel, file_name: str = "answer.html",
                   sibling: str | None = "case.html") -> str:
-    """019 §2, the answer view. Unsealed: the fingerprint slot is still zeros."""
+    """The answer view. Unsealed: the fingerprint slot is still zeros."""
     token = _RECORD_HREF.set(getattr(m, "record_href", None))
     try:
         return _render_answer(m, file_name, sibling)
@@ -824,12 +823,12 @@ def _not_checked_rows(items, steps: int) -> str:
 def render_executions(models: list[PageModel], generated_at: str, generator: str,
                       file_name: str = "executions.html",
                       hrefs: list[str] | None = None, *, of: int | None = None) -> str:
-    """C036 item 2, the Executions list. Unsealed: the fingerprint slot is still zeros.
+    """The Executions list. Unsealed: the fingerprint slot is still zeros.
 
         Three runs, two of them a deliberate pair, is what there is — render it as a real
         list view over the real corpus, emptiness visible, no synthesized rows to make it
         look fuller. This is explicitly not what a list view is *for*, and the page should
-        not pretend otherwise.                         — the list-view decision (036), item 2
+        not pretend otherwise.                         — the list view's design
 
     **Each row links to the directory it was generated from**, when the caller supplies the
     paths. As decided: the folder a run's manifest was actually read from is *generation-time
@@ -899,7 +898,7 @@ def render_executions(models: list[PageModel], generated_at: str, generator: str
 
 def render_case(m: PageModel, file_name: str = "case.html",
                 sibling: str | None = "answer.html") -> str:
-    """019 §3, the case view. Unsealed: the fingerprint slot is still zeros."""
+    """The case view. Unsealed: the fingerprint slot is still zeros."""
     token = _RECORD_HREF.set(getattr(m, "record_href", None))
     try:
         return _render_case(m, file_name, sibling)
@@ -917,7 +916,7 @@ def _graph(m: PageModel) -> str:
     if not m.graph_nodes:
         return ""
     first = m.steps[0].index if m.steps else ""
-    #: In-page links are `#step-N` only, as ruled: the first step's row is where the
+    #: In-page links are `#step-N` only: the first step's row is where the
     #: recorded order starts.
     return graph_render(m.graph_nodes, m.graph_edges,
                         recorded_order_href=f"#step-{first}" if first.isdigit() else "",
@@ -994,21 +993,20 @@ def _render_case(m: PageModel, file_name: str, sibling: str | None) -> str:
         + "</section>"
         f'<section data-section="changed"><h2>{_t("section.changed")}</h2>'
         + "".join(_said(x) for x in m.changed) + "</section>"
-        # 031 §3: the section is on the page whether or not a report reached it.
+        # The section is on the page whether or not a report reached it.
         + f'<section data-section="reproduce"><h2>{_t("section.reproduce")}</h2>'
         + "".join(_reproduce_row(m, v) for v in m.reproduced) + "</section>"
         + f'<section data-section="checked"><h2>{_t("section.checked")}</h2>{lists}{_report_block(m)}</section>'
-        # C036 item 3: Policy and Incidents are named sections carrying an absence sentence,
-        # and nothing else. Incidents keeps 019 §4's `verb.not_run.boundary` — the "record
-        # stops here" shape C036 directs be reused. Policy says "no authorization records"
-        # (release 1's state, wherever authorization would appear, never
-        # blank and never a pass). C031 §3 governs the shape: the section is on the page, and
-        # says so, rather than being blank.
+        # Policy and Incidents are named sections carrying an absence sentence, and nothing
+        # else. Incidents keeps the table's `verb.not_run.boundary`, the "record stops here"
+        # shape, reused. Policy says "no authorization records" (release 1's state, wherever
+        # authorization would appear, never blank and never a pass). The section is on the
+        # page, and says so, rather than being blank.
         + f'<section data-section="policy"><h2>{_t("section.policy")}</h2>'
         + f'<p>{_t("policy.none")}</p></section>'
         #: In the console's frame this section is dropped (the run page lists
         #: the run's incidents at the top, and the console's Incidents page the rest); in the
-        #: free file it is "Where the record stops", keeping 019 §4's sentence.
+        #: free file it is "Where the record stops", keeping the table's sentence.
         + ("" if _FRAME.get() is not None else
            f'<section data-section="incidents"><h2>{_t("section.incidents")}</h2>'
            f'<p>{_t("verb.not_run.boundary")}</p></section>')

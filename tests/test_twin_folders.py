@@ -14,6 +14,7 @@ chain head:
 The twins are copies of the reference demo's first run: one with an output file edited, one with a
 receipt deleted, one left as it is.
 """
+
 from __future__ import annotations
 
 import html
@@ -56,6 +57,7 @@ def _load(folder: Path, root: Path, compare=None):
     from onetrace_console.folder_load import load_folder
     from onetrace_console.store import Store
     from tests.test_checks import _require_installed
+
     _require_installed()
     store = Store(root / "store")
     return store, load_folder(folder, store, Config(), compare=compare)
@@ -64,6 +66,7 @@ def _load(folder: Path, root: Path, compare=None):
 def _said(loaded, store) -> dict[str, str]:
     """Each folder's line in the start-up list, by folder name."""
     from onetrace_console.folder_load import announce
+
     lines, _ = announce(Path("runs"), loaded, store)
     out = {}
     for text, _href in lines:
@@ -75,6 +78,7 @@ def _said(loaded, store) -> dict[str, str]:
 
 def _page(run, store) -> str:
     from onetrace_console.pages import CASE, render_execution
+
     return render_execution(run, store, generated_at="2026-01-01T00:00:00+00:00").pages[CASE]
 
 
@@ -91,14 +95,15 @@ def _rung(page: str) -> str:
 
 def _incidents(store, rule_words: str = DIFFER):
     from onetrace_console.incidents import derive
+
     return [i for i in derive(store) if rule_words in i.quoted]
 
 
 # ------------------------------------------------------------------ 1. a twin that differs
 
+
 @pytest.mark.parametrize("twin", ["aa-twin", "zz-twin"], ids=["twin-loads-first", "twin-loads-last"])
-def test_an_edited_output_file_in_a_twin_reads_contradicts_in_the_list_and_on_its_page(
-        tmp_path, examined, twin):
+def test_an_edited_output_file_in_a_twin_reads_contradicts_in_the_list_and_on_its_page(tmp_path, examined, twin):
     folder = _folder(tmp_path, "day-1", twin)
     _edit_output(folder / twin)
     store, loaded = _load(folder, tmp_path)
@@ -123,8 +128,7 @@ def test_an_edited_output_file_in_a_twin_reads_contradicts_in_the_list_and_on_it
     assert DIFFER in twin_page and "day-1" in twin_page
     assert f"this folder, {twin} (Contradicts its record)" in twin_page, twin_page[:900]
     assert "the folder day-1 (Records agree)" in twin_page
-    assert f"this folder, day-1 (Records agree), and the folder {twin} (Contradicts its record)" \
-        in _text(own_raw)
+    assert f"this folder, day-1 (Records agree), and the folder {twin} (Contradicts its record)" in _text(own_raw)
 
 
 def test_a_deleted_receipt_in_a_twin_is_read_on_its_own(tmp_path, examined):
@@ -145,8 +149,8 @@ def test_a_deleted_receipt_in_a_twin_is_read_on_its_own(tmp_path, examined):
 
 # ------------------------------------------------------------------ 2. identical copies
 
-def test_identical_copies_are_both_shown_as_copies_of_one_run_each_with_its_own_reading(
-        tmp_path, examined):
+
+def test_identical_copies_are_both_shown_as_copies_of_one_run_each_with_its_own_reading(tmp_path, examined):
     folder = _folder(tmp_path, "day-1", "day-1-copy")
     store, loaded = _load(folder, tmp_path)
     by_name = {r.name: r.run for r in loaded.runs}
@@ -159,14 +163,17 @@ def test_identical_copies_are_both_shown_as_copies_of_one_run_each_with_its_own_
     assert said == {"day-1": "Records agree", "day-1-copy": "Records agree"}, said
     assert not _incidents(store), "identical copies are not an incident"
     page_a, page_b = _case(a, store), _case(b, store)
-    assert ("this folder, day-1 (Records agree), is a copy of the folder day-1-copy "
-            "(Records agree)") in page_a, page_a[:800]
-    assert ("this folder, day-1-copy (Records agree), is a copy of the folder day-1 "
-            "(Records agree)") in page_b, page_b[:800]
+    assert ("this folder, day-1 (Records agree), is a copy of the folder day-1-copy (Records agree)") in page_a, page_a[
+        :800
+    ]
+    assert ("this folder, day-1-copy (Records agree), is a copy of the folder day-1 (Records agree)") in page_b, page_b[
+        :800
+    ]
 
 
 def test_a_run_folder_with_no_twin_keeps_its_address(tmp_path, examined):
     from onetrace_console.store import run_key
+
     folder = _folder(tmp_path, "day-1")
     store, loaded = _load(folder, tmp_path)
     run = loaded.runs[0].run
@@ -177,6 +184,7 @@ def test_a_run_folder_with_no_twin_keeps_its_address(tmp_path, examined):
 
 # ------------------------------------------------------------------ 3. --compare and addresses
 
+
 def test_compare_with_a_twin_compares_the_two_folders_it_names(tmp_path, examined):
     folder = _folder(tmp_path, "day-1", "day-1-twin")
     _edit_output(folder / "day-1-twin")
@@ -184,9 +192,9 @@ def test_compare_with_a_twin_compares_the_two_folders_it_names(tmp_path, examine
     by_name = {r.name: r.run for r in loaded.runs}
     examined(1, "comparison with a twin")
     assert loaded.comparison is not None, loaded.compare_note
-    assert (loaded.comparison.run_a, loaded.comparison.run_b) == (by_name["day-1"].key,
-                                                                  by_name["day-1-twin"].key)
+    assert (loaded.comparison.run_a, loaded.comparison.run_b) == (by_name["day-1"].key, by_name["day-1-twin"].key)
     from onetrace_console.folder_load import announce
+
     lines, opened = announce(folder, loaded, store)
     compared = [t for t, _ in lines if t.startswith("compared")]
     assert compared == ["compared day-1 with day-1-twin:"], lines

@@ -15,6 +15,7 @@ differing) gets no line, and the page is as it was. The line is first on the pag
 answer, and never says what produced the difference. On the demo as the public build draws it, the
 pairs whose first difference is an input carry the inputs line.
 """
+
 from __future__ import annotations
 
 import html
@@ -40,8 +41,11 @@ def _said(page: str) -> tuple[str | None, str | None]:
 
 
 def _row(request_id: str, verdict: str, version: str | None) -> dict:
-    row = {"request_id": request_id, "action_type": "pay",
-           "decision": {"permit": "executed", "deny": "denied"}[verdict]}
+    row = {
+        "request_id": request_id,
+        "action_type": "pay",
+        "decision": {"permit": "executed", "deny": "denied"}[verdict],
+    }
     if version is not None:
         row["policy_version"] = version
     return row
@@ -49,18 +53,39 @@ def _row(request_id: str, verdict: str, version: str | None) -> dict:
 
 def _ref(row: dict, verdict: str) -> dict:
     from onetrace import onedoor_ref
-    return {"format": "onedoor-decision-ref/1", "request_id": row["request_id"],
-            "decision_digest": onedoor_ref.decision_digest(row), "verdict": verdict, "issuer": ISSUER}
+
+    return {
+        "format": "onedoor-decision-ref/1",
+        "request_id": row["request_id"],
+        "decision_digest": onedoor_ref.decision_digest(row),
+        "verdict": verdict,
+        "issuer": ISSUER,
+    }
 
 
-def _step_run(folder: Path, run_id: str, *, question: bytes = b"what is due?", answer: str = "a",
-              kind: str = "model", ref: dict | None = None) -> Path:
+def _step_run(
+    folder: Path,
+    run_id: str,
+    *,
+    question: bytes = b"what is due?",
+    answer: str = "a",
+    kind: str = "model",
+    ref: dict | None = None,
+) -> Path:
     """A one-step run: the step reads `question`, records `ref` where given, and writes `answer`."""
     from onetrace.emit import Instrument, Recorder
+
     out = folder / run_id
     gated = {"gated_stages": ["step"]} if ref is not None else {}
-    rec = Recorder(str(out), run_id=run_id, declared_stages=["step"], manifest=Path(__file__),
-                   policy="fail-closed", anchor_reason="a test", **gated)
+    rec = Recorder(
+        str(out),
+        run_id=run_id,
+        declared_stages=["step"],
+        manifest=Path(__file__),
+        policy="fail-closed",
+        anchor_reason="a test",
+        **gated,
+    )
 
     def step(ctx):
         ctx.read_memory(question, "text/plain", name="question", trust_class="externally-sourced")
@@ -85,42 +110,70 @@ def built(tmp_path_factory):
     from tests.test_checks import FIXED_RAN_AT
     from tests.test_compare import _deliver
     from tests.test_policy_pages import _delivery
+
     folder = tmp_path_factory.mktemp("first-kind")
-    rows = {"held-a": _row("held-a", "permit", "v1"), "held-b": _row("held-b", "deny", "v2"),
-            "same-a": _row("same-a", "permit", "v3"), "same-b": _row("same-b", "deny", "v3"),
-            "gone-a": _row("gone-a", "permit", "v1"), "gone-b": _row("gone-b", "deny", "v2")}
+    rows = {
+        "held-a": _row("held-a", "permit", "v1"),
+        "held-b": _row("held-b", "deny", "v2"),
+        "same-a": _row("same-a", "permit", "v3"),
+        "same-b": _row("same-b", "deny", "v3"),
+        "gone-a": _row("gone-a", "permit", "v1"),
+        "gone-b": _row("gone-b", "deny", "v2"),
+    }
     s = folder / "s"
     made = {
-        "in-a": (_step_run(s, "in-a"), True), "in-b": (_step_run(s, "in-b", question=b"what is owed?", answer="b"), True),
+        "in-a": (_step_run(s, "in-a"), True),
+        "in-b": (_step_run(s, "in-b", question=b"what is owed?", answer="b"), True),
         "dec-a": (_step_run(s, "dec-a", ref=_ref(rows["held-a"], "permit")), True),
         "dec-b": (_step_run(s, "dec-b", answer="b", ref=_ref(rows["held-b"], "deny")), True),
         "same-a": (_step_run(s, "same-a", ref=_ref(rows["same-a"], "permit")), True),
         "same-b": (_step_run(s, "same-b", answer="b", ref=_ref(rows["same-b"], "deny")), True),
         "gone-a": (_step_run(s, "gone-a", ref=_ref(rows["gone-a"], "permit")), True),
         "gone-b": (_step_run(s, "gone-b", answer="b", ref=_ref(rows["gone-b"], "deny")), True),
-        "kept-a": (_step_run(s, "kept-a"), False), "kept-b": (_step_run(s, "kept-b", answer="b"), False),
+        "kept-a": (_step_run(s, "kept-a"), False),
+        "kept-b": (_step_run(s, "kept-b", answer="b"), False),
         "tool-a": (_step_run(s, "tool-a", kind="tool"), True),
         "tool-b": (_step_run(s, "tool-b", kind="tool", answer="b"), True),
         "mc": (record_run(folder / "mc", "mc"), True),
         "mc-files": (record_run(folder / "mc-files", "mc-files", files_digest="sha256:" + "f" * 64), True),
-        "mc-out": (record_run(folder / "mc-out", "mc-out", fingerprint="sha256:" + "d" * 64,
-                              output="sha256:" + "e" * 64), True),
+        "mc-out": (
+            record_run(folder / "mc-out", "mc-out", fingerprint="sha256:" + "d" * 64, output="sha256:" + "e" * 64),
+            True,
+        ),
         "mc-set-a": (record_run(folder / "mc-set-a", "mc-set-a", extra={"engine.settings.max_new_tokens": "64"}), True),
-        "mc-set-b": (record_run(folder / "mc-set-b", "mc-set-b", extra={"engine.settings.max_new_tokens": "128"}), True),
+        "mc-set-b": (
+            record_run(folder / "mc-set-b", "mc-set-b", extra={"engine.settings.max_new_tokens": "128"}),
+            True,
+        ),
         "mc-samp-a": (record_run(folder / "mc-samp-a", "mc-samp-a", extra={"sampling.temperature": "0"}), True),
         "mc-samp-b": (record_run(folder / "mc-samp-b", "mc-samp-b", extra={"sampling.temperature": "0.7"}), True),
         "mc-batch": (record_run(folder / "mc-batch", "mc-batch", extra={"batch.size": "2"}), True),
     }
     store = Store(folder / "store")
     export = [rows[k] for k in ("held-a", "held-b", "same-a", "same-b")]
-    accept_export(_delivery("decisions.jsonl", "".join(json.dumps(r, sort_keys=True, separators=(",", ":")) + "\n"
-                                                       for r in export).encode("utf-8")), store)
-    runs = {k: run_and_record(_deliver(p, store, outputs=kept), store, ran_at=FIXED_RAN_AT)
-            for k, (p, kept) in made.items()}
-    pairs = {"inputs": ("in-a", "in-b"), "decision": ("dec-a", "dec-b"), "decision-same": ("same-a", "same-b"),
-             "decision-gone": ("gone-a", "gone-b"), "not-kept": ("kept-a", "kept-b"), "tool": ("tool-a", "tool-b"),
-             "identity": ("mc", "mc-files"), "output": ("mc", "mc-out"), "settings": ("mc-set-a", "mc-set-b"),
-             "sampling": ("mc-samp-a", "mc-samp-b"), "batch": ("mc", "mc-batch")}
+    accept_export(
+        _delivery(
+            "decisions.jsonl",
+            "".join(json.dumps(r, sort_keys=True, separators=(",", ":")) + "\n" for r in export).encode("utf-8"),
+        ),
+        store,
+    )
+    runs = {
+        k: run_and_record(_deliver(p, store, outputs=kept), store, ran_at=FIXED_RAN_AT) for k, (p, kept) in made.items()
+    }
+    pairs = {
+        "inputs": ("in-a", "in-b"),
+        "decision": ("dec-a", "dec-b"),
+        "decision-same": ("same-a", "same-b"),
+        "decision-gone": ("gone-a", "gone-b"),
+        "not-kept": ("kept-a", "kept-b"),
+        "tool": ("tool-a", "tool-b"),
+        "identity": ("mc", "mc-files"),
+        "output": ("mc", "mc-out"),
+        "settings": ("mc-set-a", "mc-set-b"),
+        "sampling": ("mc-samp-a", "mc-samp-b"),
+        "batch": ("mc", "mc-batch"),
+    }
     comparisons = {k: compare(runs[a], runs[b], store, ran_at=FIXED_RAN_AT) for k, (a, b) in pairs.items()}
     with rendering(onedoor=False, sign_in=False, public=True):
         pages = {k: render_diff(c, store, generated_at=GENERATED_AT) for k, c in comparisons.items()}
@@ -130,22 +183,45 @@ def built(tmp_path_factory):
 #: Each planted pair: (the kind, the line as a reader reads it).
 WANT = {
     "inputs": ("inputs", "The first difference is upstream: this step's inputs already differed."),
-    "identity": ("model-call", "The model's output differed on equal inputs; the comparator's kind of change: "
-                               "model identity (first differing field `model.files_digest`)."),
-    "settings": ("model-call", "The model's output differed on equal inputs; the comparator's kind of change: "
-                               "engine settings (first differing field `engine.settings.max_new_tokens`)."),
-    "sampling": ("model-call", "The model's output differed on equal inputs; the comparator's kind of change: "
-                               "sampling settings (first differing field `sampling.temperature`)."),
-    "output": ("model-call", "The model's output differed on equal inputs; the comparator's kind of change: "
-                             "the output alone (first differing field `fingerprint (tolerant, first-token-logprobs)`)."),
-    "batch": ("model-call-batch", "At this step's model call, the comparator's result is: "
-                                  "could not compare: batch context differs: batch.size."),
-    "decision": ("decision", "The policy decision differed: `permit` in the baseline, `deny` in the candidate. "
-                             "The policy version differed: `v1` in the baseline, `v2` in the candidate."),
-    "decision-same": ("decision", "The policy decision differed: `permit` in the baseline, `deny` in the candidate. "
-                                  "The policy version is the same in both: `v3`."),
-    "decision-gone": ("decision", "The policy decision differed: `permit` in the baseline, `deny` in the candidate. "
-                                  "The policy version is not recorded."),
+    "identity": (
+        "model-call",
+        "The model's output differed on equal inputs; the comparator's kind of change: "
+        "model identity (first differing field `model.files_digest`).",
+    ),
+    "settings": (
+        "model-call",
+        "The model's output differed on equal inputs; the comparator's kind of change: "
+        "engine settings (first differing field `engine.settings.max_new_tokens`).",
+    ),
+    "sampling": (
+        "model-call",
+        "The model's output differed on equal inputs; the comparator's kind of change: "
+        "sampling settings (first differing field `sampling.temperature`).",
+    ),
+    "output": (
+        "model-call",
+        "The model's output differed on equal inputs; the comparator's kind of change: "
+        "the output alone (first differing field `fingerprint (tolerant, first-token-logprobs)`).",
+    ),
+    "batch": (
+        "model-call-batch",
+        "At this step's model call, the comparator's result is: could not compare: batch context differs: batch.size.",
+    ),
+    "decision": (
+        "decision",
+        "The policy decision differed: `permit` in the baseline, `deny` in the candidate. "
+        "The policy version differed: `v1` in the baseline, `v2` in the candidate.",
+    ),
+    "decision-same": (
+        "decision",
+        "The policy decision differed: `permit` in the baseline, `deny` in the candidate. "
+        "The policy version is the same in both: `v3`.",
+    ),
+    "decision-gone": (
+        "decision",
+        "The policy decision differed: `permit` in the baseline, `deny` in the candidate. "
+        "The policy version is not recorded.",
+    ),
     "not-kept": ("output-not-kept", "This step's output was not kept, so only its digest is compared."),
     "tool": (None, None),
 }
@@ -174,14 +250,23 @@ def test_a_tool_step_gets_no_line_and_its_page_is_otherwise_the_same(built, exam
 
 @pytest.mark.parametrize("word", ["caused", "because", "why"])
 def test_no_line_says_what_produced_the_difference(word, examined):
-    lines = [first_kind.INPUTS, first_kind.MODEL, first_kind.BATCH, first_kind.DECISION, first_kind.POLICY_SAME,
-             first_kind.POLICY_DIFFERS, first_kind.POLICY_NOT_RECORDED, first_kind.NOT_KEPT]
+    lines = [
+        first_kind.INPUTS,
+        first_kind.MODEL,
+        first_kind.BATCH,
+        first_kind.DECISION,
+        first_kind.POLICY_SAME,
+        first_kind.POLICY_DIFFERS,
+        first_kind.POLICY_NOT_RECORDED,
+        first_kind.NOT_KEPT,
+    ]
     examined(len(lines), "lines")
     assert not any(re.search(rf"\b{word}\b", s, re.I) for s in lines)
 
 
 def test_the_groups_are_the_comparator_s_own(examined):
     from onetrace.model_call.comparator import IDENTITY
+
     examined(len(IDENTITY), "identity fields")
     assert {first_kind.model_kind(f) for f in IDENTITY} == {first_kind.IDENTITY}
     assert first_kind.model_kind("engine.settings.x") == first_kind.ENGINE
@@ -193,6 +278,7 @@ def test_sabotage_without_the_inputs_check_the_inputs_pair_has_no_line(built, mo
     """With the inputs check off, the inputs pair says nothing: the check is what gives its line."""
     monkeypatch.setattr(first_kind, "_inputs_differ", lambda *a: False)
     from onetrace_console.render import read_diff
+
     c = built["comparisons"]["inputs"]
     report, _ = read_diff(c, built["store"])
     examined(1, "the inputs pair")
@@ -201,6 +287,7 @@ def test_sabotage_without_the_inputs_check_the_inputs_pair_has_no_line(built, mo
 
 def test_the_demo_s_input_pairs_carry_the_inputs_line(shared_demo, examined):
     from onetrace_console.store import Store
+
     store = Store(shared_demo["folder"] / "store" / "store")
     ids = {r.key: r.run_id for r in store.runs()}
     pages = shared_demo["folder"] / "store" / "pages" / "diff"
@@ -235,12 +322,19 @@ def test_the_demo_s_agent_pair_whose_difference_is_inside_its_sub_agent_has_no_i
     """P10: `total`, the agent step's one input from outside the run, is the same in both runs; the
     first difference is inside the sub-agent run, at its step `settle`, as the short answer says."""
     from onetrace_console.store import Store
+
     store = Store(shared_demo["folder"] / "store" / "store")
     ids = {r.key: r.run_id for r in store.runs()}
     pages = shared_demo["folder"] / "store" / "pages" / "diff"
-    (c,) = [c for c in store.comparisons()
-            if (ids.get(c.run_a), ids.get(c.run_b)) == ("pz-51-agent-baseline", "pz-53-agent-amount-changed")]
+    (c,) = [
+        c
+        for c in store.comparisons()
+        if (ids.get(c.run_a), ids.get(c.run_b)) == ("pz-51-agent-baseline", "pz-53-agent-amount-changed")
+    ]
     page = (pages / f"{c.key}.html").read_text(encoding="utf-8")
     examined(1, "P10's comparison page")
     assert _said(page)[0] != "inputs", _said(page)
-    assert first_kind.at_stage("agent_step", c, store) is None or first_kind.at_stage("agent_step", c, store)[0] != "inputs"
+    assert (
+        first_kind.at_stage("agent_step", c, store) is None
+        or first_kind.at_stage("agent_step", c, store)[0] != "inputs"
+    )

@@ -4,6 +4,7 @@ A run's answer and case pages end with the command that regenerates them. The vi
 `onetrace_console.viewer`, so the command must name that module: run as the page prints it, with the
 two placeholders filled in, it writes the same two pages again.
 """
+
 from __future__ import annotations
 
 import os

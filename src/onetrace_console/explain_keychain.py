@@ -10,6 +10,7 @@ this naming equal to 0.3's own `KEYRING_SERVICE` and `keyring_user`).
 stored, and the value goes no further than that test. No error from here carries it: each is said by
 its type alone.
 """
+
 from __future__ import annotations
 
 #: onetrace-explain 0.3's keychain service.
@@ -38,13 +39,13 @@ class Unreadable(Unavailable):
 def _keyring():
     """keyring, and the keychain it would use; Unavailable where there is none."""
     try:
-        import keyring
-        import keyring.errors  # noqa: F401
+        import keyring  # type: ignore[import-not-found]  # an optional library: no dependency file names it, and it ships no type information
+        import keyring.errors  # type: ignore[import-not-found]  # noqa: F401 - as above
     except ImportError as e:
         raise Unavailable("keyring is not installed in the Python this console runs from", type(e).__name__) from None
     try:
         backend = keyring.get_keyring()
-        from keyring.backends import fail
+        from keyring.backends import fail  # type: ignore[import-not-found]  # as above
     except Exception as e:  # noqa: BLE001 - said by its type, never its text
         raise Unavailable(f"keyring could not find a keychain ({type(e).__name__})", type(e).__name__) from None
     if isinstance(backend, fail.Keyring):
@@ -75,7 +76,7 @@ def stored(provider: str, base_url: str) -> bool:
 def remove(provider: str, base_url: str) -> None:
     """Take the provider's key out of the keychain; nothing where none is stored."""
     keyring = _keyring()
-    import keyring.errors
+
     try:
         keyring.delete_password(SERVICE, user(provider, base_url))
     except keyring.errors.PasswordDeleteError:

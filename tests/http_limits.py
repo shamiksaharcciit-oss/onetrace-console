@@ -11,6 +11,7 @@ only. Its time is the median of `RUNS` runs. A machine slower than the reference
 gives each request more time; a request that is slow for this machine still fails at its limit. The
 run's summary prints the measured time, the reference, and each limit used.
 """
+
 from __future__ import annotations
 
 import hashlib
@@ -18,7 +19,7 @@ import os
 import statistics
 import tempfile
 import time
-from functools import lru_cache
+from functools import cache
 
 #: The calibration's time on the machine the fixed limits were set on: the median of seven runs,
 #: 0.482 s, measured at a load of about 96 on 16 cores, declared rounded up.
@@ -49,7 +50,7 @@ def workload(folder: str) -> None:
         os.remove(path)
 
 
-@lru_cache(maxsize=None)
+@cache
 def calibration() -> float:
     """The workload's time on this machine, in seconds: the median of `RUNS` runs, measured once."""
     times = []
@@ -61,13 +62,16 @@ def calibration() -> float:
     return statistics.median(times)
 
 
-def scaled(fixed: float, measured: float, reference: float = REFERENCE_SECONDS,
-           ceiling_times: float = CEILING_TIMES) -> float:
+def scaled(
+    fixed: float, measured: float, reference: float = REFERENCE_SECONDS, ceiling_times: float = CEILING_TIMES
+) -> float:
     """`fixed` times `measured` over `reference`, never below `fixed` and never above `ceiling_times`
     times `fixed`. Refuses a limit, a time or a reference that is not above zero."""
     if not (fixed > 0 and measured > 0 and reference > 0 and ceiling_times >= 1):
-        raise ValueError(f"a limit needs a fixed limit, a measured time and a reference above zero "
-                         f"and a ceiling of at least 1 times: got {fixed}, {measured}, {reference}, {ceiling_times}")
+        raise ValueError(
+            f"a limit needs a fixed limit, a measured time and a reference above zero "
+            f"and a ceiling of at least 1 times: got {fixed}, {measured}, {reference}, {ceiling_times}"
+        )
     return min(fixed * ceiling_times, max(fixed, fixed * measured / reference))
 
 
@@ -83,6 +87,8 @@ def summary_lines() -> list[str]:
     if not USED:
         return []
     measured = calibration()
-    return [f"HTTP client limits: calibration {measured:.3f} s on this machine, reference {REFERENCE_SECONDS} s "
-            f"({measured / REFERENCE_SECONDS:.2f} times); floor each fixed limit, ceiling {CEILING_TIMES} times it",
-            "  " + "; ".join(f"{fixed:g} s -> {used:.1f} s" for fixed, used in sorted(USED.items()))]
+    return [
+        f"HTTP client limits: calibration {measured:.3f} s on this machine, reference {REFERENCE_SECONDS} s "
+        f"({measured / REFERENCE_SECONDS:.2f} times); floor each fixed limit, ceiling {CEILING_TIMES} times it",
+        "  " + "; ".join(f"{fixed:g} s -> {used:.1f} s" for fixed, used in sorted(USED.items())),
+    ]

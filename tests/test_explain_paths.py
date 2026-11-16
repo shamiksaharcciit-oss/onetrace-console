@@ -13,6 +13,7 @@ runs), through an audit hook, with the working folder of every process each of t
 nothing of the operating system's own limit, so it holds on any platform; on Windows with long paths
 off it is also a real run at the limit.
 """
+
 from __future__ import annotations
 
 import importlib.metadata
@@ -27,7 +28,7 @@ from tests.test_explain_panel import RAN_AT, _diff, _fake, _make, _panel, _text,
 #: Windows' longest file path and longest folder path, long paths off, NUL apart.
 FILE_MOST, FOLDER_MOST = 259, 247
 #: Every Python process the command or the console starts imports this first, from the import path.
-_HOOK = '''import os, sys
+_HOOK = """import os, sys
 _LOG = os.environ.get("EXPLAIN_PATHS_LOG")
 if _LOG:
     def _hook(event, args, _open=open):
@@ -40,7 +41,7 @@ if _LOG:
                     with _open(_LOG, "a", encoding="utf-8") as f:
                         f.write(event + "\\t" + os.path.abspath(os.fsdecode(a)) + "\\n")
     sys.addaudithook(_hook)
-'''
+"""
 #: This process's own hook, added once (an audit hook cannot be removed) and on only while a
 #: measurement runs.
 _SEEN: list[tuple[str, str]] | None = None
@@ -59,7 +60,7 @@ def _hook(event, args):
         if _SEEN is not None:
             _SEEN.append(("start", folder))
     if _SEEN is not None and event in ("open", "os.mkdir", "os.rename", "os.replace"):
-        for a in (args[:2] if event in ("os.rename", "os.replace") else args[:1]):
+        for a in args[:2] if event in ("os.rename", "os.replace") else args[:1]:
             if isinstance(a, (str, bytes, os.PathLike)):
                 _SEEN.append((event, os.path.abspath(os.fsdecode(a))))
 
@@ -76,8 +77,10 @@ def padded(tmp_path: Path, length: int) -> Path:
     """A folder whose path is exactly `length` characters."""
     room = length - len(str(tmp_path)) - 1
     if room < 1:
-        pytest.fail(f"the test's temporary folder is {len(str(tmp_path))} characters, too long to pad "
-                    f"a store folder to {length}: run the suite from a shorter folder")
+        pytest.fail(
+            f"the test's temporary folder is {len(str(tmp_path))} characters, too long to pad "
+            f"a store folder to {length}: run the suite from a shorter folder"
+        )
     root = tmp_path / ("p" * room)
     root.mkdir()
     assert len(str(root)) == length
@@ -92,6 +95,7 @@ def pair_at(root: Path, monkeypatch):
     from onetrace_console.store import Store
     from tests.test_checks import _require_installed
     from tests.test_compare import _deliver
+
     _require_installed()
     store = Store(root / "store")
     made = root.parent / "made"
@@ -107,10 +111,15 @@ def pair_at(root: Path, monkeypatch):
 def versions(explain_command) -> dict[str, str]:
     """The versions installed: onetrace-explain where the tests installed it, onetrace here."""
     _, lib = explain_command
-    found = [d.version for d in importlib.metadata.distributions(path=[str(lib)])
-             if d.metadata["Name"].lower().replace("_", "-") == "onetrace-explain"]
-    return {"onetrace-explain": found[0] if len(found) == 1 else repr(found),
-            "onetrace": importlib.metadata.version("onetrace")}
+    found = [
+        d.version
+        for d in importlib.metadata.distributions(path=[str(lib)])
+        if d.metadata["Name"].lower().replace("_", "-") == "onetrace-explain"
+    ]
+    return {
+        "onetrace-explain": found[0] if len(found) == 1 else repr(found),
+        "onetrace": importlib.metadata.version("onetrace"),
+    }
 
 
 def measured(tmp_path: Path, monkeypatch, explain_command, length: int | None = None) -> dict:
@@ -119,6 +128,7 @@ def measured(tmp_path: Path, monkeypatch, explain_command, length: int | None = 
     started in there, the deepest path, and the problems against Windows' limits."""
     global _SEEN
     from onetrace_console import explain
+
     root = padded(tmp_path, explain.LIMIT if length is None else length)
     store, comparison, config = pair_at(root, monkeypatch)
     hook = tmp_path / "hook"
@@ -139,31 +149,41 @@ def measured(tmp_path: Path, monkeypatch, explain_command, length: int | None = 
     finally:
         seen, _SEEN = _SEEN, None
     seen += [tuple(ln.split("\t", 1)) for ln in log.read_text(encoding="utf-8").splitlines()]
-    under = sorted({(event, p) for event, p in seen if p.startswith(str(root) + os.sep)},
-                   key=lambda e: -len(e[1]))
+    under = sorted({(event, p) for event, p in seen if p.startswith(str(root) + os.sep)}, key=lambda e: -len(e[1]))
     problems = []
     if got.get("exit") != "0" or shown.get("exit") != "0" or check.get("exit") is None:
         problems.append(f"the explanation, its packet or its check did not run: {tried(store, comparison)}")
     problems += [f"{len(p)} characters: {p}" for e, p in under if e != "start" and len(p) > FILE_MOST]
-    problems += [f"a folder of {len(p)} characters: {p}" for e, p in under
-                 if e == "os.mkdir" and len(p) > FOLDER_MOST]
-    problems += [f"a working folder of {len(p)} characters: {p}" for e, p in under
-                 if e == "start" and len(p) > WORKING_FOLDER_MOST]
+    problems += [f"a folder of {len(p)} characters: {p}" for e, p in under if e == "os.mkdir" and len(p) > FOLDER_MOST]
+    problems += [
+        f"a working folder of {len(p)} characters: {p}"
+        for e, p in under
+        if e == "start" and len(p) > WORKING_FOLDER_MOST
+    ]
     staging = [p for _, p in under if "_staging" in p and ".tmp" in p]
     if not staging:
         problems.append("no staged temporary file was seen: the measurement missed the command's deepest writes")
     starts = [p for e, p in under if e == "start"]
     paths = [p for e, p in under if e != "start"]
-    return {"root": root, "under": under, "deepest": len(paths[0]) if paths else 0, "problems": problems,
-            "starts": starts, "deepest_start": max((len(p) for p in starts), default=0)}
+    return {
+        "root": root,
+        "under": under,
+        "deepest": len(paths[0]) if paths else 0,
+        "problems": problems,
+        "starts": starts,
+        "deepest_start": max((len(p) for p in starts), default=0),
+    }
 
 
 def test_every_path_an_explanation_writes_fits_windows_limit_at_the_store_folder_limit(
-        tmp_path, monkeypatch, explain_command, explain_installed, examined):
+    tmp_path, monkeypatch, explain_command, explain_installed, examined
+):
     from onetrace_console import explain
+
     assert versions(explain_command) == explain.MEASURED, (
         f"measured with {explain.MEASURED}; installed {versions(explain_command)}: measure the new "
-        f"versions' parts below `{explain.REPORT}`, and set explain.MEASURED_BELOW from them")
+        f"versions' parts below `{explain.REPORT}`, and set explain.MEASURED_BELOW from them"
+    )
     got = measured(tmp_path, monkeypatch, explain_command)
     examined(len(got["under"]) - len(got["starts"]), "paths under a store folder at the limit")
     examined(len(got["starts"]), "working folders a process started in, under a store folder at the limit")
@@ -181,13 +201,21 @@ def limit_long_paths() -> int:
     verifier's, in the record's folder `<store>/<FOLDER>/<KEY_HEX hex>/<REPORT>/explain/<run id>`, from
     the layout's parts and the run id's measured length."""
     from onetrace_console import explain
-    return WORKING_FOLDER_MOST - (len("/store") + len(f"/{explain.FOLDER}/") + explain.KEY_HEX
-                                  + len(f"/{explain.REPORT}") + len("/explain/") + RUN_ID)
+
+    return WORKING_FOLDER_MOST - (
+        len("/store")
+        + len(f"/{explain.FOLDER}/")
+        + explain.KEY_HEX
+        + len(f"/{explain.REPORT}")
+        + len("/explain/")
+        + RUN_ID
+    )
 
 
 def _deeper_verifier(monkeypatch):
     """The sabotage: the verifier started one folder below the record's."""
     from onetrace_console import explain
+
     run = explain.subprocess.run
 
     def deeper(argv, *args, cwd=None, **kwargs):
@@ -195,26 +223,33 @@ def _deeper_verifier(monkeypatch):
             cwd = Path(cwd) / "d"
             cwd.mkdir(exist_ok=True)
         return run(argv, *args, cwd=cwd, **kwargs)
+
     monkeypatch.setattr(explain.subprocess, "run", deeper)
 
 
 def working_folder_problems(got: dict) -> list[str]:
-    return [p for p in got["problems"] if p.startswith(("a working folder", "the explanation, its packet",
-                                                         "no staged"))]
+    return [
+        p for p in got["problems"] if p.startswith(("a working folder", "the explanation, its packet", "no staged"))
+    ]
 
 
 def _long_paths_on_here():
     """Skip where Windows says long paths are off: at `limit_long_paths()` and over, the store's own
     files and the explanation's pass `FILE_MOST`."""
     from onetrace_console import explain
+
     if explain.long_paths() is False:
-        pytest.skip(f"at {limit_long_paths()} characters and over, the store's own files and the explanation's "
-                    f"pass {FILE_MOST}, which Windows with long paths off refuses; this runs where they are on")
+        pytest.skip(
+            f"at {limit_long_paths()} characters and over, the store's own files and the explanation's "
+            f"pass {FILE_MOST}, which Windows with long paths off refuses; this runs where they are on"
+        )
 
 
 def test_with_long_paths_on_every_process_starts_within_windows_limit_at_its_store_folder_limit(
-        tmp_path, monkeypatch, explain_command, explain_installed, examined):
+    tmp_path, monkeypatch, explain_command, explain_installed, examined
+):
     from onetrace_console import explain
+
     _long_paths_on_here()
     assert (explain.LIMIT_LONG_PATHS, explain.WORKING_FOLDER) == (limit_long_paths(), WORKING_FOLDER_MOST)
     got = measured(tmp_path, monkeypatch, explain_command, limit_long_paths())
@@ -224,8 +259,9 @@ def test_with_long_paths_on_every_process_starts_within_windows_limit_at_its_sto
     assert got["deepest_start"] == WORKING_FOLDER_MOST, (got["deepest_start"], got["starts"])
 
 
-def test_sabotage_the_verifier_started_one_folder_deeper_is_named(tmp_path, monkeypatch, explain_command,
-                                                                  explain_installed, examined):
+def test_sabotage_the_verifier_started_one_folder_deeper_is_named(
+    tmp_path, monkeypatch, explain_command, explain_installed, examined
+):
     _long_paths_on_here()
     _deeper_verifier(monkeypatch)
     outcome, named = caught(lambda: measured(tmp_path, monkeypatch, explain_command, limit_long_paths()))
@@ -276,8 +312,10 @@ def caught(measure) -> tuple[str, str]:
             folder = started[-1] if started else ""
             if len(folder) > WORKING_FOLDER_MOST:
                 return "refused", f"a working folder of {len(folder)} characters refused: {folder}"
-            return "not caught", (f"{type(e).__name__}, winerror {ERROR_DIRECTORY}, the last process start's "
-                                  f"working folder {len(folder)} characters: {folder or 'no process was started'}")
+            return "not caught", (
+                f"{type(e).__name__}, winerror {ERROR_DIRECTORY}, the last process start's "
+                f"working folder {len(folder)} characters: {folder or 'no process was started'}"
+            )
         path = os.fsdecode(e.filename) if e.filename is not None else ""
         windows = getattr(e, "winerror", None) == TOO_LONG or (os.name == "nt" and isinstance(e, FileNotFoundError))
         folder = _making_a_folder(e)
@@ -292,6 +330,7 @@ def caught(measure) -> tuple[str, str]:
 
 def test_sabotage_the_old_layout_is_named(tmp_path, monkeypatch, explain_command, explain_installed, examined):
     from onetrace_console import explain
+
     monkeypatch.setattr(explain, "FOLDER", "explanations")
     monkeypatch.setattr(explain, "KEY_HEX", 64)
     monkeypatch.setattr(explain, "REPORT", "report")
@@ -313,12 +352,14 @@ def _windows_error(path: str) -> OSError:
 def _mkdir(error):
     def mkdir():
         raise error
+
     return mkdir
 
 
 def _open(error):
     def open_file():
         raise error
+
     return open_file
 
 
@@ -334,11 +375,13 @@ def _directory_error() -> OSError:
 def _start(folder: str | None):
     """A process start in `folder`, refused as Windows refuses it: the start is seen (its audit
     event, as subprocess raises it before CreateProcess), then error 267 with no filename."""
+
     def start():
         _hooked()
         if folder is not None:
             sys.audit("subprocess.Popen", sys.executable, [sys.executable], folder, None)
         raise _directory_error()
+
     return start
 
 
@@ -372,26 +415,31 @@ def test_sabotage_of_the_sabotage_only_the_two_outcomes_count_as_caught(planted,
 
 # ------------------------------------------------------------------ one folder, one comparison
 
+
 def refused_problems(store, comparison, config) -> list[str]:
     """The layout, then a comparison folder whose `key` names another comparison: refused in words
     by every reader and every press, and nothing written into it."""
     from onetrace_console import explain
+
     out = []
     _fake(config, "mixed.json")
     got = explain.explain(comparison, store)
-    folder = Path(store.root) / explain.FOLDER / comparison.key[:explain.KEY_HEX]
+    folder = Path(store.root) / explain.FOLDER / comparison.key[: explain.KEY_HEX]
     if got.get("exit") != "0" or not (folder / explain.REPORT / "explain").is_dir():
-        out.append(f"the explanation is not under {explain.FOLDER}/<16 hex>/{explain.REPORT}: "
-                   f"{tried(store, comparison)}")
+        out.append(
+            f"the explanation is not under {explain.FOLDER}/<16 hex>/{explain.REPORT}: {tried(store, comparison)}"
+        )
     if (folder / explain.KEY_FILE).read_text(encoding="ascii").strip() != comparison.key:
         out.append("the folder's key file does not hold the comparison's full key")
-    other = comparison.key[:explain.KEY_HEX] + "0" * (64 - explain.KEY_HEX)
-    other = other if other != comparison.key else comparison.key[:explain.KEY_HEX] + "1" * (64 - explain.KEY_HEX)
+    other = comparison.key[: explain.KEY_HEX] + "0" * (64 - explain.KEY_HEX)
+    other = other if other != comparison.key else comparison.key[: explain.KEY_HEX] + "1" * (64 - explain.KEY_HEX)
     (folder / explain.KEY_FILE).write_text(other + "\n", encoding="ascii")
     before = sorted(str(p) for p in folder.rglob("*"))
-    for name, press in (("Explain", lambda: explain.explain(comparison, store)),
-                        ("Show the packet", lambda: explain.packet(comparison, store)),
-                        ("the attempts", lambda: explain.attempts(store, comparison.key))):
+    for name, press in (
+        ("Explain", lambda: explain.explain(comparison, store)),
+        ("Show the packet", lambda: explain.packet(comparison, store)),
+        ("the attempts", lambda: explain.attempts(store, comparison.key)),
+    ):
         try:
             press()
             out.append(f"{name}: not refused")
@@ -406,8 +454,9 @@ def refused_problems(store, comparison, config) -> list[str]:
     return out
 
 
-def test_a_folder_holding_another_comparison_s_key_is_refused_in_words(tmp_path, monkeypatch,
-                                                                        explain_installed, examined):
+def test_a_folder_holding_another_comparison_s_key_is_refused_in_words(
+    tmp_path, monkeypatch, explain_installed, examined
+):
     store, comparison, config = pair_at(padded(tmp_path, len(str(tmp_path)) + 2), monkeypatch)
     examined(1, "comparison folder")
     assert refused_problems(store, comparison, config) == []
@@ -415,9 +464,11 @@ def test_a_folder_holding_another_comparison_s_key_is_refused_in_words(tmp_path,
 
 def test_sabotage_the_key_check_skipped_is_named(tmp_path, monkeypatch, explain_installed, examined):
     from onetrace_console import explain
+
     store, comparison, config = pair_at(padded(tmp_path, len(str(tmp_path)) + 2), monkeypatch)
-    monkeypatch.setattr(explain, "folder_of",
-                        lambda store, key: Path(store.root) / explain.FOLDER / key[:explain.KEY_HEX])
+    monkeypatch.setattr(
+        explain, "folder_of", lambda store, key: Path(store.root) / explain.FOLDER / key[: explain.KEY_HEX]
+    )
     examined(1, "comparison folder, the check skipped")
     assert refused_problems(store, comparison, config) != []
 
@@ -425,8 +476,10 @@ def test_sabotage_the_key_check_skipped_is_named(tmp_path, monkeypatch, explain_
 # ------------------------------------------------------------------ the line before the command runs
 
 #: The panel's line, word for word as ruled; N and the limit filled in.
-RULED = ("This store's folder is {n} characters long. On Windows with long paths off, Explain needs it "
-         "to be {limit} or fewer. Turn on long paths, or move the store to a shorter folder.")
+RULED = (
+    "This store's folder is {n} characters long. On Windows with long paths off, Explain needs it "
+    "to be {limit} or fewer. Turn on long paths, or move the store to a shorter folder."
+)
 
 
 def line_problems(store, comparison, config, monkeypatch, *, enabled: bool) -> list[str]:
@@ -434,6 +487,7 @@ def line_problems(store, comparison, config, monkeypatch, *, enabled: bool) -> l
     long paths off, the ruled line, word for word, and the command never run; with them on, no line
     and the buttons."""
     from onetrace_console import explain
+
     monkeypatch.setattr(explain, "_on_windows", lambda: True)
     monkeypatch.setattr(explain, "long_paths", lambda: enabled)
     out = []
@@ -443,13 +497,15 @@ def line_problems(store, comparison, config, monkeypatch, *, enabled: bool) -> l
     panel = _panel(_diff(store, comparison))
     want = RULED.format(n=n, limit=explain.LIMIT)
     if enabled:
-        if "data-explain=\"too-long\"" in panel or "Explain</button>" not in panel:
+        if 'data-explain="too-long"' in panel or "Explain</button>" not in panel:
             out.append("long paths on: the line is shown, or Explain is not")
         return out
     if _text(panel).removeprefix(explain.TITLE).strip() != want:
         out.append(f"the panel: {_text(panel)!r}, not {want!r}")
-    for name, press in (("Explain", lambda: explain.explain(comparison, store)),
-                        ("Show the packet", lambda: explain.packet(comparison, store))):
+    for name, press in (
+        ("Explain", lambda: explain.explain(comparison, store)),
+        ("Show the packet", lambda: explain.packet(comparison, store)),
+    ):
         try:
             press()
             out.append(f"{name}: the command was run")
@@ -463,8 +519,10 @@ def line_problems(store, comparison, config, monkeypatch, *, enabled: bool) -> l
 
 @pytest.mark.parametrize("enabled", [False, True], ids=["long paths off", "long paths on"])
 def test_over_the_limit_on_windows_the_panel_says_so_before_the_command_runs(
-        tmp_path, monkeypatch, explain_installed, examined, enabled):
+    tmp_path, monkeypatch, explain_installed, examined, enabled
+):
     from onetrace_console import explain
+
     store, comparison, config = pair_at(padded(tmp_path, explain.LIMIT + 1), monkeypatch)
     examined(1, "comparison page")
     assert line_problems(store, comparison, config, monkeypatch, enabled=enabled) == []
@@ -472,6 +530,7 @@ def test_over_the_limit_on_windows_the_panel_says_so_before_the_command_runs(
 
 def test_at_the_limit_the_panel_offers_explain(tmp_path, monkeypatch, explain_installed, examined):
     from onetrace_console import explain
+
     store, comparison, config = pair_at(padded(tmp_path, explain.LIMIT), monkeypatch)
     config.write_text('[model]\nprovider = "fake"\nname = "reply.json"\n', encoding="utf-8")
     monkeypatch.setattr(explain, "_on_windows", lambda: True)
@@ -483,6 +542,7 @@ def test_at_the_limit_the_panel_offers_explain(tmp_path, monkeypatch, explain_in
 
 def test_sabotage_the_line_s_words_changed_is_named(tmp_path, monkeypatch, explain_installed, examined):
     from onetrace_console import explain
+
     store, comparison, config = pair_at(padded(tmp_path, explain.LIMIT + 1), monkeypatch)
     monkeypatch.setattr(explain, "TOO_LONG", explain.TOO_LONG.replace("Turn on long paths", "Enable long paths"))
     examined(1, "comparison page")
@@ -490,9 +550,11 @@ def test_sabotage_the_line_s_words_changed_is_named(tmp_path, monkeypatch, expla
 
 
 #: The panel's line past the working-folder bound, word for word as ruled; N and the limits filled in.
-RULED_EVEN_ON = ("This store's folder is {n} characters long. Explain needs it to be {limit} or fewer, even with "
-                 "long paths on: Windows starts no program in a folder of more than {most} characters. Move the "
-                 "store to a shorter folder.")
+RULED_EVEN_ON = (
+    "This store's folder is {n} characters long. Explain needs it to be {limit} or fewer, even with "
+    "long paths on: Windows starts no program in a folder of more than {most} characters. Move the "
+    "store to a shorter folder."
+)
 
 
 def even_on_problems(store, comparison, monkeypatch, *, enabled: bool) -> list[str]:
@@ -500,20 +562,23 @@ def even_on_problems(store, comparison, monkeypatch, *, enabled: bool) -> list[s
     `limit_long_paths()` has the ruled line, word for word, and the command never runs; at it, with
     long paths on, Explain is offered."""
     from onetrace_console import explain
+
     monkeypatch.setattr(explain, "_on_windows", lambda: True)
     monkeypatch.setattr(explain, "long_paths", lambda: enabled)
     n = len(str(Path(store.root).parent))
     panel = _panel(_diff(store, comparison))
     out = []
     if n <= limit_long_paths():
-        if "data-explain=\"too-long\"" in panel or "Explain</button>" not in panel:
+        if 'data-explain="too-long"' in panel or "Explain</button>" not in panel:
             out.append(f"at {n}, long paths {'on' if enabled else 'off'}: Explain is not offered: {_text(panel)!r}")
         return out
     want = RULED_EVEN_ON.format(n=n, limit=limit_long_paths(), most=WORKING_FOLDER_MOST)
     if _text(panel).removeprefix(explain.TITLE).strip() != want:
         out.append(f"the panel: {_text(panel)!r}, not {want!r}")
-    for name, press in (("Explain", lambda: explain.explain(comparison, store)),
-                        ("Show the packet", lambda: explain.packet(comparison, store))):
+    for name, press in (
+        ("Explain", lambda: explain.explain(comparison, store)),
+        ("Show the packet", lambda: explain.packet(comparison, store)),
+    ):
         try:
             press()
             out.append(f"{name}: the command was run")
@@ -527,10 +592,14 @@ def even_on_problems(store, comparison, monkeypatch, *, enabled: bool) -> list[s
     return out
 
 
-@pytest.mark.parametrize("length, enabled", [(0, True), (1, True), (1, False)],
-                         ids=["at the bound, long paths on", "one over, long paths on", "one over, long paths off"])
+@pytest.mark.parametrize(
+    "length, enabled",
+    [(0, True), (1, True), (1, False)],
+    ids=["at the bound, long paths on", "one over, long paths on", "one over, long paths off"],
+)
 def test_past_the_working_folder_bound_the_panel_says_so_long_paths_on_or_off(
-        tmp_path, monkeypatch, explain_installed, examined, length, enabled):
+    tmp_path, monkeypatch, explain_installed, examined, length, enabled
+):
     _long_paths_on_here()
     store, comparison, config = pair_at(padded(tmp_path, limit_long_paths() + length), monkeypatch)
     examined(1, "comparison page")
@@ -539,20 +608,25 @@ def test_past_the_working_folder_bound_the_panel_says_so_long_paths_on_or_off(
 
 def test_sabotage_the_bound_s_line_words_changed_is_named(tmp_path, monkeypatch, explain_installed, examined):
     from onetrace_console import explain
+
     _long_paths_on_here()
     store, comparison, config = pair_at(padded(tmp_path, limit_long_paths() + 1), monkeypatch)
-    monkeypatch.setattr(explain, "TOO_LONG_EVEN_ON", explain.TOO_LONG_EVEN_ON.replace("Move the store", "Move your store"))
+    monkeypatch.setattr(
+        explain, "TOO_LONG_EVEN_ON", explain.TOO_LONG_EVEN_ON.replace("Move the store", "Move your store")
+    )
     examined(1, "comparison page")
     assert even_on_problems(store, comparison, monkeypatch, enabled=True) != []
 
 
 def test_long_paths_is_read_from_the_registry_on_windows_only(examined):
     from onetrace_console import explain
+
     examined(1, "setting")
     if os.name != "nt":
         assert explain.long_paths() is None
         return
     import winreg
+
     with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, r"SYSTEM\CurrentControlSet\Control\FileSystem") as k:
         held = winreg.QueryValueEx(k, "LongPathsEnabled")[0]
     assert explain.long_paths() is (held == 1)

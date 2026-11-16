@@ -1,4 +1,4 @@
-"""Per-ingester bearer tokens (design note §1 item 11).
+"""Per-ingester bearer tokens: a machine credential for delivery, never a session.
 
 A token is a machine credential, never a cookie: random (`secrets`), shown once
 at creation and never again, stored only as a hash, checked with
@@ -19,17 +19,19 @@ the correct tool for a high-entropy secret; the security property this table
 needs is "the raw token is never stored," which sha256 gives exactly as well as
 scrypt would, at a fraction of the CPU cost.
 """
+
 from __future__ import annotations
 
 import hashlib
-from onetrace_console.bounded_json import load_json_bounded
 import hmac
 import json
 import re
 import secrets
 from dataclasses import dataclass
+from datetime import UTC
 from pathlib import Path
 
+from onetrace_console.bounded_json import load_json_bounded
 from onetrace_console.store import _atomic_write
 
 #: 256 bits, matching the session id / CSRF token sizing this codebase already uses.
@@ -50,20 +52,30 @@ class TokenRecord:
     revoked: bool
 
     def to_json(self) -> str:
-        return json.dumps(
-            {"token_id": self.token_id, "principal": self.principal,
-             "hash_hex": self.hash_hex, "created_at": self.created_at,
-             "revoked": self.revoked},
-            sort_keys=True, indent=1) + "\n"
+        return (
+            json.dumps(
+                {
+                    "token_id": self.token_id,
+                    "principal": self.principal,
+                    "hash_hex": self.hash_hex,
+                    "created_at": self.created_at,
+                    "revoked": self.revoked,
+                },
+                sort_keys=True,
+                indent=1,
+            )
+            + "\n"
+        )
 
     @staticmethod
-    def from_json(text: str) -> "TokenRecord":
+    def from_json(text: str) -> TokenRecord:
         return TokenRecord(**load_json_bounded(text, "a token record"))
 
 
 def _now_iso() -> str:
-    from datetime import datetime, timezone
-    return datetime.now(timezone.utc).isoformat(timespec="seconds")
+    from datetime import datetime
+
+    return datetime.now(UTC).isoformat(timespec="seconds")
 
 
 def _hash_token(raw: str) -> str:
@@ -76,6 +88,7 @@ class TokenStore:
     `AccountStore` already uses, and for the same reason: a token is mutated
     (revoked), which a content-addressed name cannot represent.
     """
+
     root: Path
 
     def __post_init__(self) -> None:
@@ -93,12 +106,13 @@ class TokenStore:
         if not _PRINCIPAL_RE.match(principal):
             raise TokenError(
                 f"{principal!r} is not a usable principal name: lowercase letters, "
-                f"digits, '_' or '-', starting with a letter, 2-64 characters.")
+                f"digits, '_' or '-', starting with a letter, 2-64 characters."
+            )
         token_id = secrets.token_hex(8)
         raw = secrets.token_urlsafe(TOKEN_BYTES)
-        record = TokenRecord(token_id=token_id, principal=principal,
-                             hash_hex=_hash_token(raw), created_at=_now_iso(),
-                             revoked=False)
+        record = TokenRecord(
+            token_id=token_id, principal=principal, hash_hex=_hash_token(raw), created_at=_now_iso(), revoked=False
+        )
         _atomic_write(self._path(token_id), record.to_json().encode("utf-8"))
         return record, raw
 
@@ -116,9 +130,13 @@ class TokenStore:
         record = self.get(token_id)
         if record is None:
             return False
-        revoked = TokenRecord(token_id=record.token_id, principal=record.principal,
-                              hash_hex=record.hash_hex, created_at=record.created_at,
-                              revoked=True)
+        revoked = TokenRecord(
+            token_id=record.token_id,
+            principal=record.principal,
+            hash_hex=record.hash_hex,
+            created_at=record.created_at,
+            revoked=True,
+        )
         _atomic_write(self._path(token_id), revoked.to_json().encode("utf-8"))
         return True
 

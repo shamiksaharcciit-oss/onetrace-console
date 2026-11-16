@@ -1,0 +1,49 @@
+{
+ "checks": [
+  {
+   "check": "match",
+   "run": "candidate"
+  },
+  {
+   "check": "text",
+   "node": "calibrate"
+  },
+  {
+   "check": "text",
+   "node": "calibrate"
+  },
+  {
+   "check": "reproduce",
+   "node": "calibrate",
+   "run": "candidate"
+  }
+ ],
+ "checks_dropped": {},
+ "claims": [
+  {
+   "cites": [
+    "comparison/verdict",
+    "node/calibrate/input/readings.json",
+    "node/readings/output/readings.json"
+   ],
+   "kind": "lead",
+   "text": "The first difference is at the `calibrate` node; all upstream data (`readings.json`) is identical between runs, so the divergence originates inside `calibrate` itself."
+  },
+  {
+   "cites": [
+    "node/readings",
+    "node/readings/instrument",
+    "node/readings/input/readings.csv",
+    "node/readings/output/readings.json"
+   ],
+   "kind": "ruled out",
+   "text": "The `readings` node is identical in both runs (same instrument, same input, same output), so no investigation is needed there."
+  }
+ ],
+ "dropped": {
+  "quotes a value its cites don't hold": "4"
+ },
+ "label": "Suggested explanation \u2014 AI-generated, may be wrong",
+ "model": "anthropic:claude-sonnet-4-6",
+ "record": "2026-11-10T16-09-20.577045Z"
+}

@@ -30,6 +30,7 @@ compared on a comparison's page (`model_call_compare`).
 Where the record names its model files (`model.files_digest`, observed or declared), the other runs
 whose records name the same value are listed, each linked to its step.
 """
+
 from __future__ import annotations
 
 import hashlib
@@ -40,6 +41,10 @@ from onetrace_console.bounded_json import TooDeep, load_json_bounded
 from onetrace_console.words import escape
 
 FORMAT = "model-call-record/1.0"
+#: The formats this console reads: 1.0, and 1.1, which onetrace 0.7 writes for a call captured at L1, L2 or L3 (its
+#: steps file). Each is held to the installed onetrace's own `validate`.
+FORMATS = (FORMAT, "model-call-record/1.1")
+READS = "model-call-record/1.0 and model-call-record/1.1"
 LABEL = "Model-call record, format `model-call-record/1.0`: shown as written."
 HEADING = "Model-call records"
 #: An output named like a model-call record, in any format this console has met: what the reader looks
@@ -47,16 +52,22 @@ HEADING = "Model-call records"
 NAME = re.compile(r"model_call(?:\.(?:0|[1-9][0-9]*))?\.json")
 #: The largest record read; a record is one call's fields, a few kilobytes.
 MOST_BYTES = 1 << 20
-NOT_A_RECORD_NAME = ("its name is not a record's name in model-call-record/1.0, which names a step's "
-                     "records model_call.json, then model_call.2.json, model_call.3.json and on")
+NOT_A_RECORD_NAME = (
+    "its name is not a record's name in model-call-record/1.0, which names a step's "
+    "records model_call.json, then model_call.2.json, model_call.3.json and on"
+)
 STEPS_TAKEN = "per-step capture: {name}"
 STEPS_NOT_TAKEN = "per-step capture: not taken"
 #: The token timeline's words.
 TIMELINE_HEADING = "Token timeline"
-TIMELINE_LABEL = ("Each decode step's chosen token, as the steps file holds it: token ids, not text. The "
-                  "file is the model's output (classed model-generated); this console decodes it only on a "
-                  "local console, with a tokenizer whose files match the record's tokenizer.digest.")
+TIMELINE_LABEL = (
+    "Each decode step's chosen token, as the steps file holds it: token ids, not text. The "
+    "file is the model's output (classed model-generated); this console decodes it only on a "
+    "local console, with a tokenizer whose files match the record's tokenizer.digest."
+)
 TIMELINE_NOT_SHOWN = "Token timeline not shown: {why}."
+#: A hosted capture's steps file holds the provider's tokens as text, not ids: no timeline of ids.
+HOSTED_STEPS = "a hosted capture's steps file holds the provider's tokens as text, not token ids"
 STEPS_HELD_NOT_SHOWN = "Also in the steps file, not shown by this console: {keys}."
 STEPS_LEVEL = "capture level, as the steps file names it: {level}"
 #: The largest steps file read: one id per decode step.
@@ -70,8 +81,10 @@ SAME_FILES = "Other runs whose model-call records name the same model files, {fi
 SAME_FILES_NONE = "No other run's model-call record names the same model files, {field} {value}"
 FILES_FIELD = "model.files_digest"
 #: On a run whose model-call records are in a draft format: one line, near the top of its page.
-DRAFT_LINE = ("Recorded by an earlier release, before model-call-record/1.0: this run's model-call records "
-              "are in the draft format {formats}, and the run is kept as it was recorded, unchanged.")
+DRAFT_LINE = (
+    "Recorded by an earlier release, before model-call-record/1.0: this run's model-call records "
+    "are in the draft format {formats}, and the run is kept as it was recorded, unchanged."
+)
 #: A step's output that is a model-call record links to its panel on the same page.
 RECORD_LINK = "the model-call record, as read above"
 #: The run page's link from such an output to its record's section on the step's page.
@@ -79,11 +92,15 @@ RUN_RECORD_LINK = "the model-call record, on its step's page"
 #: The schema copy (see above): its file in this package, its sha256, and where it came from.
 SCHEMA_FILE = "_received/model_call_record.schema.json"
 SCHEMA_SHA256 = "877f40cb6fde322adf321b8b0e4860ccc5ec63db24983bb531f31d5bd2d76ab6"
-SCHEMA_SOURCE = ("docs/model_call_record.schema.json in onetrace-0.6.0.tar.gz (sha256 "
-                 "abad114580f0d82dc35f44011d9644ca6bc2eb42ef309d0ce5994af6dcb17964), copied byte for byte")
+SCHEMA_SOURCE = (
+    "docs/model_call_record.schema.json in onetrace-0.6.0.tar.gz (sha256 "
+    "abad114580f0d82dc35f44011d9644ca6bc2eb42ef309d0ce5994af6dcb17964), copied byte for byte"
+)
 #: The panel's one line on where its groups and descriptions come from.
-SCHEMA_NOTE = ("Field groups and descriptions: model_call_record.schema.json from the onetrace 0.6.0 "
-               "source package, copied unchanged; the record itself is checked by the installed onetrace.")
+SCHEMA_NOTE = (
+    "Field groups and descriptions: model_call_record.schema.json from the onetrace 0.6.0 "
+    "source package, copied unchanged; the record itself is checked by the installed onetrace."
+)
 
 
 class Refused(ValueError):
@@ -93,11 +110,13 @@ class Refused(ValueError):
 def _sdk():
     """The installed onetrace's model-call package: the format's rules, never a copy of them."""
     from onetrace import model_call
+
     return model_call
 
 
 def is_record_name(name: str) -> bool:
     from onetrace.model_call import naming
+
     return naming.is_record_name(name)
 
 
@@ -122,8 +141,9 @@ def read(raw: bytes) -> dict:
     except UnicodeDecodeError:
         raise Refused("the record is not UTF-8") from None
     try:
-        record = load_json_bounded(text, "the model-call record", "show", object_pairs_hook=_no_repeats,
-                                   parse_constant=_no_constant)
+        record = load_json_bounded(
+            text, "the model-call record", "show", object_pairs_hook=_no_repeats, parse_constant=_no_constant
+        )
     except Refused:
         raise
     except TooDeep:
@@ -132,10 +152,13 @@ def read(raw: bytes) -> dict:
         raise Refused("the record is not JSON") from None
     if not isinstance(record, dict):
         raise Refused("the record is not a JSON object")
-    if record.get("format") != FORMAT:
+    if record.get("format") not in FORMATS:
         said = record.get("format")
-        raise Refused(f"the record's format is {json.dumps(said)}, not {FORMAT}; this console reads {FORMAT} only"
-                      if said is not None else f"the record names no format; this console reads {FORMAT}")
+        raise Refused(
+            f"the record's format is {json.dumps(said)}, not one this console reads; it reads {READS}"
+            if said is not None
+            else f"the record names no format; this console reads {READS}"
+        )
     sdk = _sdk()
     try:
         sdk.validate(record)
@@ -153,17 +176,24 @@ def schema_labels() -> dict:
     global _LABELS
     if _LABELS is None:
         from importlib.resources import files
+
         raw = files("onetrace_console").joinpath(SCHEMA_FILE).read_bytes()
         schema = load_json_bounded(raw.decode("utf-8"), "the model-call schema copy", "read")
-        _LABELS = {"groups": {str(t): [str(f) for f in fs] for t, fs in schema["x-groups"].items()},
-                   "descriptions": {str(k): str(v["description"]) for k, v in schema["properties"].items()
-                                    if isinstance(v, dict) and "description" in v}}
+        _LABELS = {
+            "groups": {str(t): [str(f) for f in fs] for t, fs in schema["x-groups"].items()},
+            "descriptions": {
+                str(k): str(v["description"])
+                for k, v in schema["properties"].items()
+                if isinstance(v, dict) and "description" in v
+            },
+        }
     return _LABELS
 
 
 def _values(v) -> str:
     """A value as written: a fingerprint short with its fold, a list one per line."""
     from onetrace_console.trace_panel import code_or_fold
+
     if isinstance(v, list):
         return "".join(f"<div>{code_or_fold(str(x))}</div>" for x in v)
     return code_or_fold(str(v))
@@ -172,39 +202,47 @@ def _values(v) -> str:
 def _name_cell(field: str) -> str:
     """A field's name, and the format's description of it one fold away (from the schema copy)."""
     about = schema_labels()["descriptions"].get(field)
-    fold = (f'<details class="about" data-about="{escape(field)}"><summary>{escape(ABOUT)}</summary>'
-            f"<p>{escape(about)}</p></details>") if about else ""
+    fold = (
+        (
+            f'<details class="about" data-about="{escape(field)}"><summary>{escape(ABOUT)}</summary>'
+            f"<p>{escape(about)}</p></details>"
+        )
+        if about
+        else ""
+    )
     return f"<td><code>{escape(field)}</code>{fold}</td>"
 
 
 def _shown(field: str, v) -> str:
     """One field: its name, state, value(s) and the record's reason, each as written."""
     if not isinstance(v, dict) or "status" not in v:
-        return (f'<tr data-field="{escape(field)}">{_name_cell(field)}<td></td>'
-                f'<td>{_values(v)}</td><td></td></tr>')
+        return f'<tr data-field="{escape(field)}">{_name_cell(field)}<td></td><td>{_values(v)}</td><td></td></tr>'
     shown = _values(v["value"]) if "value" in v else ""
     if "declared" in v:
-        shown += f'<div>declared {_values(v["declared"])}</div>'
+        shown += f"<div>declared {_values(v['declared'])}</div>"
     if "observed_value" in v:
-        shown += f'<div>observed {_values(v["observed_value"])}</div>'
-    return (f'<tr data-field="{escape(field)}" data-state="{escape(str(v["status"]))}">{_name_cell(field)}'
-            f'<td>{escape(str(v["status"]))}</td><td>{shown}</td>'
-            f'<td class="reason">{escape(str(v.get("source", "")))}</td></tr>')
+        shown += f"<div>observed {_values(v['observed_value'])}</div>"
+    return (
+        f'<tr data-field="{escape(field)}" data-state="{escape(str(v["status"]))}">{_name_cell(field)}'
+        f"<td>{escape(str(v['status']))}</td><td>{shown}</td>"
+        f'<td class="reason">{escape(str(v.get("source", "")))}</td></tr>'
+    )
 
 
 def _fingerprints(items: list) -> str:
     rows = "".join(
         f'<tr data-field="fingerprints[{n}]" data-state="{escape(str(f["value"]["status"]))}"><td><code>'
-        f'fingerprints[{n}]</code> {escape(f["form"])} over {escape(f["quantity"])}, k {escape(f["k"])},'
-        f' decimals {escape(f["decimals"])}</td><td>{escape(str(f["value"]["status"]))}</td>'
-        f'<td>{_values(f["value"]["value"]) if "value" in f["value"] else ""}</td>'
-        f'<td class="reason">{escape(str(f["value"].get("source", "")))}</td></tr>' for n, f in enumerate(items))
+        f"fingerprints[{n}]</code> {escape(f['form'])} over {escape(f['quantity'])}, k {escape(f['k'])},"
+        f" decimals {escape(f['decimals'])}</td><td>{escape(str(f['value']['status']))}</td>"
+        f"<td>{_values(f['value']['value']) if 'value' in f['value'] else ''}</td>"
+        f'<td class="reason">{escape(str(f["value"].get("source", "")))}</td></tr>'
+        for n, f in enumerate(items)
+    )
     return rows
 
 
 def _group_row(title: str) -> str:
-    return (f'<tr class="group" data-group="{escape(title)}"><th colspan="4" scope="colgroup">'
-            f"{escape(title)}</th></tr>")
+    return f'<tr class="group" data-group="{escape(title)}"><th colspan="4" scope="colgroup">{escape(title)}</th></tr>'
 
 
 def grouped(record: dict) -> list[tuple[str, list[str]]]:
@@ -227,25 +265,41 @@ def linked_steps(steps: tuple, paged: set[str]) -> tuple:
     """The run page's steps, each output named like a record (`NAME`) linked to its section on its
     step's page, as that page's own list links it; a step with no page of its own is left as it is."""
     from dataclasses import replace
+
     from onetrace_console.stage_pages import stage_page
-    return tuple(replace(s, outputs=tuple(
-        replace(o, href=f"{stage_page(s.index)}#{anchor(o.name)}", link=RUN_RECORD_LINK)
-        if NAME.fullmatch(o.name) else o for o in s.outputs)) if s.index in paged else s for s in steps)
+
+    return tuple(
+        replace(
+            s,
+            outputs=tuple(
+                replace(o, href=f"{stage_page(s.index)}#{anchor(o.name)}", link=RUN_RECORD_LINK)
+                if NAME.fullmatch(o.name)
+                else o
+                for o in s.outputs
+            ),
+        )
+        if s.index in paged
+        else s
+        for s in steps
+    )
 
 
 def decode_anchor(name: str, step: int) -> str:
     """A decode-step row's id on its step's page."""
-    return f"decode-{anchor(name)[len('model-call-'):]}-{step}"
+    return f"decode-{anchor(name)[len('model-call-') :]}-{step}"
 
 
 _ID = re.compile(r"0|[1-9][0-9]*")
 
 
 def read_steps(receipt: dict, receipt_file: str, name: str, record: dict, read_file) -> dict:
-    """The steps file a record names: {"file", "token_ids", "level", "other"}; `Refused` with the
-    reason where it is not read. Its bytes must match its receipt's digest and the record's `steps`."""
+    """The steps file a record names: {"file", "token_ids", "level", "other", "doc"}; `Refused` with the
+    reason where it is not read. Its bytes must match its receipt's digest and the record's `steps`. `doc` is the
+    whole file as read; a hosted capture's file holds `steps`, not `token_ids`."""
     from onetrace.model_call import naming
+
     from onetrace_console.stage_pages import _artifact_path
+
     said = record.get("steps")
     if not isinstance(said, dict) or said.get("status") != "observed":
         raise Refused(f"the record's steps field is {said.get('status') if isinstance(said, dict) else 'absent'}")
@@ -264,18 +318,34 @@ def read_steps(receipt: dict, receipt_file: str, name: str, record: dict, read_f
     if len(blob) > STEPS_MOST_BYTES:
         raise Refused(f"the steps file is {len(blob)} bytes, over the {STEPS_MOST_BYTES} this reader reads")
     try:
-        doc = load_json_bounded(blob.decode("utf-8"), "the steps file", "show", object_pairs_hook=_no_repeats,
-                                parse_constant=_no_constant)
+        doc = load_json_bounded(
+            blob.decode("utf-8"), "the steps file", "show", object_pairs_hook=_no_repeats, parse_constant=_no_constant
+        )
     except Refused:
         raise
     except (UnicodeDecodeError, TooDeep, ValueError, RecursionError):
         raise Refused("the steps file is not JSON this reader reads") from None
-    ids = doc.get("token_ids") if isinstance(doc, dict) else None
+    if not isinstance(doc, dict):
+        raise Refused("the steps file is not a JSON object")
+    level = doc.get("level")
+    if isinstance(level, str) and level.endswith("-hosted") and isinstance(doc.get("steps"), list):
+        return {
+            "file": file,
+            "token_ids": None,
+            "level": level,
+            "other": sorted(k for k in doc if k not in ("steps", "level")),
+            "doc": doc,
+        }
+    ids = doc.get("token_ids")
     if not isinstance(ids, list) or not all(isinstance(i, str) and _ID.fullmatch(i) for i in ids):
         raise Refused("the steps file holds no token_ids list of decimal strings")
-    level = doc.get("level")
-    return {"file": file, "token_ids": ids, "level": level if isinstance(level, str) else "",
-            "other": sorted(k for k in doc if k not in ("token_ids", "level"))}
+    return {
+        "file": file,
+        "token_ids": ids,
+        "level": level if isinstance(level, str) else "",
+        "other": sorted(k for k in doc if k not in ("token_ids", "level")),
+        "doc": doc,
+    }
 
 
 def _as_text(record: dict | None, searched=None) -> tuple:
@@ -283,6 +353,7 @@ def _as_text(record: dict | None, searched=None) -> tuple:
     or with no record, none and nothing said (`token_text`)."""
     from onetrace_console import token_text
     from onetrace_console.frame import rendering_public, tokenizers
+
     if record is None or rendering_public():
         return None, ""
     dec, why, refused = token_text.decoder(record, tokenizers())
@@ -293,9 +364,22 @@ def _as_text(record: dict | None, searched=None) -> tuple:
     #: it only where its files hash to that digest (`token_upload`): a local console's.
     want = token_text.recorded_digest(record)
     from onetrace_console import token_upload
-    pick = token_upload.picker(want) if want is not None else ""
-    return None, (f'<p data-token-text="not-shown">{escape(token_text.CANNOT.format(why=why))}</p>'
-                  + "".join(f'<p data-tokenizer-refused>{r}</p>' for r in refused) + pick)
+
+    if want is None:
+        pick = ""
+    elif want in token_upload.example_digests():
+        #: Example data the demo's builder constructed: no real tokenizer's files match it, so no picker.
+        pick = f"<p data-tokenizer-example>{escape(token_upload.EXAMPLE)}</p>"
+    elif not token_upload.can_decode():
+        #: The package that decodes isn't here: said, with its install line, and no picker until it is.
+        pick = token_upload.missing_package()
+    else:
+        pick = token_upload.picker(want)
+    return None, (
+        f'<p data-token-text="not-shown">{escape(token_text.CANNOT.format(why=why))}</p>'
+        + "".join(f"<p data-tokenizer-refused>{r}</p>" for r in refused)
+        + pick
+    )
 
 
 def timeline(name: str, steps: dict, record: dict | None = None, searched=None) -> str:
@@ -304,20 +388,38 @@ def timeline(name: str, steps: dict, record: dict | None = None, searched=None) 
     `searched` is given, the kept inputs it appears in (`token_text`)."""
     from onetrace_console import token_text
     from onetrace_console.words import scroll_region
+
     dec, said = _as_text(record, searched)
     ids = steps["token_ids"]
-    rows = "".join(f'<tr id="{decode_anchor(name, i)}" data-decode-step="{i}"><td>{i}</td><td><code>{escape(t)}</code>'
-                   f"</td>{token_text.cells(dec, ids, i, searched) if dec is not None else ''}</tr>" for i, t in enumerate(ids))
-    head = (f"<th>{escape(token_text.WORD_HEADING)}</th>"
-            + (f"<th>{escape(token_text.FOUND_HEADING)}</th>" if searched is not None else "")) if dec is not None else ""
-    table = scroll_region(f'<table class="board" data-token-timeline><thead><tr><th>decode step</th>'
-                          f"<th>chosen token id</th>{head}</tr></thead><tbody>{rows}</tbody></table>",
-                          f"The token timeline of {name}", "token-timeline")
-    level = f'<p data-steps-level>{escape(STEPS_LEVEL.format(level=steps["level"]))}</p>' if steps["level"] else ""
-    held = (f'<p data-steps-held>{escape(STEPS_HELD_NOT_SHOWN.format(keys=", ".join(steps["other"])))}</p>'
-            if steps["other"] else "")
-    return (f'<div class="token-timeline" data-token-timeline-of="{escape(name)}"><h4>{escape(TIMELINE_HEADING)}</h4>'
-            f'<p class="label">{escape(TIMELINE_LABEL)}</p>{said}{level}{table}{held}</div>')
+    rows = "".join(
+        f'<tr id="{decode_anchor(name, i)}" data-decode-step="{i}"><td>{i}</td><td><code>{escape(t)}</code>'
+        f"</td>{token_text.cells(dec, ids, i, searched) if dec is not None else ''}</tr>"
+        for i, t in enumerate(ids)
+    )
+    head = (
+        (
+            f"<th>{escape(token_text.WORD_HEADING)}</th>"
+            + (f"<th>{escape(token_text.FOUND_HEADING)}</th>" if searched is not None else "")
+        )
+        if dec is not None
+        else ""
+    )
+    table = scroll_region(
+        f'<table class="board" data-token-timeline><thead><tr><th>decode step</th>'
+        f"<th>chosen token id</th>{head}</tr></thead><tbody>{rows}</tbody></table>",
+        f"The token timeline of {name}",
+        "token-timeline",
+    )
+    level = f"<p data-steps-level>{escape(STEPS_LEVEL.format(level=steps['level']))}</p>" if steps["level"] else ""
+    held = (
+        f"<p data-steps-held>{escape(STEPS_HELD_NOT_SHOWN.format(keys=', '.join(steps['other'])))}</p>"
+        if steps["other"]
+        else ""
+    )
+    return (
+        f'<div class="token-timeline" data-token-timeline-of="{escape(name)}"><h4>{escape(TIMELINE_HEADING)}</h4>'
+        f'<p class="label">{escape(TIMELINE_LABEL)}</p>{said}{level}{table}{held}</div>'
+    )
 
 
 def files_value(record: dict) -> tuple[str, str] | None:
@@ -335,6 +437,7 @@ def same_files_line(record: dict, others: list[tuple[str, str, str, str, str]]) 
     if got is None:
         return ""
     from onetrace_console.viewer.page import fingerprint_html
+
     value = fingerprint_html(got[0]) if got[0].startswith("sha256:") else f"<code>{escape(got[0])}</code>"
     field = f"<code>{FILES_FIELD}</code>"
     if not others:
@@ -342,9 +445,11 @@ def same_files_line(record: dict, others: list[tuple[str, str, str, str, str]]) 
         #: A div, not a p: the value's whole form is a fold, which a paragraph cannot hold.
         return f'<div data-same-files="none">{escape(head)}{field} {value}{escape(tail)}</div>'
     head, tail = SAME_FILES.split("{field} {value}")
-    items = "".join(f'<li data-same-files-run="{escape(label)}"><a href="{escape(href)}">{escape(label)}</a>'
-                    f" · step <code>{escape(step)}</code> · <code>{escape(rec)}</code> ({escape(state)})</li>"
-                    for label, href, step, rec, state in others)
+    items = "".join(
+        f'<li data-same-files-run="{escape(label)}"><a href="{escape(href)}">{escape(label)}</a>'
+        f" · step <code>{escape(step)}</code> · <code>{escape(rec)}</code> ({escape(state)})</li>"
+        for label, href, step, rec, state in others
+    )
     return f'<div data-same-files><div>{escape(head)}{field} {value}{escape(tail)}</div><ul class="plain">{items}</ul></div>'
 
 
@@ -352,6 +457,7 @@ def draft_formats(run, store) -> list[str]:
     """The draft formats the run's stored model-call records name (their bytes matching their receipts),
     in the order met; [] where none is a draft."""
     from onetrace_console.stage_pages import _artifact_path, _files, _read, _steps
+
     found = []
     try:
         files, steps = _files(run, store), _steps(run, store)
@@ -378,17 +484,18 @@ def draft_line(run, store) -> str:
         return ""
     head, tail = DRAFT_LINE.split("{formats}")
     shown = ", ".join(f"<code>{escape(f)}</code>" for f in formats)
-    return (f'<section data-section="draft-records" class="notice"><p>{escape(head)}{shown}{escape(tail)}</p>'
-            "</section>")
+    return f'<section data-section="draft-records" class="notice"><p>{escape(head)}{shown}{escape(tail)}</p></section>'
 
 
 def same_files(store, run_key: str, value: str) -> list[tuple[str, str, str, str, str]]:
     """Every other run whose readable records name `value` as their model files, with the step and
     record that name it: [(run label, its step page's href from a step page, step, record, state)]."""
+    import html as _html
+
     from onetrace_console.stage_pages import _files, _read, _stage_name, _steps, stage_page
     from onetrace_console.store import arrival_order
     from onetrace_console.words import run_named
-    import html as _html
+
     out = []
     for run in arrival_order(store.runs(), newest_first=False):
         if run.key == run_key:
@@ -416,26 +523,41 @@ def steps_line(name: str, record: dict) -> str:
     if "steps" not in record:
         return f'<p data-model-call-steps="not-taken">{escape(STEPS_NOT_TAKEN)}</p>'
     from onetrace.model_call import naming
-    return (f'<p data-model-call-steps="taken">{escape(STEPS_TAKEN.format(name=""))}'
-            f"<code>{escape(naming.steps_name(name))}</code></p>")
+
+    return (
+        f'<p data-model-call-steps="taken">{escape(STEPS_TAKEN.format(name=""))}'
+        f"<code>{escape(naming.steps_name(name))}</code></p>"
+    )
 
 
 def record_block(name: str, record: dict, steps: str = "", same: str = "") -> str:
     """One record: its per-step capture line, its fields under their groups, then its token timeline
     (`steps`, drawn by `timeline` or the reason it is not) and the runs that share its model files."""
-    rows = "".join(_group_row(title) + "".join(_fingerprints(record[f]) if f == "fingerprints" else _shown(f, record[f])
-                                               for f in fields) for title, fields in grouped(record))
+    rows = "".join(
+        _group_row(title)
+        + "".join(_fingerprints(record[f]) if f == "fingerprints" else _shown(f, record[f]) for f in fields)
+        for title, fields in grouped(record)
+    )
     from onetrace_console.words import scroll_region
-    table = scroll_region(f'<table class="board" data-model-call-table><thead><tr><th>field</th><th>state</th>'
-                          f'<th>value</th><th>reason, as the record gives it</th></tr></thead>'
-                          f'<tbody>{rows}</tbody></table>', f"The model-call record {name}", "model-call")
-    return (f'<div class="model-call" id="{anchor(name)}" data-model-call="{escape(name)}"><h3><code>{escape(name)}</code></h3>'
-            f'{steps_line(name, record)}{table}{steps}{same}</div>')
+
+    table = scroll_region(
+        f'<table class="board" data-model-call-table><thead><tr><th>field</th><th>state</th>'
+        f"<th>value</th><th>reason, as the record gives it</th></tr></thead>"
+        f"<tbody>{rows}</tbody></table>",
+        f"The model-call record {name}",
+        "model-call",
+    )
+    return (
+        f'<div class="model-call" id="{anchor(name)}" data-model-call="{escape(name)}"><h3><code>{escape(name)}</code></h3>'
+        f"{steps_line(name, record)}{table}{steps}{same}</div>"
+    )
 
 
 def refused_block(name: str, why: str) -> str:
-    return (f'<div class="model-call" id="{anchor(name)}" data-model-call="{escape(name)}" data-refused><h3><code>{escape(name)}</code></h3>'
-            f'<p>Not shown: {escape(why)}.</p></div>')
+    return (
+        f'<div class="model-call" id="{anchor(name)}" data-model-call="{escape(name)}" data-refused><h3><code>{escape(name)}</code></h3>'
+        f"<p>Not shown: {escape(why)}.</p></div>"
+    )
 
 
 def outputs(receipt: dict) -> list[dict]:
@@ -446,6 +568,7 @@ def outputs(receipt: dict) -> list[dict]:
 def read_output(receipt_file: str, output: dict, read_file) -> dict:
     """One output named like a record: the record, or `Refused` with the reason it is not shown."""
     from onetrace_console.stage_pages import _artifact_path
+
     name = str(output["name"])
     if not is_record_name(name):
         raise Refused(NOT_A_RECORD_NAME)
@@ -465,7 +588,7 @@ def step_section(receipt: dict, receipt_file: str, read_file, same=None, searche
     outs = outputs(receipt)
     if not outs:
         return ""
-    blocks = []
+    blocks, formats = [], []
     for o in outs:
         name = str(o["name"])
         try:
@@ -474,19 +597,44 @@ def step_section(receipt: dict, receipt_file: str, read_file, same=None, searche
             blocks.append(refused_block(name, str(e)))
             continue
         drawn = ""
+        formats.append(str(record.get("format")))
         if "steps" in record:
+            drawn = ""
             try:
-                drawn = timeline(name, read_steps(receipt, receipt_file, name, record, read_file), record, searched)
+                steps = read_steps(receipt, receipt_file, name, record, read_file)
+                drawn = _close_calls(record, steps["doc"])
+                if steps["token_ids"] is None:
+                    raise Refused(HOSTED_STEPS)
+                drawn = timeline(name, steps, record, searched) + drawn
             except Refused as e:
-                drawn = f'<p data-token-timeline-refused>{escape(TIMELINE_NOT_SHOWN.format(why=e))}</p>'
+                drawn = f"<p data-token-timeline-refused>{escape(TIMELINE_NOT_SHOWN.format(why=e))}</p>" + drawn
         got = files_value(record)
         line = same_files_line(record, same(got[0])) if same is not None and got is not None else ""
         blocks.append(record_block(name, record, drawn, line))
-    return (f'<section data-section="model-call" class="model-call"><h2>{escape(HEADING)}</h2>'
-            f'<p class="label" data-model-call-label>{_label()}</p>{"".join(blocks)}'
-            f'<p class="footnote" data-model-call-schema>{escape(SCHEMA_NOTE)}</p></section>')
+    return (
+        f'<section data-section="model-call" class="model-call"><h2>{escape(HEADING)}</h2>'
+        f'<p class="label" data-model-call-label>{_label(formats)}</p>{"".join(blocks)}'
+        f'<p class="footnote" data-model-call-schema>{escape(SCHEMA_NOTE)}</p></section>'
+    )
 
 
-def _label() -> str:
-    head, code, tail = LABEL.split("`")
-    return f"{escape(head)}<code>{escape(code)}</code>{escape(tail)}"
+def _close_calls(record: dict, doc: dict) -> str:
+    """The close-call flag (`token_levels.close_calls`) under the console's margin, with f2's text rules: a public
+    console shows no run's text, but the demo builder's own example data, labelled so."""
+    from onetrace_console import token_levels
+    from onetrace_console.frame import close_call_margin
+
+    shown, _why, example = token_levels._shown_here((token_levels.value(record, "steps") or "",))
+    return token_levels.close_calls(record, doc, close_call_margin(), shown=shown, example=example)
+
+
+def _label(formats=()) -> str:
+    """The section's label, naming the format of the records it shows: 1.0's words where every record shown is 1.0
+    (or none is), and both formats' where a 1.1 record is shown."""
+    if FORMATS[1] not in formats:
+        head, code, tail = LABEL.split("`")
+        return f"{escape(head)}<code>{escape(code)}</code>{escape(tail)}"
+    return (
+        f"Model-call records, formats <code>{escape(FORMAT)}</code> and <code>{escape(FORMATS[1])}</code>: "
+        f"each shown as written."
+    )

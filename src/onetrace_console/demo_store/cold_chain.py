@@ -18,6 +18,7 @@ The demo's runs of it: a baseline; a run whose logger file differs in one readin
 so the comparison shows that reading beside the decision it changes; and a run altered after it was
 recorded (one byte of its decision), so it contradicts its record.
 """
+
 from __future__ import annotations
 
 import json
@@ -34,8 +35,20 @@ EXAMPLE = "invented example data"
 LOW, HIGH = 20, 80
 
 #: The logger's readings, invented: (minute, tenths of a degree), None where it missed one.
-READINGS = [(0, 41), (10, 42), (20, 44), (30, 46), (40, None), (50, 47), (60, 45), (70, 43),
-            (80, None), (90, 42), (100, 41), (110, 40)]
+READINGS = [
+    (0, 41),
+    (10, 42),
+    (20, 44),
+    (30, 46),
+    (40, None),
+    (50, 47),
+    (60, 45),
+    (70, 43),
+    (80, None),
+    (90, 42),
+    (100, 41),
+    (110, 40),
+]
 #: The one reading that differs in the demo's second run: minute 30, past the range.
 CHANGED = {30: 94}
 
@@ -74,8 +87,14 @@ def main(out_dir, run_id: str, changed: bool) -> None:
     """Record one run; `changed`: its logger file holds the one changed reading."""
     out = Path(out_dir)
     out.mkdir(parents=True, exist_ok=True)
-    rec = Recorder(out_dir, run_id=run_id, declared_stages=STAGES, manifest=Path(__file__),
-                   policy="fail-closed", anchor_reason="a demo record; anchoring is not part of this demo")
+    rec = Recorder(
+        out_dir,
+        run_id=run_id,
+        declared_stages=STAGES,
+        manifest=Path(__file__),
+        policy="fail-closed",
+        anchor_reason="a demo record; anchoring is not part of this demo",
+    )
     data = logger_bytes(changed)
 
     def fill_gaps(ctx):
@@ -87,27 +106,41 @@ def main(out_dir, run_id: str, changed: bool) -> None:
         for line in load_json_bounded(data.decode("utf-8"), "the logger file").splitlines()[2:]:
             minute, _, temp = line.partition(",")
             last = _tenths(temp) if temp else last
-            filled.append({"minute": minute, "temp_c": _degrees(last),
-                           "filled": not temp})
+            filled.append({"minute": minute, "temp_c": _degrees(last), "filled": not temp})
         return ctx.write_json("filled.json", {"readings": filled})
 
     def excursion_check(ctx, readings):
         ctx.read_receipt("fill_gaps")
         out_of_range = [r for r in ctx.read_json(readings)["readings"] if not LOW <= _tenths(r["temp_c"]) <= HIGH]
-        return ctx.write_json("excursions.json", {"allowed_c": f"{_degrees(LOW)} to {_degrees(HIGH)}",
-                                                  "excursions": out_of_range})
+        return ctx.write_json(
+            "excursions.json", {"allowed_c": f"{_degrees(LOW)} to {_degrees(HIGH)}", "excursions": out_of_range}
+        )
 
     def release(ctx, checked):
         ctx.read_receipt("excursion_check")
         found = ctx.read_json(checked)["excursions"]
-        return ctx.write_json("decision.json", {"decision": "quarantine" if found else "release",
-                                                "excursions": str(len(found))})
+        return ctx.write_json(
+            "decision.json", {"decision": "quarantine" if found else "release", "excursions": str(len(found))}
+        )
 
-    readings = rec.run_node("fill_gaps", None, Instrument("logger-gap-fill", "transform", "1.0.0",
-                                                          {"gap_fill": "the reading before"}), fill_gaps)
-    checked = rec.run_node("excursion_check", None, Instrument("excursion-check", "checker", "1.0.0",
-                                                               {"allowed_c": f"{_degrees(LOW)} to {_degrees(HIGH)}"}),
-                           excursion_check, readings)
-    rec.run_node("release", None, Instrument("release-rule", "rule", "1.0.0",
-                                             {"rule": "release only with no excursion"}), release, checked)
+    readings = rec.run_node(
+        "fill_gaps",
+        None,
+        Instrument("logger-gap-fill", "transform", "1.0.0", {"gap_fill": "the reading before"}),
+        fill_gaps,
+    )
+    checked = rec.run_node(
+        "excursion_check",
+        None,
+        Instrument("excursion-check", "checker", "1.0.0", {"allowed_c": f"{_degrees(LOW)} to {_degrees(HIGH)}"}),
+        excursion_check,
+        readings,
+    )
+    rec.run_node(
+        "release",
+        None,
+        Instrument("release-rule", "rule", "1.0.0", {"rule": "release only with no excursion"}),
+        release,
+        checked,
+    )
     rec.close()

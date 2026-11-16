@@ -12,6 +12,7 @@ otel`), so the trace panel always says which it read.
 
 Kept in `beside/<run key>.json` in the store: each name, the key of its bytes in the store's objects.
 """
+
 from __future__ import annotations
 
 import json
@@ -54,7 +55,7 @@ def keep(store, key: str, **items) -> None:
 def from_folder(store, key: str, run_dir: Path) -> None:
     """At a folder load: the decision files beside the run's folder, and `traces/<folder>.json`."""
     parent = Path(run_dir).parent
-    found = {}
+    found: dict[str, bytes | str] = {}
     if (parent / DECISIONS).is_file() and (parent / ISSUERS).is_file():
         found["decisions"] = (parent / DECISIONS).read_bytes()
         found["permit_issuers"] = (parent / ISSUERS).read_bytes()
@@ -72,6 +73,7 @@ def verifier_files(store, key: str, folder: Path, run_dir: Path) -> tuple[str, .
     """Write the kept decision files into `folder`; the verifier's options naming them, or (). Named
     relative to `run_dir`, where the verifier runs, so no path of this machine is recorded."""
     import os
+
     held = read(store, key)
     if not ("decisions" in held and "permit_issuers" in held):
         return ()

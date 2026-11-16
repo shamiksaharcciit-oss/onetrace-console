@@ -9,6 +9,7 @@ asks about before any send and never reaches without `--yes`.
 The pair: three stages, `load`, `score` and `decide`; the candidate's scorer has another setting,
 so the comparison first differs at `score#1`.
 """
+
 from __future__ import annotations
 
 import json
@@ -35,23 +36,32 @@ BADGES = [("lead", "Lead: where to look first"), ("ruled out", "Ruled out"), ("n
 
 def _make(root: Path) -> list[Path]:
     from onetrace.emit import Instrument, Recorder
+
     out = []
     for name, x in (("a", "1"), ("b", "2")):
-        rec = Recorder(str(root / name), run_id=f"explain-{name}", declared_stages=["load", "score", "decide"],
-                       manifest=Path(__file__), policy="fail-closed", topology=True,
-                       anchor_reason="a test record")
+        rec = Recorder(
+            str(root / name),
+            run_id=f"explain-{name}",
+            declared_stages=["load", "score", "decide"],
+            manifest=Path(__file__),
+            policy="fail-closed",
+            topology=True,
+            anchor_reason="a test record",
+        )
 
         def body(stage, value, reads=()):
             def f(ctx):
                 for r in reads:
                     ctx.read_receipt(r)
                 return ctx.write_json(f"{stage}.json", {stage: value})
+
             return f
+
         rec.run_node("load", "1", Instrument("loader", "tool", "1.0.0", {"source": "docs"}), body("load", "1"))
-        rec.run_node("score", "1", Instrument("scorer", "tool", "1.0.0", {"threshold": x}),
-                     body("score", x, ["load"]))
-        rec.run_node("decide", "1", Instrument("decider", "tool", "1.0.0", {"rule": "max"}),
-                     body("decide", x, ["score"]))
+        rec.run_node("score", "1", Instrument("scorer", "tool", "1.0.0", {"threshold": x}), body("score", x, ["load"]))
+        rec.run_node(
+            "decide", "1", Instrument("decider", "tool", "1.0.0", {"rule": "max"}), body("decide", x, ["score"])
+        )
         rec.close()
         out.append(root / name)
     return out
@@ -66,10 +76,10 @@ def pair(tmp_path, monkeypatch, explain_installed):
     from onetrace_console.store import Store
     from tests.test_checks import _require_installed
     from tests.test_compare import _deliver
+
     _require_installed()
     store = Store(tmp_path / "store")
-    a, b = (run_and_record(_deliver(f, store, outputs=True), store, ran_at=RAN_AT)
-            for f in _make(tmp_path / "made"))
+    a, b = (run_and_record(_deliver(f, store, outputs=True), store, ran_at=RAN_AT) for f in _make(tmp_path / "made"))
     comparison = compare(a, b, store)
     config = tmp_path / "config" / "explain.toml"
     config.parent.mkdir()
@@ -86,10 +96,11 @@ def toml_string(value: str) -> str:
 
 def _model(config: Path, spec: str) -> None:
     provider, _, name = spec.partition(":")
-    config.write_text(f"[model]\nprovider = {toml_string(provider)}\nname = {toml_string(name)}\n"
-                      + (f"base_url = {toml_string('http://127.0.0.1:%d/v1' % _closed_port())}\n"
-                         if provider == "openai" else ""),
-                      encoding="utf-8")
+    config.write_text(
+        f"[model]\nprovider = {toml_string(provider)}\nname = {toml_string(name)}\n"
+        + (f"base_url = {toml_string(f'http://127.0.0.1:{_closed_port()}/v1')}\n" if provider == "openai" else ""),
+        encoding="utf-8",
+    )
 
 
 def _closed_port() -> int:
@@ -110,14 +121,17 @@ def in_full(attempt: dict) -> str:
     first, so a message cut short still names them, then its stdout and stderr whole."""
     err = attempt.get("stderr", "")
     last = err.strip().splitlines()[-1] if err.strip() else ""
-    return (f"onetrace-explain exit {attempt.get('exit')}; its stderr ends: {last}\n"
-            f"--- {attempt.get('command')}, stdout:\n{attempt.get('stdout', '')}\n--- stderr:\n{err}")
+    return (
+        f"onetrace-explain exit {attempt.get('exit')}; its stderr ends: {last}\n"
+        f"--- {attempt.get('command')}, stdout:\n{attempt.get('stdout', '')}\n--- stderr:\n{err}"
+    )
 
 
 def tried(store, comparison) -> str:
     """Every press the console kept for the comparison, in the order pressed, each in full: the
     first that went wrong leads."""
     from onetrace_console import explain
+
     return "\n".join(in_full(a) for a in explain.attempts(store, comparison.key)) or "no press kept"
 
 
@@ -126,11 +140,12 @@ def recorded(stdout: str) -> str | None:
     either separator: on Windows the command ends its lines with CR LF and writes the path with
     backslashes."""
     line = next((ln for ln in stdout.splitlines() if ln.startswith("recorded: ")), None)
-    return re.split(r"[\\/]", line[len("recorded: "):].strip())[-1] if line else None
+    return re.split(r"[\\/]", line[len("recorded: ") :].strip())[-1] if line else None
 
 
 def _diff(store, comparison) -> str:
     from onetrace_console.render import render_diff
+
     return render_diff(store.get_comparison(comparison.key), store, generated_at=GENERATED_AT)
 
 
@@ -149,6 +164,7 @@ def _without_panel(page: str) -> str:
 
 # ------------------------------------------------------------------ what it shows
 
+
 def explained_problems(page: str) -> list[str]:
     """An explanation as the command wrote mixed.json's, in 0.3.2's layout: the AI line and the
     model, a card per kept claim in order with its kind's badge and its cites as chips, nothing
@@ -161,7 +177,9 @@ def explained_problems(page: str) -> list[str]:
     a = article.group(0)
     if AI_LINE not in unescape(a) or "fake:" not in unescape(a):
         out.append("the AI line or the model is missing")
-    kinds = re.findall(r'<div class="card claim" data-claim="([^"]*)"><span class="badge" data-kind="[^"]*">([^<]*)</span>', a)
+    kinds = re.findall(
+        r'<div class="card claim" data-claim="([^"]*)"><span class="badge" data-kind="[^"]*">([^<]*)</span>', a
+    )
     if kinds != BADGES:
         out.append(f"claims {kinds}")
     if re.search(r"<(s|del|strike)\b|line-through", a):
@@ -170,8 +188,10 @@ def explained_problems(page: str) -> list[str]:
     if cite is None or cite.group(1) != "#step-2":
         out.append("a cite does not link to its node's row, as the graph links it")
     checks = re.findall(r'<li data-check="(\d+)"(?: data-held)?><code>([^<]*)</code>', a)
-    if [c for _, c in checks][:2] != ["onetrace diff baseline candidate --text --stage score#1".replace(
-            "baseline", "a").replace("candidate", "b"), "onetrace localize a b --for decide#1"]:
+    if [c for _, c in checks][:2] != [
+        "onetrace diff baseline candidate --text --stage score#1".replace("baseline", "a").replace("candidate", "b"),
+        "onetrace localize a b --for decide#1",
+    ]:
         out.append(f"checks {checks}")
     #: Read without the footer count's "i" note, which names the same reasons (console 0.4.0).
     shown = _text(re.sub(r'<span class="info".*?</span></span>', "", a, flags=re.S))
@@ -182,6 +202,7 @@ def explained_problems(page: str) -> list[str]:
 
 def test_an_explanation_is_drawn_as_the_command_wrote_it(pair, examined):
     from onetrace_console import explain
+
     store, comparison, config = pair
     _fake(config, "mixed.json")
     got = explain.explain(comparison, store)
@@ -198,6 +219,7 @@ WINDOWS_SHAPED = "D:\\a\\tests\\fixtures"
 def config_problems(config: Path, name: str) -> list[str]:
     """The config the tests write is valid TOML, and gives the model's name back as written."""
     import tomllib
+
     try:
         got = tomllib.loads(config.read_text(encoding="utf-8"))["model"]["name"]
     except tomllib.TOMLDecodeError as e:
@@ -208,6 +230,7 @@ def config_problems(config: Path, name: str) -> list[str]:
 def _backslashed_replies(tmp_path: Path) -> Path:
     import os
     import shutil
+
     if os.name == "nt":
         return REPLIES
     return Path(shutil.copytree(REPLIES, tmp_path / WINDOWS_SHAPED / "explain"))
@@ -215,6 +238,7 @@ def _backslashed_replies(tmp_path: Path) -> Path:
 
 def test_a_replies_path_with_backslashes_is_written_as_valid_toml_and_explained(pair, tmp_path, examined):
     from onetrace_console import explain
+
     store, comparison, config = pair
     replies = _backslashed_replies(tmp_path)
     _model(config, f"fake:{replies / 'mixed.json'}")
@@ -227,6 +251,7 @@ def test_a_replies_path_with_backslashes_is_written_as_valid_toml_and_explained(
 
 def test_sabotage_the_path_written_unescaped_is_named(pair, tmp_path, monkeypatch, examined):
     import sys
+
     store, comparison, config = pair
     replies = _backslashed_replies(tmp_path)
     monkeypatch.setattr(sys.modules[__name__], "toml_string", lambda value: f'"{value}"')
@@ -237,6 +262,7 @@ def test_sabotage_the_path_written_unescaped_is_named(pair, tmp_path, monkeypatc
 
 def test_the_label_is_on_every_explanation(pair, examined):
     from onetrace_console import explain
+
     store, comparison, config = pair
     _fake(config, "mixed.json")
     explain.explain(comparison, store)
@@ -246,7 +272,6 @@ def test_the_label_is_on_every_explanation(pair, examined):
     assert len(articles) == 2, tried(store, comparison)
     examined(len(articles), "explanations")
     assert all(AI_LINE in unescape(a) and "fake:" in unescape(a) for a in articles)
-
 
 
 def title_problems(panel: str) -> list[str]:
@@ -267,6 +292,7 @@ def title_problems(panel: str) -> list[str]:
 def _titled_panels(store, comparison, config, monkeypatch) -> dict[str, str]:
     from onetrace_console import explain
     from onetrace_console.frame import rendering
+
     out = {}
     with rendering(onedoor=False, sign_in=False, public=True):
         out["public"] = _panel(_diff(store, comparison))
@@ -281,8 +307,7 @@ def _titled_panels(store, comparison, config, monkeypatch) -> dict[str, str]:
     return out
 
 
-def test_the_section_is_headed_once_and_each_explanation_carries_the_ai_line_and_its_model(
-        pair, monkeypatch, examined):
+def test_the_section_is_headed_once_and_each_explanation_carries_the_ai_line_and_its_model(pair, monkeypatch, examined):
     store, comparison, config = pair
     panels = _titled_panels(store, comparison, config, monkeypatch)
     examined(len(panels), "panels: public, not installed, before any press, two explanations")
@@ -292,23 +317,32 @@ def test_the_section_is_headed_once_and_each_explanation_carries_the_ai_line_and
 
 def test_sabotage_the_section_titled_with_the_label_is_named(pair, monkeypatch, examined):
     from onetrace_console import explain
+
     store, comparison, config = pair
     monkeypatch.setattr(explain, "TITLE", LABEL)
     panels = _titled_panels(store, comparison, config, monkeypatch)
     examined(len(panels), "panels, sabotaged")
     assert all(title_problems(v) for v in panels.values())
 
+
 def test_verdicts_counts_and_exits_are_the_same_with_and_without_an_explanation(pair, examined):
     """The page less the panel, the stored comparison, and Home's counts: byte for byte."""
     from onetrace_console import explain
     from onetrace_console.render import render_counts
+
     store, comparison, config = pair
-    before = (_without_panel(_diff(store, comparison)), store.get_comparison(comparison.key).to_json(),
-              render_counts(store, generated_at=GENERATED_AT))
+    before = (
+        _without_panel(_diff(store, comparison)),
+        store.get_comparison(comparison.key).to_json(),
+        render_counts(store, generated_at=GENERATED_AT),
+    )
     _fake(config, "mixed.json")
     explain.explain(comparison, store)
-    after = (_without_panel(_diff(store, comparison)), store.get_comparison(comparison.key).to_json(),
-             render_counts(store, generated_at=GENERATED_AT))
+    after = (
+        _without_panel(_diff(store, comparison)),
+        store.get_comparison(comparison.key).to_json(),
+        render_counts(store, generated_at=GENERATED_AT),
+    )
     examined(3, "page, comparison record and counts")
     assert explained_problems(_diff(store, comparison)) == [], tried(store, comparison)
     assert before == after
@@ -316,18 +350,20 @@ def test_verdicts_counts_and_exits_are_the_same_with_and_without_an_explanation(
 
 def test_every_claim_dropped_shows_its_line_and_the_checks_only(pair, examined):
     from onetrace_console import explain
+
     store, comparison, config = pair
     _fake(config, "all_dropped.json")
     explain.explain(comparison, store)
     panel = _panel(_diff(store, comparison))
     examined(1, "comparison page")
     assert "No suggestion could be tied to the record" in unescape(panel), tried(store, comparison)
-    assert 'data-claim=' not in panel and 'data-check="0"' in panel
+    assert "data-claim=" not in panel and 'data-check="0"' in panel
 
 
 def test_an_unreachable_model_shows_no_explanation(pair, examined):
     """Exit 3: the panel says so, and nothing in it looks like an explanation."""
     from onetrace_console import explain
+
     store, comparison, config = pair
     _fake(config, "not_json.txt")
     got = explain.explain(comparison, store)
@@ -346,6 +382,7 @@ def format_page_problems(panel: str) -> list[str]:
     """The explain format page is named as its address, in text, and nothing links or loads it: no
     page of the console references a remote origin."""
     from onetrace_console import explain
+
     out = [f"references {m}" for m in _REMOTE.findall(panel)]
     if f'<span class="mono">{explain.FORMAT_PAGE}</span>' not in panel:
         out.append("does not show the format page's address as text")
@@ -354,6 +391,7 @@ def format_page_problems(panel: str) -> list[str]:
 
 def test_no_model_configured_is_the_command_s_own_line_with_the_format_page(pair, examined):
     from onetrace_console import explain
+
     store, comparison, _config = pair
     got = explain.explain(comparison, store)
     panel = _panel(_diff(store, comparison))
@@ -365,6 +403,7 @@ def test_no_model_configured_is_the_command_s_own_line_with_the_format_page(pair
 
 def test_not_installed_is_one_line_with_the_format_page(pair, monkeypatch, examined):
     from onetrace_console import explain
+
     store, comparison, _config = pair
     monkeypatch.setattr(explain, "command", lambda: None)
     panel = _panel(_diff(store, comparison))
@@ -376,20 +415,26 @@ def test_not_installed_is_one_line_with_the_format_page(pair, monkeypatch, exami
 
 def test_sabotage_the_format_page_as_a_link_is_named(pair, monkeypatch, examined):
     from onetrace_console import explain
+
     store, comparison, _config = pair
     monkeypatch.setattr(explain, "command", lambda: None)
     panel = _panel(_diff(store, comparison))
-    linked = panel.replace(f'<span class="mono">{explain.FORMAT_PAGE}</span>',
-                           f'<a href="{explain.FORMAT_PAGE}">{explain.FORMAT_PAGE}</a>')
+    linked = panel.replace(
+        f'<span class="mono">{explain.FORMAT_PAGE}</span>', f'<a href="{explain.FORMAT_PAGE}">{explain.FORMAT_PAGE}</a>'
+    )
     examined(1, "planted panel")
     assert linked != panel
-    assert format_page_problems(linked) == [f'references href="{explain.FORMAT_PAGE}"',
-                                            "does not show the format page's address as text"]
+    assert format_page_problems(linked) == [
+        f'references href="{explain.FORMAT_PAGE}"',
+        "does not show the format page's address as text",
+    ]
 
 
 def test_the_packet_is_shown_with_its_size_and_sha256(pair, examined):
     import hashlib
+
     from onetrace_console import explain
+
     store, comparison, config = pair
     #: Show the packet is offered once Explain has prepared it (console 0.6.1 item 6).
     _fake(config, "mixed.json")
@@ -398,7 +443,10 @@ def test_the_packet_is_shown_with_its_size_and_sha256(pair, examined):
     examined(1, "dry run")
     assert got["exit"] == "0" and len(got["stdout"].splitlines()) >= 2, in_full(got)
     raw, said = got["stdout"].splitlines()[:2]
-    assert said == f"{len(raw.encode('utf-8'))} bytes, sha256 {hashlib.sha256(raw.encode('utf-8')).hexdigest()}; dry run: nothing sent", in_full(got)
+    assert (
+        said
+        == f"{len(raw.encode('utf-8'))} bytes, sha256 {hashlib.sha256(raw.encode('utf-8')).hexdigest()}; dry run: nothing sent"
+    ), in_full(got)
     panel = _panel(_diff(store, comparison))
     assert said in unescape(panel) and raw in unescape(panel)
 
@@ -407,6 +455,7 @@ def _ask(pair, sent: dict | None):
     """Explain pressed (it prepares, and sends nothing) with an endpoint configured that the command has
     sent `sent` to before."""
     from onetrace_console import explain
+
     store, comparison, config = pair
     _model(config, "openai:a-model")
     if sent is not None:
@@ -427,8 +476,12 @@ def test_the_first_send_question_appears_before_a_first_send_to_an_endpoint(pair
     block = re.search(r'<div data-explain="first-send">(.*?)</div>', panel, re.S)
     assert block and "Before anything is sent" in unescape(block.group(1))
     assert re.findall(r'<li data-kind="([^"]+)"', block.group(1)) == _kinds(got)
-    send = re.search(r'<button class="primary" type="button" data-explain-post="/explain\?c=[0-9a-f]{64}&amp;send=yes"'
-                     r' hidden>Send to 127\.0\.0\.1:\d+</button>', panel)
+    send = re.search(
+        r'<button class="btn-primary" data-busy="Sending…" data-busy-handover type="button" '
+        r'data-explain-post="/explain\?c=[0-9a-f]{64}&amp;send=yes"'
+        r" hidden>Send to 127\.0\.0\.1:\d+</button>",
+        panel,
+    )
     assert send, "a Send button naming the address"
     assert not list((pair[2].parent).glob("explain-sent.json")), "nothing was sent"
 
@@ -436,12 +489,13 @@ def test_the_first_send_question_appears_before_a_first_send_to_an_endpoint(pair
 def test_the_question_is_not_asked_again_of_an_endpoint_sent_those_kinds(pair, examined):
     """The command's own record of what it sent where decides; the console asks only when it does."""
     from onetrace_console import explain
+
     store, comparison, config = pair
     _model(config, "openai:a-model")
     kinds = _kinds(explain.packet(comparison, store))
     got, panel = _ask(pair, kinds)
     examined(1, "comparison page")
-    assert got["exit"] == "0", in_full(got)      # prepared, and nothing sent
+    assert got["exit"] == "0", in_full(got)  # prepared, and nothing sent
     assert 'data-explain="first-send"' not in panel and 'data-flow="prepared"' in panel
     assert re.search(r">Ready to send to 127\.0\.0\.1:\d+\.<", panel)
     assert re.search(r"&amp;send=yes\" hidden>Send to 127\.0\.0\.1:\d+</button>", panel), "Send names the address"
@@ -449,6 +503,7 @@ def test_the_question_is_not_asked_again_of_an_endpoint_sent_those_kinds(pair, e
 
 def test_two_explanations_are_listed_newest_first_and_never_merged(pair, examined):
     from onetrace_console import explain
+
     store, comparison, config = pair
     _fake(config, "all_dropped.json")
     first = explain.explain(comparison, store)
@@ -465,6 +520,7 @@ def test_a_check_s_own_output_and_exit_are_shown_and_no_lead_is_marked_by_the_co
     """A lead is confirmed or ruled out only by what a check reports: the panel shows the check's
     own output and exit, and marks no lead itself."""
     from onetrace_console import explain
+
     store, comparison, config = pair
     _fake(config, "mixed.json")
     explain.explain(comparison, store)
@@ -479,12 +535,13 @@ def test_a_check_s_own_output_and_exit_are_shown_and_no_lead_is_marked_by_the_co
     assert f"<span data-exit>{got['exit']}</span>" in out.group(1)
     #: The command's own lead line says how a lead is settled; nothing else in the panel does.
     rest = re.sub(r'<p data-explain="checks-lead">.*?</p>', "", panel, flags=re.S)
-    rest = re.sub(r"<script>.*?</script>", "", rest, flags=re.S).replace('<span data-kind>ruled out</span>', "")
+    rest = re.sub(r"<script>.*?</script>", "", rest, flags=re.S).replace("<span data-kind>ruled out</span>", "")
     assert not re.search(r"\b(confirmed|ruled out by|verified lead)\b", _text(rest), re.I)
 
 
 def test_a_check_is_rebuilt_from_the_explanation_never_from_the_request(pair, examined):
     from onetrace_console import explain
+
     store, comparison, config = pair
     _fake(config, "mixed.json")
     explain.explain(comparison, store)
@@ -495,21 +552,24 @@ def test_a_check_is_rebuilt_from_the_explanation_never_from_the_request(pair, ex
         explain.run_check(store, comparison.key, e["record"], 99)
     with pytest.raises(ValueError):
         explain.run_check(store, comparison.key, "../../x", 0)
-    with pytest.raises(ValueError):            # mask needs a file a person names: shown, not run
-        explain.run_check(store, comparison.key, e["record"], 3) if len(e["checks"]) > 3 else \
-            explain.run_check(store, comparison.key, e["record"], len(e["checks"]))
+    with pytest.raises(ValueError):  # mask needs a file a person names: shown, not run
+        explain.run_check(store, comparison.key, e["record"], 3) if len(e["checks"]) > 3 else explain.run_check(
+            store, comparison.key, e["record"], len(e["checks"])
+        )
 
 
 def test_each_explanation_s_record_is_linked_with_onetrace_verify_s_verdict(pair, examined):
     from onetrace_console import explain
+
     store, comparison, config = pair
     _fake(config, "mixed.json")
     explain.explain(comparison, store)
     panel = _panel(_diff(store, comparison))
     examined(1, "explanation")
     verified = re.search(r'<span class="mono" data-verified>([^<]*)</span>', panel)
-    assert verified and "->  PASS" in unescape(verified.group(1)) and "(exit 0)" in verified.group(1), \
-        tried(store, comparison)
+    assert verified and "->  PASS" in unescape(verified.group(1)) and "(exit 0)" in verified.group(1), tried(
+        store, comparison
+    )
 
 
 # ------------------------------------------------------------------ failure messages
@@ -517,8 +577,12 @@ def test_each_explanation_s_record_is_linked_with_onetrace_verify_s_verdict(pair
 #: tools/windows_check.py prints each failure's message to the job's log cut to this many
 #: characters, the message starting "AssertionError: ".
 SHOWN = 200
-_PRESS = {"exit": "1", "command": "onetrace-explain report", "stdout": "o" * 5000 + "\nthe last line out",
-          "stderr": "Traceback (most recent call last):\n" + "e" * 5000 + "\nValueError: the last line"}
+_PRESS = {
+    "exit": "1",
+    "command": "onetrace-explain report",
+    "stdout": "o" * 5000 + "\nthe last line out",
+    "stderr": "Traceback (most recent call last):\n" + "e" * 5000 + "\nValueError: the last line",
+}
 
 
 def message_problems(message: str, attempt: dict) -> list[str]:
@@ -577,6 +641,7 @@ def main():
 def stand_in(tmp_path: Path, monkeypatch, cli: str) -> Path:
     """`cli` as the `onetrace_explain.cli` the published launcher imports, first on its import path."""
     import os
+
     package = tmp_path / "stand-in" / "onetrace_explain"
     package.mkdir(parents=True)
     (package / "__init__.py").write_text("", encoding="utf-8")
@@ -590,7 +655,9 @@ def windows_output_problems(store, comparison, config) -> list[str]:
     first by their `recorded:` lines, the one drawn as the command wrote it, the packet with its
     size and sha256, and the first-send question with Send."""
     import hashlib
+
     from onetrace_console import explain
+
     out = []
     _fake(config, "all_dropped.json")
     first = explain.explain(comparison, store)
@@ -638,18 +705,23 @@ def mutated(monkeypatch, name: str, old: str, new: str) -> None:
     names, as patched, when it runs."""
     import inspect
     import types
+
     from onetrace_console import explain
+
     source = inspect.getsource(getattr(explain, name))
     assert source.count(old) == 1, (name, old)
     space = dict(vars(explain))
     exec(compile(source.replace(old, new), explain.__file__, "exec"), space)
     made = space[name]
-    monkeypatch.setattr(explain, name, types.FunctionType(made.__code__, vars(explain), name, made.__defaults__,
-                                                          made.__closure__))
+    monkeypatch.setattr(
+        explain, name, types.FunctionType(made.__code__, vars(explain), name, made.__defaults__, made.__closure__)
+    )
 
 
 def test_sabotage_the_packet_read_split_on_newline_is_named(windows_shaped, monkeypatch, examined):
-    mutated(monkeypatch, "panel", 'lines = pk.get("stdout", "").splitlines()', 'lines = pk.get("stdout", "").split("\\n")')
+    mutated(
+        monkeypatch, "panel", 'lines = pk.get("stdout", "").splitlines()', 'lines = pk.get("stdout", "").split("\\n")'
+    )
     examined(1, "panel with the packet read split on newline")
     assert [p.split(":")[0] for p in windows_output_problems(*windows_shaped)] == ["packet"]
 
@@ -685,7 +757,9 @@ def stdin_problems(store, comparison, config, tmp_path, monkeypatch) -> list[str
     check run from an explanation: an empty pipe each time, never NUL or a terminal."""
     import json
     import sys
+
     from onetrace_console import explain
+
     _fake(config, "mixed.json")
     explain.explain(comparison, store)
     assert len(explain.explanations(store, comparison.key)) == 1, tried(store, comparison)
@@ -693,8 +767,11 @@ def stdin_problems(store, comparison, config, tmp_path, monkeypatch) -> list[str
     seen = tmp_path / "stdin-seen.jsonl"
     monkeypatch.setenv("STAND_IN_RECORD", str(seen))
     stand_in(tmp_path, monkeypatch, STDIN_CLI)
-    monkeypatch.setattr(explain, "check_argv",
-                        lambda check: [sys.executable, "-c", "import sys; from onetrace_explain.cli import main; sys.exit(main())"])
+    monkeypatch.setattr(
+        explain,
+        "check_argv",
+        lambda check: [sys.executable, "-c", "import sys; from onetrace_explain.cli import main; sys.exit(main())"],
+    )
     explain.explain(comparison, store)
     explain.packet(comparison, store)
     explain.run_check(store, comparison.key, record, 0)
@@ -718,8 +795,10 @@ def test_sabotage_nul_for_stdin_is_named(pair, tmp_path, monkeypatch, examined):
 
 # ------------------------------------------------------------------ the public demo, and imports
 
+
 def test_a_public_comparison_page_has_the_place_only(pair, examined):
     from onetrace_console.frame import rendering
+
     store, comparison, _config = pair
     with rendering(onedoor=False, sign_in=False, public=True):
         page = _diff(store, comparison)
@@ -738,12 +817,14 @@ def test_the_public_demo_build_makes_no_network_call_and_never_runs_the_command(
     starts recorded: none is onetrace-explain. Its comparison pages carry the place only."""
     from onetrace_console.folder_load import build_public
     from tests.test_checks import _require_installed
+
     _require_installed()
     opened = []
 
     def refuse(*a, **k):
         opened.append(a)
         raise OSError("a network call from the public demo's build")
+
     monkeypatch.setattr(socket.socket, "connect", refuse)
     monkeypatch.setattr(socket, "create_connection", refuse)
     children = []
@@ -752,6 +833,7 @@ def test_the_public_demo_build_makes_no_network_call_and_never_runs_the_command(
     def record(self, args, *a, **k):
         children.append([str(x) for x in args] if isinstance(args, (list, tuple)) else [str(args)])
         return real(self, args, *a, **k)
+
     monkeypatch.setattr(subprocess.Popen, "__init__", record)
     build_public(tmp_path / "demo")
     pages = list((tmp_path / "demo").rglob("diff/*.html"))
@@ -767,6 +849,7 @@ def test_a_static_export_carries_the_place_only(pair, tmp_path, examined):
     panel's place, with no button and no script, and no explanation is copied into it."""
     from onetrace_console import explain
     from onetrace_console.export_static import export
+
     store, comparison, config = pair
     _fake(config, "mixed.json")
     explain.explain(comparison, store)
@@ -780,17 +863,20 @@ def test_a_static_export_carries_the_place_only(pair, tmp_path, examined):
 
 
 def test_the_command_the_tests_run_is_the_published_wheel(explain_command, examined):
-    """The panel's tests run onetrace-explain 0.1.0 as PyPI serves it: installed from the wheel
-    cache by its pinned hash, apart from this environment, which does not hold it."""
+    """The panel's tests run onetrace-explain 0.3.1 as released: installed from the wheel cache by its pinned
+    hash, with what it asks for, apart from this environment, which does not hold it."""
     import importlib.util
+
     from tools import fetch_wheel_cache as w
+
     found, lib = explain_command
-    (requirement, (name, sha)), = w.TEST_COMMANDS.items()
+    ((requirement, (name, sha)),) = w.TEST_COMMANDS.items()
     examined(1, "installed command")
-    assert requirement == "onetrace-explain==0.1.0" and name == "onetrace_explain-0.1.0-py3-none-any.whl"
-    assert (lib / "onetrace_explain-0.1.0.dist-info").is_dir()
+    assert requirement == "onetrace-explain==0.3.1" and name == "onetrace_explain-0.3.1-py3-none-any.whl"
+    assert (lib / "onetrace_explain-0.3.1.dist-info").is_dir()
     assert importlib.util.find_spec("onetrace_explain") is None or not str(
-        importlib.util.find_spec("onetrace_explain").origin).startswith(str(lib))
+        importlib.util.find_spec("onetrace_explain").origin
+    ).startswith(str(lib))
     assert found.is_file()
 
 
@@ -798,11 +884,13 @@ def test_sabotage_a_wheel_cache_holding_another_command_wheel_is_not_ready(tmp_p
     """The cache as it is, with only the command's wheel replaced: `check()` refuses it, so the
     fixture never installs another build under the published one's name."""
     import shutil
+
     from tools import fetch_wheel_cache as w
+
     assert w.check(), "the wheel cache is not ready: python tools/fetch_wheel_cache.py"
     planted = tmp_path / "cache"
     shutil.copytree(w.CACHE, planted)
-    (name, _), = w.TEST_COMMANDS.values()
+    ((name, _),) = w.TEST_COMMANDS.values()
     (planted / name).write_bytes(b"not the published wheel")
     monkeypatch.setattr(w, "CACHE", planted)
     examined(1, "planted cache")
@@ -813,20 +901,29 @@ def test_the_console_never_imports_onetrace_explain(examined):
     """In a fresh interpreter: the console's modules, the panel drawn, and still no onetrace_explain
     in sys.modules; and no source file imports it."""
     import ast
+
     src = Path(__file__).resolve().parent.parent / "src"
     files = list(src.rglob("*.py"))
     examined(len(files) + 1, "source files read and one interpreter")
     found = []
     for f in files:
         for node in ast.walk(ast.parse(f.read_text(encoding="utf-8"))):
-            names = ([a.name for a in node.names] if isinstance(node, ast.Import)
-                     else [node.module or ""] if isinstance(node, ast.ImportFrom) else [])
+            names = (
+                [a.name for a in node.names]
+                if isinstance(node, ast.Import)
+                else [node.module or ""]
+                if isinstance(node, ast.ImportFrom)
+                else []
+            )
             found += [f"{f.name}: {n}" for n in names if n.split(".")[0] == "onetrace_explain"]
     assert found == []
-    code = ("import sys, onetrace_console.explain as e, onetrace_console.render, onetrace_console.serve; "
-            "e.command(); print('onetrace_explain' in sys.modules)")
-    out = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True,
-                         env={"PYTHONPATH": str(src), "PATH": ""})
+    code = (
+        "import sys, onetrace_console.explain as e, onetrace_console.render, onetrace_console.serve; "
+        "e.command(); print('onetrace_explain' in sys.modules)"
+    )
+    out = subprocess.run(
+        [sys.executable, "-c", code], capture_output=True, text=True, env={"PYTHONPATH": str(src), "PATH": ""}
+    )
     assert out.stdout.strip() == "False", out.stderr[-500:]
 
 
@@ -834,6 +931,7 @@ def test_the_routes_are_a_viewer_s_and_the_script_is_named_in_the_local_policy_o
     from onetrace_console import roles
     from onetrace_console.explain_script import EXPLAIN_SCRIPT
     from onetrace_console.public import _script_hash, content_security_policy
+
     examined(4, "routes")
     for path in ("/explain", "/explain/packet", "/explain/check"):
         assert roles.required_role("POST", path) == roles.VIEWER
@@ -843,8 +941,12 @@ def test_the_routes_are_a_viewer_s_and_the_script_is_named_in_the_local_policy_o
 
 # ------------------------------------------------------------------ the sabotages
 
-def test_sabotage_a_drawn_explanation_missing_its_ai_line_a_claim_or_its_drops_or_struck_through_is_named(pair, examined):
+
+def test_sabotage_a_drawn_explanation_missing_its_ai_line_a_claim_or_its_drops_or_struck_through_is_named(
+    pair, examined
+):
     from onetrace_console import explain
+
     store, comparison, config = pair
     _fake(config, "mixed.json")
     explain.explain(comparison, store)
@@ -853,10 +955,16 @@ def test_sabotage_a_drawn_explanation_missing_its_ai_line_a_claim_or_its_drops_o
     assert "<article data-explanation=" in page, tried(store, comparison)
     article = re.search(r"<article data-explanation=.*?</article>", page, re.S).group(0)
     assert explained_problems(page.replace(article, article.replace(AI_LINE, "Explanation"), 1)) != []
-    assert explained_problems(re.sub(r'<div class="card claim" data-claim="note">.*?</div>', "", page, count=1,
-                                     flags=re.S)) != []
-    assert explained_problems(re.sub(r'<details data-explain="left-out">.*?</details>', "", page, count=1,
-                                     flags=re.S)) != []
+    assert (
+        explained_problems(
+            re.sub(r'<div class="card claim" data-claim="note">.*?</div>', "", page, count=1, flags=re.S)
+        )
+        != []
+    )
+    assert (
+        explained_problems(re.sub(r'<details data-explain="left-out">.*?</details>', "", page, count=1, flags=re.S))
+        != []
+    )
     struck = article.replace("<p data-claim-text>", "<p data-claim-text><s>", 1)
     assert explained_problems(page.replace(article, struck, 1)) == ["something is struck through"]
 
@@ -864,6 +972,7 @@ def test_sabotage_a_drawn_explanation_missing_its_ai_line_a_claim_or_its_drops_o
 def test_sabotage_an_explanation_inside_the_verdicts_is_named(pair, examined):
     """A page whose verdict part changed with the explanation fails the equality above."""
     from onetrace_console import explain
+
     store, comparison, config = pair
     before = _without_panel(_diff(store, comparison))
     _fake(config, "mixed.json")
@@ -876,6 +985,7 @@ def test_sabotage_an_explanation_inside_the_verdicts_is_named(pair, examined):
 
 def test_sabotage_an_unreachable_reply_drawn_as_an_explanation_is_named(pair, monkeypatch, examined):
     from onetrace_console import explain
+
     store, comparison, config = pair
     _fake(config, "not_json.txt")
     explain.explain(comparison, store)
@@ -887,6 +997,7 @@ def test_sabotage_an_unreachable_reply_drawn_as_an_explanation_is_named(pair, mo
 
 def test_sabotage_a_question_never_shown_is_named(pair, monkeypatch, examined):
     from onetrace_console import explain
+
     monkeypatch.setattr(explain, "_packet_kinds", lambda a: [])
     _got, panel = _ask(pair, None)
     examined(1, "planted panel")
@@ -895,6 +1006,7 @@ def test_sabotage_a_question_never_shown_is_named(pair, monkeypatch, examined):
 
 def test_sabotage_a_console_that_imports_onetrace_explain_is_named(tmp_path, examined):
     import ast
+
     planted = tmp_path / "planted.py"
     planted.write_text("from onetrace_explain import cli\n", encoding="utf-8")
     examined(1, "planted source")
@@ -905,8 +1017,9 @@ def test_sabotage_a_console_that_imports_onetrace_explain_is_named(tmp_path, exa
 def test_sabotage_a_public_page_with_a_button_is_named(pair, monkeypatch, examined):
     from onetrace_console import explain
     from onetrace_console.frame import rendering
+
     store, comparison, config = pair
-    _fake(config, "mixed.json")         # a model configured: Ready, its Explain button offered
+    _fake(config, "mixed.json")  # a model configured: Ready, its Explain button offered
     monkeypatch.setattr(explain, "_public", lambda: False)
     with rendering(onedoor=False, sign_in=False, public=True):
         page = _diff(store, comparison)
@@ -920,6 +1033,7 @@ def test_sabotage_a_socket_opened_during_a_build_is_caught(monkeypatch, examined
     def refuse(*a, **k):
         opened.append(a)
         raise OSError("refused")
+
     monkeypatch.setattr(socket.socket, "connect", refuse)
     examined(1, "planted connection")
     with pytest.raises(OSError):

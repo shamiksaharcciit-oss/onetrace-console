@@ -1,4 +1,5 @@
 """Local accounts, scrypt, hmac.compare_digest."""
+
 from __future__ import annotations
 
 import hmac
@@ -34,7 +35,7 @@ def test_stored_parameters_match_the_owasp_scrypt_recommendation(tmp_path, exami
     store = AccountStore(tmp_path / "accounts")
     account = store.create("alice", b"a password12")
     examined(1, "an account's own stored scrypt parameters")
-    assert (account.n, account.r, account.p) == (2 ** 17, 8, 1)
+    assert (account.n, account.r, account.p) == (2**17, 8, 1)
 
 
 def test_the_salt_is_random_per_account(tmp_path, examined):
@@ -90,8 +91,8 @@ def test_password_length_is_characters_after_nfc_not_bytes(tmp_path, examined):
     e_acute_decomposed = "é"
     eleven = (e_acute_decomposed * 11).encode("utf-8")
     twelve = (e_acute_decomposed * 12).encode("utf-8")
-    assert len(eleven) == 33 and len(twelve) == 36          # raw bytes: both way over 12
-    assert len(eleven.decode("utf-8")) == 22                # raw code points: also both over 12
+    assert len(eleven) == 33 and len(twelve) == 36  # raw bytes: both way over 12
+    assert len(eleven.decode("utf-8")) == 22  # raw code points: also both over 12
     store = AccountStore(tmp_path / "accounts")
     examined(2, "11 and 12 repetitions of a decomposed accented character")
     with pytest.raises(AccountError, match="11 characters"):
@@ -100,8 +101,7 @@ def test_password_length_is_characters_after_nfc_not_bytes(tmp_path, examined):
     assert store.verify_password("bob", twelve) is True
 
 
-def test_an_unknown_username_still_computes_a_dummy_hash_with_the_same_parameters(
-        tmp_path, examined, monkeypatch):
+def test_an_unknown_username_still_computes_a_dummy_hash_with_the_same_parameters(tmp_path, examined, monkeypatch):
     """An unknown username takes the same path as a known one --
     patch the scrypt wrapper and observe it is called once for a real account and
     once for a name that does not exist, with identical scrypt parameters both
@@ -142,8 +142,7 @@ def test_sabotage_replacing_compare_digest_with_equality_fails_the_spy_test(tmp_
     source = inspect.getsource(real_accounts)
     needle = "return hmac.compare_digest(computed, bytes.fromhex(account.hash_hex))"
     assert needle in source, "the line this sabotage targets has moved or been reworded"
-    sabotaged_source = source.replace(
-        needle, "return computed == bytes.fromhex(account.hash_hex)  # sabotage", 1)
+    sabotaged_source = source.replace(needle, "return computed == bytes.fromhex(account.hash_hex)  # sabotage", 1)
 
     sabotaged_path = tmp_path / "accounts_sabotaged.py"
     sabotaged_path.write_text(sabotaged_source, encoding="utf-8")

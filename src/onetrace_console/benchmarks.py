@@ -17,11 +17,12 @@ the benchmark's names), and otherwise a run with the same inputs from outside it
 step. A benchmark recorded again shows onetrace's variation profile of it and its repeats
 (`verdicts.profile_section`).
 """
+
 from __future__ import annotations
 
 import json
 import re
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from onetrace_console.words import escape
@@ -33,15 +34,21 @@ MARK = "Mark as benchmark"
 UNMARK = "Remove the benchmark mark"
 #: The most a note holds; a longer one is refused with this number.
 NOTE_CHARS = 280
-NOT_CORRECT = ("A benchmark is the run to compare against, not a statement that it is correct: its own "
-               "record and check read the same marked or not; its pipeline's runs are read against a "
-               "reference onetrace makes from it.")
+NOT_CORRECT = (
+    "A benchmark is the run to compare against, not a statement that it is correct: its own "
+    "record and check read the same marked or not; its pipeline's runs are read against a "
+    "reference onetrace makes from it."
+)
 #: Beside the local mark and its undo: what pressing it does to the pipeline's verdicts (`verdicts`).
-MARK_MOVES = ("Marking this run moves {pipeline}'s reference: onetrace makes a new one from this run, and "
-              "every verdict in {pipeline} is then read against the new one.")
-UNMARK_MOVES = ("Removing the mark moves {pipeline}'s reference to the benchmark marked before this one, where "
-                "there is one, and every verdict in {pipeline} is then read against that; with none, no run "
-                "in {pipeline} has a verdict.")
+MARK_MOVES = (
+    "Marking this run moves {pipeline}'s reference: onetrace makes a new one from this run, and "
+    "every verdict in {pipeline} is then read against the new one."
+)
+UNMARK_MOVES = (
+    "Removing the mark moves {pipeline}'s reference to the benchmark marked before this one, where "
+    "there is one, and every verdict in {pipeline} is then read against that; with none, no run "
+    "in {pipeline} has a verdict."
+)
 #: Who marked the public demo's benchmarks, and the note each carries.
 DEMO_WHO = "the demo's build"
 DEMO_NOTE = "The baseline this demo compares its pipeline's runs against."
@@ -68,6 +75,7 @@ def marks(store) -> dict[str, dict]:
     if read is not None and FOLDER in read:
         return read[FOLDER]
     from onetrace_console.bounded_json import load_json_bounded
+
     out = {}
     folder = _folder(store)
     for p in sorted(folder.glob("*.json")) if folder.is_dir() else ():
@@ -92,8 +100,15 @@ def mark(store, run, *, who: str, note: str = "", when: str | None = None) -> di
     if len(note) > NOTE_CHARS:
         raise MarkError(f"the note is {len(note)} characters; a note holds at most {NOTE_CHARS}")
     from onetrace_console.store import _atomic_write
-    entry = {"format": FORMAT, "run": run.key, "run_id": run.run_id, "who": who,
-             "when": when or datetime.now(timezone.utc).isoformat(timespec="seconds"), "note": note}
+
+    entry = {
+        "format": FORMAT,
+        "run": run.key,
+        "run_id": run.run_id,
+        "who": who,
+        "when": when or datetime.now(UTC).isoformat(timespec="seconds"),
+        "note": note,
+    }
     path = _path(store, run.key)
     path.parent.mkdir(parents=True, exist_ok=True)
     _atomic_write(path, (json.dumps(entry, indent=1, sort_keys=True, ensure_ascii=False) + "\n").encode("utf-8"))
@@ -113,6 +128,7 @@ def unmark(store, key: str) -> bool:
 def mark_build(store, folders: list[str], when: str) -> list[str]:
     """The public demo's marks: each pipeline's baseline among `folders` (`demo_store.BENCHMARKS`)."""
     from onetrace_console.demo_store import BENCHMARK_BESIDE_KEPT, BENCHMARKS
+
     done = []
     for run in store.runs():
         if run.folder and Path(run.folder).name in BENCHMARKS and Path(run.folder).name in folders:
@@ -140,59 +156,81 @@ def badge(store, key: str) -> str:
 
 # ------------------------------------------------------------------------- the run's page
 
+
 def mark_section(run, store, *, public: bool) -> str:
     """The run's page: the badge and its note, and on a local console the mark or its undo."""
     m = mark_of(store, run.key)
     said = ""
     if m is not None:
         from onetrace_console.words import time_html
-        said = (f'<p data-benchmark-mark>{badge(store, run.key).strip()} Marked by {escape(m["who"])}, '
-                f'{time_html(m["when"])}' + (f': {escape(m["note"])}' if m["note"] else ".") + "</p>")
+
+        said = (
+            f"<p data-benchmark-mark>{badge(store, run.key).strip()} Marked by {escape(m['who'])}, "
+            f"{time_html(m['when'])}" + (f": {escape(m['note'])}" if m["note"] else ".") + "</p>"
+        )
     if public:
         if m is None:
             return ""
-        return (f'<section data-section="benchmark" class="benchmark"><h2>Benchmark</h2>{said}'
-                f"<p class=\"note\">{escape(NOT_CORRECT)}</p></section>")
+        return (
+            f'<section data-section="benchmark" class="benchmark"><h2>Benchmark</h2>{said}'
+            f'<p class="note">{escape(NOT_CORRECT)}</p></section>'
+        )
     from onetrace_console.benchmark_script import BENCHMARK_SCRIPT
+
     if m is None:
-        control = (f'<label hidden data-benchmark-note>Note (optional) <input type="text" maxlength="{NOTE_CHARS}" '
-                   f'data-benchmark-note-input></label> <button type="button" hidden '
-                   f'data-benchmark-post="/benchmark?run={run.key}&amp;mark=yes">{escape(MARK)}</button>')
+        control = (
+            f'<label hidden data-benchmark-note>Note (optional) <input type="text" maxlength="{NOTE_CHARS}" '
+            f'data-benchmark-note-input></label> <button class="btn-secondary" data-busy="Marking…" type="button" hidden '
+            f'data-benchmark-post="/benchmark?run={run.key}&amp;mark=yes">{escape(MARK)}</button>'
+        )
     else:
-        control = (f'<button type="button" hidden data-benchmark-post="/benchmark?run={run.key}&amp;mark=no">'
-                   f"{escape(UNMARK)}</button>")
+        control = (
+            f'<button class="btn-secondary" data-busy="Unmarking…" type="button" hidden data-benchmark-post="/benchmark?run={run.key}&amp;mark=no">'
+            f"{escape(UNMARK)}</button>"
+        )
     #: What the press does to the pipeline's reference, said beside it, on the run's own pipeline.
     from onetrace_console.verdicts import pipeline_of
+
     pipeline = pipeline_of(run, store)
     moves = ""
     if pipeline is not None:
         words = (MARK_MOVES if m is None else UNMARK_MOVES).format(pipeline=pipeline.label)
-        moves = f'<p data-benchmark-moves>{escape(words)}</p>'
-    return (f'<section data-section="benchmark" class="benchmark"><h2>Benchmark</h2>{said}'
-            f'<p>{control}<span data-benchmark-said></span></p>{moves}'
-            f'<p class="note">{escape(NOT_CORRECT)}</p>{BENCHMARK_SCRIPT}</section>')
+        moves = f"<p data-benchmark-moves>{escape(words)}</p>"
+    return (
+        f'<section data-section="benchmark" class="benchmark"><h2>Benchmark</h2>{said}'
+        f'<p>{control} <span data-benchmark-said data-status role="status" aria-live="polite"></span></p>{moves}'
+        f'<p class="note">{escape(NOT_CORRECT)}</p>{BENCHMARK_SCRIPT}</section>'
+    )
 
 
 def _facts(run, store) -> list[dict]:
     """Each step's name, settings, instrument, inputs and outputs, as its receipt records them."""
     from onetrace_console.render import _receipts_in_order, _stage_of, own_inputs
     from onetrace_console.run_index import _named, _settings
+
     out = []
     receipts = _receipts_in_order(run.key, store)
     own = own_inputs(receipts)
     for r in receipts:
-        instrument = r.get("instrument") if isinstance(r.get("instrument"), dict) else {}
-        out.append({"name": _stage_of(r), "settings": _settings(r), "own": sorted(own.get(_stage_of(r), {}).items()),
-                    #: The instrument by name, version and configuration fingerprint: a configuration
-                    #: the record names only by its digest is a configuration all the same.
-                    "instrument": tuple(str(instrument.get(k, "")) for k in ("id", "version", "config_digest")),
-                    "inputs": sorted(tuple(x) for x in _named(r.get("inputs")) if not x[0].startswith("receipt:")),
-                    "outputs": sorted(tuple(x) for x in _named(r.get("outputs")))})
+        instrument = _instrument if isinstance(_instrument := r.get("instrument"), dict) else {}
+        out.append(
+            {
+                "name": _stage_of(r),
+                "settings": _settings(r),
+                "own": sorted(own.get(_stage_of(r), {}).items()),
+                #: The instrument by name, version and configuration fingerprint: a configuration
+                #: the record names only by its digest is a configuration all the same.
+                "instrument": tuple(str(instrument.get(k, "")) for k in ("id", "version", "config_digest")),
+                "inputs": sorted(tuple(x) for x in _named(r.get("inputs")) if not x[0].startswith("receipt:")),
+                "outputs": sorted(tuple(x) for x in _named(r.get("outputs"))),
+            }
+        )
     return out
 
 
 def _repeat_of(run, store) -> str:
     from onetrace_console.run_panels import manifest_of
+
     said = manifest_of(run, store).get("repeat_of")
     return said if isinstance(said, str) else ""
 
@@ -202,6 +240,7 @@ def repeats(run, store) -> list[tuple[object, str]]:
     first-step inputs with the same settings and instruments at every step; same pipeline only."""
     from onetrace_console.overview import declared_list
     from onetrace_console.store import arrival_order
+
     mine = _facts(run, store)
     if not mine:
         return []
@@ -209,13 +248,16 @@ def repeats(run, store) -> list[tuple[object, str]]:
     for other in arrival_order(store.runs(), newest_first=False):
         if other.key == run.key or declared_list(other) != declared_list(run):
             continue
-        if (_repeat_of(other, store) == run.run_id and run.run_id) or \
-                (_repeat_of(run, store) == other.run_id and other.run_id):
+        if (_repeat_of(other, store) == run.run_id and run.run_id) or (
+            _repeat_of(run, store) == other.run_id and other.run_id
+        ):
             out.append((other, "its manifest's repeat_of"))
             continue
         theirs = _facts(other, store)
-        if (len(theirs) == len(mine)
-                and all((a["name"], a["own"], a["settings"], a["instrument"])
-                        == (b["name"], b["own"], b["settings"], b["instrument"]) for a, b in zip(mine, theirs))):
+        if len(theirs) == len(mine) and all(
+            (a["name"], a["own"], a["settings"], a["instrument"])
+            == (b["name"], b["own"], b["settings"], b["instrument"])
+            for a, b in zip(mine, theirs)
+        ):
             out.append((other, "the same inputs, settings and configuration"))
     return out

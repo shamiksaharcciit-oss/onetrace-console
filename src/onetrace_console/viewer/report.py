@@ -1,7 +1,7 @@
 """The check's report: run the standalone check, keep its words, read them strictly.
 
     Every checkmark is a verification performed at generation time, labelled with when
-    it ran, beside the one command that repeats it without us.   — the viewer's specification, §0
+    it ran, beside the one command that repeats it without us.
 
 The standalone check (`verify.py` in the preview package) prints its findings and a
 summary line. It prints no time, so this module runs it and records **when** it ran,
@@ -200,8 +200,8 @@ def capture(run_dir: Path, verifier: Path | None, manifest_name: str = "MANIFEST
         p = subprocess.run(cmd, cwd=run_dir, capture_output=True, timeout=timeout, env=utf8_env())
     except subprocess.TimeoutExpired:
         # Recorded, not raised: a check that did not finish said nothing, and the report says
-        # so (the second confirmation review, B2: raised, it left a stored run with no report,
-        # and the console that stored it could not start again).
+        # so (raised, it once left a stored run with no report, and the console that stored it
+        # could not start again).
         p = None
     # The command is typed FROM the run's folder, so the verifier is named relative to it —
     # including upwards. The SDK's own layout keeps the verifier outside each run
@@ -254,7 +254,7 @@ def parse(envelope: dict) -> Report:
     *checked and failed* (the three-outcome rule).
 
     The check's own words are required in both cases. The page shows them one layer
-    down as received bytes -- 019 §0 -- so a report that carries rows but not the words
+    down as received bytes, so a report that carries rows but not the words
     is not a report this page can render, and reconstructing the words from the rows
     would put a generated artefact where the reader is told the check's own output is.
     """
@@ -271,8 +271,8 @@ def parse(envelope: dict) -> Report:
     for key in ("ran_at", "command", "cwd_note", "exit_status", "stdout"):
         if key not in envelope:
             raise ReportUnreadable(f"the report has no {key!r}")
-    # Each in the one shape `capture` writes it (the second confirmation review, S3: a number
-    # here broke the text reader or the command's tuple).
+    # Each in the one shape `capture` writes it (a number here once broke the text reader or the
+    # command's tuple).
     for key in ("ran_at", "cwd_note", "exit_status", "stdout"):
         if not isinstance(envelope[key], str):
             raise ReportUnreadable(f"the report's {key!r} is not a string: {envelope[key]!r:.80}")
@@ -281,7 +281,7 @@ def parse(envelope: dict) -> Report:
         raise ReportUnreadable("the report's command is not a list of strings")
     # "run_folder_verifier_elsewhere" is no longer produced: the command now always carries
     # a path that works from the run's folder. It stays accepted so reports captured before
-    # that change still read, and its ruled label (023 §4) stays in the table for them.
+    # that change still read, and its agreed label stays in the table for them.
     if envelope["cwd_note"] not in ("run_folder", "run_folder_verifier_elsewhere"):
         raise ReportUnreadable(f"the report names no known place to run from: {envelope['cwd_note']!r}")
     try:
@@ -303,6 +303,7 @@ def parse(envelope: dict) -> Report:
     # is the output's last line: the verifier prints it last, and a line a record wrote into a
     # row comes before it. The exit status, which no record can write, must agree with it.
     lines = [line for line in envelope["stdout"].splitlines() if line.strip()]
+    sections = _section_lines(lines)
     trailer = _trailer(lines)
     summary = _SUMMARY.match(lines[-1]) if lines else None
     if summary is None:
@@ -339,6 +340,7 @@ def parse(envelope: dict) -> Report:
 
     required = None
     completeness = None
+    doc = None
     if "rows_json" in envelope:
         #: The rows from the same check's `--json`, whose summary must agree
         #: with the text's -- exit status, result and counts -- or the report can't be read.
@@ -383,6 +385,7 @@ def parse(envelope: dict) -> Report:
             completeness = (exit_c, result_c, _text_line(said[0]))
 
     _check_trailer(trailer, findings, readable)
+    _check_section_lines(sections, doc)
     return Report(ran_at=envelope["ran_at"], command=tuple(envelope["command"]),
                   cwd_note=envelope["cwd_note"], exit_status=envelope["exit_status"],
                   output=envelope["stdout"], findings=tuple(findings) if readable else (),
@@ -498,6 +501,54 @@ SIGNATURE_CAVEAT = "a signature does not show: " + "; ".join(SIGNATURE_NON_CLAIM
 _BESIDE_SUBJECT = ("anchors/", "signatures/")
 
 
+#: What a format 0.5 section's members do not show: onetrace-verify 0.8 writes one line for each section a run's
+#: receipts hold members of, after the lines above, each its section's lead and that section's non-claims joined
+#: by "; ", in this order (`onetrace_verify/cli.py`, the end of `report`; the leads are `onetrace_verify/format05.py`'s
+#: `*_NON_CLAIM_LEAD`). Its `--json` lists the same non-claims, each with its lead. The console's suite holds these
+#: equal to the installed verifier's own constants.
+FORMAT_05_LEADS = (
+    "a step's recorded store state does not show: ",
+    "a step's kind, agent and tool-call record do not show: ",
+    "a step's recorded messages do not show: ",
+    "what a model call adds beside its record does not show: ",
+    "a framework's steps do not show: ",
+    "a cross-service link does not show: ",
+    "the writer and recovery: ",
+    "expectations checked during the run: ",
+    "a re-run with parts chosen separately, and a recorded code version: ",
+    "a recipient confirmation: ",
+)
+
+
+def _section_lines(lines: list[str]) -> list[str]:
+    """Take the format 0.5 section lines off the end of `lines`, in place, and return them: every last line that
+    begins with one of `FORMAT_05_LEADS`. Their order and words are `_check_section_lines`' to hold."""
+    taken: list[str] = []
+    while lines and lines[-1].startswith(FORMAT_05_LEADS):
+        taken.insert(0, lines.pop())
+    return taken
+
+
+def _check_section_lines(sections: list[str], doc: dict | None) -> None:
+    """The section lines are the ones the same check's `--json` says, and nothing else: for each lead, in the
+    verifier's order, the lead and the `--json` non-claims that begin with it joined by "; ". With no `--json`
+    kept, there is nothing to hold them to, so none may be there."""
+    if not sections:
+        return
+    claims = doc.get("non_claims") if isinstance(doc, dict) else None
+    if not (isinstance(claims, list) and all(isinstance(c, str) for c in claims)):
+        raise ReportUnreadable("lines follow the summary that say what a record does not show, and the check's "
+                               "--json lists no such thing")
+    expected = []
+    for lead in FORMAT_05_LEADS:
+        said = [c[len(lead):] for c in claims if c.startswith(lead)]
+        if said:
+            expected.append(lead + "; ".join(said))
+    if sections != expected:
+        raise ReportUnreadable(f"the lines after the summary are not the verifier's own for this run: "
+                               f"{sections!r:.200} (expected {expected!r:.200})")
+
+
 def _trailer(lines: list[str]) -> list[str]:
     """Take the lines the verifier writes after its summary off the end of `lines`, in place, and
     return them. Only those four lines, in that order; anything else stays where it is, and the
@@ -605,7 +656,7 @@ def _from_rows(call: dict, envelope: dict) -> Report:
     if missing:
         raise ReportUnreadable(f"the report is missing fields this format carries: {missing}")
     # Each field this reader uses in the one shape `verifier_call.to_dict` writes it: strings,
-    # and `raised` a string or null (the third confirmation review, NEW-7: a list was
+    # and `raised` a string or null (a list was
     # unhashable here, and a number had no `.replace`).
     for key in ("kind", "refused", "exit"):
         if not isinstance(call[key], str):

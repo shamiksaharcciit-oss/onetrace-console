@@ -1,4 +1,4 @@
-""""Ran as approved" where a plan is declared and no path was observed: couldn't check, never yes.
+""" "Ran as approved" where a plan is declared and no path was observed: couldn't check, never yes.
 
 A run that declares approved paths (`declared_edges`) and records no path it took (`edges` empty)
 has nothing its plan can be compared with. A LangGraph graph's nodes pass their state on as fresh
@@ -9,6 +9,7 @@ values, so the SDK links no stage to another and the record lists no edges at al
 The run is recorded here by the pinned SDK, in a subprocess, with no network calls: three stages,
 each given a fresh copy of the state, under a run declaring three approved edges.
 """
+
 from __future__ import annotations
 
 import html
@@ -20,7 +21,7 @@ from pathlib import Path
 
 GENERATED_AT = "2026-01-01T00:00:00+00:00"
 
-GRAPH_RUN = '''
+GRAPH_RUN = """
 import onetrace as ot
 from onetrace.emit import Instrument
 
@@ -53,7 +54,7 @@ def graph():
 
 
 graph()
-'''
+"""
 
 
 def _text(page: str) -> str:
@@ -66,8 +67,9 @@ def _record(tmp_path: Path) -> Path:
     script = tmp_path / "graph_run.py"
     script.write_text(GRAPH_RUN, encoding="utf-8")
     env = {**os.environ, "ONETRACE_RUN_ID": "graph-1"}
-    p = subprocess.run([sys.executable, "-I", str(script)], cwd=tmp_path, env=env,
-                       capture_output=True, text=True, timeout=300)
+    p = subprocess.run(
+        [sys.executable, "-I", str(script)], cwd=tmp_path, env=env, capture_output=True, text=True, timeout=300
+    )
     assert p.returncode == 0, p.stdout + p.stderr
     return tmp_path / "runs"
 
@@ -80,6 +82,7 @@ def test_a_graph_run_with_no_observed_path_reads_couldnt_check_with_its_reason(t
     from onetrace_console.pages import CASE, render_execution, run_answers
     from onetrace_console.store import Store
     from tests.test_checks import _require_installed
+
     _require_installed()
     runs = _record(tmp_path)
     manifest = json.loads((runs / "graph-1" / "MANIFEST.json").read_bytes())
@@ -96,9 +99,11 @@ def test_a_graph_run_with_no_observed_path_reads_couldnt_check_with_its_reason(t
 
 
 #: The pinned verifier's own row for such a run: a plan declared, no path observed, nothing checked.
-NO_EDGES_ROW = ("[NOT-RUN] edges conform to declared_edges -- no edges observed: the run declares an "
-                "approved plan, but no stage read another stage's output as such, so no path was "
-                "checked against it")
+NO_EDGES_ROW = (
+    "[NOT-RUN] edges conform to declared_edges -- no edges observed: the run declares an "
+    "approved plan, but no stage read another stage's output as such, so no path was "
+    "checked against it"
+)
 
 
 def test_the_verifier_s_own_row_says_so_on_proof_and_the_rung_still_reads_couldnt_check(tmp_path, examined):
@@ -109,6 +114,7 @@ def test_the_verifier_s_own_row_says_so_on_proof_and_the_rung_still_reads_couldn
     from onetrace_console.pages import CASE, RUN_PROOF, render_execution
     from onetrace_console.store import Store
     from tests.test_checks import _require_installed
+
     _require_installed()
     store = Store(tmp_path / "store")
     run = load_folder(_record(tmp_path), store, Config()).runs[0].run
@@ -123,24 +129,30 @@ def test_the_plan_and_edges_rows_passing_over_no_observed_path_is_never_yes(exam
     """Where a check's plan row and edges row both pass, as a check that compares an empty list of
     paths with a plan passes: still couldn't check."""
     from onetrace_console.viewer.model import EDGES_ROW, PLAN_ROW, CheckRows, ran_as_approved
+
     rows = CheckRows(((PLAN_ROW, "pass", ""), (EDGES_ROW, "pass", "")), "0", "pass")
     declared = [{"from": "a", "to": "b"}]
     examined(3, "manifests read")
-    assert ran_as_approved({"edges": [], "declared_edges": declared}, rows, own_check=True,
-                           verifier=None).state == "no-paths"
-    assert ran_as_approved({"edges": [{"from": "a", "to": "b"}], "declared_edges": declared}, rows,
-                           own_check=True, verifier=None).state == "approved"
-    assert ran_as_approved({"edges": [], "declared_edges": []}, rows, own_check=True,
-                           verifier=None).state == "approved"
+    assert (
+        ran_as_approved({"edges": [], "declared_edges": declared}, rows, own_check=True, verifier=None).state
+        == "no-paths"
+    )
+    assert (
+        ran_as_approved(
+            {"edges": [{"from": "a", "to": "b"}], "declared_edges": declared}, rows, own_check=True, verifier=None
+        ).state
+        == "approved"
+    )
+    assert ran_as_approved({"edges": [], "declared_edges": []}, rows, own_check=True, verifier=None).state == "approved"
 
 
 def test_a_departure_or_an_edges_mismatch_still_says_no(examined):
     from onetrace_console.viewer.model import EDGES_ROW, PLAN_ROW, CheckRows, ran_as_approved
+
     declared = [{"from": "a", "to": "b"}]
     manifest = {"edges": [], "declared_edges": declared}
     examined(2, "failing rows read")
     failed_plan = CheckRows(((PLAN_ROW, "fail", "x"), (EDGES_ROW, "pass", "")), "1", "fail")
     failed_edges = CheckRows(((PLAN_ROW, "pass", ""), (EDGES_ROW, "fail", "y")), "1", "fail")
     assert ran_as_approved(manifest, failed_plan, own_check=True, verifier=None).state == "departed"
-    assert ran_as_approved(manifest, failed_edges, own_check=True,
-                           verifier=None).state == "edges-mismatch"
+    assert ran_as_approved(manifest, failed_edges, own_check=True, verifier=None).state == "edges-mismatch"

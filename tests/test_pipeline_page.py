@@ -19,6 +19,7 @@ A pipeline's name from the demo builder is shown on a public demo only.
 
 Each check is a function returning the problems it finds; each has its sabotage.
 """
+
 from __future__ import annotations
 
 import html
@@ -33,6 +34,7 @@ DEMO: dict = {}
 def demo(shared_demo):
     from onetrace_console.store import Store
     from tests.test_checks import _require_installed
+
     _require_installed()
     folder = shared_demo["folder"]
     pages = folder / "store" / "pages"
@@ -50,20 +52,26 @@ def _text(fragment: str) -> str:
 
 def _tiles(page: str) -> list[tuple[str, str, str]]:
     """(run key, state, line) for each tile, in page order."""
-    return [(k, s, _text(line)) for k, s, line in re.findall(
-        r'<li data-run="([0-9a-f]{64})" data-state="([\w-]+)">.*?<p data-line="vs">(.*?)</p>',
-        page, re.S)]
+    return [
+        (k, s, _text(line))
+        for k, s, line in re.findall(
+            r'<li data-run="([0-9a-f]{64})" data-state="([\w-]+)">.*?<p data-line="vs">(.*?)</p>', page, re.S
+        )
+    ]
 
 
 def _stages(page: str, pipeline) -> list[tuple[str, int]]:
     """(stage, count) under each stage, the stage read by its place in the declared list."""
-    return [(pipeline.stages[int(i)], int(c)) for i, c in re.findall(
-        r'<li data-stage="(\d+)" data-first-differences="(\d+)">', page)]
+    return [
+        (pipeline.stages[int(i)], int(c))
+        for i, c in re.findall(r'<li data-stage="(\d+)" data-first-differences="(\d+)">', page)
+    ]
 
 
 def pages_problems(store, read) -> list[str]:
     from onetrace_console.overview import pipelines
     from onetrace_console.pipeline_pages import FILTERS, page_href
+
     out = []
     for p in pipelines(store):
         for f in FILTERS:
@@ -77,6 +85,7 @@ def pages_problems(store, read) -> list[str]:
 def stage_problems(store, read) -> list[str]:
     """Each declared stage once, in order, with the stored comparisons that first differ there."""
     from onetrace_console.overview import comparison_reading, pipelines
+
     out = []
     for p in pipelines(store):
         keys = {r.key for r in p.runs}
@@ -97,13 +106,15 @@ def tile_problems(store, read) -> list[str]:
     from onetrace_console import records
     from onetrace_console.overview import pipelines
     from onetrace_console.pipeline_pages import run_line
+
     out = []
     for p in pipelines(store):
         got = _tiles(read(f"pipeline-{p.label.lower()}.html"))
         want = [(r.key, records.state(r, store), _text(html.escape(run_line(r, store)))) for r in p.runs]
         if got != want:
-            out.append(f"{p.label}: tiles {[(k[:8], s, l) for k, s, l in got]} "
-                       f"!= {[(k[:8], s, l) for k, s, l in want]}")
+            out.append(
+                f"{p.label}: tiles {[(k[:8], s, l) for k, s, l in got]} != {[(k[:8], s, l) for k, s, l in want]}"
+            )
     return out
 
 
@@ -111,6 +122,7 @@ def filter_problems(store, read) -> list[str]:
     """The filters' runs are the console's own counts' runs, within the pipeline."""
     from onetrace_console.home import tallies
     from onetrace_console.overview import pipelines
+
     by_slug = {t.slug: t for t in tallies(store)}
     out = []
     for p in pipelines(store):
@@ -127,20 +139,25 @@ def filter_problems(store, read) -> list[str]:
 def compare_problems(store, read) -> list[str]:
     from onetrace_console.choose_pages import choose_href
     from onetrace_console.overview import pipelines
+
     out = []
     for p in pipelines(store):
         page = read(f"pipeline-{p.label.lower()}.html")
         if f'<a href="{choose_href(p.label)}" data-link="compare">Compare two runs</a>' not in page:
             out.append(f"{p.label}: no link to compare two runs")
-        main = page[page.index("<main>"):page.index("</main>")]
+        main = page[page.index("<main>") : page.index("</main>")]
         #: The one exception, on a public console: Compare's picker of the pipeline's own runs
         #: (`visitor_compare`), by its exact shape -- two selects and one button, posting to /compare.
-        main = re.sub(r'<form method="post" action="/compare" data-visitor-compare>'
-                      r'<label class="compare-field"><span class="compare-label">Baseline \(run A\)</span>'
-                      r'<select name="a">(?:<option [^>]*>[^<]*</option>)+</select></label>'
-                      r'<label class="compare-field"><span class="compare-label">Candidate \(run B\)</span>'
-                      r'<select name="b">(?:<option [^>]*>[^<]*</option>)+</select></label>'
-                      r'<button type="submit">Compare</button></form>', "", main)
+        main = re.sub(
+            r'<form method="post" action="/compare" data-visitor-compare>'
+            r'<label class="compare-field"><span class="compare-label">Baseline \(run A\)</span>'
+            r'<select name="a">(?:<option [^>]*>[^<]*</option>)+</select></label>'
+            r'<label class="compare-field"><span class="compare-label">Candidate \(run B\)</span>'
+            r'<select name="b">(?:<option [^>]*>[^<]*</option>)+</select></label>'
+            r'<button class="btn-primary" data-busy="Comparing…" data-busy-wait="the comparison" type="submit">Compare</button></form>',
+            "",
+            main,
+        )
         for tag in ("<form", "<button", "<input", "<script"):
             if tag in main:
                 out.append(f"{p.label}: a {tag}> on the page")
@@ -150,6 +167,7 @@ def compare_problems(store, read) -> list[str]:
 def head_problems(store, read) -> list[str]:
     """A tile's first difference is the stage its run page's head names."""
     from onetrace_console.overview import pipelines
+
     out = []
     for p in pipelines(store):
         for key, _, line in _tiles(read(f"pipeline-{p.label.lower()}.html")):
@@ -159,13 +177,13 @@ def head_problems(store, read) -> list[str]:
             case = read(f"runs/{key}/case.html")
             head = re.search(r"first difference at ([^<]+?)<", case)
             if not head or html.unescape(head.group(1)).strip() != m.group(1):
-                out.append(f"{p.label} {key[:8]}: tile says {m.group(1)!r}, run page "
-                           f"{head.group(1) if head else None!r}")
+                out.append(
+                    f"{p.label} {key[:8]}: tile says {m.group(1)!r}, run page {head.group(1) if head else None!r}"
+                )
     return out
 
 
-CHECKS = (pages_problems, stage_problems, tile_problems, filter_problems, compare_problems,
-          head_problems)
+CHECKS = (pages_problems, stage_problems, tile_problems, filter_problems, compare_problems, head_problems)
 
 
 @pytest.mark.parametrize("check", CHECKS, ids=lambda c: c.__name__)
@@ -177,6 +195,7 @@ def test_each_pipeline_page_reads_as_the_console_does(demo, check, examined):
 def test_the_demo_holds_what_the_checks_need(demo):
     """The checks read something: a first difference, a run only ever a baseline, both filters."""
     from onetrace_console.overview import pipelines
+
     store = demo["store"]
     lines = [l for p in pipelines(store) for _, _, l in _tiles(_read(f"pipeline-{p.label.lower()}.html"))]
     assert any(l.startswith("First difference") for l in lines), lines
@@ -186,6 +205,7 @@ def test_the_demo_holds_what_the_checks_need(demo):
 
 def test_a_pipeline_without_comparisons_says_so(demo):
     from onetrace_console.overview import comparison_reading, pipelines
+
     store = demo["store"]
     for p in pipelines(store):
         keys = {r.key for r in p.runs}
@@ -199,15 +219,17 @@ def test_a_pipeline_without_comparisons_says_so(demo):
 def test_the_builder_s_name_is_shown_on_a_public_demo_only(demo):
     from onetrace_console.overview import pipelines
     from onetrace_console.pipeline_pages import render_pipeline
+
     store = demo["store"]
     for p in pipelines(store):
         public = _read(f"pipeline-{p.label.lower()}.html")
-        assert re.search(r'<h1>[^<]*<span data-name>', public), p.label
+        assert re.search(r"<h1>[^<]*<span data-name>", public), p.label
         local = render_pipeline(p, store, generated_at="2026-01-01T00:00:00+00:00")
         assert "data-name" not in local, p.label
 
 
 # ------------------------------------------------------------------------------- sabotages
+
 
 def _planted(change):
     """A reader that serves the demo's pages with one changed by `change(rel, text)`."""
@@ -219,6 +241,7 @@ def test_sabotage_a_missing_filter_page_is_named(demo):
         if rel.endswith("-attention.html") and "-p1-" in rel:
             raise FileNotFoundError(rel)
         return _read(rel)
+
     assert any("no page" in p for p in pages_problems(demo["store"], read))
 
 
@@ -226,15 +249,16 @@ def test_sabotage_a_count_moved_to_another_stage_is_named(demo):
     def change(rel, text):
         n = re.findall(r'data-first-differences="(\d+)"', text)
         if rel.startswith("pipeline-") and any(int(x) for x in n):
-            text = re.sub(r'data-first-differences="(\d+)"', lambda m: 'data-first-differences="0"',
-                          text, count=0)
+            text = re.sub(r'data-first-differences="(\d+)"', lambda m: 'data-first-differences="0"', text, count=0)
         return text
+
     assert stage_problems(demo["store"], _planted(change))
 
 
 def test_sabotage_a_tile_s_state_swapped_is_named(demo):
     def change(rel, text):
         return text.replace('data-state="no"', 'data-state="yes"', 1) if rel == "pipeline-p1.html" else text
+
     assert any("P1" in p for p in tile_problems(demo["store"], _planted(change)))
 
 
@@ -244,20 +268,27 @@ def test_sabotage_a_filter_leaking_a_run_is_named(demo):
             whole = _read("pipeline-p1.html")
             return whole
         return text
+
     assert any("P1 agree" in p for p in filter_problems(demo["store"], _planted(change)))
 
 
 def test_sabotage_the_compare_link_dropped_or_a_form_added_is_named(demo):
     def drop(rel, text):
         return text.replace('data-link="compare"', 'data-link="gone"')
+
     def form(rel, text):
         return text.replace("</main>", "<form></form></main>")
+
     assert compare_problems(demo["store"], _planted(drop))
     assert any("<form" in p for p in compare_problems(demo["store"], _planted(form)))
 
 
 def test_sabotage_a_tile_naming_another_stage_is_named(demo):
     def change(rel, text):
-        return re.sub(r"(First difference · stage \S+ · )([^<]+)", r"\1elsewhere", text) \
-            if rel.startswith("pipeline-") else text
+        return (
+            re.sub(r"(First difference · stage \S+ · )([^<]+)", r"\1elsewhere", text)
+            if rel.startswith("pipeline-")
+            else text
+        )
+
     assert head_problems(demo["store"], _planted(change))

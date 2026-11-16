@@ -9,6 +9,7 @@
 
 Each check has its sabotage.
 """
+
 from __future__ import annotations
 
 import json
@@ -26,6 +27,7 @@ def _console(tmp_path, runs: Path, compare=None):
     from onetrace_console.serve import _render_startup_pages
     from onetrace_console.store import Store
     from tests.test_checks import _require_installed
+
     _require_installed()
     store = Store(tmp_path / "store" / "store")
     loaded = load_folder(runs, store, Config(), compare=compare)
@@ -39,12 +41,14 @@ def _text(html: str) -> str:
 
 # ------------------------------------------------------------------ the two times
 
+
 def recent_problems(home: str, runs) -> list[str]:
-    from onetrace_console.words import short_time
     from onetrace_console.overview import ran_at
+    from onetrace_console.words import short_time
+
     head = re.search(r'<section data-section="recent-runs">.*?<thead>(.*?)</thead>', home, re.S).group(1)
     out = []
-    if not ("<th>Ran</th><th>Received by this console</th>" in head):
+    if "<th>Ran</th><th>Received by this console</th>" not in head:
         out.append("the columns don't say which time is which")
     for run in runs:
         row = re.search(rf'<tr data-recent="{run.key}">(.*?)</tr>', home, re.S)
@@ -58,6 +62,7 @@ def recent_problems(home: str, runs) -> list[str]:
 
 def test_received_says_it_is_this_consoles_and_the_runs_own_time_stands_beside_it(tmp_path, examined):
     import shutil
+
     shutil.copytree(EXAMPLE, tmp_path / "runs")
     store, pages, _ = _console(tmp_path, tmp_path / "runs")
     home = (pages / "home.html").read_text(encoding="utf-8")
@@ -65,6 +70,7 @@ def test_received_says_it_is_this_consoles_and_the_runs_own_time_stands_beside_i
     examined(len(runs), "runs in Recent runs")
     assert recent_problems(home, runs) == []
     from onetrace_console.overview import ran_at
+
     assert {ran_at(r)[:10] for r in runs} == {"2026-09-28", "2026-09-29"}, "the record's own clock"
     assert all(r.received_at[:10] != "2026-09-28" for r in runs), "taken in today, not on the record's day"
     assert "Latest received by this console" in _text(home)
@@ -72,10 +78,12 @@ def test_received_says_it_is_this_consoles_and_the_runs_own_time_stands_beside_i
 
 def test_sabotage_the_received_time_shown_as_when_it_ran_is_named(tmp_path, examined):
     import shutil
+
     shutil.copytree(EXAMPLE, tmp_path / "runs")
     store, pages, _ = _console(tmp_path, tmp_path / "runs")
     home = (pages / "home.html").read_text(encoding="utf-8")
     from onetrace_console.words import time_html
+
     run = store.runs()[0]
     row = re.search(rf'<tr data-recent="{run.key}">(.*?)</tr>', home, re.S)
     cells = re.findall(r"<td[^>]*>.*?</td>", row.group(1), re.S)
@@ -89,9 +97,16 @@ def test_sabotage_the_received_time_shown_as_when_it_ran_is_named(tmp_path, exam
 
 def test_a_record_with_no_time_gives_none_never_the_received_time(examined):
     from types import SimpleNamespace
+
     from onetrace_console.overview import ran_at
-    cases = [(None, ""), ("{}", ""), ("not json", ""), ('{"case_ran": 7}', ""),
-             ('{"case_ran": "2026-09-28T10:00:00Z \u2192 2026-09-28T10:00:05Z"}', "2026-09-28T10:00:00Z")]
+
+    cases = [
+        (None, ""),
+        ("{}", ""),
+        ("not json", ""),
+        ('{"case_ran": 7}', ""),
+        ('{"case_ran": "2026-09-28T10:00:00Z \u2192 2026-09-28T10:00:05Z"}', "2026-09-28T10:00:00Z"),
+    ]
     examined(len(cases), "list rows")
     for row, want in cases:
         run = SimpleNamespace(list_row=row, received_at="2026-10-11T04:00:28+00:00")
@@ -100,23 +115,34 @@ def test_a_record_with_no_time_gives_none_never_the_received_time(examined):
 
 # ------------------------------------------------------------------ same outputs, different inputs
 
+
 def _intake_pair(root: Path, questions: tuple[str, str]) -> Path:
     from onetrace.emit import Instrument, Recorder
+
     runs = root / "runs"
     for name, q in zip("ab", questions):
         out = runs / name
         out.mkdir(parents=True)
         (out / "q.json").write_text(json.dumps({"question": q}), encoding="utf-8")
-        rec = Recorder(str(out), run_id=f"pair-{name}", declared_stages=["intake", "answer"],
-                       manifest=Path(__file__), policy="fail-closed", anchor_reason="a test record")
+        rec = Recorder(
+            str(out),
+            run_id=f"pair-{name}",
+            declared_stages=["intake", "answer"],
+            manifest=Path(__file__),
+            policy="fail-closed",
+            anchor_reason="a test record",
+        )
 
         def intake(ctx, out=out):
-            ctx.read_external(out / "q.json", "application/json", name="question",
-                              trust_class="operator-authored")
+            ctx.read_external(out / "q.json", "application/json", name="question", trust_class="operator-authored")
+
         rec.run_node("intake", None, Instrument("asker", "reader", "1.0.0", {"k": "v"}), intake)
-        rec.run_node("answer", None, Instrument("answerer", "tool", "1.0.0", {"k": "v"}),
-                     lambda ctx, q=q: (ctx.read_receipt("intake"),
-                                       ctx.write("a.txt", q.encode("utf-8"), "text/plain"))[1])
+        rec.run_node(
+            "answer",
+            None,
+            Instrument("answerer", "tool", "1.0.0", {"k": "v"}),
+            lambda ctx, q=q: (ctx.read_receipt("intake"), ctx.write("a.txt", q.encode("utf-8"), "text/plain"))[1],
+        )
         rec.close()
     return runs
 
@@ -131,12 +157,14 @@ def test_a_same_stage_whose_inputs_differ_says_so(tmp_path, examined):
     runs = _intake_pair(tmp_path, ("What is the refund window?", "How long does shipping take?"))
     store, pages, loaded = _console(tmp_path, runs, compare=("a", "b"))
     #: The comparison's two views: the stage table is on "Proof", the graph on "What changed".
-    diff = ((pages / "diff" / f"{loaded.comparison.key}-proof.html").read_text(encoding="utf-8")
-            + (pages / "diff" / f"{loaded.comparison.key}.html").read_text(encoding="utf-8"))
+    diff = (pages / "diff" / f"{loaded.comparison.key}-proof.html").read_text(encoding="utf-8") + (
+        pages / "diff" / f"{loaded.comparison.key}.html"
+    ).read_text(encoding="utf-8")
     cell = _text(_intake_cell(diff))
     examined(1, "comparison page")
-    assert cell.startswith("Same · its inputs differ (question); the verdict compares outputs, "
-                           "and this stage records none"), cell
+    assert cell.startswith(
+        "Same · its inputs differ (question); the verdict compares outputs, and this stage records none"
+    ), cell
     assert "inputs differ" in _text(re.search(r'<svg class="graph".*?</svg>', diff, re.S).group(0))
 
 
@@ -146,13 +174,15 @@ def test_sabotage_the_same_inputs_say_nothing(tmp_path, examined):
     #: The stage table is on the comparison's "Proof" view.
     diff = (pages / "diff" / f"{loaded.comparison.key}-proof.html").read_text(encoding="utf-8")
     examined(1, "comparison page")
-    assert _text(_intake_cell(diff)) == "Same" and 'data-inputs-differ' not in diff
+    assert _text(_intake_cell(diff)) == "Same" and "data-inputs-differ" not in diff
 
 
 # ------------------------------------------------------------------ the runs lists' words
 
+
 def list_problems(page: str, filtered: bool) -> list[str]:
     from onetrace_console.pages import LIST_RAN, LIST_TITLE_ALL, LIST_TITLE_FILTERED
+
     title = LIST_TITLE_FILTERED if filtered else LIST_TITLE_ALL
     out = []
     if f"<h1>{title}</h1>" not in page or f"<title>{title}</title>" not in page:
@@ -166,11 +196,14 @@ def list_problems(page: str, filtered: bool) -> list[str]:
 
 def _lists(tmp_path, examined):
     import shutil
+
     shutil.copytree(EXAMPLE, tmp_path / "runs")
     _store, pages, _ = _console(tmp_path, tmp_path / "runs")
     examined(2, "lists")
-    return ((pages / "executions-all.html").read_text(encoding="utf-8"),
-            (pages / "executions-records-agree.html").read_text(encoding="utf-8"))
+    return (
+        (pages / "executions-all.html").read_text(encoding="utf-8"),
+        (pages / "executions-records-agree.html").read_text(encoding="utf-8"),
+    )
 
 
 def test_the_runs_lists_say_what_they_are_and_when_it_ran(tmp_path, examined):
@@ -181,6 +214,7 @@ def test_the_runs_lists_say_what_they_are_and_when_it_ran(tmp_path, examined):
 
 def test_sabotage_the_old_words_are_named(tmp_path, examined):
     from onetrace_console.pages import LIST_RAN, LIST_TITLE_ALL
+
     every, _some = _lists(tmp_path, examined)
     old_title = every.replace(LIST_TITLE_ALL, "The runs this page was given")
     old_column = every.replace(f"<th>{LIST_RAN}</th>", "<th>ran</th>")

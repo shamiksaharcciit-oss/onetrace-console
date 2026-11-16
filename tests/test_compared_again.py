@@ -5,6 +5,7 @@ build gets a new name, and both pages are kept. The earlier page then says so, a
 newer one; it is found by the key the pair has under this console's build, never by time. A page
 whose pair has no comparison under this build, and the newer page itself, say nothing of it.
 """
+
 from __future__ import annotations
 
 import html
@@ -20,8 +21,13 @@ EARLIER = {"sdk_distribution_version": "0.6.0", "sdk_build_digest": "wheel:" + "
 def _earlier(comparison, store):
     """The same pair's comparison as an earlier console stored it: its record, under its own name."""
     from onetrace_console.compare import comparison_key
-    key = comparison_key(comparison.bundle_sha_a, comparison.bundle_sha_b, EARLIER["sdk_distribution_version"],
-                         EARLIER["sdk_build_digest"])
+
+    key = comparison_key(
+        comparison.bundle_sha_a,
+        comparison.bundle_sha_b,
+        EARLIER["sdk_distribution_version"],
+        EARLIER["sdk_build_digest"],
+    )
     old = replace(comparison, key=key, **EARLIER)
     store.put_comparison(old)
     return old
@@ -29,12 +35,15 @@ def _earlier(comparison, store):
 
 def _line(page: str) -> list[tuple[str, str]]:
     """Each compared-again line: its words, and where it links."""
-    return [(" ".join(html.unescape(re.sub(r"<[^>]+>", " ", m.group(1))).split()), m.group(2))
-            for m in re.finditer(r'<p data-section="compared-again">(.*?href="([^"]*)".*?)</p>', page, re.S)]
+    return [
+        (" ".join(html.unescape(re.sub(r"<[^>]+>", " ", m.group(1))).split()), m.group(2))
+        for m in re.finditer(r'<p data-section="compared-again">(.*?href="([^"]*)".*?)</p>', page, re.S)
+    ]
 
 
 def test_the_earlier_page_says_its_pair_was_compared_again_and_links_the_newer(tmp_path, examined):
     from onetrace_console.render import COMPARED_AGAIN
+
     _folder, store, runs = _load(tmp_path, {"day-1": "day-1", "day-2": "day-2"})
     newer = _compared(store, runs["day-1"], runs["day-2"])
     old = _earlier(newer, store)
@@ -62,6 +71,7 @@ def test_sabotage_a_line_drawn_for_any_comparison_under_this_build_is_caught(tmp
     no new name then gets one, and the test above would fail."""
     from onetrace_console import render
     from onetrace_console.compare import sdk_build_digest
+
     _folder, store, runs = _load(tmp_path, {"day-1": "day-1", "day-2": "day-2"})
     _compared(store, runs["day-1"], runs["day-2"])
     reverse = _compared(store, runs["day-2"], runs["day-1"])
@@ -72,6 +82,7 @@ def test_sabotage_a_line_drawn_for_any_comparison_under_this_build_is_caught(tmp
         if comparison.sdk_build_digest == sdk_build_digest():
             return None
         return next((c for c in store.comparisons() if c.sdk_build_digest == sdk_build_digest()), None)
+
     monkeypatch.setattr(render, "compared_again", any_under_this_build)
     examined(1, "planted rule")
     assert _line(_diff_page(old, store)) != []

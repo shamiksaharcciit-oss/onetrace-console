@@ -1,6 +1,7 @@
 """Sessions. In-memory, fresh id per sign-in, idle/absolute timeouts,
 server-side sign-out.
 """
+
 from __future__ import annotations
 
 from onetrace_console.sessions import SessionStore

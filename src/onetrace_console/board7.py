@@ -8,7 +8,7 @@ Only then is the trace made: a run of its own,
     python -m onetrace diff RUN_A RUN_B --text --json --runs-root RUNS_ROOT
 
 its stdout kept byte for byte, `--out` to the scratch folder, stored beside the comparison's other
-runs, which stay as they are. Anywhere else there is no board 7 and no extra run (`c171976`'s rule).
+runs, which stay as they are. Anywhere else there is no board 7 and no extra run, as since console 0.2.0.
 
 **The runs root** holds the stored runs the trace can reach, laid out from the store and nothing
 else -- never from the network. Each is a run the store holds whole (every object present and
@@ -26,17 +26,26 @@ entry is held to the SDK's schema for its status, and its nodes to the reader's 
 SDK's sentences word for word, its four "couldn't trace" reasons as given, no count the JSON doesn't
 hold, outputs drawn only where the SDK marked them verified, and the limit line always.
 """
+
 from __future__ import annotations
 
 import shutil
 import subprocess
-import sys
 from html import escape as _html
 from pathlib import Path
 
-from onetrace_console.textdiff_view import (VERIFIED, TextDiffUnreadable, _decimal, _fail, _keys,
-                                            _node, _shown, _strings, read_textdiff)
 from onetrace_console.child import utf8_env
+from onetrace_console.textdiff_view import (
+    VERIFIED,
+    TextDiffUnreadable,
+    _decimal,
+    _fail,
+    _keys,
+    _node,
+    _shown,
+    _strings,
+    read_textdiff,
+)
 
 TRACE = "diff --text --runs-root"
 SHOWN_COMMAND = "python -m onetrace diff RUN_A RUN_B --text --json --runs-root RUNS_ROOT"
@@ -60,11 +69,16 @@ _SIDE = {"chain_head", "run_id", "path", "verified"}
 
 # ------------------------------------------------------------------------------------ reading
 
+
 def _head(value, what: str, *, null: bool) -> None:
     if value is None and null:
         return
-    if not (isinstance(value, str) and len(value) == 71 and value.startswith("sha256:")
-            and all(c in "0123456789abcdef" for c in value[7:])):
+    if not (
+        isinstance(value, str)
+        and len(value) == 71
+        and value.startswith("sha256:")
+        and all(c in "0123456789abcdef" for c in value[7:])
+    ):
         _fail(f"{what} is not a digest: {value!r:.80}")
 
 
@@ -84,8 +98,9 @@ def _side(side, status: str, what: str) -> None:
         _fail(f"{what}'s verified is not true, false or null")
     if side["verified"] is False and side["run_id"] is not None:
         _fail(f"{what} did not verify and still names its run")
-    if status == _TRACED and (side["verified"] is not True or side["run_id"] is None
-                              or side["path"] is None or side["chain_head"] is None):
+    if status == _TRACED and (
+        side["verified"] is not True or side["run_id"] is None or side["path"] is None or side["chain_head"] is None
+    ):
         _fail(f"{what} is traced but not found and verified")
 
 
@@ -112,15 +127,13 @@ def _entry(entry, what: str, *, followed: bool) -> None:
         _fail(f"{what}'s envelope is {entry['envelope']!r}")
     documents = entry["documents"]
     if documents is not None:
-        _keys(documents, {"changed", "total", "names"}, {"changed", "total", "names"},
-              f"{what}'s documents")
+        _keys(documents, {"changed", "total", "names"}, {"changed", "total", "names"}, f"{what}'s documents")
         _decimal(documents["changed"], f"{what}'s documents changed")
         _decimal(documents["total"], f"{what}'s documents total")
         _strings(documents["names"], f"{what}'s document names")
     hop = entry["second_hop"]
     if hop is not None:
-        _keys(hop, {"node", "baseline", "candidate"}, {"node", "baseline", "candidate"},
-              f"{what}'s second hop")
+        _keys(hop, {"node", "baseline", "candidate"}, {"node", "baseline", "candidate"}, f"{what}'s second hop")
         _shown(hop["node"], f"{what}'s second hop node")
         for side in ("baseline", "candidate"):
             _head(hop[side], f"{what}'s second hop {side}", null=True)
@@ -155,8 +168,10 @@ def changed_links(raw: str | bytes) -> list[dict]:
 
 # ---------------------------------------------------------------------- the run that follows it
 
+
 def _no_follow_raw(comparison, store) -> bytes | None:
     from onetrace_console.compare import TEXT_DIFF
+
     run = comparison.verb(TEXT_DIFF)
     return None if run is None or run.note else store.get(run.stdout_key)
 
@@ -174,6 +189,7 @@ def runs_root(store, heads: set[str], root: Path) -> list[str]:
     own check said. Returns the keys laid out."""
     from onetrace_console.checks import materialise
     from onetrace_console.store import SameFileError, StoreError
+
     root.mkdir(parents=True, exist_ok=True)
     laid = []
     for run in sorted(store.runs(), key=lambda r: r.key):
@@ -193,40 +209,67 @@ def runs_root(store, heads: set[str], root: Path) -> list[str]:
 def trace_run(store, folder_a: Path, folder_b: Path, work: Path, timeout: int, no_follow):
     """The trace's own run over the two laid-out runs, or None where no corpus link changed."""
     from onetrace_console.compare import TIMED_OUT, VerbRun
+
     if no_follow is None or no_follow.note:
         return None
     links = changed_links(store.get(no_follow.stdout_key))
     if not links:
         return None
-    heads = {e[side]["chain_head"] for e in links for side in ("baseline", "candidate")
-             if e[side]["chain_head"] is not None}
+    heads = {
+        e[side]["chain_head"] for e in links for side in ("baseline", "candidate") if e[side]["chain_head"] is not None
+    }
     root = work / "runs-root"
     runs_root(store, heads, root)
     out = work / "out-trace"
     out.mkdir(parents=True, exist_ok=True)
-    from onetrace_console.compare import portable
-    from onetrace_console.compare import verifier_copy
-    run_command, command = portable(("diff", folder_a, folder_b, "--text", "--json", "--runs-root", root,
-                                     "--verifier", verifier_copy(Path(work)), "--out", out), Path(work))
+    from onetrace_console.compare import portable, verifier_copy
+
+    run_command, command = portable(
+        (
+            "diff",
+            folder_a,
+            folder_b,
+            "--text",
+            "--json",
+            "--runs-root",
+            root,
+            "--verifier",
+            verifier_copy(Path(work)),
+            "--out",
+            out,
+        ),
+        Path(work),
+    )
     try:
         proc = subprocess.run(run_command, capture_output=True, timeout=timeout, cwd=Path(work), env=utf8_env())
     except subprocess.TimeoutExpired:
-        return VerbRun(verb=TRACE, command=command, shown_command=SHOWN_COMMAND, exit_status="",
-                       stdout_key=store.put(b""), note=f"{TIMED_OUT} after {timeout}s")
-    return VerbRun(verb=TRACE, command=command, shown_command=SHOWN_COMMAND,
-                   exit_status=str(proc.returncode), stdout_key=store.put(proc.stdout),
-                   refused=proc.returncode not in (0, 1))
+        return VerbRun(
+            verb=TRACE,
+            command=command,
+            shown_command=SHOWN_COMMAND,
+            exit_status="",
+            stdout_key=store.put(b""),
+            note=f"{TIMED_OUT} after {timeout}s",
+        )
+    return VerbRun(
+        verb=TRACE,
+        command=command,
+        shown_command=SHOWN_COMMAND,
+        exit_status=str(proc.returncode),
+        stdout_key=store.put(proc.stdout),
+        refused=proc.returncode not in (0, 1),
+    )
 
 
 # ------------------------------------------------------------------------------------ drawing
+
 
 def _value(value) -> str:
     """A cause's value as the SDK gives it: a string, an input's digest and trust class, or none."""
     if value is None:
         return ""
     if isinstance(value, dict):
-        return (f'<code>{_html(str(value.get("digest", "")))}</code> '
-                f'{_html(str(value.get("trust_class", "")))}')
+        return f"<code>{_html(str(value.get('digest', '')))}</code> {_html(str(value.get('trust_class', '')))}"
     return f"<code>{_html(str(value))}</code>"
 
 
@@ -238,15 +281,18 @@ def _causes(doc: dict, entry: dict) -> str:
         return ""
     rows = "".join(
         f'<tr data-cause="{_html(c["name"])}"><td>{_html(c["kind"])}</td>'
-        f'<td><code>{_html(c["name"])}</code></td><td>{_value(c["baseline"])}</td>'
-        f'<td>{_value(c["candidate"])}</td>'
+        f"<td><code>{_html(c['name'])}</code></td><td>{_value(c['baseline'])}</td>"
+        f"<td>{_value(c['candidate'])}</td>"
         f'<td data-status="{_html(c["status"])}">{_html(c["status"])}</td></tr>'
-        for c in node["causes"])
-    return (f'<section data-section="where-started-causes"><h3>{_html(CAUSES_HEADING)}</h3>'
-            f'<p><code>{_html(node["node"])}</code></p>'
-            '<table><thead><tr><th>kind</th><th>name</th>'
-            "<th>baseline</th><th>candidate</th><th>status</th></tr></thead>"
-            f"<tbody>{rows}</tbody></table></section>")
+        for c in node["causes"]
+    )
+    return (
+        f'<section data-section="where-started-causes"><h3>{_html(CAUSES_HEADING)}</h3>'
+        f"<p><code>{_html(node['node'])}</code></p>"
+        "<table><thead><tr><th>kind</th><th>name</th>"
+        "<th>baseline</th><th>candidate</th><th>status</th></tr></thead>"
+        f"<tbody>{rows}</tbody></table></section>"
+    )
 
 
 def _chain(entry: dict) -> str:
@@ -255,27 +301,36 @@ def _chain(entry: dict) -> str:
     items = []
     for n in entry["nodes"]:
         first = n["verdict"] == "FIRST DIFFERENCE"
-        label = f'<code>{_html(n["node"])}</code> · {_html(n["verdict"])}'
-        items.append(f'<li data-node="{_html(n["node"])}" data-verdict="{_html(n["verdict"])}"'
-                     + (f' data-first-difference="true"><strong>{label}</strong></li>' if first
-                        else f">{label}</li>"))
+        label = f"<code>{_html(n['node'])}</code> · {_html(n['verdict'])}"
+        items.append(
+            f'<li data-node="{_html(n["node"])}" data-verdict="{_html(n["verdict"])}"'
+            + (f' data-first-difference="true"><strong>{label}</strong></li>' if first else f">{label}</li>")
+        )
     count = ""
     documents = entry["documents"]
     if documents is not None:
         from onetrace_console.info_mark import mark
-        note = (f"The SDK's own count, from the two runs' corpus manifests: {documents['changed']} of the "
-                f"{documents['total']} documents it lists differ between them.")
-        count = (f'<p data-documents>{_html(documents["changed"])} of '
-                 f'{_html(documents["total"])} documents changed{mark(note)}</p>')
-    return (f'<section data-section="where-started-chain"><h3>{_html(CHAIN_HEADING)}</h3>'
-            f'<ol>{"".join(items)}</ol>{count}</section>')
+
+        note = (
+            f"The SDK's own count, from the two runs' corpus manifests: {documents['changed']} of the "
+            f"{documents['total']} documents it lists differ between them."
+        )
+        count = (
+            f"<p data-documents>{_html(documents['changed'])} of "
+            f"{_html(documents['total'])} documents changed{mark(note)}</p>"
+        )
+    return (
+        f'<section data-section="where-started-chain"><h3>{_html(CHAIN_HEADING)}</h3>'
+        f"<ol>{''.join(items)}</ol>{count}</section>"
+    )
 
 
 def _cells(out: dict) -> tuple[str, str]:
     """An output's baseline and current text, from the SDK's own hunks and spans: each side's
     lines as the SDK numbered them, its marked words highlighted. Never the console's own diff."""
     from onetrace_console.textdiff_view import _marked
-    sides = {"baseline": [], "candidate": []}
+
+    sides: dict[str, list[str]] = {"baseline": [], "candidate": []}
     for hunk in out["hunks"]:
         for line in hunk["lines"]:
             mark = {"-": "del", "+": "ins"}.get(line["op"], "")
@@ -288,7 +343,7 @@ def _cells(out: dict) -> tuple[str, str]:
         notes = "\n".join(_html(n) for n in out["notes"])
         sides["baseline"].insert(0, notes)
         sides["candidate"].insert(0, notes)
-    return tuple(f'<pre>{chr(10).join(sides[s])}</pre>' for s in ("baseline", "candidate"))
+    return tuple(f"<pre>{chr(10).join(sides[s])}</pre>" for s in ("baseline", "candidate"))  # type: ignore[return-value]  # the two sides
 
 
 def _rows(run: str, nodes: list) -> list[str]:
@@ -296,58 +351,69 @@ def _rows(run: str, nodes: list) -> list[str]:
     for n in nodes:
         for out in n["outputs"]:
             name = _html(out["name"]) if out["name"] is not None else ""
-            head = (f'<td>{run}</td><td><code>{_html(n["node"])}</code></td>'
-                    f'<td><code>{name}</code></td><td>{_html(n["verdict"])}</td>')
+            head = (
+                f"<td>{run}</td><td><code>{_html(n['node'])}</code></td>"
+                f"<td><code>{name}</code></td><td>{_html(n['verdict'])}</td>"
+            )
             if out["verified"] is not True:
                 #: Never an unverified output's text: the SDK's reason, word for word.
-                rows.append(f'<tr data-output data-verified="false">{head}'
-                            f'<td colspan="3" data-not-shown>{_html(out.get("reason", ""))}</td></tr>')
+                rows.append(
+                    f'<tr data-output data-verified="false">{head}'
+                    f'<td colspan="3" data-not-shown>{_html(out.get("reason", ""))}</td></tr>'
+                )
                 continue
             base, cand = _cells(out)
-            rows.append(f'<tr data-output data-verified="true">{head}<td>{base}</td><td>{cand}</td>'
-                        f'<td><span class="pill ok" data-badge="verified">{VERIFIED}</span></td></tr>')
+            rows.append(
+                f'<tr data-output data-verified="true">{head}<td>{base}</td><td>{cand}</td>'
+                f'<td><span class="pill ok" data-badge="verified">{VERIFIED}</span></td></tr>'
+            )
     return rows
 
 
 def _text_table(doc: dict, entry: dict, query_run: str) -> str:
     """Point 4: one table, the traced ingest rows first, then the query rows."""
-    ingest = (f'{_html(entry["baseline"]["run_id"])} → {_html(entry["candidate"]["run_id"])}')
+    ingest = f"{_html(entry['baseline']['run_id'])} → {_html(entry['candidate']['run_id'])}"
     rows = _rows(ingest, entry["nodes"]) + _rows(query_run, doc.get("nodes", []))
-    return (f'<section data-section="where-started-text"><h3>{_html(TEXT_HEADING)}</h3>'
-            '<table><thead><tr><th>run</th><th>stage</th>'
-            "<th>output</th><th>verdict</th><th>baseline</th><th>current</th><th></th></tr></thead>"
-            f'<tbody>{"".join(rows)}</tbody></table></section>')
+    return (
+        f'<section data-section="where-started-text"><h3>{_html(TEXT_HEADING)}</h3>'
+        "<table><thead><tr><th>run</th><th>stage</th>"
+        "<th>output</th><th>verdict</th><th>baseline</th><th>current</th><th></th></tr></thead>"
+        f"<tbody>{''.join(rows)}</tbody></table></section>"
+    )
 
 
 def _second_hop(entry: dict) -> str:
     """The SDK's own sentence for a second changed link, as its plain form words it."""
     from onetrace.textdiff import short
+
     hop = entry["second_hop"]
     if hop is None:
         return ""
-    return (f"<p data-second-hop>the linked ingest runs' own corpus link changed at "
-            f"{_html(hop['node'])}: {_html(short(hop['baseline']))} -> "
-            f"{_html(short(hop['candidate']))}; not followed (one hop only)</p>")
+    return (
+        f"<p data-second-hop>the linked ingest runs' own corpus link changed at "
+        f"{_html(hop['node'])}: {_html(short(hop['baseline']))} -> "
+        f"{_html(short(hop['candidate']))}; not followed (one hop only)</p>"
+    )
 
 
 def render_board7(doc: dict, query_run: str) -> str:
     """The board's body from a strict reading of the trace run, one part per trace entry."""
     parts = []
     if "first_line" in doc:
-        parts.append(f'<p data-first-line>{_html(doc["first_line"])}</p>')
+        parts.append(f"<p data-first-line>{_html(doc['first_line'])}</p>")
     for entry in doc.get("corpus_traces", []):
-        parts.append(f'<article data-trace="{_html(entry["node"])}" '
-                     f'data-status="{_html(entry["status"])}">')
+        parts.append(f'<article data-trace="{_html(entry["node"])}" data-status="{_html(entry["status"])}">')
         if entry["status"] == _TRACED:
-            parts.append(f'<p data-trace-heading>{_html(entry["heading"])}</p>'
-                         f'<p data-trace-first-line>{_html(entry["first_line"])}</p>'
-                         + _second_hop(entry))
+            parts.append(
+                f"<p data-trace-heading>{_html(entry['heading'])}</p>"
+                f"<p data-trace-first-line>{_html(entry['first_line'])}</p>" + _second_hop(entry)
+            )
             parts.append(_causes(doc, entry))
             parts.append(_chain(entry))
             parts.append(_text_table(doc, entry, query_run))
         else:
             #: Point 5: the SDK's reason, word for word; the rest of the page as it was.
-            parts.append(f'<p data-trace-reason>{_html(entry["reason"])}</p>')
+            parts.append(f"<p data-trace-reason>{_html(entry['reason'])}</p>")
             parts.append(_causes(doc, entry))
         parts.append("</article>")
     return "".join(parts)
@@ -358,26 +424,31 @@ def board7_section(comparison, store) -> str:
     makes only where a corpus link changed at a first difference."""
     from onetrace_console.render import TEXT_DIFF_UNREADABLE
     from onetrace_console.words import run_named
+
     run = comparison.verb(TRACE)
     if run is None:
         return ""
     head = f'<section data-section="where-started"><h2>{_html(HEADING)}</h2>'
     from onetrace_console.render import typed_command
+
     #: The linked ingest runs are found where the SDK looks by default: the folder holding the
     #: baseline, `runs/`, so no --runs-root is needed.
-    command = (f'<p data-section="where-started-command">Command: '
-               f"<code>{_html(typed_command(comparison, store, 'diff', text=True))}</code></p>")
+    command = (
+        f'<p data-section="where-started-command">Command: '
+        f"<code>{_html(typed_command(comparison, store, 'diff', text=True))}</code></p>"
+    )
     limit = f'<p class="limit" data-section="where-started-limit">{_html(LIMIT)}</p>'
     if run.note:
-        body = (f"<p>This console did not obtain an answer: {_html(run.note)}. Nothing is shown "
-                "below because there is nothing the SDK said.</p>")
+        body = (
+            f"<p>This console did not obtain an answer: {_html(run.note)}. Nothing is shown "
+            "below because there is nothing the SDK said.</p>"
+        )
     else:
         try:
             doc = read_traces(store.get(run.stdout_key), followed=True)
         except TextDiffUnreadable as e:
             body = f"<p>{_html(TEXT_DIFF_UNREADABLE.format(why=e))}</p>"
         else:
-            query = (f"{run_named(store, comparison.run_a)} → "
-                     f"{run_named(store, comparison.run_b)}")
+            query = f"{run_named(store, comparison.run_a)} → {run_named(store, comparison.run_b)}"
             body = render_board7(doc, query)
     return f"{head}{body}{limit}{command}</section>"

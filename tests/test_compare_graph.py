@@ -10,6 +10,7 @@ The runs are the SDK exam's dag-r37 P, Q and R, compared by the real SDK: P agai
 first differences; P against Q has a node in each run only. A comparison of two linear runs is
 drawn as it always was.
 """
+
 from __future__ import annotations
 
 import html
@@ -42,6 +43,7 @@ def _unlabelled(html: str) -> str:
     """The page without the narrow screen's column labels (`words.labelled`), so a table reads as
     its cells were drawn before them; nothing else changes."""
     import re as _re
+
     return _re.sub(r' data-label="[^"]*"', "", html)
 
 
@@ -53,20 +55,25 @@ def _graph(page: str) -> str:
 
 def _boxes(graph: str) -> list[tuple[str, str]]:
     """(href, title) of each linked box, in drawing order; the title with its quoted lines' titles."""
-    return [(re.search(r'href="([^"]+)"', attrs).group(1), title)
-            for attrs, title in _box_titles(graph) if 'href="' in attrs]
+    return [
+        (re.search(r'href="([^"]+)"', attrs).group(1), title)
+        for attrs, title in _box_titles(graph)
+        if 'href="' in attrs
+    ]
 
 
 #: A box is drawn as a link (`<a>`) or a group (`<g>`): its own title holds the page's words, and each
 #: line it quotes from the report carries its whole text as its own title. Read together, in order.
-_BOX = re.compile(r'<(a|g)( [^>]*)?><rect[^>]*/><title>([^<]*)</title>(.*?)</\1>', re.S)
+_BOX = re.compile(r"<(a|g)( [^>]*)?><rect[^>]*/><title>([^<]*)</title>(.*?)</\1>", re.S)
 _QUOTED_TITLE = re.compile(r'<text class="state" data-words="report"[^>]*>[^<]*<title>([^<]*)</title>')
 
 
 def _box_titles(graph: str) -> list[tuple[str, str]]:
     """(the box's opening tag, its title with its quoted lines' titles after it), in drawing order."""
-    return [(attrs or "", " · ".join([title, *_QUOTED_TITLE.findall(rest)]))
-            for _tag, attrs, title, rest in _BOX.findall(graph)]
+    return [
+        (attrs or "", " · ".join([title, *_QUOTED_TITLE.findall(rest)]))
+        for _tag, attrs, title, rest in _BOX.findall(graph)
+    ]
 
 
 def test_two_first_differences_are_both_marked_and_the_links_are_the_recorded_ones(dag_pages):
@@ -91,8 +98,11 @@ def test_the_union_of_both_runs_nodes_and_links_with_the_sdk_s_own_words(dag_pag
 
 def test_the_order_is_the_sdk_s_and_every_node_links_to_its_row(dag_pages):
     page = _unlabelled(dag_pages["PQ"])
-    rows = re.findall(r'<tr data-node-row="(\d+)"[^>]*><td><span id="step-(\d+)"></span>[^<]*</td>'
-                      r'<td class="mono">([^<]*)</td>', page)
+    rows = re.findall(
+        r'<tr data-node-row="(\d+)"[^>]*><td><span id="step-(\d+)"></span>[^<]*</td>'
+        r'<td class="mono">([^<]*)</td>',
+        page,
+    )
     assert [node for _, _, node in rows] == ["omega", "zeta", "alpha", "join"], "the SDK's order"
     assert all(a == b for a, b, _ in rows)
     for href, title in _boxes(_graph(page)):
@@ -100,8 +110,10 @@ def test_the_order_is_the_sdk_s_and_every_node_links_to_its_row(dag_pages):
         number = next(n for n, _, name in rows if name == node)
         assert href == f"#step-{number}", (node, href)
     #: Sources share one layer and keep the SDK's order top to bottom.
-    ys = {t.split(" · ")[0]: int(y) for y, t in re.findall(
-        r'<rect class="node" x="12" y="(\d+)"[^>]*/><title>([^<]*)</title>', _graph(page))}
+    ys = {
+        t.split(" · ")[0]: int(y)
+        for y, t in re.findall(r'<rect class="node" x="12" y="(\d+)"[^>]*/><title>([^<]*)</title>', _graph(page))
+    }
     assert sorted(ys, key=ys.get) == ["omega", "zeta", "alpha"]
 
 
@@ -141,8 +153,7 @@ def test_runs_a_and_b_are_named_once_at_the_top(dag_pages):
 
 def test_a_linear_comparison_needs_no_a_and_b(compared):  # noqa: F811
     comparison, store = compared
-    assert 'data-section="runs-ab"' not in render_diff(comparison, store,
-                                                       generated_at=GENERATED_AT)
+    assert 'data-section="runs-ab"' not in render_diff(comparison, store, generated_at=GENERATED_AT)
 
 
 def test_what_the_marks_leave_open_is_said_for_every_first_difference(dag_pages):
@@ -152,11 +163,11 @@ def test_what_the_marks_leave_open_is_said_for_every_first_difference(dag_pages)
     does; and none says its output's difference is "not established", which the sentence says in
     its own terms."""
     page = dag_pages["PR"]
-    section = re.search(r'<section data-section="first-difference"[^>]*>(.*?)</section>', page,
-                        re.S)
+    section = re.search(r'<section data-section="first-difference"[^>]*>(.*?)</section>', page, re.S)
     assert section, "no caveat on the graph page"
-    said = re.findall(r"<p>no recorded cause: nothing recorded differs at '([^']*)' \(",
-                      html.unescape(section.group(1)))
+    said = re.findall(
+        r"<p>(?:no recorded cause: )?nothing recorded differs at '([^']*)' \(", html.unescape(section.group(1))
+    )
     marked = [t.split(" · ")[0] for _, t in _boxes(_graph(page)) if "First difference" in t]
     assert said and sorted(said) == sorted(marked), (said, marked)
     assert "not established" not in section.group(1)
@@ -169,16 +180,19 @@ def test_the_compare_page_s_incidents_are_inside_its_skin_and_first(runs):  # no
 
     from onetrace_console.checks import COULD_NOT_CHECK
     from tests.test_incidents import UNREADABLE_REASON
+
     found, store = runs
     #: A checked 0.2.0 run raises no incident of its own, so one of the pair
     #: is stored as its check runner stores an unreadable report: could not check, with its reason.
-    store.put_run(replace(store.get_run(found["R"].key), check_verdict=COULD_NOT_CHECK,
-                          check_note=UNREADABLE_REASON))
-    page = render_diff(compare(found["P"], found["R"], store, ran_at=FIXED_RAN_AT), store,
-                       generated_at=GENERATED_AT)
+    store.put_run(replace(store.get_run(found["R"].key), check_verdict=COULD_NOT_CHECK, check_note=UNREADABLE_REASON))
+    page = render_diff(compare(found["P"], found["R"], store, ran_at=FIXED_RAN_AT), store, generated_at=GENERATED_AT)
     assert 'data-section="incidents-raised"' in page, "the pair raised no incidents to place"
-    assert re.search(r'<main>\s*(<p data-preview[^>]*>.*?</p>\s*)?<div class="cp">\s*'
-                     r'<section data-section="incidents-raised">', page, re.S), "not first in the skin"
+    assert re.search(
+        r'<main>\s*(<p data-preview[^>]*>.*?</p>\s*)?<div class="cp">\s*'
+        r'<section data-section="incidents-raised">',
+        page,
+        re.S,
+    ), "not first in the skin"
 
 
 from tests.test_run_page_marks import runs  # noqa: E402,F401  P, Q and R, checked

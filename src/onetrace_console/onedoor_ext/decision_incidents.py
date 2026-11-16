@@ -28,10 +28,10 @@ that table is never part of any export. **This is recorded as a gap owned by
 onedoor** (the field is to be added there), not inferred from a
 shared `request_id` alone, and not built here.
 """
+
 from __future__ import annotations
 
 from onetrace_console.incidents import Incident, Rule, incident_id
-from onetrace_console.onedoor_ext.decisions import DecisionRow, StoredDecisionExport
 from onetrace_console.onedoor_ext.policy_pages import all_decisions
 from onetrace_console.store import Store
 
@@ -42,6 +42,7 @@ _RAISES_FROM = ("denied", "proposed")
 
 def _evidence_for(request_id: str) -> str:
     from onetrace_console.onedoor_ext.policy_pages import _decision_href
+
     return _decision_href(request_id)
 
 
@@ -56,11 +57,18 @@ def _raise_from_decisions(store: Store) -> tuple[Incident, ...]:
         if row.decision not in _RAISES_FROM or d.request_id is None:
             continue
         field_path = f"rows[{d.request_id}].decision"
-        out.append(Incident(
-            id=incident_id("I-ONEDOOR-DECISION", d.export.key, field_path),
-            rule="I-ONEDOOR-DECISION", subject=d.request_id, subject_kind="onedoor decision",
-            source_sha=d.export.key, field_path=field_path, quoted=row.decision,
-            evidence=_evidence_for(d.request_id)))
+        out.append(
+            Incident(
+                id=incident_id("I-ONEDOOR-DECISION", d.export.key, field_path),
+                rule="I-ONEDOOR-DECISION",
+                subject=d.request_id,
+                subject_kind="onedoor decision",
+                source_sha=d.export.key,
+                field_path=field_path,
+                quoted=row.decision,
+                evidence=_evidence_for(d.request_id),
+            )
+        )
     return tuple(out)
 
 
@@ -88,13 +96,16 @@ def couldnt_check_notes(store: Store) -> tuple[str, ...]:
     "couldn't check" sentence naming the row. Such a row raises no incident (above), so the
     incidents pages say so rather than simply showing one fewer."""
     from onetrace_console.onedoor_ext.policy_pages import checked_rows
-    return tuple(c.couldnt_check for c in checked_rows(store) if c.problem)
+
+    return tuple(c.couldnt_check for c in checked_rows(store) if c.problem)  # type: ignore[misc]  # a row with a problem says it
 
 
 def incident_page_args(store: Store) -> dict:
     """What the Incidents page and this rule's list need from the extension: one place, so
     serve.py and the tests build exactly the same pages."""
-    return {"extra_rules": (RULE,),
-            "extra_incidents": derive_decision_incidents(store),
-            "extra_totals": {"decision": len(all_decisions(store))},
-            "extra_notes": {RULE.id: couldnt_check_notes(store)}}
+    return {
+        "extra_rules": (RULE,),
+        "extra_incidents": derive_decision_incidents(store),
+        "extra_totals": {"decision": len(all_decisions(store))},
+        "extra_notes": {RULE.id: couldnt_check_notes(store)},
+    }

@@ -6,8 +6,8 @@ link. The gear opens a small menu, one row per feature, each linking to its setu
 are unchanged) and saying its state, from the same checks those pages use:
 
 - "Explain: on, <model> (<provider>)", "Explain: not set up" or "Explain: key not found"; where the
-  configuration keeps its key in the keychain (console 0.7.0), "Explain: key stored", "Explain: no key
-  stored" or "Explain: the keychain can't be read (<its type>)";
+  configuration keeps its key in the keychain (console 0.7.0), "Explain: <model> (<provider>), key
+  stored", "Explain: no key stored" or "Explain: the keychain can't be read (<its type>)";
 - "Neighbours: on, <model>", "Neighbours: off" or "Neighbours: extra not installed".
 
 A dot on the gear says that something set up has stopped working -- the variable `key_env` names is not
@@ -19,6 +19,7 @@ The menu is the browser's own popover (`popover`, `popovertarget`), with no scri
 real button named "Settings", and the menu closes on Esc and on a click outside. A public console and a
 static export draw no gear; a sealed page (a run's pages) keeps the frame its seal covers.
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -32,16 +33,33 @@ BROKEN = "A setup has stopped working; the menu says which."
 
 @dataclass(frozen=True)
 class Row:
-    feature: str           # "explain" or "neighbours"
+    feature: str  # "explain" or "neighbours"
     words: str
     href: str
-    state: str             # "on", "off" (not set up, or not installed) or "broken"
+    state: str  # "on", "off" (not set up, or not installed) or "broken"
 
 
-def explain_row() -> Row:
-    """Explain's row, from the checks its setup page and panel use (`explain`)."""
+#: Beside Explain's row where "Always stop before sending" is on.
+ALWAYS_STOPS = ", always stops before sending"
+
+
+def explain_row(store=None) -> Row:
+    """Explain's row, from the checks its setup page and panel use (`explain`); with `store`, ", always
+    stops before sending" after it where that setting is on and Explain is set up."""
+    from dataclasses import replace
+
+    from onetrace_console import explain
+
+    row = _explain_row()
+    if row.state != "off" and explain.always_stop(store):
+        return replace(row, words=row.words + ALWAYS_STOPS)
+    return row
+
+
+def _explain_row() -> Row:
     from onetrace_console import explain
     from onetrace_console.explain_setup import PATH
+
     m = explain.model_config()
     if explain.command() is None or m is None:
         return Row("explain", "Explain: not set up", PATH, "off")
@@ -54,7 +72,7 @@ def explain_row() -> Row:
     return Row("explain", f"Explain: on, {m['name']} ({m['provider']})", PATH, "on")
 
 
-KEY_STORED = "Explain: key stored"
+KEY_STORED = "Explain: {model} ({provider}), key stored"
 NO_KEY_STORED = "Explain: no key stored"
 UNREADABLE = "Explain: the keychain can't be read ({kind})"
 
@@ -66,11 +84,14 @@ def _keychain_row(m: dict) -> Row:
     the key's presence is read."""
     from onetrace_console import explain_keychain as K
     from onetrace_console.explain_setup import PATH
+
     try:
         stored = K.stored(str(m["provider"]), str(m.get("base_url") or ""))
     except K.Unavailable as e:
         return Row("explain", UNREADABLE.format(kind=e.kind or type(e).__name__), PATH, "broken")
-    return Row("explain", KEY_STORED, PATH, "on") if stored else Row("explain", NO_KEY_STORED, PATH, "broken")
+    if not stored:
+        return Row("explain", NO_KEY_STORED, PATH, "broken")
+    return Row("explain", KEY_STORED.format(model=m["name"], provider=m["provider"]), PATH, "on")
 
 
 def neighbours_row(store) -> Row:
@@ -78,10 +99,12 @@ def neighbours_row(store) -> Row:
     turned-on local model's files are checked for being there, not hashed: that is done before use."""
     from onetrace_console import neighbours
     from onetrace_console.neighbours.pages import PATH
+
     href = f"/{PATH}"
     setting = None
     if store is not None:
         from onetrace_console.neighbours import settings
+
         setting = settings.read(store)
     if not neighbours.installed():
         return Row("neighbours", "Neighbours: extra not installed", href, "broken" if setting else "off")
@@ -91,10 +114,12 @@ def neighbours_row(store) -> Row:
     if chosen.get("kind") == "endpoint":
         return Row("neighbours", f"Neighbours: on, {chosen.get('model', '')} (your endpoint)", href, "on")
     from onetrace_console.neighbours import embedder
+
     model = embedder.MODELS.get(chosen.get("model", ""))
     if model is None:
-        return Row("neighbours", f"Neighbours: on, {chosen.get('model', '')}: not a model this console has",
-                   href, "broken")
+        return Row(
+            "neighbours", f"Neighbours: on, {chosen.get('model', '')}: not a model this console has", href, "broken"
+        )
     where = embedder.folder(embedder.models_root(store), model)
     if not all((where / p).is_file() for p in model.files):
         return Row("neighbours", f"Neighbours: on, {model.name}: a model file is missing", href, "broken")
@@ -106,34 +131,65 @@ def tokenizers_row(store) -> Row:
     from pathlib import Path
 
     from onetrace_console import token_upload
+
     n = len(token_upload.kept(Path(store.root))) if store is not None else 0
     words = "Tokenizers: none kept" if n == 0 else f"Tokenizers: {n} kept"
     return Row("tokenizers", words, f"/{token_upload.PATH}", "on" if n else "off")
 
 
 def rows(store) -> list[Row]:
-    return [explain_row(), neighbours_row(store), tokenizers_row(store)]
+    return [explain_row(store), neighbours_row(store), tokenizers_row(store)]
 
 
-GEAR_SVG = ('<svg class="gear-mark" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" focusable="false">'
-            '<path fill="currentColor" d="M19.4 13a7.6 7.6 0 0 0 0-2l2.1-1.6-2-3.5-2.5 1a7.4 7.4 0 0 0-1.7-1L15 3h-4'
-            'l-.4 2.9a7.4 7.4 0 0 0-1.7 1l-2.5-1-2 3.5L6.6 11a7.6 7.6 0 0 0 0 2l-2.1 1.6 2 3.5 2.5-1a7.4 7.4 0 0 0 1.7 1'
-            'L11 21h4l.4-2.9a7.4 7.4 0 0 0 1.7-1l2.5 1 2-3.5zM13 15.5a3.5 3.5 0 1 1 0-7 3.5 3.5 0 0 1 0 7z"/></svg>')
+GEAR_SVG = (
+    '<svg class="gear-mark" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" focusable="false">'
+    '<path fill="currentColor" d="M19.4 13a7.6 7.6 0 0 0 0-2l2.1-1.6-2-3.5-2.5 1a7.4 7.4 0 0 0-1.7-1L15 3h-4'
+    "l-.4 2.9a7.4 7.4 0 0 0-1.7 1l-2.5-1-2 3.5L6.6 11a7.6 7.6 0 0 0 0 2l-2.1 1.6 2 3.5 2.5-1a7.4 7.4 0 0 0 1.7 1"
+    'L11 21h4l.4-2.9a7.4 7.4 0 0 0 1.7-1l2.5 1 2-3.5zM13 15.5a3.5 3.5 0 1 1 0-7 3.5 3.5 0 0 1 0 7z"/></svg>'
+)
 
 
-def menu(store) -> str:
-    """The gear and its menu, as a local console fills it into a page it serves."""
+#: The menu's last row for a signed-in session (`menu(csrf=...)`): a plain form, so it works without script, whose
+#: press shows the busy state. After it the server answers the sign-in page, or with Entra ID the page that offers
+#: Microsoft's own sign-out.
+SIGN_OUT = "Sign out"
+
+
+def _sign_out(csrf: str) -> str:
+    return (
+        '<li class="sign-out"><form method="post" action="/signout" data-setting="sign-out">'
+        f'<input type="hidden" name="csrf_token" value="{escape(csrf)}">'
+        f'<button class="btn-secondary" data-busy="Signing out…" type="submit">{escape(SIGN_OUT)}</button>'
+        "</form></li>"
+    )
+
+
+def menu(store, csrf: str | None = None) -> str:
+    """The gear and its menu, as a local console fills it into a page it serves; with `csrf`, a signed-in
+    session's token, the menu ends with Sign out."""
     got = rows(store)
     broken = any(r.state == "broken" for r in got)
-    dot = (f'<span class="dot" data-frame="settings-dot" title="{escape(BROKEN)}"></span>'
-           f'<span class="visually-hidden">: {escape(BROKEN)}</span>') if broken else ""
-    items = "".join(f'<li><a href="{escape(r.href)}" data-setting="{r.feature}" data-state="{r.state}">'
-                    f"{escape(r.words)}</a></li>" for r in got)
-    return (f'<div class="settings" data-frame="settings">'
-            f'<button type="button" class="gear" popovertarget="{MENU_ID}" aria-label="{NAME}" '
-            f'data-frame="gear"{" data-broken" if broken else ""}>{GEAR_SVG}{dot}</button>'
-            f'<div id="{MENU_ID}" popover data-frame="settings-menu"><p class="settings-head">{escape(NAME)}</p>'
-            f'<ul class="plain">{items}</ul></div></div>')
+    dot = (
+        (
+            f'<span class="dot" data-frame="settings-dot" title="{escape(BROKEN)}"></span>'
+            f'<span class="visually-hidden">: {escape(BROKEN)}</span>'
+        )
+        if broken
+        else ""
+    )
+    items = "".join(
+        f'<li><a href="{escape(r.href)}" data-setting="{r.feature}" data-state="{r.state}">{escape(r.words)}</a></li>'
+        for r in got
+    )
+    if csrf:
+        items += _sign_out(csrf)
+    return (
+        f'<div class="settings" data-frame="settings">'
+        f'<button type="button" class="gear btn-secondary" popovertarget="{MENU_ID}" aria-label="{NAME}" '
+        f'data-frame="gear"{" data-broken" if broken else ""}>{GEAR_SVG}{dot}</button>'
+        f'<div id="{MENU_ID}" popover data-frame="settings-menu"><p class="settings-head">{escape(NAME)}</p>'
+        f'<ul class="plain">{items}</ul></div></div>'
+    )
 
 
 #: The gear's look: fixed at the top right, in the theme's own ink and lines; the menu under it.
@@ -155,4 +211,5 @@ SETTINGS_CSS = """
 .settings [popover] a{display:block;padding:7px 14px;color:var(--accent);overflow-wrap:anywhere}
 .settings [popover] a:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
 .settings [popover] a[data-state=broken]{color:var(--cc-ink);font-weight:600}
+.settings [popover] li.sign-out{border-top:1px solid var(--line-strong);margin-top:6px;padding:8px 14px 2px}
 """

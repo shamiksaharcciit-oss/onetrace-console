@@ -15,6 +15,7 @@ console holds) and writes the descent as one line, `nested_at`: "inside <step>, 
 into run <id> at <child>", or "nested run <id>: folder not given". The console shows that line as a
 path, in the SDK's words, and nothing of its own.
 """
+
 from __future__ import annotations
 
 import re
@@ -33,12 +34,12 @@ def nested_inputs(receipt: dict) -> list[tuple[str, str]]:
     out = []
     for i in receipt.get("inputs") or [] if isinstance(receipt, dict) else []:
         if isinstance(i, dict) and isinstance(i.get("name"), str) and i["name"].startswith(RUN_PREFIX):
-            out.append((i["name"][len(RUN_PREFIX):], str(i.get("digest", ""))))
+            out.append((i["name"][len(RUN_PREFIX) :], str(i.get("digest", ""))))
     return out
 
 
 def _name(receipt: dict) -> str:
-    st = receipt.get("stage") if isinstance(receipt.get("stage"), dict) else {}
+    st = _stage if isinstance(_stage := receipt.get("stage"), dict) else {}
     return str(st.get("name", "")) + ("#" + str(st["instance"]) if st.get("instance") else "")
 
 
@@ -53,7 +54,7 @@ def run_section(steps: list[dict], held: dict[str, str]) -> str:
     blocks = []
     for s in steps:
         r = s.get("receipt") or {}
-        kids = r.get("children") if isinstance(r.get("children"), list) else []
+        kids = _children if isinstance(_children := r.get("children"), list) else []
         inner = nested_inputs(r)
         if not kids and not inner:
             continue
@@ -61,21 +62,33 @@ def run_section(steps: list[dict], held: dict[str, str]) -> str:
         items = []
         for k in kids:
             child = by_name.get(str(k)) if by_name.get(str(k), {}).get("parent") == name else None
-            said = (escape(_result(child)) if child is not None
-                    else "recorded in a nested run" if inner else "no receipt in this run")
+            said = (
+                escape(_result(child))
+                if child is not None
+                else "recorded in a nested run"
+                if inner
+                else "no receipt in this run"
+            )
             items.append(f'<li data-nest-child="{escape(str(k))}"><code>{escape(str(k))}</code> · {said}</li>')
         for rid, head in inner:
             href = held.get(rid)
-            where = (f'<a href="{escape(href)}">open its page</a>' if href else escape(NOT_LOADED))
+            where = f'<a href="{escape(href)}">open its page</a>' if href else escape(NOT_LOADED)
             from onetrace_console.trace_panel import code_or_fold
-            items.append(f'<li data-nest-run="{escape(rid)}">{escape(NESTED)} <code>{escape(rid)}</code>, '
-                         f'its head recorded as {code_or_fold(head)} · {where}</li>')
-        blocks.append(f'<li data-nest-step="{escape(name)}"><code>{escape(name)}</code>'
-                      f'<ul class="plain nest">{"".join(items)}</ul></li>')
+
+            items.append(
+                f'<li data-nest-run="{escape(rid)}">{escape(NESTED)} <code>{escape(rid)}</code>, '
+                f"its head recorded as {code_or_fold(head)} · {where}</li>"
+            )
+        blocks.append(
+            f'<li data-nest-step="{escape(name)}"><code>{escape(name)}</code>'
+            f'<ul class="plain nest">{"".join(items)}</ul></li>'
+        )
     if not blocks:
         return ""
-    return (f'<section data-section="nesting" class="nesting"><h2>{escape(HEADING)}</h2>'
-            f'<ul class="plain">{"".join(blocks)}</ul></section>')
+    return (
+        f'<section data-section="nesting" class="nesting"><h2>{escape(HEADING)}</h2>'
+        f'<ul class="plain">{"".join(blocks)}</ul></section>'
+    )
 
 
 PARENT_HEADING = "Called from another run"
@@ -92,9 +105,11 @@ def parent_section(manifest: dict, held: dict[str, str]) -> str:
     href = held.get(rid)
     where = f'<a href="{escape(href)}">open its page</a>' if href else escape(NOT_LOADED)
     at = f" at step <code>{escape(str(stage))}</code>" if isinstance(stage, str) and stage else ""
-    return (f'<section data-section="parent-run" class="nesting"><h2>{escape(PARENT_HEADING)}</h2>'
-            f'<p data-parent-run="{escape(rid)}">This run was started by run <code>{escape(rid)}</code>{at}, as '
-            f'its manifest records it · {where}</p></section>')
+    return (
+        f'<section data-section="parent-run" class="nesting"><h2>{escape(PARENT_HEADING)}</h2>'
+        f'<p data-parent-run="{escape(rid)}">This run was started by run <code>{escape(rid)}</code>{at}, as '
+        f"its manifest records it · {where}</p></section>"
+    )
 
 
 def descent(nested_at: str) -> dict | None:
@@ -111,13 +126,13 @@ def descent(nested_at: str) -> dict | None:
     parts = text.split(", ")
     if not parts[0].startswith("inside ") or len(parts) < 2:
         return None
-    path: list = [("inside", parts[0][len("inside "):])]
+    path: list = [("inside", parts[0][len("inside ") :])]
     for seg in parts[1:]:
         m = re.fullmatch(r"into run (\S+) at (.+)", seg)
         if m:
             path.append(("run", m[1], m[2]))
         elif seg.startswith("at "):
-            path.append(("at", seg[len("at "):]))
+            path.append(("at", seg[len("at ") :]))
         else:
             return None
     return {"path": path}
@@ -126,6 +141,7 @@ def descent(nested_at: str) -> dict | None:
 def path_parts(path: list) -> list:
     """The path as words and names (each name for `<code>`), in the SDK's own words and order."""
     from onetrace_console.short_answer import Code
+
     out: list = []
     for i, seg in enumerate(path):
         if i:
@@ -142,14 +158,20 @@ def path_parts(path: list) -> list:
 def descent_section(nested_at: str) -> str:
     """The comparison page's path, in the SDK's words, one step a line."""
     from onetrace_console.short_answer import _html
+
     d = descent(nested_at)
     if d is None:
-        return (f'<section data-section="descent"><h2>{escape(DESCENT)}</h2><p>{escape(nested_at)}</p></section>'
-                if isinstance(nested_at, str) and nested_at.strip() else "")
+        return (
+            f'<section data-section="descent"><h2>{escape(DESCENT)}</h2><p>{escape(nested_at)}</p></section>'
+            if isinstance(nested_at, str) and nested_at.strip()
+            else ""
+        )
     if "not_given" in d:
         items = "".join(f"<li>{escape(NESTED)} <code>{escape(r)}</code>: folder not given</li>" for r in d["not_given"])
         return f'<section data-section="descent"><h2>{escape(DESCENT)}</h2><ul class="plain">{items}</ul></section>'
     steps = "".join(f"<li>{_html(path_parts([seg]))}</li>" for seg in d["path"])
-    return (f'<section data-section="descent"><h2>{escape(DESCENT)}</h2>'
-            f'<ol class="path" data-descent>{steps}</ol><p class="said">The SDK\'s words: '
-            f'<code>{escape(nested_at)}</code></p></section>')
+    return (
+        f'<section data-section="descent"><h2>{escape(DESCENT)}</h2>'
+        f'<ol class="path" data-descent>{steps}</ol><p class="said">The SDK\'s words: '
+        f"<code>{escape(nested_at)}</code></p></section>"
+    )

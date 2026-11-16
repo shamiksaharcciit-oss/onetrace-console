@@ -33,7 +33,7 @@ ONEDOOR_ISSUER=<issuer> python make_fixture.py <output folder>
    request id... the reference it returns names that resumption's own decision — not
    the original proposal."*
 4. `demo.observed`, a new Tier-0 (`OBSERVE`) policy added for this fixture only
-   (`wo_c9_policies.yaml`, committed alongside): executes regardless of policy, and the
+   (`onedoor_policies.yaml`, committed alongside): executes regardless of policy, and the
    script asserts `result.decision_ref is None` for it — observe mode's own rule, checked
    against the real engine, not merely read from its docs.
 
@@ -42,7 +42,7 @@ returns (`permit`/`deny`/`propose`/`permit`-on-resume/`None`-on-observe) passed 
 run, so the fixture is proof the behaviour is real, not only documented.
 
 The database (`<output folder>/fixture.db`) is **not** committed; only
-`onedoor-export.jsonl`, its `.sha256` sidecar, `make_fixture.py`, and `wo_c9_policies.yaml`
+`onedoor-export.jsonl`, its `.sha256` sidecar, `make_fixture.py`, and `onedoor_policies.yaml`
 are.
 
 ## The seven rows
@@ -86,7 +86,7 @@ uses for a different purpose (unaffected by this).
 Only words, never what is run or asserted: `make_fixture.py`'s docstring, the text of two
 assertion messages, its default output folder name, and two free-text inputs to onedoor (the
 requests' `rationale` and the approval's session name) were reworded after the run, and the
-comment in `wo_c9_policies.yaml`. Neither input appears in `onedoor-export.jsonl`, so the export
+comment in `onedoor_policies.yaml`. Neither input appears in `onedoor-export.jsonl`, so the export
 is byte for byte the one this run wrote; `SHA256SUMS` records the files as they are now.
 
 ## `SHA256SUMS`

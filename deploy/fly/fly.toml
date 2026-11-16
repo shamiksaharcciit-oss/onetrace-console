@@ -4,6 +4,9 @@
 # app on their own machine when deploying (deploy/fly/README.md). The image is
 # deploy/fly/Dockerfile, built from the repository root.
 
+# The address of the capture store's app, for the comparisons page's one line to it: the environment variable ONETRACE_CONSOLE_CAPTURES_URL, set by the operator at deploy
+# (deploy/fly/README.md, "The capture store's app"), never committed here. Unset, no line is drawn.
+
 [http_service]
   # The port deploy/fly/public.json listens on, inside the machine.
   internal_port = 8080

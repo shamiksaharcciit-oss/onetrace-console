@@ -20,6 +20,7 @@ Where it comes from: each comparison's own stored run of `onetrace diff A B
 --text --json --no-follow` (`compare.text_diff_raw`), and "Show more" its run at the console's one
 larger limit; the corpus trace is board 7's.
 """
+
 from __future__ import annotations
 
 import re
@@ -30,16 +31,24 @@ from onetrace_console.bounded_json import load_json_bounded
 FORMAT = "onetrace-textdiff/0.3"
 TEXT_FORM = "escaped"
 
-_TOP = {"format", "text_form", "envelope", "exit", "shown", "reason", "first_line",
-        "unknown_stages", "nodes", "corpus_traces"}
+_TOP = {
+    "format",
+    "text_form",
+    "envelope",
+    "exit",
+    "shown",
+    "reason",
+    "first_line",
+    "unknown_stages",
+    "nodes",
+    "corpus_traces",
+}
 _TOP_REQUIRED = {"format", "text_form", "envelope", "exit", "shown"}
-_ENVELOPES = {"identical": "0", "diverged": "1", "not comparable": None, "refused": None,
-              "could not check": None}
+_ENVELOPES = {"identical": "0", "diverged": "1", "not comparable": None, "refused": None, "could not check": None}
 _NODE = {"node", "verdict", "settings", "inputs", "presence", "causes", "outputs"}
 _NODE_REQUIRED = {"node", "verdict", "settings", "inputs", "outputs"}
 _VERDICTS = {"FIRST DIFFERENCE", "downstream", "reconverged", "same", "COULD NOT CHECK"}
-_OUTPUT = {"name", "media_type", "verified", "kind", "notes", "reason", "presence", "truncated",
-           "hunks", "entries"}
+_OUTPUT = {"name", "media_type", "verified", "kind", "notes", "reason", "presence", "truncated", "hunks", "entries"}
 _OUTPUT_REQUIRED = {"name", "media_type", "verified", "kind", "notes", "hunks"}
 _KINDS = {"text", "chunk index", "hits", "binary", "not diffed", "not shown"}
 _PRESENCE = {"only in the baseline", "only in the candidate"}
@@ -83,6 +92,7 @@ def _shown(value, what: str) -> None:
     if not isinstance(value, str):
         _fail(f"{what} is not a string")
     from onetrace.escaping import escaped
+
     if escaped(value) != value.replace("\\", "\\\\"):
         _fail(f"{what} holds a character the SDK left unescaped")
 
@@ -219,8 +229,9 @@ def read_textdiff(raw: str | bytes) -> dict:
         _fail("the text diff's nodes are not a list")
     for i, node in enumerate(doc.get("nodes", [])):
         _node(node, f"node {i}")
-    if "corpus_traces" in doc and not (isinstance(doc["corpus_traces"], list)
-                                       and all(isinstance(t, dict) for t in doc["corpus_traces"])):
+    if "corpus_traces" in doc and not (
+        isinstance(doc["corpus_traces"], list) and all(isinstance(t, dict) for t in doc["corpus_traces"])
+    ):
         _fail("the text diff's corpus traces are not a list of objects")
     return doc
 
@@ -261,8 +272,10 @@ _HEXISH = re.compile(r"(?:sha256:)?[0-9a-f]{8,}…?")
 def _is_fingerprint(line: str) -> bool:
     """A settings line naming a recorded fingerprint (a digest), not a setting a reader can read."""
     m = _SETTING.fullmatch(line)
-    return bool(m) and (m["name"].endswith("digest")
-                        or (_HEXISH.fullmatch(m["old"]) is not None and _HEXISH.fullmatch(m["new"]) is not None))
+    return m is not None and (
+        m["name"].endswith("digest")
+        or (_HEXISH.fullmatch(m["old"]) is not None and _HEXISH.fullmatch(m["new"]) is not None)
+    )
 
 
 def _settings_line(text: str) -> str:
@@ -272,8 +285,10 @@ def _settings_line(text: str) -> str:
     if not m or "." not in m["name"]:
         return _html(text).replace(" -&gt; ", " → ")
     short = m["name"].rsplit(".", 1)[-1]
-    return (f'<span class="mono" data-setting-path="{_html(m["name"])}" title="{_html(m["name"])}">'
-            f'{_html(short)}</span>: {_html(m["old"])} → {_html(m["new"])}')
+    return (
+        f'<span class="mono" data-setting-path="{_html(m["name"])}" title="{_html(m["name"])}">'
+        f"{_html(short)}</span>: {_html(m['old'])} → {_html(m['new'])}"
+    )
 
 
 #: A recorded fingerprint's row, shown where its count is: what it fingerprints, by the field's
@@ -286,55 +301,69 @@ def _fingerprint_row(text: str) -> str:
     m = _SETTING.fullmatch(text)
     path = m["name"] if m else text
     words = FINGERPRINT_WORDS.get(path.rsplit(".", 1)[-1], "recorded fingerprint")
-    return (f'<p data-settings data-fingerprint><span class="mono" data-setting-path="{_html(path)}" '
-            f'title="{_html(path)}">{_html(words)}</span>: {_html(FINGERPRINT_DIFFERS)}</p>')
+    return (
+        f'<p data-settings data-fingerprint><span class="mono" data-setting-path="{_html(path)}" '
+        f'title="{_html(path)}">{_html(words)}</span>: {_html(FINGERPRINT_DIFFERS)}</p>'
+    )
 
 
 def _settings(lines: list[str]) -> str:
     """A stage's settings lines: one row for each setting its "settings: N changed" counts -- each
     readable one with its values, each recorded fingerprint by what it fingerprints -- then the
     fingerprints' values under a small Details of their own."""
-    plain = "".join(f"<p data-settings>{_settings_line(s)}</p>" if not _is_fingerprint(s)
-                    else _fingerprint_row(s) for s in lines)
+    plain = "".join(
+        f"<p data-settings>{_settings_line(s)}</p>" if not _is_fingerprint(s) else _fingerprint_row(s) for s in lines
+    )
     prints = [s for s in lines if _is_fingerprint(s)]
     if prints:
-        plain += ('<details data-settings-details><summary>Details</summary>'
-                  + "".join(f"<p data-settings>{_settings_line(s)}</p>" for s in prints) + "</details>")
+        plain += (
+            "<details data-settings-details><summary>Details</summary>"
+            + "".join(f"<p data-settings>{_settings_line(s)}</p>" for s in prints)
+            + "</details>"
+        )
     return plain
 
 
 def _render_output(out: dict, members: list | None = None) -> str:
     name = _html(out["name"]) if out["name"] is not None else ""
-    head = (f'<p class="output-head"><code>{name}</code> '
-            f'<span class="value">{_html(out["media_type"])}</span>')
+    head = f'<p class="output-head"><code>{name}</code> <span class="value">{_html(out["media_type"])}</span>'
     if out.get("presence"):
-        head += f' · {_html(out["presence"])}'
+        head += f" · {_html(out['presence'])}"
     if out["verified"] is not True:
         #: Never an unverified output's lines, notes or badge: the SDK's reason, word for word.
-        return (f'<div data-output data-verified="false">{head}</p>'
-                f'<p data-not-shown>{_html(out.get("reason", ""))}</p></div>')
+        return (
+            f'<div data-output data-verified="false">{head}</p>'
+            f"<p data-not-shown>{_html(out.get('reason', ''))}</p></div>"
+        )
     #: Shown only when both sides' bytes match their receipts, so each side is said verified.
-    chips = " ".join(f'<span class="pill ok" data-badge="verified" data-side="{side}">'
-                     f"{side.capitalize()}: {VERIFIED}</span>" for side in ("baseline", "candidate"))
+    chips = " ".join(
+        f'<span class="pill ok" data-badge="verified" data-side="{side}">{side.capitalize()}: {VERIFIED}</span>'
+        for side in ("baseline", "candidate")
+    )
     parts = [f'<div data-output data-verified="true">{head} {chips}</p>', _counts(out)]
     if out["notes"]:
-        parts.append('<pre data-notes>' + "\n".join(_html(n) for n in out["notes"]) + "</pre>")
+        parts.append("<pre data-notes>" + "\n".join(_html(n) for n in out["notes"]) + "</pre>")
     for hunk in out["hunks"]:
         lines = []
         for line in hunk["lines"]:
             mark = {"-": "del", "+": "ins"}.get(line["op"], "")
-            numbers = "".join(f'<span class="ln" data-side="{side}">{_html(line[side] or "")}</span>'
-                              for side in ("baseline", "candidate"))
-            lines.append(f'<span data-op="{_html(line["op"])}">{numbers}{_html(line["op"])} '
-                         f'{_marked(line["text"], line["spans"], mark)}</span>')
-        note = f'<p data-hunk-note>{_html(hunk["note"])}</p>' if "note" in hunk else ""
-        parts.append(f'{note}<pre data-hunk>' + "\n".join(lines) + "</pre>")
+            numbers = "".join(
+                f'<span class="ln" data-side="{side}">{_html(line[side] or "")}</span>'
+                for side in ("baseline", "candidate")
+            )
+            lines.append(
+                f'<span data-op="{_html(line["op"])}">{numbers}{_html(line["op"])} '
+                f"{_marked(line['text'], line['spans'], mark)}</span>"
+            )
+        note = f"<p data-hunk-note>{_html(hunk['note'])}</p>" if "note" in hunk else ""
+        parts.append(f"{note}<pre data-hunk>" + "\n".join(lines) + "</pre>")
     if "truncated" in out:
         #: The SDK's own words for a cut output (`… n more lines`, the plain form's).
-        parts.append(f'<p data-truncated>… {_html(out["truncated"]["more_lines"])} more lines</p>')
+        parts.append(f"<p data-truncated>… {_html(out['truncated']['more_lines'])} more lines</p>")
     if members is not None:
         #: Both sides read as JSON: its members that differ, by path (`json_diff`).
         from onetrace_console.json_diff import render
+
         parts.append(render(members))
     parts.append("</div>")
     return "".join(parts)
@@ -358,16 +387,19 @@ def _kept_hunks(a: str, b: str) -> tuple[list[dict], int]:
     line number, the text), and how many lines past the cap were left out. Each text is split on
     its own line breaks; nothing in a line is changed."""
     import difflib
+
     x, y = a.splitlines(), b.splitlines()
     hunks, drawn, more = [], 0, 0
     for group in difflib.SequenceMatcher(None, x, y, autojunk=False).get_grouped_opcodes(KEPT_CONTEXT):
-        lines = []
+        lines: list[dict] = []
         for tag, i1, i2, j1, j2 in group:
+            rows: list[tuple[str, str | None, str | None, str]]
             if tag == "equal":
                 rows = [(" ", str(i1 + k + 1), str(j1 + k + 1), x[i1 + k]) for k in range(i2 - i1)]
             else:
-                rows = ([("-", str(k + 1), None, x[k]) for k in range(i1, i2)]
-                        + [("+", None, str(k + 1), y[k]) for k in range(j1, j2)])
+                rows = [("-", str(k + 1), None, x[k]) for k in range(i1, i2)] + [
+                    ("+", None, str(k + 1), y[k]) for k in range(j1, j2)
+                ]
             for op, base, cand, text in rows:
                 if drawn >= KEPT_MAX_LINES:
                     more += 1
@@ -395,29 +427,36 @@ def render_textdiff(doc: dict) -> str:
         return f'<div data-textdiff="not-shown"><p>{_html(doc["reason"])}</p></div>'
     parts = ['<div data-textdiff="shown">']
     if "first_line" in doc:
-        parts.append(f'<p data-first-line>{_html(doc["first_line"])}</p>')
+        parts.append(f"<p data-first-line>{_html(doc['first_line'])}</p>")
     #: Each stage's diff folded, only the first difference open, so the page is as long as the
     #: change a reader came for; every other stage one click away, its lines as capped as before.
     for node in doc.get("nodes", []):
         from onetrace_console.render import _RESULT_WORDS
+
         verdict = _RESULT_WORDS.get(node["verdict"], node["verdict"])
         opened = " open" if node["verdict"] == "FIRST DIFFERENCE" else ""
-        parts.append(f'<details data-node-fold="{_html(node["node"])}"{opened}><summary>'
-                     f'<h3>{_html(node["node"])} · {_html(verdict)}</h3></summary>'
-                     f'<article data-node="{_html(node["node"])}">')
+        parts.append(
+            f'<details data-node-fold="{_html(node["node"])}"{opened}><summary>'
+            f"<h3>{_html(node['node'])} · {_html(verdict)}</h3></summary>"
+            f'<article data-node="{_html(node["node"])}">'
+        )
         if node.get("presence"):
-            parts.append(f'<p>{_html(node["presence"])}</p>')
+            parts.append(f"<p>{_html(node['presence'])}</p>")
         parts.append(_settings(node["settings"]))
         from onetrace_console.kept_inputs import KEPT_DIFFS
+
         kept = {k[0]: k for k in node.get(KEPT_DIFFS) or ()}
         for s in node["inputs"]:
-            parts.append(f'<p data-input>{_html(s)}</p>')
+            parts.append(f"<p data-input>{_html(s)}</p>")
             if s in kept:
                 parts.append(_render_kept(node["node"], *kept[s][1:]))
         from onetrace_console.kept_inputs import JSON_DIFFS
+
         members = node.get(JSON_DIFFS) or {}
-        parts.extend(_render_output(out, members.get(out["name"]) if out["verified"] is True else None)
-                     for out in node["outputs"])
+        parts.extend(
+            _render_output(out, members.get(out["name"]) if out["verified"] is True else None)
+            for out in node["outputs"]
+        )
         parts.append("</article></details>")
     parts.append("</div>")
     return "".join(parts)

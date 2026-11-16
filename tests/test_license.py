@@ -4,15 +4,18 @@ The file is onetrace-ci's LICENSE, byte for byte -- the Apache License 2.0 text 
 public repositories -- and the README carries the one copyright line that goes beside it
 there.
 """
+
 from __future__ import annotations
 
 import hashlib
 import tomllib
 from pathlib import Path
 
+from tests.conftest import only
+
 REPO = Path(__file__).resolve().parent.parent
 
-#: sha256 of onetrace-ci's LICENSE, written here by script (X-11), never typed.
+#: sha256 of onetrace-ci's LICENSE, written here by script, never typed.
 LICENSE_SHA256 = "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4"
 
 
@@ -44,21 +47,34 @@ def test_the_built_metadata_says_apache_2_0_and_the_build_does_not_warn(tmp_path
     import subprocess
     import sys
     import zipfile
+
     tree = tmp_path / "tree"
-    tracked = subprocess.run(["git", "ls-files", "-z"], cwd=REPO, capture_output=True,
-                             check=True).stdout.decode("utf-8").split("\0")
+    tracked = (
+        subprocess.run(["git", "ls-files", "-z"], cwd=REPO, capture_output=True, check=True)
+        .stdout.decode("utf-8")
+        .split("\0")
+    )
     for rel in filter(None, tracked):
         if (REPO / rel).is_file():
             (tree / rel).parent.mkdir(parents=True, exist_ok=True)
             (tree / rel).write_bytes((REPO / rel).read_bytes())
     clean = {k: v for k, v in os.environ.items() if k != "PYTHONPATH"}
-    built = subprocess.run([sys.executable, "-c", "import sys; from setuptools import build_meta as b; "
-                            "print(b.build_wheel(sys.argv[1]))", str(tmp_path / "dist")],
-                           cwd=tree, capture_output=True, text=True, env=clean)
+    built = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            "import sys; from setuptools import build_meta as b; print(b.build_wheel(sys.argv[1]))",
+            str(tmp_path / "dist"),
+        ],
+        cwd=tree,
+        capture_output=True,
+        text=True,
+        env=clean,
+    )
     assert built.returncode == 0, built.stderr[-2000:]
     assert "License classifiers are deprecated" not in built.stderr
     assert "project.license` as a TOML table is deprecated" not in built.stderr
-    wheel = next((tmp_path / "dist").glob("onetrace_console-*.whl"))
+    wheel = only((tmp_path / "dist").glob("onetrace_console-*.whl"))
     with zipfile.ZipFile(wheel) as whl:
         meta = next(n for n in whl.namelist() if n.endswith(".dist-info/METADATA"))
         text = whl.read(meta).decode("utf-8")

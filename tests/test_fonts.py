@@ -10,14 +10,13 @@ registry's own sha512 integrity before anything was taken from it. These tests h
 - the route that serves them: to anyone, signed in or not (the sign-in page uses them), only
   these files, with the right content type -- and nothing else under `/static/`.
 """
+
 from __future__ import annotations
 
 import hashlib
 import http.client
 from pathlib import Path
 from urllib.parse import urlparse
-
-import pytest
 
 REPO = Path(__file__).resolve().parent.parent
 FONTS = REPO / "src" / "onetrace_console" / "static" / "fonts"
@@ -37,8 +36,14 @@ PINNED = {
     "OFL.txt": "7e6b2818edbd8f6a01ae80641cc8f16a51080d08fb4e532be3a0b6f74adb07da",
 }
 RELEASES = {
-    "@ibm/plex-sans": ("1.1.0", "sha512-WPgvO6Yfj2w5YbhyAr1tv95RUz4LRJlqN+CmYvBglabXteufP1D1E9BABMde+ZIKdRbFJDoKF5eQzfhpnbgZcQ=="),
-    "@ibm/plex-mono": ("2.5.0", "sha512-STBJIPxPomOYPmBMO7z5TKPJUotAF9u3gAUumTqVgwgrAO+K4FRNh0MlhsoJjKhJKsMbBJR10/bk4inkj/wc1w=="),
+    "@ibm/plex-sans": (
+        "1.1.0",
+        "sha512-WPgvO6Yfj2w5YbhyAr1tv95RUz4LRJlqN+CmYvBglabXteufP1D1E9BABMde+ZIKdRbFJDoKF5eQzfhpnbgZcQ==",
+    ),
+    "@ibm/plex-mono": (
+        "2.5.0",
+        "sha512-STBJIPxPomOYPmBMO7z5TKPJUotAF9u3gAUumTqVgwgrAO+K4FRNh0MlhsoJjKhJKsMbBJR10/bk4inkj/wc1w==",
+    ),
 }
 
 
@@ -64,8 +69,8 @@ def test_the_ofl_text_ships_and_the_readme_names_it(examined):
     examined(1, "licence text")
     assert "SIL Open Font License, Version 1.1" in ofl and 'Reserved Font Name "Plex"' in ofl
     readme = " ".join((REPO / "OPERATOR_README.md").read_text(encoding="utf-8").split())
-    section = readme[readme.index("## Where the data lives"):]
-    section = section[:section.index("### Backing up")]
+    section = readme[readme.index("## Where the data lives") :]
+    section = section[: section.index("### Backing up")]
     assert "static/fonts/OFL.txt" in section and "IBM Plex" in section
 
 
@@ -89,6 +94,7 @@ def test_the_fonts_are_served_to_anyone_and_nothing_else_is(server, examined):
     base, _ = server
     from onetrace_console.config import Config
     from onetrace_console.serve import Handler
+
     old = Handler.config
     Handler.config = Config(sign_in={"enabled": True})
     try:
@@ -98,8 +104,12 @@ def test_the_fonts_are_served_to_anyone_and_nothing_else_is(server, examined):
             assert status == 200, (name, status)
             assert body == (FONTS / name).read_bytes(), name
             assert ctype == ("font/woff2" if name.endswith(".woff2") else "text/plain; charset=utf-8"), ctype
-        for path in ("/static/fonts/IBMPlexSans-Bold.woff2", "/static/fonts/FONTS.md",
-                     "/static/fonts/../../serve.py", "/static/fonts/%2e%2e/%2e%2e/serve.py"):
+        for path in (
+            "/static/fonts/IBMPlexSans-Bold.woff2",
+            "/static/fonts/FONTS.md",
+            "/static/fonts/../../serve.py",
+            "/static/fonts/%2e%2e/%2e%2e/serve.py",
+        ):
             status, _, _ = _get(base, path)
             assert status in (400, 404), (path, status)
     finally:
@@ -107,6 +117,7 @@ def test_the_fonts_are_served_to_anyone_and_nothing_else_is(server, examined):
 
 
 # ------------------------------------------------------------------ what the faces cover
+
 
 def _covered(ranges: str) -> set[int]:
     out = set()
@@ -120,16 +131,24 @@ def console_characters() -> set[int]:
     """Every character the console's own words can draw: its sentence tables and every string in
     its source, printable ASCII and beyond."""
     import ast
+
     from onetrace_console.viewer import sentences as S
-    texts = [v[0] if isinstance(v, tuple) else str(v)
-             for name in ("TABLE", "FIXED", "RULED", "PROVISIONAL", "LABELS")
-             for v in getattr(S, name).values()]
+
+    texts = [
+        v[0] if isinstance(v, tuple) else str(v)
+        for name in ("TABLE", "FIXED", "RULED", "PROVISIONAL", "LABELS")
+        for v in getattr(S, name).values()
+    ]
     for path in (REPO / "src" / "onetrace_console").rglob("*.py"):
-        texts += [n.value for n in ast.walk(ast.parse(path.read_text(encoding="utf-8")))
-                  if isinstance(n, ast.Constant) and isinstance(n.value, str)]
+        texts += [
+            n.value
+            for n in ast.walk(ast.parse(path.read_text(encoding="utf-8")))
+            if isinstance(n, ast.Constant) and isinstance(n.value, str)
+        ]
     #: Less what no page ever draws as itself: a control, bidirectional or surrogate character is
     #: shown as its escape (`viewer.page._UNSHOWN`).
     from onetrace_console.viewer.page import _UNSHOWN
+
     return {ord(c) for t in texts for c in t if 0x20 <= ord(c) and not _UNSHOWN.match(c)}
 
 
@@ -145,6 +164,7 @@ def coverage_problems(faces: dict, needed: set[int]) -> list[str]:
 
 def test_each_family_holds_every_character_the_console_writes(examined):
     from onetrace_console.frame import _FACES
+
     needed = console_characters()
     examined(len(needed), "characters the console's words use")
     assert coverage_problems(_FACES, needed) == []
@@ -152,6 +172,7 @@ def test_each_family_holds_every_character_the_console_writes(examined):
 
 def test_the_stylesheet_names_the_ranges_the_provenance_records(examined):
     from onetrace_console.frame import _FACES, stylesheet
+
     sheet = stylesheet().decode("utf-8")
     record = (FONTS / "FONTS.md").read_text(encoding="utf-8")
     examined(len(_FACES), "faces")
@@ -162,6 +183,7 @@ def test_the_stylesheet_names_the_ranges_the_provenance_records(examined):
 
 def test_sabotage_a_family_without_its_symbols_face_is_named(examined):
     from onetrace_console.frame import _FACES
+
     without_pi = {n: v for n, v in _FACES.items() if not n.endswith("-Pi.woff2")}
     examined(1, "faces with the symbols removed")
     found = coverage_problems(without_pi, console_characters())

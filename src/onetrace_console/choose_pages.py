@@ -11,20 +11,29 @@ route makes a comparison: a GET that wrote would be the opening a cross-site req
 the script the button stays hidden and the request stays shown. A public console makes no
 comparison, so it lists only the pairs it holds, has no button, and says so.
 """
+
 from __future__ import annotations
+
+from typing import TYPE_CHECKING
 
 from onetrace_console.render import _document, _tag, run_named
 from onetrace_console.store import Store, arrival_order
 from onetrace_console.viewer.model import LIST_CAP
 from onetrace_console.words import escape, generated_footer, scroll_region, time_html
 
+if TYPE_CHECKING:
+    from onetrace_console.compare import StoredComparison
 
 #: How a pair not compared yet is compared: on the console's page, and in a static export (`compare_script.exported`).
-HOW_LOCAL = ("A pair not compared yet has a Compare button, which sends this console the request shown beside it, "
-             "with your session's CSRF token, and opens the comparison. The request can also be sent by hand, as the "
-             "operator's guide shows.")
-HOW_EXPORTED = ("A pair not compared yet shows its Compare disabled: comparing needs a running console. The request "
-                "that makes it is shown beside it, as the operator's guide gives it.")
+HOW_LOCAL = (
+    "A pair not compared yet has a Compare button, which sends this console the request shown beside it, "
+    "with your session's CSRF token, and opens the comparison. The request can also be sent by hand, as the "
+    "operator's guide shows."
+)
+HOW_EXPORTED = (
+    "A pair not compared yet shows its Compare disabled: comparing needs a running console. The request "
+    "that makes it is shown beside it, as the operator's guide gives it."
+)
 
 
 def choose_href(label: str) -> str:
@@ -49,13 +58,15 @@ def compare_request(a_key: str, b_key: str) -> str:
 
 def _public() -> bool:
     from onetrace_console.frame import rendering_public
+
     return rendering_public()
 
 
-def held_comparisons(store: Store) -> dict[tuple[str, str], object]:
+def held_comparisons(store: Store) -> dict[tuple[str, str], StoredComparison]:
     """(run A, run B) -> the newest comparison this console holds of the pair, in that direction."""
     from onetrace_console.render import _newest_first
-    out: dict[tuple[str, str], object] = {}
+
+    out: dict[tuple[str, str], StoredComparison] = {}
     for c in sorted(store.comparisons(), key=_newest_first):
         out.setdefault((c.run_a, c.run_b), c)
     return out
@@ -63,6 +74,7 @@ def held_comparisons(store: Store) -> dict[tuple[str, str], object]:
 
 def _run_link(store: Store, key: str) -> str:
     from onetrace_console.benchmarks import badge
+
     return f'<a href="runs/{_tag(key)}/case.html">{run_named(store, key)}</a>{badge(store, key)}'
 
 
@@ -77,13 +89,18 @@ def render_choose(pipeline, store: Store, *, generated_at: str) -> str:
         f'<tr data-run="{_tag(r.key)}"><td>{_run_link(store, r.key)}</td>'
         f'<td class="mono">{time_html(r.received_at)}</td>'
         f'<td><a href="{_tag(pair_href(pipeline.label, r.key))}">Choose as run A</a></td></tr>'
-        for r in runs)
-    listing = scroll_region('<table class="timeline" data-section="choose-a"><thead><tr>'
-                            "<th>Run</th><th>Arrived</th><th></th></tr>"
-                            f"</thead><tbody>{rows}</tbody></table>",
-                            "Runs to choose from, scrolls sideways", "choose-a")
+        for r in runs
+    )
+    listing = scroll_region(
+        '<table class="timeline" data-section="choose-a"><thead><tr>'
+        "<th>Run</th><th>Arrived</th><th></th></tr>"
+        f"</thead><tbody>{rows}</tbody></table>",
+        "Runs to choose from, scrolls sideways",
+        "choose-a",
+    )
     if more > 0:
         from onetrace_console.viewer.sentences import template
+
         listing += f'<p data-section="more">{escape(template("list.more").format(n=str(more)))}</p>'
     body = [
         f'<p class="crumbs" data-section="crumbs"><a href="comparisons.html">Comparisons</a> / '
@@ -99,8 +116,7 @@ def render_choose(pipeline, store: Store, *, generated_at: str) -> str:
     return _document(f"Choose two runs · {pipeline.label}", "\n".join(['<div class="cp">', *body, "</div>"]))
 
 
-def render_pair(pipeline, a_run, store: Store, *, generated_at: str,
-                held: dict | None = None) -> str:
+def render_pair(pipeline, a_run, store: Store, *, generated_at: str, held: dict | None = None) -> str:
     """Run A's page: each other run of the pipeline as run B, with the comparison of the two where
     this console holds one, and otherwise the request that makes it -- or, on a public console,
     only the pairs it holds."""
@@ -121,34 +137,45 @@ def render_pair(pipeline, a_run, store: Store, *, generated_at: str,
             state = "compared"
         else:
             request = compare_request(a_run.key, r.key)
-            cell = (f'<button type="button" hidden '
-                    f'data-compare-post="{_tag(request.split(" ", 1)[1])}">Compare</button> '
-                    f"Not compared yet. "
-                    f'<code class="mono" data-command>{escape(request)}</code>'
-                    f'<span data-compare-said role="status"></span>')
+            cell = (
+                f'<button class="btn-secondary" data-busy="Comparing…" data-busy-wait="the comparison" type="button" hidden '
+                f'data-compare-post="{_tag(request.split(" ", 1)[1])}">Compare</button> '
+                f"Not compared yet. "
+                f'<code class="mono" data-command>{escape(request)}</code>'
+                f'<span data-compare-said role="status"></span>'
+            )
             state = "not-compared"
-        rows.append(f'<tr data-run="{_tag(r.key)}" data-pair="{state}"><td><span id="{_tag(b_anchor(r.key))}"></span>'
-                    f'{_run_link(store, r.key)}</td>'
-                    f"<td>{cell}</td></tr>")
+        rows.append(
+            f'<tr data-run="{_tag(r.key)}" data-pair="{state}"><td><span id="{_tag(b_anchor(r.key))}"></span>'
+            f"{_run_link(store, r.key)}</td>"
+            f"<td>{cell}</td></tr>"
+        )
     label = escape(pipeline.label)
     if not others:
         listing = f'<p data-section="none">No other run of {label} is stored.</p>'
     elif not shown:
-        listing = (f'<p data-section="none">None of the other runs of {label} has been compared '
-                   "with this one as run A.</p>")
+        listing = (
+            f'<p data-section="none">None of the other runs of {label} has been compared with this one as run A.</p>'
+        )
     else:
-        listing = scroll_region('<table class="timeline" data-section="choose-b"><thead><tr>'
-                                "<th>Run B</th><th>Comparison</th></tr>"
-                                f"</thead><tbody>{''.join(rows)}</tbody></table>",
-                                "Runs to compare with run A, scrolls sideways", "choose-b")
+        listing = scroll_region(
+            '<table class="timeline" data-section="choose-b"><thead><tr>'
+            "<th>Run B</th><th>Comparison</th></tr>"
+            f"</thead><tbody>{''.join(rows)}</tbody></table>",
+            "Runs to compare with run A, scrolls sideways",
+            "choose-b",
+        )
         if more > 0:
             from onetrace_console.viewer.sentences import template
+
             listing += f'<p data-section="more">{escape(template("list.more").format(n=str(more)))}</p>'
 
     if public:
-        how = (f'<p data-section="how">This public console makes no comparison, so it lists only the '
-               f"pairs it holds: {len(compared)} of the {len(others)} other runs of {label} "
-               f"{'has' if len(compared) == 1 else 'have'} a comparison with this run as run A.</p>")
+        how = (
+            f'<p data-section="how">This public console makes no comparison, so it lists only the '
+            f"pairs it holds: {len(compared)} of the {len(others)} other runs of {label} "
+            f"{'has' if len(compared) == 1 else 'have'} a comparison with this run as run A.</p>"
+        )
     else:
         how = f'<p data-section="how">{HOW_LOCAL}</p>'
     body = [
@@ -164,6 +191,7 @@ def render_pair(pipeline, a_run, store: Store, *, generated_at: str,
     ]
     if not public and any('data-pair="not-compared"' in row for row in rows):
         from onetrace_console.compare_script import COMPARE_SCRIPT
+
         body.append(COMPARE_SCRIPT)
     return _document(f"Choose run B · {pipeline.label}", "\n".join(['<div class="cp">', *body, "</div>"]))
 
@@ -171,10 +199,16 @@ def render_pair(pipeline, a_run, store: Store, *, generated_at: str,
 def choose_links(store: Store) -> str:
     """The Comparisons page's way in: one link per pipeline."""
     from onetrace_console.overview import pipelines
+
     every = pipelines(store)
     if not every:
         return ""
-    links = " · ".join(f'<a href="{_tag(choose_href(p.label))}">{escape(p.label)}, '
-                       f'{len(p.runs)} run{"" if len(p.runs) == 1 else "s"}</a>' for p in every)
-    return (f'<section data-section="choose"><h2>Choose two runs</h2><p>From the runs of one '
-            f"pipeline: {links}.</p></section>")
+    links = " · ".join(
+        f'<a href="{_tag(choose_href(p.label))}">{escape(p.label)}, '
+        f"{len(p.runs)} run{'' if len(p.runs) == 1 else 's'}</a>"
+        for p in every
+    )
+    return (
+        f'<section data-section="choose"><h2>Choose two runs</h2><p>From the runs of one '
+        f"pipeline: {links}.</p></section>"
+    )

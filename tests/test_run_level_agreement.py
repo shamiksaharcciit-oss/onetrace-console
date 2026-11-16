@@ -9,6 +9,7 @@ surface that presents the verifier's own output agrees with it: it held. Each th
 the run says its "Records agree" as its own page's rung 1 does: not checked, since the check held
 without the run's output files required -- never "Verified", and never "couldn't check".
 """
+
 from __future__ import annotations
 
 import json
@@ -32,8 +33,7 @@ def _tally(home: str, slug: str) -> str:
     return re.search(rf'<li data-tally="{slug}"><a [^>]*>([^<]*)</a>', home).group(1)
 
 
-def test_a_run_without_artifacts_reads_as_the_verifier_says_on_every_surface(server, files,
-                                                                              examined):
+def test_a_run_without_artifacts_reads_as_the_verifier_says_on_every_surface(server, files, examined):
     base, root = server
     assert not any(p.startswith("artifacts/") for p in files), "the fixture must carry none"
     status, body = _post(base, "/v1/runs", make_tar(files))
@@ -65,16 +65,24 @@ def test_a_run_without_artifacts_reads_as_the_verifier_says_on_every_surface(ser
     status, home = _get(base, "/counts.html")  # every count, whole
     assert status == 200
     home = home.decode("utf-8")
-    counts = {slug: _tally(home, slug).split(" ", 1)[0]
-              for slug in ("records-agree", "contradicts", "could-not-check", "not-checked", "no-verdict")}
+    counts = {
+        slug: _tally(home, slug).split(" ", 1)[0]
+        for slug in ("records-agree", "contradicts", "could-not-check", "not-checked", "no-verdict")
+    }
     assert sorted(counts.values()) == ["0", "0", "0", "0", "1"], counts
     counted["Home tallies"] = next(s for s, n in counts.items() if n == "1")
     # 5. the Overview's attention list: the run is listed under not checked, as its order says
     status, overview = _get(base, "/")
-    listed = [kind for kind, item in re.findall(r'<li data-attention="([a-z-]+)">(.*?)</li>',
-                                                overview.decode("utf-8"), re.S) if key in item]
+    listed = [
+        kind
+        for kind, item in re.findall(r'<li data-attention="([a-z-]+)">(.*?)</li>', overview.decode("utf-8"), re.S)
+        if key in item
+    ]
     counted["Overview attention"] = listed[0] if len(listed) == 1 else listed
     examined(len(counted), "surfaces that count or list the run")
-    assert counted == {"case page rung 1": "not-checked", "Home tallies": "not-checked",
-                       "Overview attention": "not-checked"}, counted
+    assert counted == {
+        "case page rung 1": "not-checked",
+        "Home tallies": "not-checked",
+        "Overview attention": "not-checked",
+    }, counted
     assert "For the run as a whole" in case and "artifacts not present" in case

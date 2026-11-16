@@ -1,6 +1,6 @@
 """Read a run directory: the manifest and its receipts, exactly as recorded.
 
-019 §1.2: the generator reads a run directory, the check's report for that run, and the
+The generator reads a run directory, the check's report for that run, and the
 verbs' reports where present — **and nothing else**: no logs, no source, no database.
 
 This module reads. It does not decide validity and it computes no fingerprint: whether the
@@ -113,7 +113,7 @@ class Record:
 def unshowable(obj, *, surrogates: bool = False) -> str | None:
     """Why parsed JSON cannot be shown on a page, or None.
 
-    Found by a review of the rule that no input may crash a page. Two
+    The rule is that no input may crash a page. Two
     kinds of input pass `json.loads` and every shape rule, and then crash the page. One is
     nesting deeper than the page's own indented encoder reaches. The other is a lone surrogate
     escape, which is valid JSON but cannot be written as UTF-8, and every page is UTF-8. Measured
@@ -139,7 +139,7 @@ def unshowable(obj, *, surrogates: bool = False) -> str | None:
 #: What `unshowable` found, keyed by the very bytes it was found in -- exact, and no digest:
 #: this module computes no fingerprint (test_structure.py). The answer depends only on the
 #: bytes, and writing a 10 MB receipt out in full took seconds on every render of every list
-#: (the second confirmation review, N4). Bounded by the bytes it holds; cleared whole when full.
+#: Bounded by the bytes it holds; cleared whole when full.
 _SHOWABLE: dict[tuple[bool, bytes], str | None] = {}
 _SHOWABLE_MAX_BYTES = 64 * 1024 * 1024
 
@@ -191,9 +191,8 @@ def read_record(run_dir: Path, manifest_name: str = "MANIFEST.json") -> Record:
         rel = entry["file"]
         target = (run_dir / rel).resolve()
         # A receipt is one step. A list of steps naming one file again and again drew pages of
-        # hundreds of MB from a small upload, and exhausted memory (the third confirmation
-        # review, NEW-1); so did the same file under other spellings -- './', 'x/../', another
-        # case on Windows (round 4, B1). The name compared is the file it resolves to, as this
+        # hundreds of MB from a small upload, and exhausted memory; so did the same file under other spellings -- './', 'x/../', another
+        # case on Windows. The name compared is the file it resolves to, as this
         # machine opens it, and a second one is refused before anything is read past it.
         same = os.path.normcase(str(target))
         if same in named:

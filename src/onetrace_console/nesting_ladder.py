@@ -11,6 +11,7 @@ a row of its own under its calling step: "nested run <id>", the head the step re
 its page where the console holds it, "not loaded" where it does not. A table with neither is
 returned as it is, byte for byte.
 """
+
 from __future__ import annotations
 
 import html
@@ -31,11 +32,14 @@ _NODE_ROW = re.compile(r'<tr data-node-row="[^"]*"[^>]*><td\b[^>]*>.*?</td><td\b
 
 def _nested_row(rid: str, head: str, href: str, parent: str, depth: int, cols: int, side: str = "") -> str:
     from onetrace_console.trace_panel import code_or_fold
+
     where = f'<a href="{escape(href)}">open its page</a>' if href else escape(NOT_LOADED)
     said = f"{escape(side)}: " if side else ""
-    return (f'<tr data-nested-run="{escape(rid)}" data-child-of="{escape(parent)}" data-depth="{depth}">'
-            f'<td colspan="{cols}">{said}{escape(NESTED)} <code>{escape(rid)}</code>, its head recorded as '
-            f'{code_or_fold(head)} · {where}</td></tr>')
+    return (
+        f'<tr data-nested-run="{escape(rid)}" data-child-of="{escape(parent)}" data-depth="{depth}">'
+        f'<td colspan="{cols}">{said}{escape(NESTED)} <code>{escape(rid)}</code>, its head recorded as '
+        f"{code_or_fold(head)} · {where}</td></tr>"
+    )
 
 
 def _marked(row: str, opening: str, parent: str, depth: int, cell_end: re.Pattern) -> str:
@@ -48,13 +52,17 @@ def _marked(row: str, opening: str, parent: str, depth: int, cell_end: re.Patter
     return row[:at] + note + row[at:] if at >= 0 else row
 
 
-def _placed(order: list[str], rows: dict[str, str], receipts: dict[str, dict], nested_for, opening_of,
-            cell_end: re.Pattern) -> list[str] | None:
+def _placed(
+    order: list[str], rows: dict[str, str], receipts: dict[str, dict], nested_for, opening_of, cell_end: re.Pattern
+) -> list[str] | None:
     """The rows in ladder order, or None where nothing moves and nothing is added. `order`: the keys
     as the table holds them; `receipts`: key -> that step's receipt."""
     name_key = {_name(r): k for k, r in receipts.items()}
-    parent_of = {k: str(r.get("parent")) for k, r in receipts.items()
-                 if r.get("parent") and str(r.get("parent")) in name_key and k in rows}
+    parent_of = {
+        k: str(r.get("parent"))
+        for k, r in receipts.items()
+        if r.get("parent") and str(r.get("parent")) in name_key and k in rows
+    }
     if not parent_of and not any(nested_for(k) for k in order):
         return None
     out: list[str] = []
@@ -65,8 +73,11 @@ def _placed(order: list[str], rows: dict[str, str], receipts: dict[str, dict], n
         out.append(_marked(rows[key], opening_of(key), parent, depth, cell_end) if depth else rows[key])
         receipt = receipts.get(key) or {}
         name = _name(receipt)
-        kids = [name_key.get(str(c)) for c in receipt.get("children") or []] if isinstance(
-            receipt.get("children"), list) else []
+        kids = (
+            [name_key.get(str(c)) for c in receipt.get("children") or []]
+            if isinstance(receipt.get("children"), list)
+            else []
+        )
         kids += [k for k in order if parent_of.get(k) == name and k not in kids]
         for k in kids:
             if k in rows and k not in done and parent_of.get(k) == name:
@@ -95,21 +106,24 @@ def run_ladder(page: str, steps: list[dict], held: dict[str, str]) -> str:
     span = _tbody(page, _STEP_ROW)
     if span is None:
         return page
-    body = page[span[0]:span[1]]
+    body = page[span[0] : span[1]]
     found = list(_STEP_ROW.finditer(body))
     rows = {m.group(1): m.group(0) for m in found}
     order = [m.group(1) for m in found]
     receipts = {str(s.get("index")): s.get("receipt") or {} for s in steps if str(s.get("index")) in rows}
-    head = page[:span[0]]
-    cols = len(re.findall(r"<th\b", head[head.rfind("<thead>"):]))
+    head = page[: span[0]]
+    cols = len(re.findall(r"<th\b", head[head.rfind("<thead>") :]))
 
     def nested(key, depth=1, parent=""):
-        return [_nested_row(rid, h, held.get(rid, ""), parent, depth, cols)
-                for rid, h in nested_inputs(receipts.get(key) or {})]
+        return [
+            _nested_row(rid, h, held.get(rid, ""), parent, depth, cols)
+            for rid, h in nested_inputs(receipts.get(key) or {})
+        ]
+
     placed = _placed(order, rows, receipts, nested, lambda k: f'<tr data-step="{k}">', _STEP_CELL)
     if placed is None:
         return page
-    return page[:span[0]] + "".join(placed) + page[span[1]:]
+    return page[: span[0]] + "".join(placed) + page[span[1] :]
 
 
 def diff_ladder(table: str, receipts_a: list[dict], receipts_b: list[dict], held: dict[str, str]) -> str:
@@ -118,7 +132,7 @@ def diff_ladder(table: str, receipts_a: list[dict], receipts_b: list[dict], held
     span = _tbody(table, _NODE_ROW)
     if span is None:
         return table
-    body = table[span[0]:span[1]]
+    body = table[span[0] : span[1]]
     found = list(_NODE_ROW.finditer(body))
     node = lambda m: html.unescape(re.sub(r"<[^>]+>", "", m.group(1))).strip()  # noqa: E731
     rows = {node(m): m.group(0) for m in found}
@@ -128,19 +142,25 @@ def diff_ladder(table: str, receipts_a: list[dict], receipts_b: list[dict], held
         if isinstance(r, dict):
             by_name[_name(r)] = r
     receipts = {k: by_name[k] for k in order if k in by_name}
-    sides = (("baseline", {_name(r): r for r in receipts_a if isinstance(r, dict)}),
-             ("candidate", {_name(r): r for r in receipts_b if isinstance(r, dict)}))
-    head = table[:span[0]]
-    cols = len(re.findall(r"<th\b", head[head.rfind("<thead>"):]))
+    sides = (
+        ("baseline", {_name(r): r for r in receipts_a if isinstance(r, dict)}),
+        ("candidate", {_name(r): r for r in receipts_b if isinstance(r, dict)}),
+    )
+    head = table[: span[0]]
+    cols = len(re.findall(r"<th\b", head[head.rfind("<thead>") :]))
 
     def nested(key, depth=1, parent=""):
-        return [_nested_row(rid, h, held.get(rid, ""), parent or key, depth, cols, side)
-                for side, mine in sides for rid, h in nested_inputs(mine.get(key) or {})]
+        return [
+            _nested_row(rid, h, held.get(rid, ""), parent or key, depth, cols, side)
+            for side, mine in sides
+            for rid, h in nested_inputs(mine.get(key) or {})
+        ]
 
     def opening(key):
         m = re.match(r"<tr [^>]*>", rows[key])
         return m.group(0)
+
     placed = _placed(order, rows, receipts, nested, opening, _NODE_CELL)
     if placed is None:
         return table
-    return table[:span[0]] + "".join(placed) + table[span[1]:]
+    return table[: span[0]] + "".join(placed) + table[span[1] :]

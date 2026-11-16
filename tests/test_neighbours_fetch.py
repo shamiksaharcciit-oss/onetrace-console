@@ -8,6 +8,7 @@ press is answered "already fetching" and starts nothing; the confirm button is d
 The model here is a tiny one of two files whose `get` is a function of the test, so a fetch can be held
 open at a chosen file.
 """
+
 from __future__ import annotations
 
 import hashlib
@@ -29,8 +30,10 @@ DATA = {"onnx/model.onnx": b"weights", "tokenizer.json": b"{}"}
 def tiny(monkeypatch):
     """A two-file model, named among the local embedders, and the fetch state cleared before and after."""
     from onetrace_console.neighbours import embedder, fetching
-    model = embedder.Model("tiny", "example/tiny", "0" * 40, "mean", "none",
-                           {p: hashlib.sha256(d).hexdigest() for p, d in DATA.items()})
+
+    model = embedder.Model(
+        "tiny", "example/tiny", "0" * 40, "mean", "none", {p: hashlib.sha256(d).hexdigest() for p, d in DATA.items()}
+    )
     monkeypatch.setattr(embedder, "MODELS", {**embedder.MODELS, "tiny": model})
     fetching._FETCHES.clear()
     yield model
@@ -42,6 +45,7 @@ def tiny(monkeypatch):
 
 def _store(tmp_path):
     from onetrace_console.store import Store
+
     return Store(tmp_path / "store")
 
 
@@ -67,6 +71,7 @@ class Gate:
 
 def _wait(cond, what: str):
     import time
+
     end = time.monotonic() + limit(30)
     while not cond():
         if time.monotonic() > end:
@@ -79,12 +84,14 @@ LOCAL = {"kind": "local", "model": "tiny"}
 
 def _start(store, gate):
     from onetrace_console.neighbours import fetching, settings
+
     return fetching.start(store, LOCAL, who="a test", confirmed=settings.confirmation(LOCAL), get=gate)
 
 
 def test_the_page_during_a_fetch_counts_the_files_checked_and_refreshes_itself(tiny, tmp_path):
     from onetrace_console.neighbours import fetching, settings
     from onetrace_console.neighbours.pages import document
+
     store, gate = _store(tmp_path), Gate(tiny)
     state = _start(store, gate)
     assert gate.waiting.wait(limit(30))
@@ -107,14 +114,18 @@ def test_the_page_during_a_fetch_counts_the_files_checked_and_refreshes_itself(t
 def test_a_refused_file_is_named_and_nothing_is_turned_on(tiny, tmp_path):
     from onetrace_console.neighbours import embedder, fetching, settings
     from onetrace_console.neighbours.pages import document
+
     store, gate = _store(tmp_path), Gate(tiny, tampered=True)
     state = _start(store, gate)
     gate.release.set()
     state.thread.join(limit(30))
     assert settings.read(store) is None
     page = document(store)
-    assert re.search(r'data-neighbours="refused" role="alert">Not turned on: tiny: tokenizer\.json as fetched has '
-                     r"sha256 [0-9a-f]{64}, not the pinned", page)
+    assert re.search(
+        r'data-neighbours="refused" role="alert">Not turned on: tiny: tokenizer\.json as fetched has '
+        r"sha256 [0-9a-f]{64}, not the pinned",
+        page,
+    )
     assert 'http-equiv="refresh"' not in page
     assert not (embedder.folder(embedder.models_root(store), tiny) / "tokenizer.json").exists()
     #: The choice is offered again, to try once more.
@@ -123,6 +134,7 @@ def test_a_refused_file_is_named_and_nothing_is_turned_on(tiny, tmp_path):
 
 def test_a_wrong_confirmation_refuses_before_anything_is_fetched(tiny, tmp_path):
     from onetrace_console.neighbours import embedder, fetching
+
     store = _store(tmp_path)
     with pytest.raises(embedder.Refused):
         fetching.start(store, LOCAL, who="a test", confirmed="yes", get=lambda url: pytest.fail("fetched"))
@@ -132,13 +144,17 @@ def test_a_wrong_confirmation_refuses_before_anything_is_fetched(tiny, tmp_path)
 def test_a_second_press_while_fetching_starts_nothing_and_the_button_is_disabled(tiny, tmp_path):
     from onetrace_console.neighbours import fetching, settings
     from onetrace_console.neighbours.pages import document
+
     store, gate = _store(tmp_path), Gate(tiny)
     state = _start(store, gate)
     assert gate.waiting.wait(limit(30))
     with pytest.raises(fetching.AlreadyFetching):
         _start(store, Gate(tiny))
     confirm = document(store, query={"embedder": "tiny"})
-    assert re.search(r'<button type="submit" disabled>Confirm and turn on</button>', confirm)
+    assert re.search(
+        r'<button class="btn-primary" data-busy="Turning on…" data-busy-handover type="submit" disabled>Confirm and turn on</button>',
+        confirm,
+    )
     gate.release.set()
     state.thread.join(limit(30))
     assert gate.asked == ["onnx/model.onnx", "tokenizer.json"]
@@ -149,12 +165,13 @@ def test_a_restart_mid_fetch_keeps_the_checked_files_and_fetches_the_rest(tiny, 
     """A console stopped mid-fetch: one file kept whole, one cut short. The next confirm checks each by its
     sha256, keeps the whole one and fetches only the other."""
     from onetrace_console.neighbours import embedder, fetching, settings
+
     store = _store(tmp_path)
     where = embedder.folder(embedder.models_root(store), tiny)
     (where / "onnx").mkdir(parents=True)
     (where / "onnx" / "model.onnx").write_bytes(DATA["onnx/model.onnx"])
     (where / "tokenizer.json").write_bytes(b"{")
-    fetching._FETCHES.clear()                      # a new process: nothing remembered
+    fetching._FETCHES.clear()  # a new process: nothing remembered
     gate = Gate(tiny)
     gate.release.set()
     _start(store, gate).thread.join(limit(30))
@@ -164,20 +181,22 @@ def test_a_restart_mid_fetch_keeps_the_checked_files_and_fetches_the_rest(tiny, 
 
 @needs_extra
 def test_over_http_the_post_answers_at_once_and_a_second_press_is_already_fetching(server, tiny, monkeypatch):
-    from onetrace_console.neighbours import fetching, settings
-    from onetrace_console.neighbours import embedder
+    from onetrace_console.neighbours import embedder, fetching, settings
     from onetrace_console.serve import Handler
+
     base, _root = server
     gate = Gate(tiny)
     monkeypatch.setattr(embedder, "_get", gate)
     #: `fetch`'s default `get` is bound at definition: the server's fetch is given the gate this way.
     real = embedder.fetch
-    monkeypatch.setattr(embedder, "fetch", lambda root, model, get=None, progress=None:
-                        real(root, model, get=gate, progress=progress))
+    monkeypatch.setattr(
+        embedder, "fetch", lambda root, model, get=None, progress=None: real(root, model, get=gate, progress=progress)
+    )
 
     class NoRedirect(urllib.request.HTTPRedirectHandler):
         def redirect_request(self, *a, **k):
             return None
+
     opener = urllib.request.build_opener(NoRedirect)
     body = urllib.parse.urlencode({"embedder": "tiny", "confirmed": settings.confirmation(LOCAL)}).encode()
     with pytest.raises(urllib.error.HTTPError) as got:

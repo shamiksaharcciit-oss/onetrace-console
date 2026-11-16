@@ -30,6 +30,7 @@ A line names what differs as the records give it, and nothing about what produce
 reads stored records only: no network calls. A public console draws the section only for the
 demo's runs, and runs nothing: it reads the reference its build kept.
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -44,15 +45,18 @@ AGAINST = "This run's configuration, step by step, against the pipeline's refere
 NOT_COMPARED = "Inputs and outputs are not compared here."
 NO_REFERENCE = NO_REFERENCE_YET
 #: Where no reference is held: the command that makes one, named as `verdicts` names it.
-HOW_MADE = ("A reference is made by {command} from the pipeline's benchmark; on a local console, marking a "
-            "run as a benchmark makes one.")
+HOW_MADE = (
+    "A reference is made by {command} from the pipeline's benchmark; on a local console, marking a "
+    "run as a benchmark makes one."
+)
 COMMAND = "python -m onetrace reference make"
 OWN_RUN = "This run is the pipeline's reference run: the reference {seal} was made from it."
 #: The run the reference names is not one this console holds.
 NOT_HELD = "The reference {seal} was made from run {run_id}, which this console does not hold, so nothing is compared."
-NON_CLAIMS = ("A configuration difference is a fact about the records, not a reason for any output.",
-              "Equal configuration does not mean an equal environment: data sources and external services "
-              "are not covered.")
+NON_CLAIMS = (
+    "A configuration difference is a fact about the records, not a reason for any output.",
+    "Equal configuration does not mean an equal environment: data sources and external services are not covered.",
+)
 #: A step's word.
 SAME, DIFFERS = "configuration same", "configuration differs"
 NOT_IN_REFERENCE, NOT_IN_THIS = "not in the reference run", "not in this run"
@@ -69,6 +73,7 @@ NOT_READ = "not read"
 class Item:
     """One compared item at one step: its name as the records give it, its word, and each side's value
     ("" where that side records none)."""
+
     name: str
     word: str
     reference: str = ""
@@ -78,12 +83,13 @@ class Item:
 
 def _public() -> bool:
     from onetrace_console.frame import rendering_public
+
     return rendering_public()
 
 
 def node_id(receipt: dict) -> str:
     """A step's stage name and instance, as "What changed?" pairs steps: `name#instance`."""
-    stage = receipt.get("stage") if isinstance(receipt.get("stage"), dict) else {}
+    stage = _stage if isinstance(_stage := receipt.get("stage"), dict) else {}
     name, inst = str(stage.get("name", "")), stage.get("instance")
     return f"{name}#{inst}" if inst else name
 
@@ -99,20 +105,25 @@ class Step:
 def steps_of(run, store) -> list[Step]:
     """The run's steps in its chain's order, each with a reader of the run's own files."""
     from onetrace_console.stage_pages import _files, _read, _steps
+
     files = _files(run, store)
-    return [Step(node_id(s["receipt"]), s["receipt"], s["file"], lambda path, files=files: _read(files, store, path))
-            for s in _steps(run, store)]
+    return [
+        Step(node_id(s["receipt"]), s["receipt"], s["file"], lambda path, files=files: _read(files, store, path))
+        for s in _steps(run, store)
+    ]
 
 
 def paired(ref_steps: list[Step], my_steps: list[Step]) -> list[tuple[str, Step | None, Step | None]]:
     """[(node, the reference run's step, this run's)], paired by node and, for a node met more than
     once, by its turn: the reference run's order, then this run's steps it does not hold."""
+
     def keyed(steps):
         seen, out = {}, []
         for s in steps:
             n = seen[s.node] = seen.get(s.node, 0) + 1
             out.append(((s.node, n), s))
         return out
+
     mine = dict(keyed(my_steps))
     out, used = [], set()
     for key, s in keyed(ref_steps):
@@ -140,37 +151,51 @@ def _recorded(value):
 
 def config_fingerprint(ref: Step, mine: Step, store) -> list[Item]:
     """The instrument's configuration fingerprint (`instrument.config_digest`)."""
-    return [compare_values("configuration fingerprint", _recorded(_instrument(ref.receipt).get("config_digest")),
-                           _recorded(_instrument(mine.receipt).get("config_digest")))]
+    return [
+        compare_values(
+            "configuration fingerprint",
+            _recorded(_instrument(ref.receipt).get("config_digest")),
+            _recorded(_instrument(mine.receipt).get("config_digest")),
+        )
+    ]
 
 
 def _constants(receipt: dict) -> dict:
     """The step's declared settings (`assertions.constants`), without onetrace's own `onetrace.*`."""
-    assertions = receipt.get("assertions") if isinstance(receipt.get("assertions"), dict) else {}
-    held = assertions.get("constants") if isinstance(assertions.get("constants"), dict) else {}
+    assertions = _assertions if isinstance(_assertions := receipt.get("assertions"), dict) else {}
+    held = _constants2 if isinstance(_constants2 := assertions.get("constants"), dict) else {}
     return {k: v for k, v in held.items() if isinstance(k, str) and not k.startswith("onetrace.")}
 
 
 def declared_settings(ref: Step, mine: Step, store) -> list[Item]:
     """Each declared setting either run's step records, by name: a name one lacks is not recorded."""
     import json
+
     a, b = _constants(ref.receipt), _constants(mine.receipt)
     shown = lambda v: v if isinstance(v, str) else json.dumps(v, sort_keys=True)  # noqa: E731
-    return [compare_values(f"declared setting {k}", shown(a[k]) if k in a else None, shown(b[k]) if k in b else None)
-            for k in sorted(set(a) | set(b))]
+    return [
+        compare_values(f"declared setting {k}", shown(a[k]) if k in a else None, shown(b[k]) if k in b else None)
+        for k in sorted(set(a) | set(b))
+    ]
 
 
 def code_fingerprint(ref: Step, mine: Step, store) -> list[Item]:
     """The fingerprint of the code that ran the step (`instrument.manifest_digest`)."""
-    return [compare_values("code fingerprint", _recorded(_instrument(ref.receipt).get("manifest_digest")),
-                           _recorded(_instrument(mine.receipt).get("manifest_digest")))]
+    return [
+        compare_values(
+            "code fingerprint",
+            _recorded(_instrument(ref.receipt).get("manifest_digest")),
+            _recorded(_instrument(mine.receipt).get("manifest_digest")),
+        )
+    ]
 
 
 def _records(step: Step) -> dict:
     """{name: the record, or `model_call.Refused` with its reason} for each of the step's outputs named
     like a model-call record, read as the step's page reads them (`model_call.read_output`)."""
     from onetrace_console import model_call
-    out = {}
+
+    out: dict[str, dict | Exception] = {}
     for o in model_call.outputs(step.receipt):
         try:
             out[str(o["name"])] = model_call.read_output(step.file, o, step.read)
@@ -182,9 +207,13 @@ def _records(step: Step) -> dict:
 def _fields(a: dict, b: dict) -> list[str]:
     """The comparator's groups, in its order: identity, then engine settings, then sampling settings."""
     from onetrace.model_call.comparator import IDENTITY
+
     keys = list(a) + list(b)
-    return (list(IDENTITY) + sorted({k for k in keys if k.startswith("engine.settings.")})
-            + sorted({k for k in keys if k.startswith("sampling.")}))
+    return (
+        list(IDENTITY)
+        + sorted({k for k in keys if k.startswith("engine.settings.")})
+        + sorted({k for k in keys if k.startswith("sampling.")})
+    )
 
 
 def _field(name: str, a, b) -> Item:
@@ -192,14 +221,14 @@ def _field(name: str, a, b) -> Item:
     (as the comparator reads one); otherwise the line says not recorded, with each side's state."""
     from onetrace.model_call.comparator import pair
     from onetrace.model_call.record import DECLARED, OBSERVED
+
     has = lambda v: isinstance(v, dict) and v.get("status") in (OBSERVED, DECLARED) and "value" in v  # noqa: E731
     shown = lambda v: str(v["value"]) if has(v) else None  # noqa: E731
     if has(a) and has(b):
         word = ITEM_SAME if pair(a, b) == "equal" else ITEM_DIFFERS
-        return Item(name, word, shown(a), shown(b))
+        return Item(name, word, shown(a), shown(b))  # type: ignore[arg-type]  # has() holds on both: each is shown
     state = lambda v: str(v.get("status")) if isinstance(v, dict) else "absent"  # noqa: E731
-    return Item(name, NOT_RECORDED, shown(a) or "", shown(b) or "",
-                f"reference run {state(a)}, this run {state(b)}")
+    return Item(name, NOT_RECORDED, shown(a) or "", shown(b) or "", f"reference run {state(a)}, this run {state(b)}")
 
 
 def model_calls(ref: Step, mine: Step, store) -> list[Item]:
@@ -210,11 +239,13 @@ def model_calls(ref: Step, mine: Step, store) -> list[Item]:
     for name in list(dict.fromkeys([*a, *b])):
         ra, rb = a.get(name), b.get(name)
         if ra is None or rb is None:
-            out.append(Item(f"model-call record {name}", NOT_RECORDED, "" if ra is None else name,
-                            "" if rb is None else name))
+            out.append(
+                Item(f"model-call record {name}", NOT_RECORDED, "" if ra is None else name, "" if rb is None else name)
+            )
         elif isinstance(ra, Exception) or isinstance(rb, Exception):
-            why = "; ".join(f"{side}: {e}" for side, e in (("reference run", ra), ("this run", rb))
-                            if isinstance(e, Exception))
+            why = "; ".join(
+                f"{side}: {e}" for side, e in (("reference run", ra), ("this run", rb)) if isinstance(e, Exception)
+            )
             out.append(Item(f"model-call record {name}", NOT_READ, note=why))
         else:
             out += [_field(f"{name} {f}", ra.get(f), rb.get(f)) for f in _fields(ra, rb)]
@@ -225,6 +256,7 @@ def _onedoor_on() -> bool:
     """Whether this render is a console's with the onedoor extension on: a console with it off never
     imports the extension (`tests/test_onedoor_ext_isolation.py`), so it holds no policy version here."""
     from onetrace_console.frame import _RENDERING
+
     r = _RENDERING.get()
     return bool(r is not None and r.onedoor)
 
@@ -236,6 +268,7 @@ def policy_version(ref: dict, store) -> str | None:
     if not _onedoor_on() or not (store.root / "decision_exports").is_dir():
         return None
     from onetrace_console.onedoor_ext.policy_pages import all_decisions
+
     want, digest = ref.get("request_id"), ref.get("decision_digest")
     for d in all_decisions(store):
         if d.request_id != want:
@@ -252,8 +285,9 @@ def policies(ref: Step, mine: Step, store) -> list[Item]:
     """The policy version behind each decision the step cites, paired in call order; a line only where
     either run's step cites one. Read only where both runs' rows are held in onedoor exports."""
     from onetrace_console.onedoor_panel import decisions
+
     a, b = decisions(ref.receipt) or [], decisions(mine.receipt) or []
-    refs = lambda ds: [d.get("ref") if isinstance(d.get("ref"), dict) else {} for d in ds]  # noqa: E731
+    refs = lambda ds: [_ref if isinstance(_ref := d.get("ref"), dict) else {} for d in ds]  # noqa: E731
     a, b = refs(a), refs(b)
     out = []
     for n in range(max(len(a), len(b))):
@@ -273,17 +307,19 @@ def compare_step(ref: Step, mine: Step, store) -> list[Item]:
 
 
 def step_word(items: list[Item]) -> str:
-    """"configuration differs" where any item differs; "configuration same" otherwise, with each item
+    """ "configuration differs" where any item differs; "configuration same" otherwise, with each item
     not recorded named under it, never counted as same."""
     return DIFFERS if any(i.word == ITEM_DIFFERS for i in items) else SAME
 
 
 # ---- which reference run ------------------------------------------------------------------------
 
+
 def reference_run(run, store, *, compute: bool):
     """(the pipeline's current reference record or None, its reference run or None). The run is the
     first of the sealed reference's `made_from.run_ids`, among the runs the console made it from."""
     from onetrace_console import verdicts
+
     pipeline = verdicts.pipeline_of(run, store)
     if pipeline is None:
         return None, None
@@ -291,11 +327,11 @@ def reference_run(run, store, *, compute: bool):
     doc = (ref or {}).get("reference")
     if not isinstance(doc, dict):
         return ref, None
-    made = doc.get("made_from") if isinstance(doc.get("made_from"), dict) else {}
-    ids = made.get("run_ids") if isinstance(made.get("run_ids"), list) else []
+    made = _made_from if isinstance(_made_from := doc.get("made_from"), dict) else {}
+    ids = _run_ids if isinstance(_run_ids := made.get("run_ids"), list) else []
     if not ids:
         return ref, None
-    for key in ref.get("runs") or []:
+    for key in ref.get("runs") or []:  # type: ignore[union-attr]  # its document was read from it above
         try:
             held = store.get_run(key)
         except StoreError:
@@ -307,6 +343,7 @@ def reference_run(run, store, *, compute: bool):
 
 def _demo_folders() -> set[str]:
     from onetrace_console.demo_store import runs
+
     return {spec.folder for spec in runs()}
 
 
@@ -316,20 +353,29 @@ def _demo(run) -> bool:
 
 # ---- drawn -------------------------------------------------------------------------------------
 
+
 def _value_html(value: str) -> str:
     from onetrace_console.trace_panel import code_or_fold
+
     return code_or_fold(value) if value else ""
 
 
 def _item_html(item: Item) -> str:
     if item.word == ITEM_DIFFERS:
-        said = (f"{escape(item.name)} differs: reference run {_value_html(item.reference)}, "
-                f"this run {_value_html(item.this)}")
+        said = (
+            f"{escape(item.name)} differs: reference run {_value_html(item.reference)}, "
+            f"this run {_value_html(item.this)}"
+        )
     elif item.word == NOT_READ:
         said = f"{escape(item.name)}: {escape(NOT_READ)}"
     elif item.word == NOT_RECORDED:
-        where = ("in neither run" if not item.reference and not item.this
-                 else "in the reference run" if not item.reference else "in this run")
+        where = (
+            "in neither run"
+            if not item.reference and not item.this
+            else "in the reference run"
+            if not item.reference
+            else "in this run"
+        )
         said = f"{escape(item.name)}: {escape(NOT_RECORDED)} {escape(where)}"
     else:
         said = f"{escape(item.name)}: {escape(ITEM_SAME)}"
@@ -340,14 +386,18 @@ def _item_html(item: Item) -> str:
 def _step_html(node: str, ref: Step | None, mine: Step | None, store) -> str:
     if ref is None or mine is None:
         word = NOT_IN_REFERENCE if ref is None else NOT_IN_THIS
-        return (f'<li data-config-step="{escape(node)}" data-config-word="{escape(word)}">'
-                f"<code>{escape(node)}</code>: {escape(word)}</li>")
+        return (
+            f'<li data-config-step="{escape(node)}" data-config-word="{escape(word)}">'
+            f"<code>{escape(node)}</code>: {escape(word)}</li>"
+        )
     items = compare_step(ref, mine, store)
     word = step_word(items)
     differs = [i.name for i in items if i.word == ITEM_DIFFERS]
     head = f"{escape(word)}: {escape(', '.join(differs))}" if differs else escape(word)
-    return (f'<li data-config-step="{escape(node)}" data-config-word="{escape(word)}"><code>{escape(node)}</code>: '
-            f'{head}<ul class="plain">{"".join(_item_html(i) for i in items)}</ul></li>')
+    return (
+        f'<li data-config-step="{escape(node)}" data-config-word="{escape(word)}"><code>{escape(node)}</code>: '
+        f'{head}<ul class="plain">{"".join(_item_html(i) for i in items)}</ul></li>'
+    )
 
 
 def section(run, store, *, up: str = "../../") -> str:
@@ -355,6 +405,7 @@ def section(run, store, *, up: str = "../../") -> str:
     run that is not the demo's, and where the run belongs to no pipeline."""
     from onetrace_console.viewer.page import fingerprint_html
     from onetrace_console.words import run_named
+
     public = _public()
     if public and not _demo(run):
         return ""
@@ -363,36 +414,47 @@ def section(run, store, *, up: str = "../../") -> str:
     except (StoreError, ValueError):
         return ""
     from onetrace_console import verdicts
+
     if verdicts.pipeline_of(run, store) is None:
         return ""
-    out = (f'<section data-section="config-compare" class="config-compare"><h2>{escape(HEADING)}</h2>'
-           f'<p data-config="within">{escape(WITHIN)}</p>')
+    out = (
+        f'<section data-section="config-compare" class="config-compare"><h2>{escape(HEADING)}</h2>'
+        f'<p data-config="within">{escape(WITHIN)}</p>'
+    )
     doc = (ref or {}).get("reference")
     if not isinstance(doc, dict):
         h, t = HOW_MADE.split("{command}")
-        out += (f'<p data-config="no-reference">{escape(NO_REFERENCE)}</p>'
-                f'<p data-config="how-made">{escape(h)}<code>{escape(COMMAND)}</code>{escape(t)}</p>')
+        out += (
+            f'<p data-config="no-reference">{escape(NO_REFERENCE)}</p>'
+            f'<p data-config="how-made">{escape(h)}<code>{escape(COMMAND)}</code>{escape(t)}</p>'
+        )
         if ref is not None and (ref.get("refused") or ref.get("note")):
             out += f"<p>{escape(verdicts.NO_REFERENCE.format(why=ref.get('refused') or ref.get('note')))}</p>"
         return out + "</section>"
     seal = str(doc.get("seal", ""))
     if other is None:
-        made = doc.get("made_from") if isinstance(doc.get("made_from"), dict) else {}
+        made = _made_from2 if isinstance(_made_from2 := doc.get("made_from"), dict) else {}
         first = (made.get("run_ids") or [""])[0]
         h, t = NOT_HELD.split("{seal}")
-        return (out + f'<div data-config="not-held">{escape(h)}{fingerprint_html(seal)}'
-                f'{escape(t.format(run_id=first))}</div></section>')
+        return (
+            out + f'<div data-config="not-held">{escape(h)}{fingerprint_html(seal)}'
+            f"{escape(t.format(run_id=first))}</div></section>"
+        )
     if other.key == run.key:
         h, t = OWN_RUN.split("{seal}")
         return out + f'<div data-config="own-run">{escape(h)}{fingerprint_html(seal)}{escape(t)}</div></section>'
     if public and not _demo(other):
         return ""
-    named = f'<a href="{up}runs/{escape(other.key)}/case.html" data-config-reference-run>{run_named(store, other.key)}</a>'
+    named = (
+        f'<a href="{up}runs/{escape(other.key)}/case.html" data-config-reference-run>{run_named(store, other.key)}</a>'
+    )
     head, rest = AGAINST.split("{run}")
     mid, tail = rest.split("{seal}")
     #: A seal's fold is a box of its own, never inside a paragraph (`tests/test_short_fingerprints.py`).
-    out += (f'<div data-config="against">{escape(head)}{named}{escape(mid)}{fingerprint_html(seal)}{escape(tail)}</div>'
-            f'<p data-config="not-compared">{escape(NOT_COMPARED)}</p>')
+    out += (
+        f'<div data-config="against">{escape(head)}{named}{escape(mid)}{fingerprint_html(seal)}{escape(tail)}</div>'
+        f'<p data-config="not-compared">{escape(NOT_COMPARED)}</p>'
+    )
     try:
         pairs = paired(steps_of(other, store), steps_of(run, store))
     except (StoreError, ValueError):

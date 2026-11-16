@@ -20,6 +20,7 @@ page; the default embedder's files are fetched then, and only then (`embedder`).
 
 This module imports none of the extra's packages: it only asks whether they are installed.
 """
+
 from __future__ import annotations
 
 import importlib.util
@@ -30,15 +31,14 @@ EXTRA = ("onnxruntime", "tokenizers", "numpy")
 #: embedding batches' runs, and the derived file of vectors.
 FOLDER = "neighbours"
 
-#: The note's non-claims, word for word (onetrace_backlog_run_index_and_neighbours.md, item 2): on
-#: the page that turns the feature on, and in docs/neighbours.md.
+#: What neighbours do not claim, word for word: on the page that turns the feature on, and in the
+#: operator guide.
 NON_CLAIMS = (
     "Similarity of inputs is a suggestion for which runs to compare, and a drop in the nearness ladder "
     "is a suggestion of where to look; neither is evidence of anything and neither is a verdict.",
     "The embedder reads kept inputs; the console says so, and the feature is off by default.",
     "Nothing about hosted embedders: none is offered.",
-    "No fitted threshold: the similarity is shown as a number, ordered, with no cut-off claimed to "
-    "mean \"the same\".",
+    'No fitted threshold: the similarity is shown as a number, ordered, with no cut-off claimed to mean "the same".',
 )
 
 
@@ -57,6 +57,7 @@ def drawing_public() -> bool:
     which can press nothing: either way the feature does not exist on them."""
     from onetrace_console.explain import _NO_PRESSES
     from onetrace_console.frame import rendering_public
+
     return rendering_public() or _NO_PRESSES.get()
 
 
@@ -70,4 +71,5 @@ def active(store) -> bool:
     if store is None or not here():
         return False
     from onetrace_console.neighbours import settings
+
     return settings.read(store) is not None

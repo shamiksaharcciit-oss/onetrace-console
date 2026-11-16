@@ -11,13 +11,13 @@
    names: the verifier's fix line for the export row names it, and is kept in the report instead.
    Held on the incident page of a gated run planted to contradict its record.
 """
+
 from __future__ import annotations
 
 import hashlib
 import html
 import json
 import os
-import re
 import shutil
 import subprocess
 import sys
@@ -35,13 +35,17 @@ def _windows_text(monkeypatch):
 
     def write_text(self, data, encoding=None, errors=None, newline=None):
         return real(self, data, encoding=encoding, errors=errors, newline="\r\n" if newline is None else newline)
+
     monkeypatch.setattr(Path, "write_text", write_text)
 
 
 def beside_problems(runs: Path) -> list[str]:
     """The three files as the verifier reads them: LF only, and the sidecar's digest the export's."""
-    out = [f"{name} holds a CR" for name in ("decisions.jsonl", "decisions.jsonl.sha256", "permit-issuers.json")
-           if b"\r" in (runs / name).read_bytes()]
+    out = [
+        f"{name} holds a CR"
+        for name in ("decisions.jsonl", "decisions.jsonl.sha256", "permit-issuers.json")
+        if b"\r" in (runs / name).read_bytes()
+    ]
     said = (runs / "decisions.jsonl.sha256").read_bytes().split()[0].decode("ascii")
     if said != hashlib.sha256((runs / "decisions.jsonl").read_bytes()).hexdigest():
         out.append("the sidecar's digest is not the export's")
@@ -50,6 +54,7 @@ def beside_problems(runs: Path) -> list[str]:
 
 def test_the_decision_files_are_lf_on_every_platform(tmp_path, monkeypatch, examined):
     from onetrace_console.demo_store.onedoor_demo import Issuer
+
     _windows_text(monkeypatch)
     issuer = Issuer()
     issuer.decide("req-1", "permit")
@@ -62,16 +67,31 @@ def test_the_decision_files_are_lf_on_every_platform(tmp_path, monkeypatch, exam
 def test_sabotage_an_export_written_in_text_mode_is_named(tmp_path, examined):
     (tmp_path / "decisions.jsonl").write_bytes(b'{"a":1}\r\n')
     (tmp_path / "decisions.jsonl.sha256").write_bytes(
-        (hashlib.sha256(b'{"a":1}\n').hexdigest() + "  decisions.jsonl\n").encode())
+        (hashlib.sha256(b'{"a":1}\n').hexdigest() + "  decisions.jsonl\n").encode()
+    )
     (tmp_path / "permit-issuers.json").write_bytes(b"{}\n")
     examined(1, "planted export")
     assert beside_problems(tmp_path) == ["decisions.jsonl holds a CR", "the sidecar's digest is not the export's"]
 
 
 def _verify_rows(run: Path, beside: Path) -> dict[str, str]:
-    proc = subprocess.run([sys.executable, "-m", "onetrace_verify.cli", "--json", "--decisions",
-                           str(beside / "decisions.jsonl"), "--permit-issuers", str(beside / "permit-issuers.json"),
-                           "MANIFEST.json"], cwd=run, capture_output=True, text=True, timeout=120)
+    proc = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "onetrace_verify.cli",
+            "--json",
+            "--decisions",
+            str(beside / "decisions.jsonl"),
+            "--permit-issuers",
+            str(beside / "permit-issuers.json"),
+            "MANIFEST.json",
+        ],
+        cwd=run,
+        capture_output=True,
+        text=True,
+        timeout=120,
+    )
     return {r["name"]: r["result"] for r in json.loads(proc.stdout)["rows"] if r["name"].startswith("decisions:")}
 
 
@@ -100,7 +120,9 @@ def test_the_verifier_reads_an_export_written_in_text_mode_as_damaged(planted, e
 
 def test_a_relative_path_in_the_stored_command_is_written_with_slashes(tmp_path, monkeypatch, examined):
     import ntpath
+
     from onetrace_console.checks import _relative_to
+
     run_dir = tmp_path / "check" / "run"
     trust = tmp_path / "check" / "evidence" / "trust.json"
     #: Windows' separator, and its relpath, which writes it.
@@ -118,27 +140,40 @@ def incident_pages(planted):
     from onetrace_console.folder_load import load_folder
     from onetrace_console.serve import _render_startup_pages
     from onetrace_console.store import Store
+
     _src, root = planted
     store_root = root / "store"
-    config = Config(public=True, store_root=str(store_root), trust_file=str(root / "trust.json"),
-                    sign_in={**Config().sign_in, "enabled": False})
+    config = Config(
+        public=True,
+        store_root=str(store_root),
+        trust_file=str(root / "trust.json"),
+        sign_in={**Config().sign_in, "enabled": False},
+    )
     store = Store(store_root / "store")
     with store.reading():
         load_folder(root / "runs", store, config)
         _render_startup_pages(store, store_root, config)
     pages = store_root / "pages"
-    return {p.relative_to(pages).as_posix(): p.read_text(encoding="utf-8")
-            for p in pages.glob("incidents/i-contradicts-*.html")}
+    return {
+        p.relative_to(pages).as_posix(): p.read_text(encoding="utf-8")
+        for p in pages.glob("incidents/i-contradicts-*.html")
+    }
 
 
 def word_problems(pages: dict[str, str]) -> list[str]:
-    from tests.test_ux_screens import NOT_ON_A_PAGE, _text
-    return [f"{rel}: {name}" for rel, page in pages.items() for name, rx in NOT_ON_A_PAGE.items()
-            if rx.search(_text(page))]
+    from tests.test_ux_screens import NOT_ON_A_PAGE, scanned_text
+
+    return [
+        f"{rel}: {name}"
+        for rel, page in pages.items()
+        for name, rx in NOT_ON_A_PAGE.items()
+        if rx.search(scanned_text(page))
+    ]
 
 
 def test_a_contradicting_gated_run_s_incident_page_holds_the_word_rule(incident_pages, examined):
     from onetrace_console.incident_pages import FIX_KEPT
+
     examined(len(incident_pages), "incident pages")
     assert incident_pages, "the planted run raised no incident"
     page = next(iter(incident_pages.values()))
@@ -149,7 +184,10 @@ def test_a_contradicting_gated_run_s_incident_page_holds_the_word_rule(incident_
 
 def test_sabotage_the_verifier_s_fix_line_shown_whole_is_named(incident_pages, examined):
     rel, page = next(iter(incident_pages.items()))
-    planted = page.replace("</main>", "<p>fix (decisions: the decision is in the export): pass the onedoor "
-                                      "decision export as --decisions</p></main>", 1)
+    planted = page.replace(
+        "</main>",
+        "<p>fix (decisions: the decision is in the export): pass the onedoor decision export as --decisions</p></main>",
+        1,
+    )
     examined(1, "planted page")
     assert word_problems({rel: planted}) == [f"{rel}: onedoor"]

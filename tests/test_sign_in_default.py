@@ -9,6 +9,7 @@ On `0.0.0.0` with no TLS configured, "serves with sign-in" shows as the existing
 refusal: sign-in is on, so the console will not listen in clear text beyond
 loopback. Before this change the same file started, on every interface, with no sign-in.
 """
+
 from __future__ import annotations
 
 import json
@@ -38,21 +39,23 @@ def test_an_empty_config_file_serves_with_sign_in(local_main, capsys, tmp_path, 
     assert "WARNING: sign_in.enabled is false" not in capsys.readouterr().err
 
 
-@pytest.mark.parametrize("body", [{"host": "0.0.0.0"}, {"host": "0.0.0.0", "sign_in": {}}],
-                         ids=["no-sign-in-key", "sign-in-without-enabled"])
-def test_a_file_without_sign_in_on_every_interface_is_not_served_open(
-        local_main, tmp_path, monkeypatch, body):
+@pytest.mark.parametrize(
+    "body", [{"host": "0.0.0.0"}, {"host": "0.0.0.0", "sign_in": {}}], ids=["no-sign-in-key", "sign-in-without-enabled"]
+)
+def test_a_file_without_sign_in_on_every_interface_is_not_served_open(local_main, tmp_path, monkeypatch, body):
     serve_module, _ = local_main
     _file(tmp_path, monkeypatch, {**body, "store_root": (tmp_path / "s").as_posix()})
     assert serve_module.main([]) == 1, "refused in words, never a traceback"
     assert _FakeServer.address is None, "it never listened"
 
 
-def test_explicitly_off_beyond_loopback_keeps_its_warning(local_main, capsys, tmp_path,
-                                                         monkeypatch):
+def test_explicitly_off_beyond_loopback_keeps_its_warning(local_main, capsys, tmp_path, monkeypatch):
     serve_module, run = local_main
-    _file(tmp_path, monkeypatch, {"host": "0.0.0.0", "store_root": (tmp_path / "s").as_posix(),
-                                  "sign_in": {"enabled": False}})
+    _file(
+        tmp_path,
+        monkeypatch,
+        {"host": "0.0.0.0", "store_root": (tmp_path / "s").as_posix(), "sign_in": {"enabled": False}},
+    )
     address, err, _ = run(capsys)
     assert address == ("0.0.0.0", 8080)
     assert "WARNING: sign_in.enabled is false" in err

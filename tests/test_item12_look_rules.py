@@ -7,21 +7,25 @@
 2. Every text colour the look draws on its background reads: WCAG AA, 4.5:1, for each pair the
    rules set, worked out from the skin's own tokens.
 """
+
 from __future__ import annotations
 
 import re
 
 import pytest
 
-HIDING = re.compile(r"display\s*:\s*none|visibility\s*:\s*hidden|opacity\s*:\s*0(?![.\d])"
-                    r"|font-size\s*:\s*0(?![.\d])")
+HIDING = re.compile(
+    r"display\s*:\s*none|visibility\s*:\s*hidden|opacity\s*:\s*0(?![.\d])"
+    r"|font-size\s*:\s*0(?![.\d])"
+)
 
 
 def _sheets() -> dict[str, str]:
     """The look's rules: the console pages', the frame's, and the one chip family's (0.1.1 moved
     every state chip's rules there). The whole served stylesheet is held by tests/test_shared_style.py."""
-    from onetrace_console.viewer.page import FRAME_CSS
     from onetrace_console.frame import CHIP_CSS, PAGE_CSS
+    from onetrace_console.viewer.page import FRAME_CSS
+
     return {"PAGE_CSS": PAGE_CSS, "FRAME_CSS": FRAME_CSS, "CHIP_CSS": CHIP_CSS}
 
 
@@ -36,11 +40,13 @@ def test_no_rule_of_the_look_hides_text(examined):
 
 def test_the_only_rule_that_hides_is_the_navigation_in_print():
     from onetrace_console.viewer.page import FRAME_CSS
+
     assert re.findall(r"@media print\{([^{}]*)\{display:none\}\}", FRAME_CSS) == ["nav.frame"]
 
 
 def _tokens() -> dict[str, str]:
     from onetrace_console.viewer.tokens import root_css
+
     return dict(re.findall(r"--([\w-]+):\s*(#[0-9a-fA-F]{6})", root_css()))
 
 
@@ -48,7 +54,8 @@ def _luminance(hex_colour: str) -> float:
     def channel(c: int) -> float:
         c = c / 255
         return c / 12.92 if c <= 0.03928 else ((c + 0.055) / 1.055) ** 2.4
-    r, g, b = (int(hex_colour[i:i + 2], 16) for i in (1, 3, 5))
+
+    r, g, b = (int(hex_colour[i : i + 2], 16) for i in (1, 3, 5))
     return 0.2126 * channel(r) + 0.7152 * channel(g) + 0.0722 * channel(b)
 
 
@@ -60,12 +67,25 @@ def _ratio(fg: str, bg: str) -> float:
 #: (text, background): every pair the look sets -- pills, the banner, cards and panels, the page,
 #: the first difference in the bad ink, the links, and the navigation.
 #: ("page", "cc-ink"): a comparison's first difference, its chip amber filled.
-PAIRS = [("page", "cc-ink"), ("ok-ink", "ok-bg"), ("cc-ink", "cc-bg"), ("bad-ink", "bad-bg"), ("neu-ink", "neu-bg"),
-         ("ink", "surface"), ("ink", "page"), ("ink-muted", "surface"), ("ink-muted", "page"),
-         ("bad-ink", "surface"), ("accent", "surface"), ("accent", "page"),
-         #: Couldn't check, amber ink on the neutral fill with an amber outline.
-         ("cc-ink", "neu-bg"),
-         ("nav-ink", "nav-bg"), ("nav-on-ink", "nav-on-bg"), ("nav-ink-faint", "nav-bg")]
+PAIRS = [
+    ("page", "cc-ink"),
+    ("ok-ink", "ok-bg"),
+    ("cc-ink", "cc-bg"),
+    ("bad-ink", "bad-bg"),
+    ("neu-ink", "neu-bg"),
+    ("ink", "surface"),
+    ("ink", "page"),
+    ("ink-muted", "surface"),
+    ("ink-muted", "page"),
+    ("bad-ink", "surface"),
+    ("accent", "surface"),
+    ("accent", "page"),
+    #: Couldn't check, amber ink on the neutral fill with an amber outline.
+    ("cc-ink", "neu-bg"),
+    ("nav-ink", "nav-bg"),
+    ("nav-on-ink", "nav-on-bg"),
+    ("nav-ink-faint", "nav-bg"),
+]
 
 
 @pytest.mark.parametrize("fg, bg", PAIRS)

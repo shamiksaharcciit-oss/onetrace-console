@@ -16,6 +16,7 @@ which sets the same key; never a default. A public console:
 - refuses to start beside sign-in, the onedoor extension, a trust file other than the demo's,
   or a store that holds accounts or tokens -- each said in words, with its fix.
 """
+
 from __future__ import annotations
 
 import base64
@@ -24,24 +25,30 @@ import json
 import sys
 import threading
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 #: The answer to every write. Plain words: what this is, and where to go instead.
-REFUSAL = ("This is a read-only demo of onetrace-console. Nothing can be uploaded or changed "
-           "here. Install it to try your own runs: pip install onetrace-console.")
+REFUSAL = (
+    "This is a read-only demo of onetrace-console. Nothing can be uploaded or changed "
+    "here. Install it to try your own runs: pip install onetrace-console."
+)
 
 #: The banner every page carries in public mode, in the release's own wording.
 BANNER = "A read-only demo of onetrace-console. Install it:"
 BANNER_COMMAND = "pip install onetrace-console"
 #: What the demo's runs are: said on every page, as the README says it. The count is the
 #: builder's own pipeline list, never a typed word (`banner_runs`).
-BANNER_RUNS = ("Its runs come from {count} small example pipelines, recorded when this demo "
-               "was built, with no network calls and no hosted model.")
+BANNER_RUNS = (
+    "Its runs come from {count} small example pipelines, recorded when this demo "
+    "was built, with no network calls and no hosted model."
+)
 #: What the demo runs on request, and its limits: said on every page beside the runs' sentence.
-BANNER_COMPARE = ("It runs one thing on request: Compare, on a pipeline's page, compares two of that "
-                  "pipeline's runs here with the SDK's verbs, with no model and no network, at most "
-                  "{per_minute} new comparisons a minute for everyone.")
+BANNER_COMPARE = (
+    "It runs one thing on request: Compare, on a pipeline's page, compares two of that "
+    "pipeline's runs here with the SDK's verbs, with no model and no network, at most "
+    "{per_minute} new comparisons a minute for everyone."
+)
 #: A count as the page's words say it.
 COUNT_WORDS = ("no", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten")
 
@@ -56,11 +63,13 @@ def count_word(n: int) -> str:
 def banner_runs() -> str:
     """The banner's sentence on the demo's runs, its count read from the demo's builder."""
     from onetrace_console.demo_store import pipeline_names
+
     return BANNER_RUNS.format(count=count_word(len(pipeline_names())))
 
 
 def banner_compare() -> str:
     from onetrace_console.visitor_compare import PER_MINUTE
+
     return BANNER_COMPARE.format(per_minute=PER_MINUTE)
 
 
@@ -76,6 +85,7 @@ def inline_scripts() -> tuple[str, ...]:
     from onetrace_console.frame import THEME_HEAD_SCRIPT, THEME_SCRIPT
     from onetrace_console.viewer.page import PRINT_SCRIPT
     from onetrace_console.words import RELATIVE_TIME_SCRIPT, WATCH_SCRIPT
+
     return (PRINT_SCRIPT, RELATIVE_TIME_SCRIPT, WATCH_SCRIPT, THEME_HEAD_SCRIPT, THEME_SCRIPT)
 
 
@@ -88,29 +98,51 @@ def content_security_policy(*, local: bool = False) -> str:
     `local`: the console on this machine, which also lets the watched folder's notice ask the
     console itself what it has taken in (`connect-src 'self'`). Nothing else differs."""
     from onetrace_console.benchmark_script import BENCHMARK_SCRIPT
+    from onetrace_console.busy_script import BUSY_SCRIPT
     from onetrace_console.compare_script import COMPARE_SCRIPT
-    from onetrace_console.explain_script import EXPLAIN_SCRIPT
     from onetrace_console.expectations_script import EXPECTATIONS_SCRIPT
+    from onetrace_console.explain_script import EXPLAIN_SCRIPT
+    from onetrace_console.run_lock_script import LOAD_NOT_CLOSED_SCRIPT
     from onetrace_console.token_script import TOKEN_SCRIPT
+
     #: The explanation panel's, the Compare buttons', the benchmark mark's and the expectations file's
     #: and the tokenizer picker's are a local console's only: a public one has no such button, so its policy
     #: does not name them.
-    hashes = " ".join(_script_hash(s) for s in inline_scripts()
-                      + ((EXPLAIN_SCRIPT, COMPARE_SCRIPT, BENCHMARK_SCRIPT, EXPECTATIONS_SCRIPT, TOKEN_SCRIPT) if local else ()))
-    return ("default-src 'none'; style-src 'self' 'unsafe-inline'; font-src 'self'; "
-            f"img-src 'self' data:; script-src {hashes}; "
-            + ("connect-src 'self'; " if local else "")
-            + "base-uri 'none'; form-action 'self'; frame-ancestors 'none'")
+    hashes = " ".join(
+        _script_hash(s)
+        for s in inline_scripts()
+        + (
+            (
+                EXPLAIN_SCRIPT,
+                COMPARE_SCRIPT,
+                BENCHMARK_SCRIPT,
+                EXPECTATIONS_SCRIPT,
+                TOKEN_SCRIPT,
+                LOAD_NOT_CLOSED_SCRIPT,
+                BUSY_SCRIPT,
+            )
+            if local
+            else ()
+        )
+    )
+    return (
+        "default-src 'none'; style-src 'self' 'unsafe-inline'; font-src 'self'; "
+        f"img-src 'self' data:; script-src {hashes}; "
+        + ("connect-src 'self'; " if local else "")
+        + "base-uri 'none'; form-action 'self'; frame-ancestors 'none'"
+    )
 
 
 def security_headers() -> tuple[tuple[str, str], ...]:
     """Sent on every response in public mode."""
-    return (("X-Frame-Options", "DENY"),
-            ("X-Content-Type-Options", "nosniff"),
-            ("Cross-Origin-Resource-Policy", "same-origin"),
-            ("Referrer-Policy", "no-referrer"),
-            ("Strict-Transport-Security", "max-age=31536000"),
-            ("Content-Security-Policy", content_security_policy()))
+    return (
+        ("X-Frame-Options", "DENY"),
+        ("X-Content-Type-Options", "nosniff"),
+        ("Cross-Origin-Resource-Policy", "same-origin"),
+        ("Referrer-Policy", "no-referrer"),
+        ("Strict-Transport-Security", "max-age=31536000"),
+        ("Content-Security-Policy", content_security_policy()),
+    )
 
 
 @dataclass(frozen=True)
@@ -122,16 +154,21 @@ class Refusal:
 def demo_trust_bytes() -> bytes:
     """The packaged demo's trust file, the only one a public console may name."""
     from importlib.resources import files
+
     return (files("onetrace_console") / "demo_store" / "trust.json").read_bytes()
 
 
 #: A public console that can't read its own store or build record: refused in one line, never a
 #: traceback, so the host's log stays the access log and nothing else.
-UNREADABLE = ("public is true and {path} cannot be read ({why}). A public console checks the demo "
-              "it serves against the build record before it starts, and can't check what it can't read.")
-UNREADABLE_FIX = ("make the demo's folder readable, not writable, by the user the console runs as "
-                  "(chmod -R a+rX,a-w <folder>), or build it again with onetrace-console demo "
-                  "--public --build <folder>.")
+UNREADABLE = (
+    "public is true and {path} cannot be read ({why}). A public console checks the demo "
+    "it serves against the build record before it starts, and can't check what it can't read."
+)
+UNREADABLE_FIX = (
+    "make the demo's folder readable, not writable, by the user the console runs as "
+    "(chmod -R a+rX,a-w <folder>), or build it again with onetrace-console demo "
+    "--public --build <folder>."
+)
 
 
 def start_refusal(config, store_root: Path) -> Refusal | None:
@@ -140,60 +177,79 @@ def start_refusal(config, store_root: Path) -> Refusal | None:
     try:
         return _start_refusal(config, store_root)
     except OSError as e:
-        return Refusal(UNREADABLE.format(path=e.filename or store_root,
-                                         why=e.strerror or type(e).__name__), UNREADABLE_FIX)
+        return Refusal(
+            UNREADABLE.format(path=e.filename or store_root, why=e.strerror or type(e).__name__), UNREADABLE_FIX
+        )
 
 
 def _start_refusal(config, store_root: Path) -> Refusal | None:
     from onetrace_console.serve import ACCOUNTS_DIRNAME, PAGES_DIRNAME, TOKENS_DIRNAME
+
+    if config.sign_in.get("method") == "oidc":
+        return Refusal(
+            "public is true and sign_in.method is oidc. A public console serves the demo to anyone, with "
+            "no sign-in; Entra ID sign-in is for a team's own console.",
+            "remove sign_in.method and sign_in.oidc from a public console's configuration, or remove public "
+            "to run a team's console with Entra ID sign-in.",
+        )
     if config.sign_in.get("enabled"):
-        return Refusal("public is true and sign_in.enabled is true. A public console has no "
-                       "accounts and no sign-in.",
-                       "set sign_in.enabled to false, or remove public.")
+        return Refusal(
+            "public is true and sign_in.enabled is true. A public console has no accounts and no sign-in.",
+            "set sign_in.enabled to false, or remove public.",
+        )
     if config.extensions.get("onedoor"):
-        return Refusal("public is true and extensions.onedoor is true. A public console serves "
-                       "the demo's runs only.",
-                       "set extensions.onedoor to false, or remove public.")
+        return Refusal(
+            "public is true and extensions.onedoor is true. A public console serves the demo's runs only.",
+            "set extensions.onedoor to false, or remove public.",
+        )
     trust = config.trust_file
     try:
         same = trust is not None and Path(trust).read_bytes() == demo_trust_bytes()
     except OSError:
         same = False
     if not same:
-        return Refusal(f"public is true and trust_file is {trust!r}, which is not the packaged "
-                       f"demo's trust file. A public console serves the demo, signed with the "
-                       f"demo's key.",
-                       "name the trust.json that onetrace-console demo --public --build wrote "
-                       "beside the store.")
-    held = [name for name in (ACCOUNTS_DIRNAME, TOKENS_DIRNAME)
-            if any((store_root / name).glob("*.json"))]
+        return Refusal(
+            f"public is true and trust_file is {trust!r}, which is not the packaged "
+            f"demo's trust file. A public console serves the demo, signed with the "
+            f"demo's key.",
+            "name the trust.json that onetrace-console demo --public --build wrote beside the store.",
+        )
+    held = [name for name in (ACCOUNTS_DIRNAME, TOKENS_DIRNAME) if any((store_root / name).glob("*.json"))]
     if held:
-        return Refusal(f"public is true and the store at {store_root} holds "
-                       f"{' and '.join(held)}. A public console never serves a store set up "
-                       f"for sign-in or delivery.",
-                       "serve a store built for the demo with onetrace-console demo --public "
-                       "--build <folder>.")
+        return Refusal(
+            f"public is true and the store at {store_root} holds "
+            f"{' and '.join(held)}. A public console never serves a store set up "
+            f"for sign-in or delivery.",
+            "serve a store built for the demo with onetrace-console demo --public --build <folder>.",
+        )
     from onetrace_console.neighbours import FOLDER as NEIGHBOURS
+
     if (store_root / "store" / NEIGHBOURS).exists():
         #: A public build has no embedder: no model's files, no embedding runs, no vectors.
-        return Refusal(f"public is true and the store at {store_root} holds an embedder's folder "
-                       f"(store/{NEIGHBOURS}). A public console has no embedder and embeds nothing.",
-                       "serve a store built for the demo with onetrace-console demo --public "
-                       "--build <folder>, which holds none.")
+        return Refusal(
+            f"public is true and the store at {store_root} holds an embedder's folder "
+            f"(store/{NEIGHBOURS}). A public console has no embedder and embeds nothing.",
+            "serve a store built for the demo with onetrace-console demo --public --build <folder>, which holds none.",
+        )
     if not (store_root / PAGES_DIRNAME / "home.html").is_file():
-        return Refusal(f"public is true and the store at {store_root} has no pages drawn. A "
-                       f"public console serves the pages its store was built with and draws "
-                       f"none itself.",
-                       "build the store first with onetrace-console demo --public --build "
-                       "<folder>, and name its store folder as store_root.")
+        return Refusal(
+            f"public is true and the store at {store_root} has no pages drawn. A "
+            f"public console serves the pages its store was built with and draws "
+            f"none itself.",
+            "build the store first with onetrace-console demo --public --build "
+            "<folder>, and name its store folder as store_root.",
+        )
     from onetrace_console.demo_store import check_build_record
+
     problems = check_build_record(Path(trust).parent)
     if problems:
-        return Refusal(f"public is true and the demo built beside {trust} is not the one its "
-                       f"builder recorded: {'; '.join(problems[:5])}"
-                       f"{' and more' if len(problems) > 5 else ''}. A public console serves "
-                       f"only the demo exactly as it was built.",
-                       "build it again with onetrace-console demo --public --build <folder>.")
+        return Refusal(
+            f"public is true and the demo built beside {trust} is not the one its "
+            f"builder recorded: {'; '.join(problems[:5])}"
+            f"{' and more' if len(problems) > 5 else ''}. A public console serves "
+            f"only the demo exactly as it was built.",
+            "build it again with onetrace-console demo --public --build <folder>.",
+        )
     return None
 
 
@@ -206,9 +262,16 @@ class StdoutAccessLog:
         self._lock = threading.Lock()
 
     def append(self, *, principal: str, method: str, path: str, status: int) -> None:
-        line = json.dumps({"at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
-                           "principal": principal, "method": method, "path": path,
-                           "status": status}, ensure_ascii=False)
+        line = json.dumps(
+            {
+                "at": datetime.now(UTC).isoformat(timespec="seconds"),
+                "principal": principal,
+                "method": method,
+                "path": path,
+                "status": status,
+            },
+            ensure_ascii=False,
+        )
         stream = self._stream or sys.stdout
         with self._lock:
             stream.write(line + "\n")
@@ -216,8 +279,15 @@ class StdoutAccessLog:
 
     def compare(self, *, a: str, b: str, outcome: str, ms: int) -> None:
         """Compare's line: the pair, what came of it and the time taken; never the address."""
-        line = json.dumps({"at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
-                           "compare": {"a": a, "b": b}, "outcome": outcome, "ms": ms}, ensure_ascii=False)
+        line = json.dumps(
+            {
+                "at": datetime.now(UTC).isoformat(timespec="seconds"),
+                "compare": {"a": a, "b": b},
+                "outcome": outcome,
+                "ms": ms,
+            },
+            ensure_ascii=False,
+        )
         stream = self._stream or sys.stdout
         with self._lock:
             stream.write(line + "\n")

@@ -10,6 +10,7 @@
 - The signing and anchoring badges: two rows on each stage page, in the run ladder's fixed
   questions.
 """
+
 from __future__ import annotations
 
 import json
@@ -25,8 +26,17 @@ from tests.test_stage_pages import _pages, _text, demo  # noqa: F401
 
 PLACEHOLDER = "not available until onetrace 0.2.0"
 #: The demo's day 1 is signed by the demo key; checked without a trust file.
-_DEMO_KEY = json.loads((Path(__file__).resolve().parent.parent / "examples" / "reference-demo" / "runs"
-                        / "day-1" / "signatures" / "1.json").read_text(encoding="utf-8"))["key_id"]
+_DEMO_KEY = json.loads(
+    (
+        Path(__file__).resolve().parent.parent
+        / "examples"
+        / "reference-demo"
+        / "runs"
+        / "day-1"
+        / "signatures"
+        / "1.json"
+    ).read_text(encoding="utf-8")
+)["key_id"]
 LIMIT = "Nothing here says which version is correct, who changed the source, or why."
 
 
@@ -37,6 +47,7 @@ def _section(page: str, name: str) -> str | None:
 
 def _words(html: str) -> str:
     from tests.conftest import whole_folds
+
     return _text(whole_folds(html)).strip()
 
 
@@ -60,6 +71,7 @@ def test_the_text_diff_is_the_sdks_own_stored_run_drawn_as_it_wrote_it(diverging
     never the console's own diff, nor the placeholder."""
     from onetrace_console.compare import text_diff_raw
     from onetrace_console.textdiff_view import read_textdiff, render_textdiff
+
     comparison, store = diverging
     frame = _section(render_diff(comparison, store, generated_at=GENERATED_AT), "text-diff")
     assert frame is not None, "no text-diff frame on the Diff page"
@@ -116,9 +128,9 @@ def test_every_stage_page_asks_the_ladder_s_two_questions(demo):  # noqa: F811
     stages = {k: v for k, v in _pages(run, store).items() if k.startswith("stage-")}
     assert stages, "no stage pages"
     for name, page in stages.items():
-        rows = re.findall(r'<tr data-badge="(\d)"[^>]*>(.*?)</tr>', _section(page, "badges") or "",
-                          re.S)
+        rows = re.findall(r'<tr data-badge="(\d)"[^>]*>(.*?)</tr>', _section(page, "badges") or "", re.S)
         assert [(n, _words(r)) for n, r in rows] == [
             ("1", "Signed by a known recorder Signed, key not trusted · " + _DEMO_KEY),
-            ("2", "Committed by a known time Not anchored · no anchor beside the chain")], (name, rows)
+            ("2", "Committed by a known time Not anchored · no anchor beside the chain"),
+        ], (name, rows)
         assert page.index('data-section="outputs"') < page.index('data-section="badges"')

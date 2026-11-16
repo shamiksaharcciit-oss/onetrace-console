@@ -3,6 +3,7 @@
 The badge on a lead names where to look, never a cause: "culprit" is gone from the console's own words.
 "Ruled out" and "Note" are kept. onetrace-explain's own terminal labels wait for its 0.3.
 """
+
 from __future__ import annotations
 
 import re
@@ -13,11 +14,13 @@ from tests.test_explain_panel import _diff, _fake, _panel, pair  # noqa: F401  (
 
 def test_the_kind_words_are_the_ruled_ones():
     from onetrace_console import explain
+
     assert explain.KIND_WORDS == {"lead": "Lead: where to look first", "ruled out": "Ruled out", "note": "Note"}
 
 
 def test_a_drawn_lead_reads_where_to_look_first_and_never_culprit(pair):
     from onetrace_console import explain
+
     store, comparison, config = pair
     _fake(config, "mixed.json")
     explain.explain(comparison, store, send=True)
@@ -31,5 +34,7 @@ def test_a_drawn_lead_reads_where_to_look_first_and_never_culprit(pair):
 
 def test_no_console_source_words_a_lead_as_a_culprit():
     src = Path(__file__).resolve().parent.parent / "src" / "onetrace_console"
-    said = [p.name for p in src.rglob("*.py") if re.search(r'["\'][^"\']*\bculprit', p.read_text(encoding="utf-8"), re.I)]
+    said = [
+        p.name for p in src.rglob("*.py") if re.search(r'["\'][^"\']*\bculprit', p.read_text(encoding="utf-8"), re.I)
+    ]
     assert said == []

@@ -46,7 +46,17 @@ RUN printf '#!/bin/sh\nexec python -m onetrace_console "$@"\n' > /usr/local/bin/
 # (deploy/fly/kept/README.md); where it is not, the runs are recorded now and none is kept. The public
 # site's links into the demo (deploy/fly/site_links.txt): a listed comparison page this build names
 # anew gets a page at its old name that sends a reader on.
-RUN if [ -d deploy/fly/kept ]; then \
+#
+# The store it builds: the demo (the default), or, with `--build-arg ONETRACE_DEMO_STORE=captures` (as
+# deploy/fly/captures/fly.toml sets it), the capture store in its place, into the same folder, served the same
+# way: P10's runs captured at L3 and L2, example data, built from its own runs (never deploy/fly/kept/). Any other
+# value fails the build.
+ARG ONETRACE_DEMO_STORE=demo
+RUN if [ "$ONETRACE_DEMO_STORE" = captures ]; then \
+        python -m onetrace_console demo --public --build /srv/onetrace-demo --captures; \
+    elif [ "$ONETRACE_DEMO_STORE" != demo ]; then \
+        echo "ONETRACE_DEMO_STORE is demo or captures, not $ONETRACE_DEMO_STORE" >&2; exit 1; \
+    elif [ -d deploy/fly/kept ]; then \
         python -m onetrace_console demo --public --build /srv/onetrace-demo \
             --runs-from /app/deploy/fly/kept --explanations /app/deploy/fly/kept \
             --site-links /app/deploy/fly/site_links.txt; \

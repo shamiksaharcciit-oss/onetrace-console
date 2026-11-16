@@ -11,6 +11,7 @@ Test fixtures only: the model is a fake endpoint on this machine's loopback, an 
 one that holds its reply until the test lets it go, replying with tests/fixtures/explain/mixed.json's
 text. No model is called and nothing leaves this machine; no key is configured or sent.
 """
+
 from __future__ import annotations
 
 import json
@@ -21,8 +22,8 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from types import SimpleNamespace
 
 import pytest
-from tests.http_limits import limit
 
+from tests.http_limits import limit
 from tests.test_explain_panel import REPLIES, _panel, _text, pair, toml_string  # noqa: F401  (pair: a fixture)
 
 
@@ -46,6 +47,7 @@ def endpoint():
 
         def log_message(self, *a):
             pass
+
     srv = ThreadingHTTPServer(("127.0.0.1", 0), Fake)
     threading.Thread(target=srv.serve_forever, daemon=True).start()
     try:
@@ -61,8 +63,9 @@ def held(pair, endpoint):
     """The pair, with the fake endpoint configured as the model (`openai:test-model`)."""
     store, comparison, config = pair
     base, gate = endpoint
-    config.write_text(f'[model]\nprovider = "openai"\nname = "test-model"\nbase_url = {toml_string(base)}\n',
-                      encoding="utf-8")
+    config.write_text(
+        f'[model]\nprovider = "openai"\nname = "test-model"\nbase_url = {toml_string(base)}\n', encoding="utf-8"
+    )
     return store, comparison, gate
 
 
@@ -92,8 +95,10 @@ def running_problems(panel: str, step_words: str) -> list[str]:
 
 # ------------------------------------------------------------------ 1 and 2: say it, don't hold the page
 
+
 def test_a_press_returns_at_once_and_says_what_it_is_waiting_for(held, examined):
     from onetrace_console import explain
+
     store, comparison, gate = held
     t = time.monotonic()
     explain.start(comparison, store, send=True)
@@ -105,6 +110,7 @@ def test_a_press_returns_at_once_and_says_what_it_is_waiting_for(held, examined)
         if s["running"] and (not seen or seen[-1] != s["step"]):
             seen.append(s["step"])
         return s["running"] and s["step"] == "waiting" and s
+
     s = _until(waiting)
     examined(1, "press waiting for its reply")
     #: Console 0.6.1 item 6: the running state names the address, the time it was sent, and waits.
@@ -119,6 +125,7 @@ def test_a_press_returns_at_once_and_says_what_it_is_waiting_for(held, examined)
 
 def test_a_second_press_while_one_runs_is_refused_in_words(held, examined):
     from onetrace_console import explain
+
     store, comparison, gate = held
     explain.start(comparison, store, send=True)
     examined(1, "second press")
@@ -130,6 +137,7 @@ def test_a_second_press_while_one_runs_is_refused_in_words(held, examined):
 
 def test_sabotage_the_running_line_left_out_is_named(held, monkeypatch, examined):
     from onetrace_console import explain
+
     store, comparison, gate = held
     monkeypatch.setattr(explain, "_running_line", lambda s: "")
     explain.start(comparison, store, send=True)
@@ -143,6 +151,7 @@ def test_sabotage_the_running_line_left_out_is_named(held, monkeypatch, examined
 def test_sabotage_a_press_that_holds_the_page_is_named(held, monkeypatch, examined):
     """The work run in the press itself: the press returns only when the reply has come."""
     from onetrace_console import explain
+
     store, comparison, gate = held
     monkeypatch.setattr(explain, "_spawn", lambda work: work())
     threading.Timer(6, gate.set).start()
@@ -154,8 +163,10 @@ def test_sabotage_a_press_that_holds_the_page_is_named(held, monkeypatch, examin
 
 # ------------------------------------------------------------------ 5: step times
 
+
 def test_each_attempt_keeps_its_step_times_shown_under_its_explanation(held, examined):
     from onetrace_console import explain
+
     store, comparison, gate = held
     gate.set()
     explain.start(comparison, store, send=True)
@@ -165,14 +176,19 @@ def test_each_attempt_keeps_its_step_times_shown_under_its_explanation(held, exa
     assert sorted(a["steps"]) == ["model", "post_check", "preparing", "verifying"]
     assert all(re.fullmatch(r"\d+\.\d", v) for v in a["steps"].values()), a["steps"]
     panel = _text(explain.panel(comparison, store, public=False))
-    assert re.search(r"Preparing \d+\.\d s · the model's reply \d+\.\d s · the post-check \d+\.\d s · "
-                     r"verifying \d+\.\d s", panel), panel
+    assert re.search(
+        r"Preparing \d+\.\d s · the model's reply \d+\.\d s · the post-check \d+\.\d s · "
+        r"verifying \d+\.\d s",
+        panel,
+    ), panel
 
 
 # ------------------------------------------------------------------ 3: verified once
 
+
 def test_each_explanation_is_verified_once_and_again_only_where_its_record_changed(held, monkeypatch, examined):
     from onetrace_console import explain
+
     store, comparison, gate = held
     gate.set()
     starts = []
@@ -197,6 +213,7 @@ def test_each_explanation_is_verified_once_and_again_only_where_its_record_chang
 def test_sabotage_the_reading_kept_by_name_alone_is_named(held, monkeypatch, examined):
     """The kept reading not keyed by the chain head: a changed record keeps its old reading."""
     from onetrace_console import explain
+
     store, comparison, gate = held
     gate.set()
     explain.start(comparison, store, send=True)
@@ -222,32 +239,49 @@ def _failed_panel(tmp_path, monkeypatch, attempt: dict) -> str:
 
     from onetrace_console import explain
     from onetrace_console.store import Store
+
     store = Store(tmp_path / "store")
     d = explain.folder_of(store, KEY) / "attempts"
     d.mkdir(parents=True)
-    (d / "000001.json").write_text(json.dumps({"n": "1", "kind": "explain", "command": "onetrace-explain r",
-                                               "stdout": "", **attempt}), encoding="utf-8")
+    (d / "000001.json").write_text(
+        json.dumps({"n": "1", "kind": "explain", "command": "onetrace-explain r", "stdout": "", **attempt}),
+        encoding="utf-8",
+    )
     (d.parent / explain.REPORT).mkdir()
     monkeypatch.setattr(explain, "command", lambda: Path("onetrace-explain"))
     monkeypatch.setattr(explain, "too_long", lambda store: None)
     return explain.panel(SimpleNamespace(key=KEY), store, public=False)
 
 
-TRACEBACK = ("Traceback (most recent call last):\n  File \"/home/someone/venv/lib/onetrace_explain/cli.py\", line 9\n"
-             "tomllib.TOMLDecodeError: Invalid value (at line 2, column 8) in /home/someone/.config/onetrace/explain.toml\n")
+TRACEBACK = (
+    'Traceback (most recent call last):\n  File "/home/someone/venv/lib/onetrace_explain/cli.py", line 9\n'
+    "tomllib.TOMLDecodeError: Invalid value (at line 2, column 8) in /home/someone/.config/onetrace/explain.toml\n"
+)
 
 
-@pytest.mark.parametrize("attempt, want", [
-    ({"exit": "1", "stderr": TRACEBACK},
-     "The command failed, exit 1: tomllib.TOMLDecodeError: Invalid value (at line 2, column 8) in "
-     "…/onetrace/explain.toml"),
-    ({"exit": "1", "stderr": "boom at C:\\Users\\someone\\AppData\\onetrace\\explain.toml\r\n"},
-     "The command failed, exit 1: boom at …\\onetrace\\explain.toml"),
-    ({"exit": "", "stderr": "", "note": "it reached its limit of 300 seconds and was stopped"},
-     "The command failed with no exit: it reached its limit of 300 seconds and was stopped."),
-    ({"exit": "", "stderr": "", "note": "it could not start: No such file or directory"},
-     "The command failed with no exit: it could not start: No such file or directory."),
-], ids=["exit 1, a traceback", "exit 1, a Windows path", "a limit reached", "could not start"])
+@pytest.mark.parametrize(
+    "attempt, want",
+    [
+        (
+            {"exit": "1", "stderr": TRACEBACK},
+            "The command failed, exit 1: tomllib.TOMLDecodeError: Invalid value (at line 2, column 8) in "
+            "…/onetrace/explain.toml",
+        ),
+        (
+            {"exit": "1", "stderr": "boom at C:\\Users\\someone\\AppData\\onetrace\\explain.toml\r\n"},
+            "The command failed, exit 1: boom at …\\onetrace\\explain.toml",
+        ),
+        (
+            {"exit": "", "stderr": "", "note": "it reached its limit of 300 seconds and was stopped"},
+            "The command failed with no exit: it reached its limit of 300 seconds and was stopped.",
+        ),
+        (
+            {"exit": "", "stderr": "", "note": "it could not start: No such file or directory"},
+            "The command failed with no exit: it could not start: No such file or directory.",
+        ),
+    ],
+    ids=["exit 1, a traceback", "exit 1, a Windows path", "a limit reached", "could not start"],
+)
 def test_every_failure_says_so_with_its_exit_and_last_line(tmp_path, monkeypatch, attempt, want, examined):
     panel = _text(_failed_panel(tmp_path, monkeypatch, attempt))
     examined(1, "failed press")
@@ -257,6 +291,7 @@ def test_every_failure_says_so_with_its_exit_and_last_line(tmp_path, monkeypatch
 
 def test_sabotage_the_failure_line_left_out_is_named(tmp_path, monkeypatch, examined):
     from onetrace_console import explain
+
     monkeypatch.setattr(explain, "_failed_line", lambda a: "")
     panel = _text(_failed_panel(tmp_path, monkeypatch, {"exit": "1", "stderr": TRACEBACK}))
     examined(1, "failed press, its line left out")
@@ -265,14 +300,16 @@ def test_sabotage_the_failure_line_left_out_is_named(tmp_path, monkeypatch, exam
 
 # ------------------------------------------------------------------ through the console
 
+
 def test_the_console_answers_a_press_at_once_and_reports_its_state(held, server, monkeypatch, examined):
-    """POST /explain answers 202 at once; GET /explain/state reports the press; a second press
-    while it runs answers 409 with BUSY."""
+    """POST /explain answers 202 at once; GET /explain/state reports the press; a second Send while it runs is
+    answered with the run in progress, and starts nothing (a press counts once)."""
     import urllib.error
     import urllib.request
 
     from onetrace_console import explain
     from onetrace_console.serve import Handler
+
     store, comparison, gate = held
     base, _ = server
     monkeypatch.setattr(Handler, "store", store)
@@ -288,12 +325,21 @@ def test_the_console_answers_a_press_at_once_and_reports_its_state(held, server,
     def now():
         with urllib.request.urlopen(f"{base}/explain/state?c={comparison.key}", timeout=limit(30)) as r:
             return json.loads(r.read())
+
     t = time.monotonic()
     status, body = post()
     examined(3, "requests")
     assert status == 202 and body["started"] and time.monotonic() - t < 5, body
     assert now()["running"] is True
-    assert post() == (409, {"error": explain.BUSY})
+    assert post() == (
+        202,
+        {
+            "comparison_key": comparison.key,
+            "started": False,
+            "running": True,
+            "state": f"/explain/state?c={comparison.key}",
+        },
+    )
     gate.set()
     explain.wait(comparison.key, 120)
     assert now() == {"running": False}
@@ -301,6 +347,7 @@ def test_the_console_answers_a_press_at_once_and_reports_its_state(held, server,
 
 def test_a_press_that_reaches_its_limit_is_stopped_and_says_so(held, monkeypatch, examined):
     from onetrace_console import explain
+
     store, comparison, gate = held
     monkeypatch.setattr(explain, "TIMEOUT", 3)
     explain.start(comparison, store, send=True)
@@ -309,4 +356,5 @@ def test_a_press_that_reaches_its_limit_is_stopped_and_says_so(held, monkeypatch
     examined(1, "press at its limit")
     assert (a["exit"], a["note"]) == ("", explain.LIMIT_REACHED.format(n=3))
     assert explain.FAILED_NO_EXIT.format(why=explain.LIMIT_REACHED.format(n=3)) in _text(
-        explain.panel(comparison, store, public=False))
+        explain.panel(comparison, store, public=False)
+    )

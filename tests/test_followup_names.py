@@ -11,13 +11,12 @@
 - A lone surrogate in the manifest's identity (run_id, chain_head) is still a 422; anywhere
   else in the record it is stored, and shown escaped.
 """
+
 from __future__ import annotations
 
 import json
 import re
 from dataclasses import replace
-
-import pytest
 
 from onetrace_console.pages import ANSWER, AUTHORIZATION, CASE, RUN_PROOF, render_execution
 from onetrace_console.render import HOME, render_all
@@ -42,14 +41,14 @@ def _outside_verbatim(page: str) -> str:
 
 # ------------------------------------------------------------------------------- §5
 
+
 def test_a_long_run_id_is_capped_on_every_page_with_its_record_offered(files, store):
-    from onetrace_console.unreadable import (render_unchecked_run, render_unreadable_run,
-                                             unshowable_runs_block)
     from onetrace_console.pages import render_executions
+    from onetrace_console.unreadable import render_unchecked_run, render_unreadable_run, unshowable_runs_block
+
     run = _stored(_with_run_id(files, LONG_ID), store)
     pages = dict(render_all(store, generated_at=GENERATED_AT))
-    pages.update({f"run/{k}": v for k, v in
-                  render_execution(run, store, generated_at=GENERATED_AT).pages.items()})
+    pages.update({f"run/{k}": v for k, v in render_execution(run, store, generated_at=GENERATED_AT).pages.items()})
     pages["unreadable"] = render_unreadable_run(run, "why", generated_at=GENERATED_AT)
     pages["unchecked"] = render_unchecked_run(run, generated_at=GENERATED_AT)
     listed = render_executions([], store, generated_at=GENERATED_AT, of=1)
@@ -61,8 +60,16 @@ def test_a_long_run_id_is_capped_on_every_page_with_its_record_offered(files, st
         if "r" * 256 in page:
             showing.add(name)
             assert link in page, f"{name} shortens the run_id and offers no record"
-    assert {HOME, "executions-all.html", f"run/{ANSWER}", f"run/{CASE}", f"run/{AUTHORIZATION}",
-            "unreadable", "unchecked", "unshowable"} <= showing, set(pages) - showing
+    assert {
+        HOME,
+        "executions-all.html",
+        f"run/{ANSWER}",
+        f"run/{CASE}",
+        f"run/{AUTHORIZATION}",
+        "unreadable",
+        "unchecked",
+        "unshowable",
+    } <= showing, set(pages) - showing
 
 
 def test_a_long_declared_stage_name_is_capped_on_home(files, store):
@@ -81,6 +88,7 @@ def test_a_long_declared_stage_name_is_capped_on_home(files, store):
 def test_the_whole_run_id_is_kept_for_keys_and_the_record(files, store):
     from onetrace_console.ingest import bundle
     from onetrace_console.store import run_key
+
     run = _stored(_with_run_id(files, LONG_ID), store)
     assert run.run_id == LONG_ID and run.key == run_key(LONG_ID, run.chain_head)
     manifest = dict((p, k) for p, k in run.listing)["MANIFEST.json"]
@@ -90,6 +98,7 @@ def test_the_whole_run_id_is_kept_for_keys_and_the_record(files, store):
 
 # ----------------------------------------------------------------------------- SF1
 
+
 def test_a_runs_list_row_and_digests_are_kept_when_it_is_checked(checked):  # noqa: F811
     row = json.loads(checked.list_row)
     assert row["step_count"] == 3 and "case_for" in row
@@ -98,13 +107,14 @@ def test_a_runs_list_row_and_digests_are_kept_when_it_is_checked(checked):  # no
 
 
 def test_lists_and_home_read_no_receipt_of_a_checked_run(checked, store, monkeypatch):  # noqa: F811
-    """Every later render read every stored run's receipts again (the round-4 review's
+    """Every later render read every stored run's receipts again (the fourth review's
     probe_after: one upload of three 14 MB receipts made every later ingest take 40 s)."""
     import onetrace_console.checks as checks
     import onetrace_console.viewer.record as record
 
     def no(*a, **k):
         raise AssertionError("a render read a checked run's record again")
+
     monkeypatch.setattr(record, "read_record", no)
     monkeypatch.setattr(checks, "materialise", no)
     real_get = store.get
@@ -115,8 +125,10 @@ def test_lists_and_home_read_no_receipt_of_a_checked_run(checked, store, monkeyp
         if key in receipts or key == manifest_key:
             raise AssertionError("a render read a checked run's receipt or manifest again")
         return real_get(key)
+
     monkeypatch.setattr(store, "get", get)
     from onetrace_console.unreadable import PAGE_FAILED
+
     pages = render_all(store, generated_at=GENERATED_AT)
     assert f'data-run="{checked.run_id}"' in pages["executions-all.html"]
     assert PAGE_FAILED not in _text(pages[HOME]), "Home was drawn, from the record alone"
@@ -125,11 +137,15 @@ def test_lists_and_home_read_no_receipt_of_a_checked_run(checked, store, monkeyp
 
 # ------------------------------------------------------------------ runs stored before
 
-def test_a_run_stored_before_this_batch_is_re_derived_at_start_up(checked, store,  # noqa: F811
-                                                                  tmp_path):
+
+def test_a_run_stored_before_this_batch_is_re_derived_at_start_up(
+    checked,
+    store,  # noqa: F811
+    tmp_path,
+):
     from onetrace_console.serve import _render_startup_pages
-    old = replace(checked, nothing_missing="", list_row="", digests="", derived="",
-                  recorded_count=7)
+
+    old = replace(checked, nothing_missing="", list_row="", digests="", derived="", recorded_count=7)
     store.put_run(old)
     root = tmp_path / "root"
     root.mkdir()
@@ -138,15 +154,17 @@ def test_a_run_stored_before_this_batch_is_re_derived_at_start_up(checked, store
     assert again.nothing_missing == checked.nothing_missing
     assert again.recorded_count == 3, "the receipts delivered, recounted"
     assert again.list_row and again.digests and again.derived
-    assert (again.check_report, again.check_verdict) == (checked.check_report,
-                                                         checked.check_verdict), \
+    assert (again.check_report, again.check_verdict) == (checked.check_report, checked.check_verdict), (
         "the check is not run again: its report and verdict are as stored"
+    )
 
 
 # ------------------------------------------------------------------------------- §7
 
+
 def test_a_lone_surrogate_in_the_run_id_is_still_refused(files, store):
     from onetrace_console.ingest import Rejection, accept
+
     out = dict(files)
     manifest = json.loads(out["MANIFEST.json"].decode("utf-8"))
     manifest["run_id"] = "__PLANTED__"
@@ -165,17 +183,16 @@ def test_a_lone_surrogate_elsewhere_in_the_record_is_stored_and_shown_escaped(fi
     receipt["stage"]["name"] = "__STAGE__"
     for entry in manifest["chain"]:
         declares = json.loads(out[entry["file"]].decode("utf-8"))
-        declares["coverage"]["declared_stages"] = declares["coverage"]["declared_stages"] + [
-            "__STAGE__"]
+        declares["coverage"]["declared_stages"] = declares["coverage"]["declared_stages"] + ["__STAGE__"]
         if entry["file"] == rel:
             receipt["coverage"] = declares["coverage"]
         else:
-            out[entry["file"]] = json.dumps(declares).replace(
-                '"__STAGE__"', '"al\\ud800pha"').encode()
+            out[entry["file"]] = json.dumps(declares).replace('"__STAGE__"', '"al\\ud800pha"').encode()
     out[rel] = json.dumps(receipt).replace('"__STAGE__"', '"al\\ud800pha"').encode()
     out["MANIFEST.json"] = json.dumps(manifest).replace('"__STAGE__"', '"al\\ud800pha"').encode()
     run = _stored(_resummed(out), store)
     from onetrace_console.unreadable import RUN_FAILED, TITLE
+
     drawn = render_execution(run, store, generated_at=GENERATED_AT).pages
     #: Both views: the case, which names the stage, is on "Proof" for a run whose records don't hold up.
     case = drawn[CASE] + drawn[RUN_PROOF]

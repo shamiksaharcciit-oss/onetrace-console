@@ -7,6 +7,7 @@ the order falls back to the record ids, and this case is listed the other way ro
 
 Written by hand, as the command writes them: no command runs here.
 """
+
 from __future__ import annotations
 
 import json
@@ -22,9 +23,10 @@ FIRST, SECOND = "2026-10-22T10-00-00.000002Z", "2026-10-22T10-00-00.000001Z"
 def _press(folder: Path, n: int, recorded: str) -> None:
     d = folder / "attempts"
     d.mkdir(parents=True, exist_ok=True)
-    (d / f"{n:06d}.json").write_text(json.dumps({"n": str(n), "kind": "explain", "exit": "0",
-                                                 "stdout": f"recorded: {recorded}\r\n", "stderr": ""}),
-                                     encoding="utf-8")
+    (d / f"{n:06d}.json").write_text(
+        json.dumps({"n": str(n), "kind": "explain", "exit": "0", "stdout": f"recorded: {recorded}\r\n", "stderr": ""}),
+        encoding="utf-8",
+    )
 
 
 def _explanation(folder: Path, rid: str) -> None:
@@ -37,13 +39,14 @@ def _explanation(folder: Path, rid: str) -> None:
 def test_explanations_are_listed_newest_press_first_whatever_their_ids(tmp_path, sep, examined):
     from onetrace_console import explain
     from onetrace_console.store import Store
+
     store = Store(tmp_path / "store")
     folder = explain.folder_of(store, KEY)
     for n, rid in ((1, FIRST), (2, SECOND)):
         _explanation(folder, rid)
         _press(folder, n, sep.join(["D:", "store", "x", KEY[:16], "r", "explain", rid]))
     examined(2, "explanations")
-    assert sorted([FIRST, SECOND], reverse=True) == [FIRST, SECOND]     # the ids alone: FIRST first
+    assert sorted([FIRST, SECOND], reverse=True) == [FIRST, SECOND]  # the ids alone: FIRST first
     assert [e["record"] for e in explain.explanations(store, KEY)] == [SECOND, FIRST]
 
 
@@ -55,6 +58,7 @@ def test_sabotage_the_backslash_reading_removed_is_named(tmp_path, monkeypatch, 
 
     from onetrace_console import explain
     from onetrace_console.store import Store
+
     source = textwrap.dedent(inspect.getsource(explain.explanations))
     reading = '.replace("\\\\", "/")'
     assert source.count(reading) == 1, "the backslash reading is not where this sabotage looks"

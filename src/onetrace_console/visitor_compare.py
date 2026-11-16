@@ -23,6 +23,7 @@ Bounds, each held by a test (`tests/test_visitor_compare.py`):
 - the log line holds the pair, the outcome and the time taken; the client address is held by the
   limiter only while that address has a comparison in flight or waiting, and never logged.
 """
+
 from __future__ import annotations
 
 import threading
@@ -47,20 +48,30 @@ MOST_BODY = 512
 WINDOW_SECONDS = 60.0
 
 BUSY = "Busy, try again"
-BUSY_WORDS = ("This demo is comparing as many pairs as it allows at once, or has started as many as "
-              "it allows this minute. Nothing was queued. Try again in a minute.")
-TIMED_OUT = ("The comparison took longer than this demo allows ({seconds} seconds a step) and was "
-             "stopped; nothing was kept. Try again, or pick another pair.")
-NO_CACHE = ("This demo cannot keep a comparison: its folder {folder} cannot be written ({why}). The "
-            "comparisons it holds are on each run's page.")
-VISITOR_MADE = ("Compared on this demo's server at a visitor's request, with the SDK's verbs on the "
-                "two runs as recorded: no model and no network. No explanation is kept for it.")
+BUSY_WORDS = (
+    "This demo is comparing as many pairs as it allows at once, or has started as many as "
+    "it allows this minute. Nothing was queued. Try again in a minute."
+)
+TIMED_OUT = (
+    "The comparison took longer than this demo allows ({seconds} seconds a step) and was "
+    "stopped; nothing was kept. Try again, or pick another pair."
+)
+NO_CACHE = (
+    "This demo cannot keep a comparison: its folder {folder} cannot be written ({why}). The "
+    "comparisons it holds are on each run's page."
+)
+VISITOR_MADE = (
+    "Compared on this demo's server at a visitor's request, with the SDK's verbs on the "
+    "two runs as recorded: no model and no network. No explanation is kept for it."
+)
 #: The picker's words on a pipeline's page.
 PICKER_HEAD = "Compare two of its runs"
-PICKER_WORDS = ("Pick two runs of this pipeline; this demo compares them on its server with the SDK's "
-                "verbs, as it compared its own pairs when it was built: no model, no network and no "
-                "explanation. A pair compared before opens at once. At most {per_minute} new "
-                "comparisons a minute for everyone; it sends and keeps nothing else.")
+PICKER_WORDS = (
+    "Pick two runs of this pipeline; this demo compares them on its server with the SDK's "
+    "verbs, as it compared its own pairs when it was built: no model, no network and no "
+    "explanation. A pair compared before opens at once. At most {per_minute} new "
+    "comparisons a minute for everyone; it sends and keeps nothing else."
+)
 PICKER_BUTTON = "Compare"
 
 
@@ -73,6 +84,7 @@ class Refused(ValueError):
 
 
 # --------------------------------------------------------------------------- the request
+
 
 def read_pair(query: str, body: bytes) -> tuple[str, str]:
     """(a, b) from a form body holding exactly the two fields, each once; `Refused` otherwise."""
@@ -101,19 +113,24 @@ def read_pair(query: str, body: bytes) -> tuple[str, str]:
 def resolve(store, a_id: str, b_id: str):
     """The two runs of the build the ids name, of one pipeline; `Refused` with the reason otherwise."""
     from onetrace_console.overview import declared_list
+
     runs = []
     for n, rid in (("a", a_id), ("b", b_id)):
         found = store.runs_with_id(rid) if rid else ()
         if len(found) != 1:
-            raise Refused(f"{n}: this demo holds no run named {rid!r}" if not found else
-                          f"{n}: {len(found)} runs of this demo are named {rid!r}")
-        runs.append(found[0])
+            raise Refused(
+                f"{n}: this demo holds no run named {rid!r}"
+                if not found
+                else f"{n}: {len(found)} runs of this demo are named {rid!r}"
+            )
+        runs.append(found[0])  # type: ignore[misc]  # one run found, said above
     a, b = runs
     if a.key == b.key:
         raise Refused("a and b name the same run; there is nothing to compare")
     if declared_list(a) != declared_list(b):
-        raise Refused(f"{a.run_id} and {b.run_id} are runs of different pipelines; this demo "
-                      "compares two runs of one pipeline")
+        raise Refused(
+            f"{a.run_id} and {b.run_id} are runs of different pipelines; this demo compares two runs of one pipeline"
+        )
     return a, b
 
 
@@ -130,18 +147,26 @@ def client_address(config, headers, socket_address: str) -> str:
 
 # ---------------------------------------------------------------------------- the limiter
 
+
 class Limiter:
     """One in flight per address with a small queue, a bound on those running at once, and a
     per-minute bound for the whole console. Addresses are held only while in flight or waiting."""
 
-    def __init__(self, *, per_minute: int = PER_MINUTE, running: int = RUNNING, queue: int = QUEUE,
-                 wait_seconds: float = WAIT_SECONDS, clock=time.monotonic):
+    def __init__(
+        self,
+        *,
+        per_minute: int = PER_MINUTE,
+        running: int = RUNNING,
+        queue: int = QUEUE,
+        wait_seconds: float = WAIT_SECONDS,
+        clock=time.monotonic,
+    ):
         self.per_minute, self.running_most, self.queue = per_minute, running, queue
         self.wait_seconds, self.clock = wait_seconds, clock
         self._cond = threading.Condition()
         self._started: deque[float] = deque()
-        self._held: dict[str, int] = {}          # address -> in flight and waiting
-        self._busy: set[str] = set()             # addresses with one in flight
+        self._held: dict[str, int] = {}  # address -> in flight and waiting
+        self._busy: set[str] = set()  # addresses with one in flight
         self._running = 0
 
     def addresses(self) -> set[str]:
@@ -198,6 +223,7 @@ class Limiter:
 
 # ---------------------------------------------------------------------------- the stores
 
+
 class VisitorStore:
     """The built store, read-only, with the cache's store beside it: objects and comparisons are read
     from either and written to the cache only. Everything else is the built store's."""
@@ -216,6 +242,7 @@ class VisitorStore:
 
     def put(self, data: bytes) -> str:
         from onetrace_console.store import digest
+
         key = digest(data)
         if self._base.has(key):
             return key
@@ -247,6 +274,7 @@ def cache_store(root: Path):
     import tempfile
 
     from onetrace_console.store import Store
+
     try:
         (root / "store").mkdir(parents=True, exist_ok=True)
         #: A probe of this request's own: two requests at once each write and remove their own.
@@ -261,6 +289,7 @@ def cache_store(root: Path):
 def held_page(base, root: Path, a, b) -> str | None:
     """The page of a pair the build compared, or a visitor compared before: its path, or None."""
     from onetrace_console.what_changed import held
+
     c = held(base, a.key, b.key)
     if c is not None:
         return f"diff/{c.key}.html"
@@ -268,6 +297,7 @@ def held_page(base, root: Path, a, b) -> str | None:
     if not store_dir.is_dir():
         return None
     from onetrace_console.store import Store
+
     c = held(Store(root / "store"), a.key, b.key)
     if c is not None and (root / "pages" / "diff" / f"{c.key}.html").is_file():
         return f"diff/{c.key}.html"
@@ -279,14 +309,15 @@ def make(base, root: Path, a, b, *, timeout: int = TIMEOUT_SECONDS) -> str:
     did not finish is not kept: `Refused` (504) with the words."""
     from onetrace_console.compare import compare
     from onetrace_console.serve import _render_diff_page
+
     cache = cache_store(root)
     store = VisitorStore(base, cache)
-    comparison = compare(a, b, store, timeout=timeout)
+    comparison = compare(a, b, store, timeout=timeout)  # type: ignore[arg-type]  # a VisitorStore reads as a Store does
     if any(v.note == "timed out" for v in comparison.verbs):
         (cache.root / "comparisons" / f"{comparison.key}.json").unlink(missing_ok=True)
         raise Refused(TIMED_OUT.format(seconds=timeout), 504)
     with base.reading():
-        rel = _render_diff_page(comparison, store, root, public=True)
+        rel = _render_diff_page(comparison, store, root, public=True)  # type: ignore[arg-type]  # as above
     #: The page says how it was made, and that no explanation is kept for it: under its heading.
     page = root / "pages" / rel
     html = page.read_text(encoding="utf-8")
@@ -312,31 +343,44 @@ def cached_page(root: Path, rel: str) -> bytes | None:
 
 # ------------------------------------------------------------------------------ the pages
 
+
 def picker(pipeline) -> str:
     """The form on a pipeline's page of a public console: two of its runs, by run id."""
     from onetrace_console.store import arrival_order
+
     runs = arrival_order(pipeline.runs, newest_first=False)
     if len(runs) < 2:
         return ""
 
     def select(name: str, label: str, chosen: int) -> str:
-        options = "".join(f'<option value="{escape(r.run_id)}"{" selected" if i == chosen else ""}>'
-                          f"{escape(r.run_id)}</option>" for i, r in enumerate(runs))
+        options = "".join(
+            f'<option value="{escape(r.run_id)}"{" selected" if i == chosen else ""}>{escape(r.run_id)}</option>'
+            for i, r in enumerate(runs)
+        )
         #: One field: the label's words above its own select, as the local console's picker draws it.
-        return (f'<label class="compare-field"><span class="compare-label">{escape(label)}</span>'
-                f'<select name="{name}">{options}</select></label>')
-    return (f'<section id="visitor-compare" data-section="visitor-compare" class="visitor-compare">'
-            f"<h2>{escape(PICKER_HEAD)}</h2>"
-            f"<p>{escape(PICKER_WORDS.format(per_minute=PER_MINUTE))}</p>"
-            f'<form method="post" action="/compare" data-visitor-compare>'
-            f'{select("a", "Baseline (run A)", 0)}{select("b", "Candidate (run B)", 1)}'
-            f'<button type="submit">{escape(PICKER_BUTTON)}</button></form></section>')
+        return (
+            f'<label class="compare-field"><span class="compare-label">{escape(label)}</span>'
+            f'<select name="{name}">{options}</select></label>'
+        )
+
+    return (
+        f'<section id="visitor-compare" data-section="visitor-compare" class="visitor-compare">'
+        f"<h2>{escape(PICKER_HEAD)}</h2>"
+        f"<p>{escape(PICKER_WORDS.format(per_minute=PER_MINUTE))}</p>"
+        f'<form method="post" action="/compare" data-visitor-compare>'
+        f"{select('a', 'Baseline (run A)', 0)}{select('b', 'Candidate (run B)', 1)}"
+        f'<button class="btn-primary" data-busy="Comparing…" data-busy-wait="the comparison" type="submit">{escape(PICKER_BUTTON)}</button></form></section>'
+    )
 
 
 def answer_page(title: str, words: str, *, back: str = "") -> str:
     """A short page for a refusal or "busy": its title, its words, and the way back to the Overview
     (the request carries no pipeline, and no header is read for one)."""
     from onetrace_console.render import _document
+
     link = f'<p><a href="{escape(back)}">Back to the Overview</a></p>' if back else ""
-    return _document(title, f'<div class="cp"><h1>{escape(title)}</h1>'
-                            f'<p data-visitor-compare="said" role="alert">{escape(words)}</p>{link}</div>')
+    return _document(
+        title,
+        f'<div class="cp"><h1>{escape(title)}</h1>'
+        f'<p data-visitor-compare="said" role="alert">{escape(words)}</p>{link}</div>',
+    )

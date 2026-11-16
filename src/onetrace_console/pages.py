@@ -13,25 +13,23 @@ WHAT THE PAGES READ
 -------------------
 The **stored** report, never a fresh check. A page is a view of what was checked when the
 run was received; re-checking on render would make the page a different claim every time it
-was opened, and would be a check button that the reader did not press (the design note forbids
-the one they *could* press, and this would be worse).
+was opened, and would be a check button that the reader did not press (the console has no
+button the reader *could* press to check, and this would be worse).
 """
+
 from __future__ import annotations
 
-from onetrace_console import __version__
-
-import json
 import re
-from onetrace_console.bounded_json import load_json_bounded
-import shutil
 import sys
 import tempfile
 from dataclasses import dataclass, replace
 from pathlib import Path
 
+from onetrace_console import __version__
+from onetrace_console.bounded_json import load_json_bounded
 from onetrace_console.checks import COULD_NOT_CHECK, REPEAT_COMMAND
 from onetrace_console.preview import label
-from onetrace_console.store import StoredRun, Store
+from onetrace_console.store import Store, StoredRun
 
 #: The generator string the footer carries. The viewer's own default names the viewer; a
 #: page produced here says so, because "which program wrote this file" is exactly the kind
@@ -56,6 +54,7 @@ class PageError(RuntimeError):
 @dataclass(frozen=True, slots=True)
 class RenderedExecution:
     """One run's pages, and the verdict the page was built from."""
+
     run: StoredRun
     pages: dict[str, str]
     verdict: str
@@ -81,7 +80,8 @@ def _envelope(run: StoredRun, store: Store, *, required: bool = True) -> dict | 
                 f"run {run.run_id} has no stored check report, so there is nothing for a "
                 f"page to show. The check runner runs at ingest; a run without a report is "
                 f"a run this console has not checked, and it says so rather than rendering "
-                f"a page that looks checked.")
+                f"a page that looks checked."
+            )
         return None
     return load_json_bounded(store.get(run.check_report).decode("utf-8"), "the check report")
 
@@ -94,6 +94,7 @@ def shown_command(command: tuple[str, ...]) -> tuple[str, ...]:
     """`command` as a page shows it: each evidence option's file by its name alone, whichever
     system's separators the path was written with. Everything else as it ran."""
     import re
+
     out = list(command)
     for i, arg in enumerate(out[:-1]):
         if arg in EVIDENCE_OPTIONS:
@@ -101,28 +102,36 @@ def shown_command(command: tuple[str, ...]) -> tuple[str, ...]:
     return tuple(out)
 
 
-def _model(run: StoredRun, store: Store, generated_at: str, folder: Path, *,
-           require_report: bool = True):
+def _model(run: StoredRun, store: Store, generated_at: str, folder: Path, *, require_report: bool = True):
+    from onetrace_console.checks import materialise
     from onetrace_console.viewer.model import build_model
     from onetrace_console.viewer.record import read_record
 
-    from onetrace_console.checks import materialise
     materialise(run, store, folder)
     #: `own_check=True`: the stored report is this console's own run of the pinned verifier
     #: over the stored bundle, made at ingest by `checks.run_and_record` -- the only writer of
     #: a run's `check_report` (tests/test_own_check.py).
     from dataclasses import replace
 
-    from onetrace_console.words import record_href
     #: The run's own record offered for download where a page shortens its words.
     #: The check that ran, named on the "Ran as approved" rung where it has no
     #: plan row. The console runs only its one pinned verifier, so it is named
     #: from the installed distribution; a report stored under an earlier pin is named by today's.
     from importlib.metadata import version
+
+    from onetrace_console.words import record_href
+
     checker = f"onetrace-verify {version('onetrace-verify')}"
-    model = replace(build_model(read_record(folder), _envelope(run, store, required=require_report),
-                                generated_at, own_check=True, checker=checker),
-                    record_href=record_href(run))
+    model = replace(
+        build_model(
+            read_record(folder),
+            _envelope(run, store, required=require_report),
+            generated_at,
+            own_check=True,
+            checker=checker,
+        ),
+        record_href=record_href(run),
+    )
     #: "Repeat the check" names each evidence file by its name alone, as the receipt page's
     #: command does: the stored report keeps the command as it ran, with the path on this
     #: console's machine, which says nothing a reader can use and shows how the machine is laid out.
@@ -130,16 +139,23 @@ def _model(run: StoredRun, store: Store, generated_at: str, folder: Path, *,
     #: The authorization rung: the run's `decisions:` rows where it declares a gated step or cites a
     #: decision, and this console's own plain words where it does neither.
     rung = authorization_rung(run, store)
-    model = replace(model, ladder=tuple(
-        replace(r, state=rung[0], state_key=rung[1], evidence=rung[2]) if r.key == "authorized" else r
-        for r in model.ladder))
+    model = replace(
+        model,
+        ladder=tuple(
+            replace(r, state=rung[0], state_key=rung[1], evidence=rung[2]) if r.key == "authorized" else r
+            for r in model.ladder
+        ),
+    )
     return _with_marks(model, run, store)
 
 
 #: The authorization rung's states: (the rung's slug, its words' key) by the combined result of the
 #: verifier's `decisions:` rows. Any FAIL is No; all PASS is Yes; otherwise couldn't check.
-AUTHORIZED_STATES = {"PASS": ("yes", "rung.state.yes"), "FAIL": ("no", "rung.state.no"),
-                     "NOT-RUN": ("couldnt-check", "rung.state.couldnt_check")}
+AUTHORIZED_STATES = {
+    "PASS": ("yes", "rung.state.yes"),
+    "FAIL": ("no", "rung.state.no"),
+    "NOT-RUN": ("couldnt-check", "rung.state.couldnt_check"),
+}
 
 
 def declares_authorization(run: StoredRun, store: Store) -> bool:
@@ -147,6 +163,7 @@ def declares_authorization(run: StoredRun, store: Store) -> bool:
     from onetrace_console import onedoor_panel
     from onetrace_console.run_panels import manifest_of
     from onetrace_console.stage_pages import _steps
+
     if onedoor_panel.gated_stages(manifest_of(run, store)):
         return True
     return any(onedoor_panel.decisions(s["receipt"]) is not None for s in _steps(run, store))
@@ -160,21 +177,35 @@ def authorization_rung(run: StoredRun, store: Store) -> tuple:
     from onetrace_console import onedoor_panel
     from onetrace_console.viewer.model import Text
     from onetrace_console.words import NO_AUTHORIZATION
+
     if not declares_authorization(run, store):
         return "no-records", "rung.state.no_records", ((Text(NO_AUTHORIZATION),),)
     rows = onedoor_panel.decision_rows(_envelope(run, store, required=False))
     if not rows:
-        return ("couldnt-check", "rung.state.couldnt_check",
-                ((Text(AUTHORIZED_NO_ROWS),),))
+        return ("couldnt-check", "rung.state.couldnt_check", ((Text(AUTHORIZED_NO_ROWS),),))
     results = [str(r.get("result", "")) for r in rows]
     combined = "FAIL" if "FAIL" in results else "PASS" if all(x == "PASS" for x in results) else "NOT-RUN"
     counts = ", ".join(f"{results.count(x)} {x}" for x in ("PASS", "FAIL", "NOT-RUN") if x in results)
     lines = [(Text(AUTHORIZED_ROWS), Text(counts, "check"))]
     for r in rows:
         if r.get("result") != "PASS":
-            lines.append((Text(f'{r.get("result")} ', "check"), Text(str(r.get("name", "")), "check")))
+            lines.append((Text(f"{r.get('result')} ", "check"), Text(str(r.get("name", "")), "check")))
     state, key = AUTHORIZED_STATES[combined]
     return state, key, tuple(lines)
+
+
+def _authorization_inputs(run: StoredRun, store: Store) -> dict:
+    """What the Authorization page reads of a run: its manifest, its steps, and the verifier's
+    `decisions:` rows from its stored check."""
+    from onetrace_console import onedoor_panel
+    from onetrace_console.run_panels import manifest_of
+    from onetrace_console.stage_pages import _steps
+
+    return {
+        "manifest": manifest_of(run, store),
+        "steps": _steps(run, store),
+        "rows": onedoor_panel.decision_rows(_envelope(run, store, required=False)),
+    }
 
 
 GATED_STEPS_ID = "gated-steps"
@@ -184,6 +215,7 @@ def with_gated_steps_link(page: str) -> str:
     """`page` with the authorization rung's row ending in a link to the run's Gated steps section,
     where the page holds that section; unchanged elsewhere."""
     import re as _re
+
     if f'id="{GATED_STEPS_ID}"' not in page:
         return page
     row = _re.search(r'(<tr data-rung="authorized" data-state="[^"]*">.*?)(</td></tr>)', page, _re.S)
@@ -191,8 +223,9 @@ def with_gated_steps_link(page: str) -> str:
         return page
     from onetrace_console.onedoor_panel import HEADING
     from onetrace_console.words import escape
+
     link = f' <a href="#{GATED_STEPS_ID}" data-link="gated-steps">{escape(HEADING)}</a>'
-    return page[:row.end(1)] + link + page[row.end(1):]
+    return page[: row.end(1)] + link + page[row.end(1) :]
 
 
 #: The rung's words where the run declares a gated step or cites a decision.
@@ -212,6 +245,7 @@ def latest_as_candidate(run: StoredRun, store: Store):
     index's own order (`render._newest_first`). A comparison in which the run is the baseline
     never counts. None where there is none."""
     from onetrace_console.render import _newest_first
+
     mine = [c for c in store.comparisons() if c.run_b == run.key]
     return min(mine, key=_newest_first) if mine else None
 
@@ -219,11 +253,11 @@ def latest_as_candidate(run: StoredRun, store: Store):
 def _strict_diff_report(comparison, store: Store):
     """That comparison's `diff` report, through the viewer's strict reader (two_run_dag=True), or
     None where there is none or it does not pass."""
+    from onetrace_console.compare import DIFF
+    from onetrace_console.records import unchecked_sides
+    from onetrace_console.store import create_exclusively
     from onetrace_console.viewer.verbs import TwoRun, TwoRunDag, read_report
 
-    from onetrace_console.compare import DIFF
-    from onetrace_console.store import create_exclusively
-    from onetrace_console.records import unchecked_sides
     run = comparison.verb(DIFF)
     if run is None or run.note or not any(n == "diff.json" for n, _ in run.reports):
         return None
@@ -261,6 +295,7 @@ def _with_node_facts(model):
     from html import unescape
 
     from onetrace_console.viewer.page import _line
+
     steps = {s.index: s for s in model.steps}
     order = sorted(model.graph_nodes, key=lambda n: n.index)
     failed: set[str] = set()
@@ -282,8 +317,7 @@ def _with_node_facts(model):
         else:
             count = len(step.outputs) + step.outputs_more
             fact = NODE_OUTPUTS[count != 1].format(n=count)
-        check = (" ".join(unescape(_re.sub(r"<[^>]+>", " ", _line(step.check[0]))).split())
-                 if step.check else "")
+        check = " ".join(unescape(_re.sub(r"<[^>]+>", " ", _line(step.check[0]))).split()) if step.check else ""
         tags = (n.tags + (fact,)) if n.tags else ((fact, check) if check else (fact,))
         #: A step with steps inside it says how many, after the record's fact (a box's first line
         #: after its chip); its box opens its step's page, which lists them (onetrace 0.5's `children`).
@@ -303,9 +337,9 @@ def _with_marks(model, run: StoredRun, store: Store):
     carries the verdict in the compare page's words and the SDK's own annotations, every first
     difference marked; the line above the graph names the comparison. With no comparison the
     model is returned untouched, so the page is the page it always was."""
+    from onetrace_console.render import _RESULT_WORDS
     from onetrace_console.viewer.verbs import TwoRunDag
 
-    from onetrace_console.render import _RESULT_WORDS
     comparison = latest_as_candidate(run, store)
     if comparison is None:
         return model
@@ -317,21 +351,27 @@ def _with_marks(model, run: StoredRun, store: Store):
     href = f"../../diff/{comparison.key}.html"
     report = _strict_diff_report(comparison, store)
     from onetrace_console.viewer.model import _framed
+
     if report is None:
         from onetrace_console.records import UNCHECKED_MARKS, unchecked_sides
         from onetrace_console.viewer.model import VerbSaid, line
+
         unchecked = unchecked_sides(comparison, store)
         #: The console's own words where a side couldn't be checked, never set as the verb's.
-        changed = (_framed("comparison.could_not_check", "reason",
-                           "the comparison's report could not be read") if not unchecked else
-                   VerbSaid(line("comparison.could_not_check", reason=(UNCHECKED_MARKS.format(
-                       name=unchecked[0][1].run_id, role=unchecked[0][0]), "page"))))
-        return replace(model, graph_source=(name, comparison.ran_at, href, False),
-                       changed=(changed,))
+        changed = (
+            _framed("comparison.could_not_check", "reason", "the comparison's report could not be read")
+            if not unchecked
+            else VerbSaid(
+                line(
+                    "comparison.could_not_check",
+                    reason=(UNCHECKED_MARKS.format(name=unchecked[0][1].run_id, role=unchecked[0][0]), "page"),
+                )
+            )
+        )
+        return replace(model, graph_source=(name, comparison.ran_at, href, False), changed=(changed,))
     #: A graph-shaped report names each node by its id; a linear one by its position, which is
     #: the step's emission index in the candidate.
-    by = ({r.node: r for r in report.ladder} if isinstance(report, TwoRunDag)
-          else {r.index: r for r in report.ladder})
+    by = {r.node: r for r in report.ladder} if isinstance(report, TwoRunDag) else {r.index: r for r in report.ladder}
     nodes = []
     for node in model.graph_nodes:
         row = by.get(node.node_id if isinstance(report, TwoRunDag) else str(node.index))
@@ -339,11 +379,21 @@ def _with_marks(model, run: StoredRun, store: Store):
             nodes.append(node)
             continue
         notes = tuple(getattr(row, "annotations", ()) or ())
-        nodes.append(replace(node, tags=(_RESULT_WORDS.get(row.verdict, row.verdict),), quoted=notes,
-                             mark="first" if row.verdict == "FIRST DIFFERENCE" else ""))
+        nodes.append(
+            replace(
+                node,
+                tags=(_RESULT_WORDS.get(row.verdict, row.verdict),),
+                quoted=notes,
+                mark="first" if row.verdict == "FIRST DIFFERENCE" else "",
+            )
+        )
     #: "Where it changed" reads the comparison the graph reads, so the two cannot disagree.
-    return replace(model, graph_nodes=tuple(nodes), changed=_changed_from(report),
-                   graph_source=(name, comparison.ran_at, href, True))
+    return replace(
+        model,
+        graph_nodes=tuple(nodes),
+        changed=_changed_from(report),
+        graph_source=(name, comparison.ran_at, href, True),
+    )
 
 
 def _changed_from(report) -> tuple:
@@ -353,17 +403,24 @@ def _changed_from(report) -> tuple:
     first-difference node quoted from the report."""
     from onetrace_console.viewer.model import Detail, Text, VerbSaid, _framed, changed_said, line
     from onetrace_console.viewer.verbs import TwoRunDag
+
     if not isinstance(report, TwoRunDag):
         return changed_said(report)
     if report.envelope == "identical":
         return (VerbSaid(line("diff.pass")),)
     if report.envelope == "diverged" and report.first_difference_frontier:
-        return (VerbSaid(line("localize.located"), tuple(
-            Detail("field.where", Text(node, "check")) for node in report.first_difference_frontier)),)
-    frames = {"not comparable": "comparison.not_comparable", "refused": "comparison.refused",
-              "could not check": "comparison.could_not_check"}
-    return (_framed(frames.get(report.envelope, "comparison.could_not_check"), "reason",
-                    report.reason),)
+        return (
+            VerbSaid(
+                line("localize.located"),
+                tuple(Detail("field.where", Text(node, "check")) for node in report.first_difference_frontier),
+            ),
+        )
+    frames = {
+        "not comparable": "comparison.not_comparable",
+        "refused": "comparison.refused",
+        "could not check": "comparison.could_not_check",
+    }
+    return (_framed(frames.get(report.envelope, "comparison.could_not_check"), "reason", report.reason),)
 
 
 def topology_note_block(case_html: str, run: StoredRun) -> str:
@@ -372,58 +429,67 @@ def topology_note_block(case_html: str, run: StoredRun) -> str:
     if not run.topology_note:
         return case_html
     from onetrace_console.words import escape
+
     section = re.search(r'<section data-section="checked"><h2>[^<]*</h2>', case_html)
     if section is None:
-        raise ValueError("cannot show the run's topology note: the case page has no "
-                         "\"What was checked\" section to place it in")
+        raise ValueError(
+            'cannot show the run\'s topology note: the case page has no "What was checked" section to place it in'
+        )
     note = f'<p data-section="topology-note">{escape(run.topology_note)}</p>'
-    return case_html[:section.end()] + note + case_html[section.end():]
+    return case_html[: section.end()] + note + case_html[section.end() :]
 
 
 def refusal(e: Exception, *, log: bool = True) -> tuple[str, bool]:
     """(what a page says, whether it is the viewer's own refusal). A refusal the viewer made is
-    its own words; anything else is named by its type, never as the viewer's (the second
-    review, S1), with the traceback in the operator's log where `log` -- once, on the run's own
+    its own words; anything else is named by its type, never as the viewer's, with the traceback in the operator's log where `log` -- once, on the run's own
     page, not again on every list that holds it."""
     from onetrace_console.viewer.record import RecordError
+
     if isinstance(e, RecordError):
         return str(e), True
     if log:
         import traceback
+
         traceback.print_exception(e, file=sys.stderr)
     return f"{type(e).__name__}: {e}", False
 
 
 def render_execution(run: StoredRun, store: Store, *, generated_at: str) -> RenderedExecution:
     """One run's detail pages: the answer and the case, sealed as the viewer seals them."""
+    from onetrace_console.authorization import authorization_link, render_authorization
     from onetrace_console.viewer import fingerprint
     from onetrace_console.viewer.page import render_answer, render_case
-
-    from onetrace_console.authorization import authorization_link, render_authorization
 
     def drawn(folder: Path) -> dict[str, str]:
         model = _model(run, store, generated_at, folder)
         #: In the console's frame a graph node opens its stage page,
         #: a sibling file; the free file keeps the viewer's in-page `#step-N`.
         from onetrace_console.frame import _RENDERING
-        from onetrace_console.stage_pages import render_stage_pages, stage_page
         from onetrace_console.receipt_page import RECEIPT, receipt_link, render_receipt
+        from onetrace_console.stage_pages import render_stage_pages, stage_page
+
         if _RENDERING.get() is not None:
-            model = replace(model, graph_nodes=tuple(
-                replace(n, href=stage_page(n.href[len("#step-"):]))
-                if n.href.startswith("#step-") else n for n in model.graph_nodes),
+            model = replace(
+                model,
+                graph_nodes=tuple(
+                    replace(n, href=stage_page(n.href[len("#step-") :])) if n.href.startswith("#step-") else n
+                    for n in model.graph_nodes
+                ),
                 #: A line wraps at four boxes a row, as the comparison's does, read row by row.
-                graph_wrap=4)
+                graph_wrap=4,
+            )
             model = _with_node_facts(model)
             #: Each model-call record among a step's outputs links to its section on the step's page.
             from onetrace_console import model_call
             from onetrace_console.stage_pages import _steps
+
             paged = {s["index"] for s in _steps(run, store) if s["index"].isdigit()}
             model = replace(model, steps=model_call.linked_steps(model.steps, paged))
         #: Labelled BEFORE sealing, so the fingerprint covers the label. Sealing first and
         #: splicing after would leave a page whose own seal did not describe it.
         from onetrace_console.incident_pages import incidents_block
         from onetrace_console.incidents import derive
+
         every = derive(store)
         raised = tuple(i for i in every if i.subject == run.key)
 
@@ -431,37 +497,60 @@ def render_execution(run: StoredRun, store: Store, *, generated_at: str) -> Rend
         #: and the case page its link to the authorization page, for the same reason. The
         #: console's frame is filled last before the seal, for the same reason again.
         from onetrace_console.frame import fill_sealed, sealed_framing
+
         with sealed_framing():
             answer = render_answer(model, ANSWER, sibling=CASE)
             case = render_case(model, CASE, sibling=ANSWER)
         #: The run's head, in place of the viewer's header, before the seal so the fingerprint
         #: covers it.
         from onetrace_console.run_head import run_head, with_head
+
         first = next((s.index for s in model.steps if s.index.isdigit()), "")
-        case = with_head(case, run_head(run, store, model, receipt=RECEIPT,
-                                        stage_page=stage_page(first) if first else ""))
+        case = with_head(
+            case, run_head(run, store, model, receipt=RECEIPT, stage_page=stage_page(first) if first else "")
+        )
         #: F5: the answer page and the authorization page carry the same head, their tabs to the
         #: run page's views; the authorization page keeps its own heading, so its run is the
         #: head's title line, not a second h1.
-        answer = with_head(answer, run_head(run, store, model, receipt=RECEIPT, page=CASE,
-                                            stage_page=stage_page(first) if first else ""),
-                           anchors=False)
-        authorization_head = run_head(run, store, model, receipt=RECEIPT, page=CASE,
-                                      stage_page=stage_page(first) if first else "", title_tag="p",
-                                      rungs=False)
+        answer = with_head(
+            answer,
+            run_head(run, store, model, receipt=RECEIPT, page=CASE, stage_page=stage_page(first) if first else ""),
+            anchors=False,
+        )
+        authorization_head = run_head(
+            run,
+            store,
+            model,
+            receipt=RECEIPT,
+            page=CASE,
+            stage_page=stage_page(first) if first else "",
+            title_tag="p",
+            rungs=False,
+        )
         #: The run page as its two views, split before the seal so each view's fingerprint covers
         #: that view: "What changed" at the page's address, "Proof" its sibling.
         from onetrace_console import views
+
         #: onetrace 0.5's records, where the run holds them: gated steps and their decisions, the
         #: span context, steps inside steps (`run_panels`), before the seal like every block here.
         from onetrace_console.run_panels import with_sections
-        whole = receipt_link(authorization_link(incidents_block(
-            topology_note_block(with_sections(label(case, [run]), run, store), run), raised, len(every),
-            store, up="../../")))
+
+        whole = receipt_link(
+            authorization_link(
+                incidents_block(
+                    topology_note_block(with_sections(label(case, [run]), run, store), run),
+                    raised,
+                    len(every),
+                    store,
+                    up="../../",
+                )
+            )
+        )
         #: A mark beside each count of checks, its note read from the verifier's own rows.
         from onetrace_console import info_mark
         from onetrace_console.home import _envelope as _stored
         from onetrace_console.run_panels import manifest_of
+
         chain = [e.get("file", "") for e in manifest_of(run, store).get("chain") or [] if isinstance(e, dict)]
         whole = info_mark.splice(whole, info_mark.rows_of(_stored(run, store)), chain)
         #: Steps inside steps in the table of steps: each child under its calling step, each nested
@@ -469,31 +558,43 @@ def render_execution(run: StoredRun, store: Store, *, generated_at: str) -> Rend
         from onetrace_console.nesting_ladder import run_ladder
         from onetrace_console.run_panels import held_runs
         from onetrace_console.stage_pages import _steps
+
         whole = run_ladder(whole, _steps(run, store), held_runs(store))
         #: "What changed?": the comparison a stated rule picks for this run (`what_changed`).
         from onetrace_console import what_changed
         from onetrace_console.frame import rendering_public
         from onetrace_console.run_panels import BEFORE
+
         at = whole.find(BEFORE)
         if at >= 0:
             #: Then the run's verdict against its pipeline's reference (`verdicts`), the run's
             #: benchmark mark (`benchmarks`), onetrace's variation profile where it was recorded
             #: again on the same configuration, and the index's search box, asked from this run.
             from onetrace_console import benchmarks, search_page, verdicts
-            box = (f'<section data-section="run-search" class="run-search">'
-                   f'{search_page.box(up="../../", run_key=run.key)}</section>')
+
+            box = (
+                f'<section data-section="run-search" class="run-search">'
+                f"{search_page.box(up='../../', run_key=run.key)}</section>"
+            )
             #: Neighbours by input under it (`neighbours`), where the extra is installed on a local
             #: console; "" anywhere else.
-            from onetrace_console.neighbours.pages import run_section
-            from onetrace_console.model_call import draft_line
             #: Beside it, the run's configuration against its pipeline's reference run (`config_compare`).
             from onetrace_console import config_compare
-            whole = (whole[:at] + draft_line(run, store) + what_changed.section(run, store, public=rendering_public())
-                     + config_compare.section(run, store)
-                     + run_section(run, store)
-                     + verdicts.section(run, store)
-                     + benchmarks.mark_section(run, store, public=rendering_public())
-                     + verdicts.profile_section(run, store) + box + whole[at:])
+            from onetrace_console.model_call import draft_line
+            from onetrace_console.neighbours.pages import run_section
+
+            whole = (
+                whole[:at]
+                + draft_line(run, store)
+                + what_changed.section(run, store, public=rendering_public())
+                + config_compare.section(run, store)
+                + run_section(run, store)
+                + verdicts.section(run, store)
+                + benchmarks.mark_section(run, store, public=rendering_public())
+                + verdicts.profile_section(run, store)
+                + box
+                + whole[at:]
+            )
         #: The authorization rung links to the Gated steps section it reads, on the same view.
         whole = with_gated_steps_link(whole)
         said, state = views.run_said(run, store)
@@ -502,24 +603,38 @@ def render_execution(run: StoredRun, store: Store, *, generated_at: str) -> Rend
         answer = views.retarget(answer, what, proof, CASE, views.RUN_PROOF)
         authorization_head = views.retarget(authorization_head, what, proof, CASE, views.RUN_PROOF)
         return {
-            ANSWER: fingerprint.seal(fill_sealed(incidents_block(
-                label(answer, [run]), raised, len(every), store, up="../../"),
-                f"runs/{run.key}/{ANSWER}")),
+            ANSWER: fingerprint.seal(
+                fill_sealed(
+                    incidents_block(label(answer, [run]), raised, len(every), store, up="../../"),
+                    f"runs/{run.key}/{ANSWER}",
+                )
+            ),
             CASE: fingerprint.seal(fill_sealed(what, f"runs/{run.key}/{CASE}")),
-            views.RUN_PROOF: fingerprint.seal(fill_sealed(_check_names(proof, views.RUN_PROOF),
-                                                          f"runs/{run.key}/{views.RUN_PROOF}")),
-            AUTHORIZATION: render_authorization(run, generated_at=generated_at, case=CASE,
-                                                head=authorization_head),
+            views.RUN_PROOF: fingerprint.seal(
+                fill_sealed(_check_names(proof, views.RUN_PROOF), f"runs/{run.key}/{views.RUN_PROOF}")
+            ),
+            AUTHORIZATION: render_authorization(
+                run, generated_at=generated_at, case=CASE, head=authorization_head, **_authorization_inputs(run, store)
+            ),
             #: The run receipt, labelled like the run's other pages.
-            RECEIPT: label(render_receipt(run, store, generated_at=generated_at,
-                                         anchored=_rung_of(model, "anchored"),
-                                         signed=_rung_of(model, "signed"),
-                                         agree=_rung_of(model, "records-agree")), [run]),
+            RECEIPT: label(
+                render_receipt(
+                    run,
+                    store,
+                    generated_at=generated_at,
+                    anchored=_rung_of(model, "anchored"),
+                    signed=_rung_of(model, "signed"),
+                    agree=_rung_of(model, "records-agree"),
+                ),
+                [run],
+            ),
             #: Labelled like the run's other pages: every page that shows a preview run says so.
-            **{name: label(page, [run]) for name, page
-               in render_stage_pages(run, store, generated_at=generated_at,
-                                     anchored=model.anchor_badge,
-                                     signed=_rung_of(model, "signed")).items()},
+            **{
+                name: label(page, [run])
+                for name, page in render_stage_pages(
+                    run, store, generated_at=generated_at, anchored=model.anchor_badge, signed=_rung_of(model, "signed")
+                ).items()
+            },
         }
 
     gone = store.missing(run)
@@ -528,14 +643,21 @@ def render_execution(run: StoredRun, store: Store, *, generated_at: str) -> Rend
         #: left: its pages say what is missing, as could not check.
         from onetrace_console.store import MISSING_OBJECT
         from onetrace_console.unreadable import render_incomplete_run
-        page = render_incomplete_run(run, MISSING_OBJECT.format(objects=", ".join(gone)),
-                                     generated_at=generated_at)
-        return RenderedExecution(run=run, pages={
-            ANSWER: page, CASE: page, RUN_PROOF: page,
-            AUTHORIZATION: render_authorization(run, generated_at=generated_at, case=CASE)},
+
+        page = render_incomplete_run(run, MISSING_OBJECT.format(objects=", ".join(gone)), generated_at=generated_at)
+        return RenderedExecution(
+            run=run,
+            pages={
+                ANSWER: page,
+                CASE: page,
+                RUN_PROOF: page,
+                AUTHORIZATION: render_authorization(run, generated_at=generated_at, case=CASE),
+            },
             #: Could not check, whatever verdict the passed run carries -- a
             #: caller holding a raw StoredRun, not the store's reading, gets the same.
-            verdict=COULD_NOT_CHECK, repeat_command=REPEAT_COMMAND)
+            verdict=COULD_NOT_CHECK,
+            repeat_command=REPEAT_COMMAND,
+        )
     with tempfile.TemporaryDirectory(prefix="onetrace-page-") as tmp:
         try:
             pages = drawn(Path(tmp) / "run")
@@ -543,25 +665,28 @@ def render_execution(run: StoredRun, store: Store, *, generated_at: str) -> Rend
             raise
         except Exception as e:  # noqa: BLE001 - stated on the run's page, and logged
             #: The viewer refused the record, or drawing it failed in
-            #: a way nobody foresaw -- anywhere from the model to the seal: the third
-            #: confirmation review found MemoryError in `render_answer`. Both pages say so, and
+            #: a way nobody foresaw -- anywhere from the model to the seal: a MemoryError
+            #: was once found in `render_answer`. Both pages say so, and
             #: one run never takes the others down with it. The authorization page is the same
             #: as any run's.
             from onetrace_console.unreadable import render_unreadable_run
+
             reason, from_viewer = refusal(e)
-            page = render_unreadable_run(run, reason, generated_at=generated_at,
-                                         from_viewer=from_viewer)
-            pages = {ANSWER: page, CASE: page, RUN_PROOF: page,
-                     AUTHORIZATION: render_authorization(run, generated_at=generated_at,
-                                                         case=CASE)}
-    return RenderedExecution(run=run, pages=pages, verdict=run.check_verdict,
-                             repeat_command=REPEAT_COMMAND)
+            page = render_unreadable_run(run, reason, generated_at=generated_at, from_viewer=from_viewer)
+            pages = {
+                ANSWER: page,
+                CASE: page,
+                RUN_PROOF: page,
+                AUTHORIZATION: render_authorization(run, generated_at=generated_at, case=CASE),
+            }
+    return RenderedExecution(run=run, pages=pages, verdict=run.check_verdict, repeat_command=REPEAT_COMMAND)
 
 
 def _check_names(page: str, name: str) -> str:
     """A view's "Check it yourself" command, naming that view's own file."""
     from onetrace_console.viewer.page import _code
     from onetrace_console.viewer.slot import STANDALONE_CHECK
+
     return page.replace(_code(STANDALONE_CHECK.format(file=CASE)), _code(STANDALONE_CHECK.format(file=name)))
 
 
@@ -569,11 +694,11 @@ def _list_row(run: StoredRun, store: Store, folder: Path):
     """What a list shows of one run: the viewer's `list_row`, never its full model, or
     (why not, whether the viewer said so) where it refused the record. Read from the
     run's record where its check kept the row: a list then reads no receipt."""
+    from onetrace_console.checks import materialise
     from onetrace_console.viewer.model import ListRow, list_row
     from onetrace_console.viewer.record import read_record
-
-    from onetrace_console.checks import materialise
     from onetrace_console.words import record_href
+
     kept = _kept_row(run.list_row)
     if kept is not None:
         if "refused" in kept:
@@ -596,24 +721,32 @@ def _kept_row(text: str) -> dict | None:
     if set(kept) == {"refused", "from_viewer"}:
         ok = isinstance(kept["refused"], str) and isinstance(kept["from_viewer"], bool)
     else:
-        ok = (set(kept) == {"case_ran", "case_for", "step_count", "case_for_more"}
-              and isinstance(kept["case_ran"], str) and isinstance(kept["case_for"], str)
-              and all(isinstance(kept[k], int) and not isinstance(kept[k], bool)
-                      and kept[k] >= 0 for k in ("step_count", "case_for_more")))
+        ok = (
+            set(kept) == {"case_ran", "case_for", "step_count", "case_for_more"}
+            and isinstance(kept["case_ran"], str)
+            and isinstance(kept["case_for"], str)
+            and all(
+                isinstance(kept[k], int) and not isinstance(kept[k], bool) and kept[k] >= 0
+                for k in ("step_count", "case_for_more")
+            )
+        )
     return kept if ok else None
 
 
 #: Fixed wording for the console's Runs page only: it is exactly the list of
 #: the stored runs, so the free file's "It is not a view of a store, and nothing is summarised
 #: across runs" is untrue in the console. The free viewer file keeps its own sentence.
-RUNS_STORED = ("Runs stored: {n} of {n}, and this page lists every one of them. Nothing is "
-               "summarised across runs on this page.")
+RUNS_STORED = (
+    "Runs stored: {n} of {n}, and this page lists every one of them. Nothing is summarised across runs on this page."
+)
 #: Fixed wording for every other list a count opens: in the console each is drawn from the
 #: store, so "not a view of a store" is untrue there too. The free file keeps its own. One form
 #: each for none, one and several runs; the last sentence follows every one.
-RUNS_IN_LIST = {0: "Runs in this list: none of the {T} stored.",
-                1: "Runs in this list: 1 of {T} stored, and this page lists it.",
-                2: "Runs in this list: {n} of {T} stored, and this page lists all {n}."}
+RUNS_IN_LIST = {
+    0: "Runs in this list: none of the {T} stored.",
+    1: "Runs in this list: 1 of {T} stored, and this page lists it.",
+    2: "Runs in this list: {n} of {T} stored, and this page lists all {n}.",
+}
 SUMMARISED = " Nothing is summarised across runs on this page."
 
 
@@ -633,11 +766,14 @@ LIST_RAN = "When it ran"
 def _plain_list_words(page: str, every_stored: bool) -> str:
     from onetrace_console.viewer.page import escape as viewer_escape
     from onetrace_console.viewer.sentences import template
+
     title = LIST_TITLE_ALL if every_stored else LIST_TITLE_FILTERED
     given = viewer_escape(template("title.executions"))
-    for old, new in ((f"<title>{given}</title>", f"<title>{title}</title>"),
-                     (f"<h1>{given}</h1>", f"<h1>{title}</h1>"),
-                     (f"<th>{viewer_escape(template('field.ran'))}</th>", f"<th>{LIST_RAN}</th>")):
+    for old, new in (
+        (f"<title>{given}</title>", f"<title>{title}</title>"),
+        (f"<h1>{given}</h1>", f"<h1>{title}</h1>"),
+        (f"<th>{viewer_escape(template('field.ran'))}</th>", f"<th>{LIST_RAN}</th>"),
+    ):
         if page.count(old) != 1:
             raise RuntimeError(f"the runs list does not carry {old!r} exactly once")
         page = page.replace(old, new)
@@ -652,12 +788,16 @@ def verdict_pill(run, store) -> str:
     from onetrace_console import verdicts
     from onetrace_console.frame import rendering_public
     from onetrace_console.words import escape
+
     try:
         verdicts.verdict_record(run, store, compute=not rendering_public())
     except Exception:  # noqa: BLE001 - a verdict that cannot be made is not shown here; the run's page says why
         return ""
-    if verdicts.unchecked(run, store) and verdicts.pipeline_of(run, store) is not None and \
-            verdicts.reference_record(verdicts.pipeline_of(run, store), store, compute=False) is not None:
+    if (
+        verdicts.unchecked(run, store)
+        and verdicts.pipeline_of(run, store) is not None
+        and verdicts.reference_record(verdicts.pipeline_of(run, store), store, compute=False) is not None
+    ):
         return f' <span class="pill neu" data-verdict-word="unchecked">{escape(verdicts.UNCHECKED)}</span>'
     got = verdicts.word_of(run, store)
     if got is None:
@@ -666,25 +806,56 @@ def verdict_pill(run, store) -> str:
     said = f"verdict: {word}" + (f" {at}" if at else "")
     #: Each verdict with the seal of the reference it was read against.
     seal = verdicts.seal_of(run, store)
-    return (f' <span class="pill neu" data-verdict-word="{escape(word)}">{escape(said)}</span>'
-            + (f" {verdicts.against_html(seal)}" if seal else ""))
+    return f' <span class="pill neu" data-verdict-word="{escape(word)}">{escape(said)}</span>' + (
+        f" {verdicts.against_html(seal)}" if seal else ""
+    )
 
 
-RUN_COLUMNS = ("Run", "Pipeline", "When it ran", "Received by this console", "How far it got", "Closed",
-               "Records agree", "Signed by a known recorder", "Committed by a known time",
-               "Ran as approved")
+RUN_COLUMNS = (
+    "Run",
+    "Pipeline",
+    "When it ran",
+    "Received by this console",
+    "How far it got",
+    "Closed",
+    "Records agree",
+    "Signed by a known recorder",
+    "Committed by a known time",
+    "Ran as approved",
+)
 #: Each reading the store keeps, as the run page's rung state (`data-state`).
-_SIGNED_STATE = {"yes": "yes", "untrusted": "signed-untrusted", "failed": "no", "unsigned": "unsigned",
-                 "couldnt-check": "couldnt-check", "unreadable": "couldnt-check",
-                 "not-installed": "not-checked", "": "not-checked"}
-_ANCHORED_STATE = {"yes": "yes", "couldnt-check": "couldnt-check", "failed": "no",
-                   "not-anchored": "not-anchored", "": "not-checked"}
+_SIGNED_STATE = {
+    "yes": "yes",
+    "untrusted": "signed-untrusted",
+    "failed": "no",
+    "unsigned": "unsigned",
+    "couldnt-check": "couldnt-check",
+    "unreadable": "couldnt-check",
+    "not-installed": "not-checked",
+    "": "not-checked",
+}
+_ANCHORED_STATE = {
+    "yes": "yes",
+    "couldnt-check": "couldnt-check",
+    "failed": "no",
+    "not-anchored": "not-anchored",
+    "": "not-checked",
+}
 #: "Ran as approved": the run page's states, and "Couldn't check" wherever the plan can't be
 #: decided -- the verifier has no plan row, or the run doesn't verify, so its rows aren't read.
-_APPROVED_STATE = {"approved": "yes", "departed": "no", "edges-mismatch": "no", "no-plan": "not-declared",
-                   "not-a-graph-run": "not-a-graph-run", "cant-check": "couldnt-check", "no-paths": "couldnt-check",
-                   "does-not-verify": "couldnt-check", "couldnt-check": "couldnt-check",
-                   "not-checked": "not-checked", "": "not-checked"}
+_APPROVED_STATE = {
+    "approved": "yes",
+    "departed": "no",
+    "edges-mismatch": "no",
+    "no-plan": "not-declared",
+    "not-a-graph-run": "not-a-graph-run",
+    "cant-check": "couldnt-check",
+    "no-paths": "couldnt-check",
+    "does-not-verify": "couldnt-check",
+    "couldnt-check": "couldnt-check",
+    "not-checked": "not-checked",
+    "": "not-checked",
+}
 
 
 def run_answers(run: StoredRun, store: Store) -> dict[str, str]:
@@ -692,9 +863,13 @@ def run_answers(run: StoredRun, store: Store) -> dict[str, str]:
     counts it by, so a row, the Overview and the run's own page cannot disagree; and "Ran as
     approved", as the run's own page reads it, recorded when the run is checked."""
     from onetrace_console import records
-    return {"records-agree": records.state(run, store), "signed": _SIGNED_STATE.get(run.signed, "not-checked"),
-            "anchored": _ANCHORED_STATE.get(run.anchored, "not-checked"),
-            "approved": _APPROVED_STATE.get(run.approved, "couldnt-check")}
+
+    return {
+        "records-agree": records.state(run, store),
+        "signed": _SIGNED_STATE.get(run.signed, "not-checked"),
+        "anchored": _ANCHORED_STATE.get(run.anchored, "not-checked"),
+        "approved": _APPROVED_STATE.get(run.approved, "couldnt-check"),
+    }
 
 
 def _short_line(run: StoredRun, store: Store) -> str:
@@ -702,15 +877,19 @@ def _short_line(run: StoredRun, store: Store) -> str:
     table, holding the short answer against the run the stated rule picks; "" where that comparison
     is not held (the run's page says why). A row, not a column: the table fills its frame at desktop
     width already."""
+    import re as _re
+
     from onetrace_console.what_changed import NOT_COMPARED, runs_line
     from onetrace_console.words import escape
-    import re as _re
+
     said = runs_line(run, store)
     if said == NOT_COMPARED:
         return ""
     line = _re.sub(r"`([^`]+)`", r"<code>\1</code>", escape(said))
-    return (f'<tr class="what-changed-row" data-what-changed-of="{run.key}"><td colspan="{len(RUN_COLUMNS)}" '
-            f'data-answer="what-changed">What changed: {line}</td></tr>')
+    return (
+        f'<tr class="what-changed-row" data-what-changed-of="{run.key}"><td colspan="{len(RUN_COLUMNS)}" '
+        f'data-answer="what-changed">What changed: {line}</td></tr>'
+    )
 
 
 def runs_table(runs: list[StoredRun], store: Store) -> str:
@@ -723,11 +902,14 @@ def runs_table(runs: list[StoredRun], store: Store) -> str:
     from onetrace_console.viewer.page import escape as viewer_escape
     from onetrace_console.viewer.sentences import template
     from onetrace_console.words import record_href, rest, scroll_region, time_html
+
     label = {r.key: p.label for p in pipelines(store) for r in p.runs}
 
     def chip(state: str) -> str:
-        return (f'<span class="pill {tones.tone(tones.RUNG, state)}" data-state="{state}">'
-                f'{viewer_escape(template("rung.state." + state.replace("-", "_")))}</span>')
+        return (
+            f'<span class="pill {tones.tone(tones.RUNG, state)}" data-state="{state}">'
+            f"{viewer_escape(template('rung.state.' + state.replace('-', '_')))}</span>"
+        )
 
     rows, lines, verdicts_said = [], {}, {}
     for run in runs:
@@ -735,47 +917,59 @@ def runs_table(runs: list[StoredRun], store: Store) -> str:
         verdicts_said[run.key] = verdict_pill(run, store)
         answers = run_answers(run, store)
         ran = ran_at(run)
-        got = (f"{run.delivered_stages} of {run.stage_count} declared stages"
-               + (f"; {run.retries} retr{'y' if run.retries == 1 else 'ies'} recorded" if run.retries else ""))
+        got = f"{run.delivered_stages} of {run.stage_count} declared stages" + (
+            f"; {run.retries} retr{'y' if run.retries == 1 else 'ies'} recorded" if run.retries else ""
+        )
         rows.append(
             #: The run id capped as every page caps a record word: its whole is in its record.
             f'<tr data-run="{_named(run.run_id)}" data-key="{run.key}">'
             #: The id capped inside its link; after it, what was left out and the record offered.
             f'<td><a href="runs/{run.key}/case.html"><span class="mono" data-words="record">'
             f"{_named(run.run_id)}</span></a>{rest(run.run_id, record_href(run))}{badge(store, run.key)}</td>"
-            f'<td>{viewer_escape(label.get(run.key, ""))}</td>'
+            f"<td>{viewer_escape(label.get(run.key, ''))}</td>"
             f'<td class="value">{time_html(ran) if ran else "not recorded"}</td>'
             f'<td class="value">{time_html(run.received_at)}</td>'
             f"<td>{viewer_escape(got)}{(' ' + stopped) if (stopped := declined_chip(run)) else ''}</td>"
             #: Whether it closed and how it ended, as the run's head says it (`closing`).
             f'<td data-answer="closed" data-ending="{closing.state(run.ending)}">{closing.html(run.ending)}</td>'
-            + "".join(f'<td data-answer="{k}">{chip(answers[k])}</td>'
-                      for k in ("records-agree", "signed", "anchored", "approved"))
+            + "".join(
+                f'<td data-answer="{k}">{chip(answers[k])}</td>'
+                for k in ("records-agree", "signed", "anchored", "approved")
+            )
             + "</tr>"
             #: The run's verdict against its pipeline's reference, with the reference's seal: a row of
             #: its own across the table, as "What changed?" is, so the seal widens no column.
             + (f'<tr data-verdict-slot="{run.key}"></tr>' if verdicts_said[run.key] else "")
             #: "What changed?": a row of its own where the rule's comparison is held, put in after
             #: the cells are labelled by column (it is under none), at its empty placeholder.
-            + (f'<tr data-what-changed-slot="{run.key}"></tr>' if lines[run.key] else ""))
+            + (f'<tr data-what-changed-slot="{run.key}"></tr>' if lines[run.key] else "")
+        )
     head = "".join(f"<th>{c}</th>" for c in RUN_COLUMNS)
-    table = scroll_region(f'<table class="timeline" data-section="runs-table"><thead><tr>{head}</tr>'
-                          f"</thead><tbody>{''.join(rows)}</tbody></table>", "The runs", "runs")
+    table = scroll_region(
+        f'<table class="timeline" data-section="runs-table"><thead><tr>{head}</tr>'
+        f"</thead><tbody>{''.join(rows)}</tbody></table>",
+        "The runs",
+        "runs",
+    )
     for key, line in lines.items():
         if line:
             table = table.replace(f'<tr data-what-changed-slot="{key}"></tr>', line)
     for key, said in verdicts_said.items():
         if said:
-            table = table.replace(f'<tr data-verdict-slot="{key}"></tr>',
-                                  f'<tr class="verdict-row" data-verdict-of="{key}"><td colspan="{len(RUN_COLUMNS)}" '
-                                  f'data-answer="verdict">{said.strip()}</td></tr>')
+            table = table.replace(
+                f'<tr data-verdict-slot="{key}"></tr>',
+                f'<tr class="verdict-row" data-verdict-of="{key}"><td colspan="{len(RUN_COLUMNS)}" '
+                f'data-answer="verdict">{said.strip()}</td></tr>',
+            )
     #: The verdicts' references, each seal whole once under the table (`verdicts.seals_note`).
     from onetrace_console import verdicts
+
     return table + verdicts.seals_note(verdicts.seal_of(run, store) for run in runs)
 
 
-_VIEWER_RUNS = re.compile(r'(<section data-section="executions"><h2>[^<]*</h2>.*?)<table class="timeline">.*?</table>',
-                          re.S)
+_VIEWER_RUNS = re.compile(
+    r'(<section data-section="executions"><h2>[^<]*</h2>.*?)<table class="timeline">.*?</table>', re.S
+)
 
 
 def _with_runs_table(page: str, runs: list[StoredRun], store: Store) -> str:
@@ -784,6 +978,7 @@ def _with_runs_table(page: str, runs: list[StoredRun], store: Store) -> str:
     if len(_VIEWER_RUNS.findall(page)) != 1:
         raise RuntimeError("the runs list does not carry the viewer's table exactly once")
     from onetrace_console.words import RELATIVE_TIME_SCRIPT
+
     page = _VIEWER_RUNS.sub(lambda m: m.group(1) + runs_table(runs, store), page, count=1)
     return page.replace("</main>", RELATIVE_TIME_SCRIPT + "</main>", 1) if runs else page
 
@@ -794,27 +989,75 @@ NO_RUNS = "No run is listed here."
 def _without_runs_table(page: str) -> str:
     if len(_VIEWER_RUNS.findall(page)) != 1:
         raise RuntimeError("the runs list does not carry the viewer's table exactly once")
-    return _VIEWER_RUNS.sub(lambda m: m.group(1) + f'<p class="zero" data-section="no-runs">{NO_RUNS}</p>',
-                            page, count=1)
+    return _VIEWER_RUNS.sub(
+        lambda m: m.group(1) + f'<p class="zero" data-section="no-runs">{NO_RUNS}</p>', page, count=1
+    )
 
 
 def _runs_stored(page: str, given: int, of: int, sentence: str, section: str) -> str:
     """A list page with the viewer's corpus sentence replaced by the console's fixed one."""
     from onetrace_console.viewer.page import escape as viewer_escape
     from onetrace_console.viewer.sentences import template
-    said = (template("executions.one").format(total=of) if given == 1
-            else template("executions.corpus").format(n=given, total=of))
+
+    said = (
+        template("executions.one").format(total=of)
+        if given == 1
+        else template("executions.corpus").format(n=given, total=of)
+    )
     old = f"<p>{viewer_escape(said)}</p>"
     if page.count(old) != 1:
-        raise RuntimeError("the viewer's corpus sentence is not on the list exactly once, so "
-                           "the console's cannot replace it")
+        raise RuntimeError(
+            "the viewer's corpus sentence is not on the list exactly once, so the console's cannot replace it"
+        )
     return page.replace(old, f'<p data-section="{section}">{viewer_escape(sentence)}</p>')
 
 
-def render_executions(runs: list[StoredRun], store: Store, *, generated_at: str,
-                      of: int | None = None, file_name: str = EXECUTIONS,
-                      rows: dict | None = None, every_stored: bool = False,
-                      filtered: bool = False) -> str:
+def locked_section() -> str:
+    """The run folders a folder load or the watcher listed as locked (`run_lock.LISTED`): each with its
+    words, and, where its `.lock` is empty, a local console's "Load as not closed" while a folder is
+    watched. A public console only lists them. Nothing when none is listed."""
+    from onetrace_console import run_lock, watch
+    from onetrace_console.frame import rendering_public
+    from onetrace_console.words import escape
+
+    if not run_lock.LISTED:
+        return ""
+    press = not rendering_public() and watch.CURRENT is not None
+    from urllib.parse import quote
+
+    from onetrace_console.run_lock_script import LOAD_NOT_CLOSED_SCRIPT
+
+    items = []
+    for name, (_path, kind) in sorted(run_lock.LISTED.items()):
+        control = (
+            f' <button class="btn-secondary" data-busy="Loading…" type="button" hidden data-load-not-closed="{run_lock.ROUTE}?folder='
+            f'{escape(quote(name, safe=""))}">{escape(run_lock.PRESS)}</button>'
+            f"<span data-load-not-closed-said></span>"
+            if press and kind == "empty"
+            else ""
+        )
+        items.append(
+            f'<li data-locked="{escape(kind)}"><code>{escape(name)}</code> '
+            f"{escape(run_lock.LISTED_WORDS[kind])}{control}</li>"
+        )
+    script = LOAD_NOT_CLOSED_SCRIPT if press and "data-load-not-closed=" in "".join(items) else ""
+    return (
+        f'<section data-section="locked-runs"><h2>{escape(run_lock.HEADING)}</h2>'
+        f'<ul class="plain">{"".join(items)}</ul>{script}</section>'
+    )
+
+
+def render_executions(
+    runs: list[StoredRun],
+    store: Store,
+    *,
+    generated_at: str,
+    of: int | None = None,
+    file_name: str = EXECUTIONS,
+    rows: dict | None = None,
+    every_stored: bool = False,
+    filtered: bool = False,
+) -> str:
     """The list of stored runs. Rows are addressed by the directory they came from.
 
     `of` is the size of the set these runs were chosen from (a count carries its
@@ -833,9 +1076,8 @@ def render_executions(runs: list[StoredRun], store: Store, *, generated_at: str,
     stored run, the Runs page, which says so in the fixed words; `filtered` says it
     is a list of some of them, which says so in its own fixed words.
     """
-    from onetrace_console.viewer.page import render_executions as viewer_render_executions
-
     from onetrace_console.unreadable import unshowable_runs_block
+    from onetrace_console.viewer.page import render_executions as viewer_render_executions
 
     rows = {} if rows is None else rows
     shown, refused = [], []
@@ -854,31 +1096,42 @@ def render_executions(runs: list[StoredRun], store: Store, *, generated_at: str,
             else:
                 shown.append(row)
         from onetrace_console.frame import fill_sealed, sealed_framing
+
         with sealed_framing():
-            page = viewer_render_executions(shown, generated_at, GENERATOR, file_name,
-                                            hrefs=None, of=len(runs) if of is None else of)
+            page = viewer_render_executions(
+                shown, generated_at, GENERATOR, file_name, hrefs=None, of=len(runs) if of is None else of
+            )
         total = len(runs) if of is None else of
         if every_stored:
-            page = _runs_stored(page, len(shown), total, RUNS_STORED.format(n=len(runs)),
-                                "runs-stored")
+            page = _runs_stored(page, len(shown), total, RUNS_STORED.format(n=len(runs)), "runs-stored")
             #: The watched folder, as on the Overview: on the list of every run only.
             from onetrace_console.render import watched_section
+
             watched = watched_section()
             if watched and "</header>" in page:
                 page = page.replace("</header>", "</header>" + watched, 1)
+            #: The run folders listed as locked (`run_lock`), with a local console's press.
+            locked = locked_section()
+            if locked and "</header>" in page:
+                page = page.replace("</header>", "</header>" + locked, 1)
             #: The index's search box, on the Runs page (`search_page`).
             from onetrace_console.search_page import box
+
             if "</header>" in page:
                 page = page.replace("</header>", f'</header><section data-section="runs-search">{box()}</section>', 1)
             #: The monitoring view's link, on a local console only, where the page is drawn (`verdicts`).
             from onetrace_console.frame import rendering_public
+
             if not rendering_public() and "</header>" in page:
                 from onetrace_console.verdicts import MONITOR, MONITOR_TITLE
-                page = page.replace("</header>", f'</header><p data-section="monitor-link"><a href="{MONITOR}">'
-                                    f"{MONITOR_TITLE}</a></p>", 1)
+
+                page = page.replace(
+                    "</header>",
+                    f'</header><p data-section="monitor-link"><a href="{MONITOR}">{MONITOR_TITLE}</a></p>',
+                    1,
+                )
         elif filtered:
-            page = _runs_stored(page, len(shown), total,
-                                runs_in_list(len(runs), total), "runs-in-list")
+            page = _runs_stored(page, len(shown), total, runs_in_list(len(runs), total), "runs-in-list")
     page = _plain_list_words(page, every_stored)
     #: F1: the console's own table of the runs it listed, those the viewer refused said below as
     #: before.
@@ -891,7 +1144,7 @@ def render_executions(runs: list[StoredRun], store: Store, *, generated_at: str,
         page = _without_runs_table(page)
     #: Sealed as the viewer seals its own list, AFTER the console's splices so the fingerprint
     #: covers them, under the page's own file name: the console never sealed these, and every
-    #: list printed 0000... as its fingerprint (the third confirmation review, NEW-3).
+    #: list printed 0000... as its fingerprint.
     from onetrace_console.viewer import fingerprint
-    return fingerprint.seal(fill_sealed(label(unshowable_runs_block(page, refused), runs),
-                                        file_name))
+
+    return fingerprint.seal(fill_sealed(label(unshowable_runs_block(page, refused), runs), file_name))

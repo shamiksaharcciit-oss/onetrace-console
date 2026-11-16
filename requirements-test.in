@@ -5,3 +5,7 @@ pytest-xdist==3.8.0
 # setuptools builds the console's own wheel inside the suite (tests/test_packaging.py), with no
 # network: the version that builds the vendored viewer wheel.
 setuptools==83.0.0
+# ruff (lint and format) and mypy run in the gate and in the private CI's Linux check: pyproject.toml holds their
+# configuration.
+ruff==0.17.4
+mypy==2.4.1

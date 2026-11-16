@@ -5,7 +5,7 @@ Standard library only:
 
 WHY scrypt, AND THESE PARAMETERS
 ------------------------------------
-`docs/design/signin-and-roles.md` (§2c) already grounded this choice: OWASP's Password
+The choice rests on OWASP's Password
 Storage Cheat Sheet (https://cheatsheetseries.owasp.org/cheatsheets/Password_Storage_Cheat_Sheet.html)
 recommends Argon2id first, with scrypt as the named fallback "when [Argon2id] is not
 available" -- true here, since Argon2id has no standard-library implementation and
@@ -28,25 +28,26 @@ strings is not provably constant-time the way `hmac.compare_digest` is documente
 and nothing about reading the source proves which one is really running without a test
 that would tell the two apart.
 """
+
 from __future__ import annotations
 
 import hashlib
-from onetrace_console.bounded_json import load_json_bounded
 import hmac
 import json
 import re
 import secrets
-import time
 import unicodedata
 from dataclasses import dataclass
+from datetime import UTC
 from pathlib import Path
 
+from onetrace_console.bounded_json import load_json_bounded
 from onetrace_console.store import _atomic_write
 
 #: OWASP Password Storage Cheat Sheet's first listed scrypt row: "N=2^17 (128 MiB), r=8
 #: (1024 bytes), p=1" -- equivalent security to the other rows it lists, trading memory
 #: for parallelism; this one needs no tuning for a host with many processors.
-SCRYPT_N = 2 ** 17
+SCRYPT_N = 2**17
 SCRYPT_R = 8
 SCRYPT_P = 1
 SCRYPT_DKLEN = 64
@@ -77,26 +78,60 @@ class Account:
     created_at: str
 
     def to_json(self) -> str:
-        return json.dumps(
-            {"username": self.username, "salt_hex": self.salt_hex, "hash_hex": self.hash_hex,
-             "n": self.n, "r": self.r, "p": self.p, "dklen": self.dklen,
-             "created_at": self.created_at},
-            sort_keys=True, indent=1) + "\n"
+        return (
+            json.dumps(
+                {
+                    "username": self.username,
+                    "salt_hex": self.salt_hex,
+                    "hash_hex": self.hash_hex,
+                    "n": self.n,
+                    "r": self.r,
+                    "p": self.p,
+                    "dklen": self.dklen,
+                    "created_at": self.created_at,
+                },
+                sort_keys=True,
+                indent=1,
+            )
+            + "\n"
+        )
 
     @staticmethod
-    def from_json(text: str) -> "Account":
+    def from_json(text: str) -> Account:
         d = load_json_bounded(text, "an account record")
         return Account(**d)
 
 
 def _scrypt(password: bytes, salt: bytes, *, n: int, r: int, p: int, dklen: int) -> bytes:
-    return hashlib.scrypt(password, salt=salt, n=n, r=r, p=p, maxmem=200 * 1024 * 1024,
-                          dklen=dklen)
+    return hashlib.scrypt(password, salt=salt, n=n, r=r, p=p, maxmem=200 * 1024 * 1024, dklen=dklen)
 
 
 def _now_iso() -> str:
-    from datetime import datetime, timezone
-    return datetime.now(timezone.utc).isoformat(timespec="seconds")
+    from datetime import datetime
+
+    return datetime.now(UTC).isoformat(timespec="seconds")
+
+
+#: How long `_write_time` waits, at most, for the wall clock to read past the time it wrote.
+CLOCK_WAIT_SECONDS = 1.0
+
+
+def _write_time(path: Path) -> int:
+    """Write the wall clock's time (time.time_ns()) to `path`, and return it once the clock reads past it.
+
+    A session made at or before that time is ended (`SessionStore.get`, `<=`), and an unlock clears the sign-in limit
+    once for each new time it writes (`rate_limit.clear_once`). On a clock whose tick is coarse (Windows'), a session
+    made just after the call, or a second unlock, could read the same time; waiting for the next tick before returning
+    keeps "made after" after. The wait is at most `CLOCK_WAIT_SECONDS`: a clock that does not move is not waited on
+    for ever."""
+    import time
+
+    now = time.time_ns()
+    _atomic_write(path, f"{now}\n".encode("ascii"))
+    deadline = time.monotonic() + CLOCK_WAIT_SECONDS
+    while time.time_ns() <= now and time.monotonic() < deadline:
+        time.sleep(0.001)
+    return now
 
 
 @dataclass
@@ -107,6 +142,7 @@ class AccountStore:
     content-addressed name cannot represent), so this is its own small store, not part
     of `onetrace_console.store.Store`.
     """
+
     root: Path
 
     def __post_init__(self) -> None:
@@ -123,7 +159,8 @@ class AccountStore:
         if not _USERNAME_RE.match(username):
             raise AccountError(
                 f"{username!r} is not a usable username: lowercase letters, digits, "
-                f"'_' or '-', starting with a letter, 2-64 characters.")
+                f"'_' or '-', starting with a letter, 2-64 characters."
+            )
         if self.exists(username):
             raise AccountError(f"an account named {username!r} already exists")
         #: Counted in CHARACTERS (Unicode code points), after
@@ -142,12 +179,20 @@ class AccountStore:
                 f"password is {len(normalized)} characters (after NFC "
                 f"normalization); a minimum of {MIN_PASSWORD_LENGTH} is required "
                 f"(OWASP Password Storage Cheat Sheet's own length "
-                f"recommendation). No other composition rule is enforced.")
+                f"recommendation). No other composition rule is enforced."
+            )
         salt = secrets.token_bytes(SALT_BYTES)
         digest = _scrypt(password, salt, n=SCRYPT_N, r=SCRYPT_R, p=SCRYPT_P, dklen=SCRYPT_DKLEN)
-        account = Account(username=username, salt_hex=salt.hex(), hash_hex=digest.hex(),
-                          n=SCRYPT_N, r=SCRYPT_R, p=SCRYPT_P, dklen=SCRYPT_DKLEN,
-                          created_at=_now_iso())
+        account = Account(
+            username=username,
+            salt_hex=salt.hex(),
+            hash_hex=digest.hex(),
+            n=SCRYPT_N,
+            r=SCRYPT_R,
+            p=SCRYPT_P,
+            dklen=SCRYPT_DKLEN,
+            created_at=_now_iso(),
+        )
         _atomic_write(self._path(username), account.to_json().encode("utf-8"))
         return account
 
@@ -166,12 +211,46 @@ class AccountStore:
         """
         account = self.get(username)
         if account is None:
-            _scrypt(password, b"\x00" * SALT_BYTES, n=SCRYPT_N, r=SCRYPT_R, p=SCRYPT_P,
-                   dklen=SCRYPT_DKLEN)
+            _scrypt(password, b"\x00" * SALT_BYTES, n=SCRYPT_N, r=SCRYPT_R, p=SCRYPT_P, dklen=SCRYPT_DKLEN)
             return False
-        computed = _scrypt(password, bytes.fromhex(account.salt_hex),
-                           n=account.n, r=account.r, p=account.p, dklen=account.dklen)
+        computed = _scrypt(
+            password, bytes.fromhex(account.salt_hex), n=account.n, r=account.r, p=account.p, dklen=account.dklen
+        )
         return hmac.compare_digest(computed, bytes.fromhex(account.hash_hex))
+
+    def end_sessions(self, username: str) -> int:
+        """End all of an account's sessions: `<root>/<username>.ended` holds this time
+        (time.time_ns()), and a running console's session made before it is gone at its next
+        request (`SessionStore.ended`). AccountError for an account that does not exist."""
+        if not _USERNAME_RE.match(username) or not self.exists(username):
+            raise AccountError(f"no account named {username!r}")
+        return _write_time(self.root / f"{username}.ended")
+
+    def sessions_ended_at(self, username: str) -> int | None:
+        """The time `end_sessions` last wrote for the account, or None."""
+        if not _USERNAME_RE.match(username):
+            return None
+        try:
+            return int((self.root / f"{username}.ended").read_text(encoding="ascii").strip())
+        except (OSError, ValueError):
+            return None
+
+    def unlock(self, username: str) -> int:
+        """Clear the account's sign-in ceiling: `<root>/<username>.unlocked` holds this time
+        (time.time_ns()), and a running console clears the account's ceiling at its next sign-in
+        attempt for it. AccountError for an account that does not exist."""
+        if not _USERNAME_RE.match(username) or not self.exists(username):
+            raise AccountError(f"no account named {username!r}")
+        return _write_time(self.root / f"{username}.unlocked")
+
+    def unlocked_at(self, username: str) -> int | None:
+        """The time `unlock` last wrote for the account, or None."""
+        if not _USERNAME_RE.match(username):
+            return None
+        try:
+            return int((self.root / f"{username}.unlocked").read_text(encoding="ascii").strip())
+        except (OSError, ValueError):
+            return None
 
     def any_exist(self) -> bool:
         return any(self.root.glob("*.json"))

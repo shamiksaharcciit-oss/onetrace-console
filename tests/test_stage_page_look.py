@@ -7,6 +7,7 @@ the receipt's trust class, word for word, and never a route the receipt doesn't 
 instrument line is the receipt's instrument, its configuration's fingerprint whole; and each tab
 opens an output the page carries. Each check has its sabotage.
 """
+
 from __future__ import annotations
 
 import json
@@ -25,6 +26,7 @@ def _text(html: str) -> str:
 def demo(shared_demo):
     from onetrace_console.store import Store
     from tests.test_checks import _require_installed
+
     _require_installed()
     folder = shared_demo["folder"]
     return Store(folder / "store" / "store"), folder / "store" / "pages", folder / "runs"
@@ -33,11 +35,13 @@ def demo(shared_demo):
 def _receipts(run, store) -> dict[str, dict]:
     """{manifest index: receipt}, read from the stored run."""
     from onetrace_console.stage_pages import _steps
+
     return {s["index"]: s["receipt"] for s in _steps(run, store)}
 
 
 def stage_problems(page: str, receipt: dict, run_id: str) -> list[str]:
     from onetrace_console.stage_pages import INPUT_COLUMNS, SHOWN
+
     out = []
     stage = receipt["stage"]["name"]
     if f'<a href="case.html"><span class="mono" data-words="record">{run_id}' not in page:
@@ -52,7 +56,8 @@ def stage_problems(page: str, receipt: dict, run_id: str) -> list[str]:
     if inputs:
         head = re.search(r'<table class="board" data-section="inputs-table"><thead><tr>(.*?)</tr>', page, re.S)
         if head is None or re.findall(r"<th>(.*?)</th>", head.group(1)) != [
-                c.replace("'", "&#x27;") for c in INPUT_COLUMNS]:
+            c.replace("'", "&#x27;") for c in INPUT_COLUMNS
+        ]:
             out.append("columns")
     for item in inputs:
         row = re.search(rf'<tr data-input="{re.escape(item["name"])}">(.*?)</tr>', page, re.S)
@@ -106,9 +111,11 @@ def test_the_demo_keeps_externally_sourced_inputs_only_as_its_builder_s_example_
     each such input's digest is one of the builder's own invented inputs. (The rule that a public
     console never shows such text otherwise is held in tests/test_kept_inputs.py and
     tests/test_demo_example_inputs.py; this holds the data beside it.)"""
-    from onetrace_console.demo_store import EXAMPLE_DATA, example_input_digests, runs as specs
+    from onetrace_console.demo_store import EXAMPLE_DATA, example_input_digests
+    from onetrace_console.demo_store import runs as specs
     from onetrace_console.kept_inputs import EXTERNALLY_SOURCED, external_kept, listed
     from onetrace_console.stage_pages import _steps
+
     store, _, _ = demo
     runs = store.runs()
     marked = {s.run_id or s.folder for s in specs() if s.pipeline in EXAMPLE_DATA}
@@ -127,19 +134,29 @@ def test_the_demo_keeps_externally_sourced_inputs_only_as_its_builder_s_example_
 def test_sabotage_a_stage_page_that_strays_from_its_receipt_is_named(demo, examined):
     store, pages, _ = demo
     run = store.runs()[0]
-    index, receipt = next((i, r) for i, r in _receipts(run, store).items()
-                          if any(not str(x.get("name", "")).startswith("receipt:")
-                                 for x in r.get("inputs") or []))
+    index, receipt = next(
+        (i, r)
+        for i, r in _receipts(run, store).items()
+        if any(not str(x.get("name", "")).startswith("receipt:") for x in r.get("inputs") or [])
+    )
     page = (pages / "runs" / run.key / f"stage-{index}.html").read_text(encoding="utf-8")
     item = next(x for x in receipt["inputs"] if not x["name"].startswith("receipt:"))
     row = re.search(rf'<tr data-input="{re.escape(item["name"])}">.*?</tr>', page, re.S).group(0)
-    routed = page.replace(row, row.replace(f"<span data-trust-class>{item['trust_class']}</span>",
-                                           "<span data-trust-class>load_docs · this run</span>", 1), 1)
+    routed = page.replace(
+        row,
+        row.replace(
+            f"<span data-trust-class>{item['trust_class']}</span>",
+            "<span data-trust-class>load_docs · this run</span>",
+            1,
+        ),
+        1,
+    )
     short = receipt["instrument"]["config_digest"]
     shortened = page.replace(short, short[:19] + "…", 1)
     amber = page.replace('<p data-section="banner" class="notice">', '<p data-section="banner">', 1)
-    tab = page.replace("</h1>", '</h1><nav class="tabs" aria-label="This stage&#x27;s outputs">'
-                       '<a href="#output-9">x</a></nav>', 1)
+    tab = page.replace(
+        "</h1>", '</h1><nav class="tabs" aria-label="This stage&#x27;s outputs"><a href="#output-9">x</a></nav>', 1
+    )
     examined(4, "planted pages")
     for planted in (routed, shortened, amber, tab):
         assert planted != page
@@ -153,6 +170,7 @@ def test_the_notice_is_neutral_by_the_one_colour_rule(examined):
     """The notice says what is shown; it is no state, so it takes no state's colour. The amber
     belongs to "couldn't check" (`tones.py`)."""
     from onetrace_console.frame import stylesheet
+
     css = stylesheet().decode("utf-8")
     rule = re.search(r"\.cp>\[data-section=banner\]\.notice\{([^}]*)\}", css)
     examined(1, "rule")
@@ -164,17 +182,30 @@ def test_a_stage_with_two_outputs_has_a_tab_for_each(tmp_path, examined):
     from onetrace.emit import Instrument, Recorder
 
     from tests.test_times_and_words import _console
+
     out = tmp_path / "runs" / "two"
     out.mkdir(parents=True)
-    rec = Recorder(str(out), run_id="two-outputs", declared_stages=["write"],
-                   manifest=Path(__file__), policy="fail-closed", anchor_reason="a test record")
-    rec.run_node("write", None, Instrument("writer", "tool", "1.0.0", {"k": "v"}),
-                 lambda ctx: (ctx.write("index.json", b'{"n": 2}', "application/json"),
-                              ctx.write("text.txt", b"two outputs", "text/plain"))[1])
+    rec = Recorder(
+        str(out),
+        run_id="two-outputs",
+        declared_stages=["write"],
+        manifest=Path(__file__),
+        policy="fail-closed",
+        anchor_reason="a test record",
+    )
+    rec.run_node(
+        "write",
+        None,
+        Instrument("writer", "tool", "1.0.0", {"k": "v"}),
+        lambda ctx: (
+            ctx.write("index.json", b'{"n": 2}', "application/json"),
+            ctx.write("text.txt", b"two outputs", "text/plain"),
+        )[1],
+    )
     rec.close()
     store, pages, _ = _console(tmp_path, tmp_path / "runs")
     run = store.runs()[0]
-    (index, receipt), = _receipts(run, store).items()
+    ((index, receipt),) = _receipts(run, store).items()
     page = (pages / "runs" / run.key / f"stage-{index}.html").read_text(encoding="utf-8")
     examined(1, "stage page with two outputs")
     assert len(receipt["outputs"]) == 2
@@ -186,6 +217,7 @@ def test_a_stage_with_two_outputs_has_a_tab_for_each(tmp_path, examined):
 def chunk_problems(page: str, chunks: list[dict] | None) -> list[str]:
     """The chunk view against the verified chunk list it comes from (None: the page must have none)."""
     from onetrace_console.stage_pages import CHUNKS_SHOWN
+
     has = 'data-chunks="index"' in page
     if chunks is None:
         return ["a chunk view on an output that is not a chunk list"] if has else []
@@ -196,8 +228,9 @@ def chunk_problems(page: str, chunks: list[dict] | None) -> list[str]:
     counts = _text(re.search(r"<p data-chunk-counts>(.*?)</p>", page).group(1))
     if counts != f"{len(chunks)} chunks · {docs} documents":
         out.append(f"counts {counts!r}")
-    shown = re.findall(r'<details data-chunk="([^"]+)"><summary[^>]*>.*?</summary><pre data-content="verified">(.*?)</pre>',
-                       page, re.S)
+    shown = re.findall(
+        r'<details data-chunk="([^"]+)"><summary[^>]*>.*?</summary><pre data-content="verified">(.*?)</pre>', page, re.S
+    )
     want = chunks[:CHUNKS_SHOWN]
     if [unescape(i) for i, _ in shown] != [c["id"] for c in want]:
         out.append("chunk ids not in the output's order")
@@ -214,6 +247,7 @@ def chunk_problems(page: str, chunks: list[dict] | None) -> list[str]:
 
 def test_only_the_chunk_list_gets_the_chunk_view(demo, examined):
     from onetrace_console.stage_pages import _artifact_path, _files, _read, _steps, _verified
+
     store, pages, _ = demo
     views = others = 0
     for run in store.runs():
@@ -234,6 +268,7 @@ def test_only_the_chunk_list_gets_the_chunk_view(demo, examined):
 
 def test_sabotage_a_wrong_chunk_view_is_named(demo, examined):
     from onetrace_console.stage_pages import _artifact_path, _files, _read, _steps
+
     store, pages, _ = demo
     run = next(r for r in store.runs() if r.run_id == "p1-01-baseline-set1")
     step = next(s for s in _steps(run, store) if s["receipt"]["stage"]["name"] == "split")

@@ -14,6 +14,7 @@ Verified and compared with onetrace's own commands -- the same ones this console
 through the console's own path: ingest, check, compare, the run pages, the Overview and the
 Diff page.
 """
+
 from __future__ import annotations
 
 import json
@@ -24,6 +25,7 @@ from html import unescape
 from pathlib import Path
 
 import pytest
+
 from tests.conftest import whole_folds
 
 REPO = Path(__file__).resolve().parent.parent
@@ -34,8 +36,7 @@ DAYS = {1: "2026-09-28T10:00:00Z", 2: "2026-09-29T10:00:00Z"}
 
 def _files(run: Path) -> list[str]:
     """Every file of a run, less the recorder's own lock file, which is not part of it."""
-    return sorted(p.relative_to(run).as_posix() for p in run.rglob("*")
-                  if p.is_file() and p.name != ".lock")
+    return sorted(p.relative_to(run).as_posix() for p in run.rglob("*") if p.is_file() and p.name != ".lock")
 
 
 def _receipts(run: Path) -> list[dict]:
@@ -51,9 +52,20 @@ def _stage(run: Path, name: str) -> dict:
 def regenerated(tmp_path_factory) -> Path:
     out = tmp_path_factory.mktemp("demo")
     for day, at in DAYS.items():
-        subprocess.run([sys.executable, "-B", str(DEMO / "demo.py"), str(out / f"day-{day}"),
-                        f"demo-run-{day}", str(day), "--at", at], check=True,
-                       capture_output=True)
+        subprocess.run(
+            [
+                sys.executable,
+                "-B",
+                str(DEMO / "demo.py"),
+                str(out / f"day-{day}"),
+                f"demo-run-{day}",
+                str(day),
+                "--at",
+                at,
+            ],
+            check=True,
+            capture_output=True,
+        )
     return out
 
 
@@ -66,11 +78,13 @@ COMMITTED_FORMAT = ("stage-receipt-chain/0.2", "stage-receipt/0.2")
 _DIGEST = re.compile(rb"[0-9a-f]{64}")
 
 
-#: The later formats the pinned SDK has recorded the demo in: 0.3, and since onetrace 0.7, 0.4.
-LATER = ("0.3", "0.4")
+#: The later formats the pinned SDK has recorded the demo in: 0.3; since onetrace 0.7, 0.4; since onetrace 0.8, 0.5.
+LATER = ("0.3", "0.4", "0.5")
 #: Format 0.4's close receipt (onetrace's `docs/format.md`, "The close receipt"): the chain's last
-#: entry, which every 0.4 receipt declares last. It is not a step.
+#: entry, which every 0.4 receipt declares last. It is not a step. Format 0.5 writes it as 0.4 does: measured, the
+#: demo's 0.5 bytes are its 0.4 bytes but for the format's minor and the digests that change.
 CLOSE = "onetrace.close"
+CLOSING = ("0.4", "0.5")
 
 
 def same_run_in_a_later_format(committed: bytes, made: bytes, closed_complete: bool = False) -> bool:
@@ -90,21 +104,29 @@ def same_run_in_a_later_format(committed: bytes, made: bytes, closed_complete: b
     fmt = b.get("format")
     if fmt in [f"stage-receipt-chain/{v}" for v in LATER] + [f"stage-receipt/{v}" for v in LATER]:
         b["format"] = fmt.rsplit("/", 1)[0] + "/0.2"
-    if fmt in ("stage-receipt-chain/0.4", "stage-receipt/0.4"):
+    if fmt in [f"stage-receipt-chain/{v}" for v in CLOSING] + [f"stage-receipt/{v}" for v in CLOSING]:
         chain = b.get("chain")
         if isinstance(chain, list) and chain and isinstance(chain[-1], dict) and chain[-1].get("stage") == CLOSE:
             b["chain"] = chain[:-1]
         coverage = b.get("coverage")
         if isinstance(coverage, dict) and (coverage.get("declared_stages") or [None])[-1] == CLOSE:
             coverage["declared_stages"] = coverage["declared_stages"][:-1]
-        if closed_complete and isinstance(coverage, dict) and coverage.get("completeness") == "incomplete" \
-                and ((a.get("coverage") or {}).get("completeness")) == "complete":
+        if (
+            closed_complete
+            and isinstance(coverage, dict)
+            and coverage.get("completeness") == "incomplete"
+            and ((a.get("coverage") or {}).get("completeness")) == "complete"
+        ):
             coverage["completeness"] = "complete"
         #: An earlier receipt read as an input is that receipt's bytes, which declare the close stage
         #: too: longer by exactly its entry in the list.
         for item in b.get("inputs") or []:
-            if isinstance(item, dict) and str(item.get("name", "")).startswith("receipt:") \
-                    and isinstance(item.get("bytes"), str) and item["bytes"].isdigit():
+            if (
+                isinstance(item, dict)
+                and str(item.get("name", "")).startswith("receipt:")
+                and isinstance(item.get("bytes"), str)
+                and item["bytes"].isdigit()
+            ):
                 item["bytes"] = str(int(item["bytes"]) - len(f',"{CLOSE}"'))
     if b.get("outputs_kept") == "all" and "outputs_kept" not in a:
         del b["outputs_kept"]
@@ -114,6 +136,7 @@ def same_run_in_a_later_format(committed: bytes, made: bytes, closed_complete: b
 def _close_receipt(run: Path) -> str | None:
     """The run's close receipt's file, where it is in format 0.4 and the chain's last entry."""
     from onetrace_console.viewer.record import is_close
+
     chain = json.loads((run / "MANIFEST.json").read_bytes()).get("chain") or []
     if not chain:
         return None
@@ -136,8 +159,10 @@ def test_the_committed_runs_are_what_the_script_produces(regenerated, examined):
         committed = [rel for rel in committed if rel not in signed]
         close = _close_receipt(regenerated / f"day-{day}")
         made = [rel for rel in made if rel != close]
-        closed_complete = close is not None and json.loads((regenerated / f"day-{day}" / close).read_bytes())[
-            "coverage"]["completeness"] == "complete"
+        closed_complete = (
+            close is not None
+            and json.loads((regenerated / f"day-{day}" / close).read_bytes())["coverage"]["completeness"] == "complete"
+        )
         assert committed == made, day
         assert json.loads((RUNS / f"day-{day}" / "MANIFEST.json").read_bytes())["format"] == COMMITTED_FORMAT[0]
         for rel in committed:
@@ -155,16 +180,16 @@ def test_sabotage_a_changed_value_in_a_regenerated_receipt_is_named(regenerated,
     examined(2, "planted receipts")
     assert same_run_in_a_later_format(x, y)
     assert not same_run_in_a_later_format(x, y.replace(b'"model"', b'"modeL"', 1))
-    assert not same_run_in_a_later_format(x, y.replace(b'"stage-receipt/0.4"', b'"stage-receipt/0.5"', 1)
-                                          .replace(b'"stage-receipt/0.3"', b'"stage-receipt/0.5"', 1))
+    later = re.search(rb'"stage-receipt/0\.[345]"', y).group(0)
+    assert not same_run_in_a_later_format(x, y.replace(later, b'"stage-receipt/0.6"', 1))
     #: In 0.4, only the close stage declared last is set aside: another stage declared is a difference;
     #: and a last step's `incomplete` reads as `complete` only where the close receipt reads so.
     last = "receipts/07-config-applied.json"
     lx, ly = (RUNS / "day-1" / last).read_bytes(), (regenerated / "day-1" / last).read_bytes()
-    if b'"stage-receipt/0.4"' in ly:
+    if re.search(rb'"stage-receipt/0\.[45]"', ly):
         assert same_run_in_a_later_format(lx, ly, closed_complete=True)
         assert not same_run_in_a_later_format(lx, ly, closed_complete=False)
-    if b'"stage-receipt/0.4"' in y:
+    if re.search(rb'"stage-receipt/0\.[45]"', y):
         assert not same_run_in_a_later_format(x, y.replace(b'"onetrace.close"]', b'"onetrace.closed"]', 1))
 
 
@@ -179,8 +204,12 @@ def test_the_model_reads_the_same_inputs_and_writes_a_different_value():
     assert _data(one) == _data(two) and len(_data(one)) == 3
     assert [i["name"] for i in one["inputs"]] == [i["name"] for i in two["inputs"]]
     assert [o["digest"] for o in one["outputs"]] != [o["digest"] for o in two["outputs"]]
-    values = [json.loads((RUNS / f"day-{d}" / "artifacts" / "05-model" / "model-output.json")
-                         .read_bytes())["action"]["changes"]["auth_env"] for d in DAYS]
+    values = [
+        json.loads((RUNS / f"day-{d}" / "artifacts" / "05-model" / "model-output.json").read_bytes())["action"][
+            "changes"
+        ]["auth_env"]
+        for d in DAYS
+    ]
     assert values == ["production", "staging"]
     assert one["instrument"]["rederivable"] == "false", "declared not re-runnable"
 
@@ -190,7 +219,8 @@ def test_the_runs_are_a_day_apart_and_the_record_says_the_demo_set_the_clock():
     assert [r["time"]["started"][:10] for r in firsts] == ["2026-09-28", "2026-09-29"]
     for r in firsts:
         assert r["assertions"]["constants"]["clock"] == (
-            "set by the demo; the times in this record were not read from a clock")
+            "set by the demo; the times in this record were not read from a clock"
+        )
 
 
 def test_there_are_no_authorization_records_anywhere_in_the_demo():
@@ -204,6 +234,7 @@ def test_there_are_no_authorization_records_anywhere_in_the_demo():
 def _verifier() -> str:
     """The pinned `onetrace-verify` this interpreter installed, as `checks.REPEAT_COMMAND` names it."""
     from tests.console_scripts import console_script
+
     found = console_script("onetrace-verify")
     if found is None:
         pytest.fail("onetrace-verify is not installed; see PINS.md")
@@ -221,17 +252,24 @@ def test_both_runs_verify(examined):
 
 def test_the_first_difference_is_the_model_stage_and_only_its_seed_differs(tmp_path):
     """`python -m onetrace diff`, as `compare.py` runs it."""
-    done = subprocess.run([sys.executable, "-m", "onetrace", "diff", str(RUNS / "day-1"),
-                           str(RUNS / "day-2"), "--out", str(tmp_path)], capture_output=True)
+    done = subprocess.run(
+        [sys.executable, "-m", "onetrace", "diff", str(RUNS / "day-1"), str(RUNS / "day-2"), "--out", str(tmp_path)],
+        capture_output=True,
+    )
     report = json.loads((tmp_path / "diff.json").read_bytes().decode("utf-8"))
     assert report["envelope"] == "diverged", done.stdout[-400:]
     #: A graph comparison: the SDK names a frontier, every node where the runs first differ.
     assert (report["shape"], report["mode"]) == ("dag", "two-run")
     assert report["first_difference_frontier"] == ["model"]
     assert [(r["node"], r["verdict"]) for r in report["ladder"]] == [
-        ("request", "same"), ("context", "same"), ("tests#1", "same"), ("tests#2", "same"),
-        ("model", "FIRST DIFFERENCE"), ("proposal", "downstream"),
-        ("config applied", "downstream")]
+        ("request", "same"),
+        ("context", "same"),
+        ("tests#1", "same"),
+        ("tests#2", "same"),
+        ("model", "FIRST DIFFERENCE"),
+        ("proposal", "downstream"),
+        ("config applied", "downstream"),
+    ]
     model = next(r for r in report["ladder"] if r["node"] == "model")
     #: Of the model's recorded settings, only the seed differs (and so the digest over them).
     settings = [a for a in model["annotations"] if not a.startswith("output ")]
@@ -240,18 +278,32 @@ def test_the_first_difference_is_the_model_stage_and_only_its_seed_differs(tmp_p
 
 
 def test_the_store_takes_exactly_the_listed_formats():
-    """Formats 0.3 and 0.4 added, and the store's lists are exactly these -- a format
+    """Formats 0.3, 0.4 and 0.5 added, and the store's lists are exactly these -- a format
     joins or leaves them only by changing this test."""
     from onetrace_console.ingest import MANIFEST_FORMATS, RECEIPT_FORMATS
-    assert MANIFEST_FORMATS == ("stage-receipt-chain/0.4", "stage-receipt-chain/0.3", "stage-receipt-chain/0.2",
-                                "stage-receipt-chain/0.1", "stage-receipt-chain/0.0-preview")
-    assert RECEIPT_FORMATS == ("stage-receipt/0.4", "stage-receipt/0.3", "stage-receipt/0.2", "stage-receipt/0.1",
-                               "stage-receipt/0.0-preview")
+
+    assert MANIFEST_FORMATS == (
+        "stage-receipt-chain/0.5",
+        "stage-receipt-chain/0.4",
+        "stage-receipt-chain/0.3",
+        "stage-receipt-chain/0.2",
+        "stage-receipt-chain/0.1",
+        "stage-receipt-chain/0.0-preview",
+    )
+    assert RECEIPT_FORMATS == (
+        "stage-receipt/0.5",
+        "stage-receipt/0.4",
+        "stage-receipt/0.3",
+        "stage-receipt/0.2",
+        "stage-receipt/0.1",
+        "stage-receipt/0.0-preview",
+    )
     fmt = json.loads((RUNS / "day-1" / "MANIFEST.json").read_bytes())["format"]
     assert fmt in MANIFEST_FORMATS, "the demo's own format is one the store implements"
 
 
 # ------------------------------------------------ through the console's own path
+
 
 def _delivery(folder: Path, extra: dict[str, bytes] | None = None) -> bytes:
     """A delivery as a sender makes it: the manifest, its chain, any files beside the chain,
@@ -261,13 +313,15 @@ def _delivery(folder: Path, extra: dict[str, bytes] | None = None) -> bytes:
     import tarfile
 
     from onetrace_console.ingest import SUMS_NAME
+
     manifest = json.loads((folder / "MANIFEST.json").read_bytes().decode("utf-8"))
     files = {"MANIFEST.json": (folder / "MANIFEST.json").read_bytes()}
     for entry in manifest["chain"]:
         files[entry["file"]] = (folder / entry["file"]).read_bytes()
     files.update(extra or {})
-    files[SUMS_NAME] = ("\n".join(f"{hashlib.sha256(b).hexdigest()}  {p}"
-                                   for p, b in files.items()) + "\n").encode("utf-8")
+    files[SUMS_NAME] = ("\n".join(f"{hashlib.sha256(b).hexdigest()}  {p}" for p, b in files.items()) + "\n").encode(
+        "utf-8"
+    )
     buf = io.BytesIO()
     with tarfile.open(fileobj=buf, mode="w") as tar:
         for path, blob in files.items():
@@ -280,19 +334,18 @@ def _delivery(folder: Path, extra: dict[str, bytes] | None = None) -> bytes:
 @pytest.fixture(scope="module")
 def loaded(tmp_path_factory):
     """Both runs delivered to a store, checked and compared, as the console does it."""
-    from dataclasses import replace
 
     from onetrace_console.checks import run_and_record
     from onetrace_console.compare import compare
     from onetrace_console.ingest import accept
     from onetrace_console.store import Store
     from tests.test_checks import FIXED_RAN_AT, _require_installed
+
     _require_installed()
     store = Store(tmp_path_factory.mktemp("demo-store") / "store")
     runs = []
     for day, at in DAYS.items():
-        accepted = accept(_delivery(RUNS / f"day-{day}"), store,
-                          received_at=at.replace("Z", "+00:00"))
+        accepted = accept(_delivery(RUNS / f"day-{day}"), store, received_at=at.replace("Z", "+00:00"))
         assert getattr(accepted, "run", None) is not None, getattr(accepted, "rows", accepted)
         runs.append(run_and_record(accepted.run, store, ran_at=FIXED_RAN_AT))
     comparison = compare(runs[0], runs[1], store, ran_at=FIXED_RAN_AT)
@@ -309,6 +362,7 @@ def test_the_console_ingests_and_checks_both_runs(loaded):
 
 def test_the_console_compares_them_to_the_model_stage(loaded):
     from onetrace_console.compare import DIFF
+
     store, _, comparison = loaded
     report = json.loads(store.get(dict(comparison.verb(DIFF).reports)["diff.json"]))
     assert report["first_difference_frontier"] == ["model"]
@@ -316,6 +370,7 @@ def test_the_console_compares_them_to_the_model_stage(loaded):
 
 def test_each_run_page_renders_with_its_ladder_and_no_records(loaded):
     from onetrace_console.pages import AUTHORIZATION, CASE, render_execution
+
     store, runs, _ = loaded
     for run in runs:
         pages = render_execution(run, store, generated_at="2026-09-29T12:00:00+00:00").pages
@@ -331,6 +386,7 @@ def test_each_run_page_renders_with_its_ladder_and_no_records(loaded):
 
 def test_the_overview_and_the_diff_page_show_it(loaded):
     from onetrace_console.render import COUNTS, HOME, render_all, render_diff
+
     store, _, comparison = loaded
     pages = render_all(store, generated_at="x")
     home = re.sub(r"\s+", " ", unescape(re.sub(r"<[^>]+>", " ", whole_folds(pages[HOME]))))
@@ -339,7 +395,9 @@ def test_the_overview_and_the_diff_page_show_it(loaded):
     assert "1 run of 2 — changed vs baseline" in counts
     assert "P1 · stage model · settings changed" in home
     assert "First difference · model" in home, "the recent runs name the frontier"
-    diff = re.sub(r"\s+", " ", unescape(re.sub(r"<[^>]+>", " ", whole_folds(render_diff(comparison, store, generated_at="x")))))
+    diff = re.sub(
+        r"\s+", " ", unescape(re.sub(r"<[^>]+>", " ", whole_folds(render_diff(comparison, store, generated_at="x"))))
+    )
     #: A graph pair: model's own setting is recorded as differing, so the page names it, by its
     #: node, and says nothing of it being not established.
     assert "model: seed differs." in diff
@@ -355,9 +413,9 @@ def test_files_beside_the_chain_are_accepted_kept_and_not_the_chain(tmp_path):
     from onetrace_console.ingest import accept, bundle
     from onetrace_console.store import Store
     from tests.test_checks import FIXED_RAN_AT, _require_installed
+
     _require_installed()
-    beside = {"anchors/1.json": b'{"placeholder":"anchor"}',
-              "signatures/1.json": b'{"placeholder":"signature"}'}
+    beside = {"anchors/1.json": b'{"placeholder":"anchor"}', "signatures/1.json": b'{"placeholder":"signature"}'}
     store = Store(tmp_path / "store")
     accepted = accept(_delivery(RUNS / "day-1", beside), store)
     assert getattr(accepted, "run", None) is not None, getattr(accepted, "rows", accepted)
@@ -372,6 +430,7 @@ def test_files_beside_the_chain_are_accepted_kept_and_not_the_chain(tmp_path):
     assert (run.stage_count, run.recorded_count) == (6, 7)
     import io
     import tarfile
+
     with tarfile.open(fileobj=io.BytesIO(bundle(run, store))) as tar:
         names = tar.getnames()
     assert all(p in names for p in beside), "the bundle hands them back"
@@ -390,6 +449,7 @@ def test_files_beside_the_chain_are_accepted_kept_and_not_the_chain(tmp_path):
     assert tail[0].startswith("anchors show this record existed"), tail
     assert tail[1].startswith("a signature does not show: "), tail
     from onetrace_console.pages import CASE, RUN_PROOF, render_execution
+
     drawn = render_execution(checked, store, generated_at="2026-10-06T12:00:00+00:00").pages
     #: The answer trail is on "Proof" for a run whose records don't hold up.
     case = drawn[CASE] + drawn[RUN_PROOF]
@@ -399,9 +459,15 @@ def test_files_beside_the_chain_are_accepted_kept_and_not_the_chain(tmp_path):
 # ------------------------------------------------------- item 5: the demo as a graph (board 2)
 
 #: Board 2's approved graph, over stage names.
-APPROVED = {("request", "context"), ("request", "tests"), ("request", "model"),
-            ("context", "model"), ("tests", "model"), ("model", "proposal"),
-            ("proposal", "config applied")}
+APPROVED = {
+    ("request", "context"),
+    ("request", "tests"),
+    ("request", "model"),
+    ("context", "model"),
+    ("tests", "model"),
+    ("model", "proposal"),
+    ("proposal", "config applied"),
+}
 
 
 def _manifest(run: Path) -> dict:
@@ -422,22 +488,30 @@ def test_each_run_records_board_2_s_graph_and_its_approved_plan(regenerated, exa
         assert len(m["declared_edges"]) == len(APPROVED)
         observed = [(e["from"], e["to"]) for e in m["edges"]]
         #: The request feeds both attempts of the tests stage; the model reads the one that ran.
-        assert observed == [("request", "context"), ("request", "tests#1"), ("request", "tests#2"),
-                            ("request", "model"), ("context", "model"), ("tests#2", "model"),
-                            ("model", "proposal"), ("proposal", "config applied")], day
+        assert observed == [
+            ("request", "context"),
+            ("request", "tests#1"),
+            ("request", "tests#2"),
+            ("request", "model"),
+            ("context", "model"),
+            ("tests#2", "model"),
+            ("model", "proposal"),
+            ("proposal", "config applied"),
+        ], day
         assert {(a.split("#")[0], b.split("#")[0]) for a, b in observed} == APPROVED, (
-            "every link is in the approved graph, and every approved link was used")
+            "every link is in the approved graph, and every approved link was used"
+        )
         examined(len(observed), f"{run.parent.name}/{day}'s recorded links")
 
 
 def test_the_tests_stage_s_failed_attempt_is_kept_and_says_the_demo_set_it(regenerated):
     for run in _both(regenerated):
-        receipts = {(r["stage"]["name"], r["stage"].get("instance")): r
-                    for r in _receipts(run)}
+        receipts = {(r["stage"]["name"], r["stage"].get("instance")): r for r in _receipts(run)}
         first, second = receipts[("tests", "1")], receipts[("tests", "2")]
         assert first["outcome"]["class"] == "error" and first["outcome"]["status"] == "TimeoutError"
-        assert first["outcome"]["body"] == ("set by the demo to show a retry: the first attempt "
-                                            "raises this instead of running; nothing timed out")
+        assert first["outcome"]["body"] == (
+            "set by the demo to show a retry: the first attempt raises this instead of running; nothing timed out"
+        )
         assert not first["outputs"], "the failed attempt wrote nothing"
         assert second["outcome"] == {"class": "ok"} and second["outputs"]
         model_reads = [i["name"] for i in receipts[("model", None)]["inputs"]]
@@ -446,6 +520,7 @@ def test_the_tests_stage_s_failed_attempt_is_kept_and_says_the_demo_set_it(regen
 
 def test_the_run_page_draws_the_graph_with_the_retry_folded_and_its_failure_shown(loaded):
     from onetrace_console.pages import CASE, render_execution
+
     store, runs, _ = loaded
     case = render_execution(runs[1], store, generated_at="2026-09-29T12:00:00+00:00").pages[CASE]
     graph = re.search(r'<section data-section="graph">.*?</section>', case, re.S).group(0)
@@ -458,6 +533,7 @@ def test_the_run_page_draws_the_graph_with_the_retry_folded_and_its_failure_show
 
 
 # ------------------------------------------- item 5's signing: a demo key, "test key (demo)"
+
 
 def test_both_runs_are_signed_by_the_demo_key_the_trust_file_names():
     """Each run's signature covers its own chain head, beside the chain,
@@ -481,12 +557,14 @@ def test_the_demo_trust_file_is_the_demos_only():
     says what such a key proves. The hosted demo's kept inputs (deploy/fly/kept/) carry that same
     file, byte for byte."""
     import subprocess
+
     from onetrace_console.demo_store import keys
-    tracked = subprocess.run(["git", "ls-files"], cwd=DEMO.parent.parent, capture_output=True,
-                             text=True, check=True).stdout.split()
+
+    tracked = subprocess.run(
+        ["git", "ls-files"], cwd=DEMO.parent.parent, capture_output=True, text=True, check=True
+    ).stdout.split()
     shipped, kept = "src/onetrace_console/demo_store/trust.json", "deploy/fly/kept/trust.json"
-    assert [p for p in tracked if p.endswith("trust.json")] == [kept, "examples/reference-demo/trust.json",
-                                                                shipped]
+    assert [p for p in tracked if p.endswith("trust.json")] == [kept, "examples/reference-demo/trust.json", shipped]
     assert (REPO / shipped).read_bytes() == keys.trust_file_bytes() == (REPO / kept).read_bytes()
     ((entry),) = json.loads((REPO / shipped).read_text(encoding="utf-8"))["keys"]
     assert entry["label"] == keys.TRUSTED_LABEL and "not who signed it" in entry["label"]
@@ -501,13 +579,16 @@ def test_the_console_reads_the_demo_signature_as_its_trust_file_says(tmp_path, w
     from onetrace_console.store import Store
     from tests.test_checks import FIXED_RAN_AT, _require_installed
     from tests.test_signed_run import _signed_rung
+
     _require_installed()
     store = Store(tmp_path / "store")
     sig = (RUNS / "day-1" / "signatures" / "1.json").read_bytes()
     run = accept(_delivery(RUNS / "day-1", {"signatures/1.json": sig}), store).run
-    run = run_and_record(run, store, ran_at=FIXED_RAN_AT,
-                         trust_file=str(DEMO / "trust.json") if with_trust else None)
+    run = run_and_record(run, store, ran_at=FIXED_RAN_AT, trust_file=str(DEMO / "trust.json") if with_trust else None)
     key_id = json.loads(sig)["key_id"]
-    expected = (("yes", f"Yes · test key (demo) · {key_id}") if with_trust
-                else ("signed-untrusted", f"Signed, key not trusted · {key_id}"))
+    expected = (
+        ("yes", f"Yes · test key (demo) · {key_id}")
+        if with_trust
+        else ("signed-untrusted", f"Signed, key not trusted · {key_id}")
+    )
     assert _signed_rung(run, store) == expected

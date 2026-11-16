@@ -12,6 +12,7 @@ it is never compared at all. A run that is loaded and whose check could not be d
 said NOT VERIFIED) is stored with that reading, as the check runner stores it; that is the side
 these tests compare.
 """
+
 from __future__ import annotations
 
 import html
@@ -40,6 +41,7 @@ def _load(tmp_path: Path, names: dict[str, str]):
     from onetrace_console.folder_load import load_folder
     from onetrace_console.store import Store
     from tests.test_checks import _require_installed
+
     _require_installed()
     folder = tmp_path / "runs"
     folder.mkdir()
@@ -53,19 +55,23 @@ def _load(tmp_path: Path, names: dict[str, str]):
 def _not_verified(run, store):
     """The run as the check runner stores a check that said NOT VERIFIED: couldn't check."""
     from onetrace_console.checks import COULD_NOT_CHECK
-    out = replace(run, check_verdict=COULD_NOT_CHECK, check_exit="2", agree="couldnt-check",
-                  agree_why="", check_note=NOT_VERIFIED)
+
+    out = replace(
+        run, check_verdict=COULD_NOT_CHECK, check_exit="2", agree="couldnt-check", agree_why="", check_note=NOT_VERIFIED
+    )
     store.put_run(out)
     return out
 
 
 def _compared(store, a, b):
     from onetrace_console.compare import compare
+
     return compare(a, b, store, ran_at=GENERATED_AT)
 
 
 def _diff_page(comparison, store) -> str:
     from onetrace_console.render import render_diff
+
     return render_diff(comparison, store, generated_at=GENERATED_AT)
 
 
@@ -95,6 +101,7 @@ def test_an_unchecked_candidate_is_never_same_on_any_page(tmp_path, examined):
     from onetrace_console.overview import vs_baseline
     from onetrace_console.pages import CASE, RUN_PROOF, render_execution
     from onetrace_console.textdiff_page import render_text_diff_page
+
     _folder, store, runs = _load(tmp_path, {"day-1": "day-1", "day-1-copy": "day-1"})
     a, b = runs["day-1"], runs["day-1-copy"]
     assert a.key != b.key
@@ -116,6 +123,7 @@ def test_an_unchecked_candidate_is_never_same_on_any_page(tmp_path, examined):
 
 def test_the_start_up_list_says_couldnt_check_for_that_side(tmp_path, examined):
     from onetrace_console.folder_load import Loaded, LoadedRun, announce
+
     folder, store, runs = _load(tmp_path, {"day-1": "day-1", "day-2": "day-2"})
     b = _not_verified(runs["day-2"], store)
     comparison = _compared(store, runs["day-1"], b)
@@ -130,6 +138,7 @@ def _rechained(run_dir: Path, receipt_format: str) -> None:
     """Every receipt given `receipt_format`, and the chain made consistent again: each receipt's
     `prev`, each `receipt:` input's digest and size, the manifest's entries and its chain head."""
     import onetrace.canonical as canonical
+
     m = json.loads((run_dir / "MANIFEST.json").read_bytes())
     prev, digests, sizes = None, {}, {}
     for entry in m["chain"]:
@@ -137,7 +146,7 @@ def _rechained(run_dir: Path, receipt_format: str) -> None:
         r = json.loads(f.read_bytes())
         r["format"], r["prev"] = receipt_format, prev
         for i in r.get("inputs", []):
-            stage = i["name"][len("receipt:"):]
+            stage = i["name"][len("receipt:") :]
             if i["name"].startswith("receipt:") and stage in digests:
                 i["digest"], i["bytes"] = digests[stage], str(sizes[stage])
         data = canonical.canonicalize(r)
@@ -148,8 +157,7 @@ def _rechained(run_dir: Path, receipt_format: str) -> None:
     (run_dir / "MANIFEST.json").write_bytes(canonical.canonicalize(m))
 
 
-def test_a_run_the_check_could_not_check_is_one_the_verbs_could_not_check_and_no_verdict_is_shown(
-        tmp_path, examined):
+def test_a_run_the_check_could_not_check_is_one_the_verbs_could_not_check_and_no_verdict_is_shown(tmp_path, examined):
     """Not the stand-in: a run whose check really said NOT VERIFIED. Its receipts carry the preview
     format inside a chain of the current one (re-chained, its signature taken out, so nothing else
     fails), which is loaded and stored as couldn't check. The SDK's verbs then answer "could not
@@ -160,6 +168,7 @@ def test_a_run_the_check_could_not_check_is_one_the_verbs_could_not_check_and_no
     from onetrace_console.folder_load import load_folder
     from onetrace_console.store import Store
     from tests.test_checks import _require_installed
+
     _require_installed()
     folder = tmp_path / "runs"
     folder.mkdir()
@@ -189,6 +198,7 @@ def test_a_run_whose_receipts_carry_an_unimplemented_major_format_is_never_compa
     from onetrace_console.folder_load import announce, load_folder
     from onetrace_console.store import Store
     from tests.test_checks import _require_installed
+
     _require_installed()
     folder = tmp_path / "runs"
     folder.mkdir()

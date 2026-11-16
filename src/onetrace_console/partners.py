@@ -4,7 +4,7 @@
     automatic partner-finding. The Execution page may list candidate partners, but only runs
     that share a declared identity field with this run. Label each by the fields they share,
     **never by a similarity score**. If no declared field exists to match on, show no
-    candidates, and write that into DESIGN_GAPS.md.
+    candidates, and say so.
 
 WHAT A CANDIDATE IS, AND WHAT IT IS NOT
 --------------------------------------
@@ -22,18 +22,19 @@ something this console inferred, counted or derived. `received_at` is deliberate
 two runs arriving close together share nothing about themselves, and time-proximity is the
 first thing that turns into a similarity score when nobody is watching.
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass
 
-from onetrace_console.store import StoredRun, Store
+from onetrace_console.store import Store, StoredRun
 
 #: The declared identity fields a candidate may be matched on, and the label each carries.
 #:
 #: `run_id` is the name the emitter gave the run. `declared_stages` is the stage list the
 #: manifest declares. Both are written by the emitter and read here unchanged. The stored
 #: `pipeline` field, a digest of the manifest, is not among them: it is left unread in
-#: release 1 (BACKLOG.md R2-1), and calling a manifest digest "the same
+#: release 1, and calling a manifest digest "the same
 #: declared pipeline" named something the record does not declare.
 MATCHABLE: dict[str, str] = {
     "run_id": "the same run name",
@@ -44,12 +45,14 @@ MATCHABLE: dict[str, str] = {
 #: sentence, never a blank, and never a list of runs that share nothing.
 NO_DECLARED_FIELD = (
     "No other stored run declares a field this one declares, so there is nothing to offer "
-    "as a candidate. Choose a partner by run id.")
+    "as a candidate. Choose a partner by run id."
+)
 
 
 @dataclass(frozen=True, slots=True)
 class Candidate:
     """A run that shares at least one declared field, and the fields it shares."""
+
     run: StoredRun
     shared: tuple[str, ...]
 
@@ -64,6 +67,7 @@ def _value(run: StoredRun, field: str):
         #: All of them, by their digest beside the names kept: a run keeps the first LIST_CAP
         #: names only, and two runs sharing those need not declare the same stages.
         from onetrace_console.overview import declared_list
+
         return declared_list(run) if run.declared_stages else ()
     value = getattr(run, field, None)
     if isinstance(value, (list, tuple)):

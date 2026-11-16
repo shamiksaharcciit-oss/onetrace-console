@@ -12,6 +12,7 @@ Held with the demo's P7 pair (one logger reading changed) and three P7 runs reco
 pair recorded here with its frame not kept: the demo's P6 keeps its frame since console 0.7.0, so the
 input not kept is recorded here as P6 recorded it before, its keeping turned off.
 """
+
 from __future__ import annotations
 
 import hashlib
@@ -29,7 +30,9 @@ def _unkept_p6_page(root, monkeypatch) -> str:
     """The comparison page of a P6 pair whose frame differs (full, then below the reject line), each
     recorded here with its step's keeping turned off: the frame is recorded by its digest alone."""
     from onetrace.emit import StageContext
+
     from onetrace_console.demo_store import fill_inspection
+
     monkeypatch.setattr(StageContext, "keep_input", lambda self, name, data: None)
     runs = root / "runs"
     for name, frame in (("a", "full"), ("b", "low")):
@@ -67,17 +70,22 @@ def card_problems(page: str, name: str, old: str, new: str, linked: bool) -> lis
     for words in ("not established", "No recorded cause", "caused", "because"):
         if words in said:
             out.append(f"the card says {words!r}")
-    if "no recorded cause" in said.lower():
+    if "nothing recorded differs at" in said.lower():
         out.append("the card says the SDK's no-recorded-cause sentence")
     return out
 
 
 def test_the_p7_card_names_the_changed_logger_first(demo, examined):  # noqa: F811
     from onetrace_console.demo_store import cold_chain
+
     page = _page(demo, *P7)
     examined(1, "comparison page")
-    assert card_problems(page, "logger", _short(cold_chain.logger_bytes(False)),
-                         _short(cold_chain.logger_bytes(True)), linked=True) == []
+    assert (
+        card_problems(
+            page, "logger", _short(cold_chain.logger_bytes(False)), _short(cold_chain.logger_bytes(True)), linked=True
+        )
+        == []
+    )
 
 
 def test_the_p7_kept_logger_is_a_line_diff_with_real_line_breaks(demo, examined):  # noqa: F811
@@ -102,6 +110,7 @@ def _three_p7_runs(root):
     """A baseline, a candidate with the changed logger, and a third run recorded with the
     candidate's logger."""
     from onetrace_console.demo_store import cold_chain
+
     runs = root / "runs"
     for name, changed in (("a", False), ("b", True), ("c", True)):
         cold_chain.main(runs / name, f"cc-{name}", changed)
@@ -110,6 +119,7 @@ def _three_p7_runs(root):
 
 def test_the_lookup_finds_a_third_run_with_the_same_input_digest(tmp_path, examined):
     from onetrace_console.demo_store import cold_chain
+
     _store, pages, loaded = _console(tmp_path, _three_p7_runs(tmp_path), compare=("a", "b"))
     page = (pages / "diff" / f"{loaded.comparison.key}.html").read_text(encoding="utf-8")
     examined(1, "comparison page")
@@ -118,24 +128,33 @@ def test_the_lookup_finds_a_third_run_with_the_same_input_digest(tmp_path, exami
     assert "the same input logger digest" in said, said
     assert re.findall(r'<li data-run="[^"]*">', panel) and "cc-c" in said and "cc-a" not in said, said
     assert "2 of 3 stored runs" in said, said
-    assert card_problems(page, "logger", _short(cold_chain.logger_bytes(False)),
-                         _short(cold_chain.logger_bytes(True)), linked=True) == []
+    assert (
+        card_problems(
+            page, "logger", _short(cold_chain.logger_bytes(False)), _short(cold_chain.logger_bytes(True)), linked=True
+        )
+        == []
+    )
 
 
 # ------------------------------------------------------------------ sabotages
 
+
 def test_sabotage_each_card_fault_is_named(demo, examined):  # noqa: F811
     from onetrace_console.demo_store import cold_chain
+
     page = _page(demo, *P7)
     old, new = _short(cold_chain.logger_bytes(False)), _short(cold_chain.logger_bytes(True))
     line = re.search(r"<p data-input-changed>.*?</p>", page).group(0)
     planted = {
-        "not first": page.replace(line, "", 1).replace('</div><div data-part="what">',
-                                                        '</div><div data-part="what"><p>x</p>' + line, 1),
+        "not first": page.replace(line, "", 1).replace(
+            '</div><div data-part="what">', '</div><div data-part="what"><p>x</p>' + line, 1
+        ),
         "no link": page.replace('data-link="changed-lines"', "", 1),
-        "not established": page.replace("<pre data-section=\"headline-command\">",
-                                        "<p>Why it differs is not established by this evidence.</p>"
-                                        "<pre data-section=\"headline-command\">", 1),
+        "not established": page.replace(
+            '<pre data-section="headline-command">',
+            '<p>Why it differs is not established by this evidence.</p><pre data-section="headline-command">',
+            1,
+        ),
         "a cause": page.replace(line, line.replace("changed:", "caused it:"), 1),
     }
     examined(len(planted), "planted pages")
@@ -145,8 +164,10 @@ def test_sabotage_each_card_fault_is_named(demo, examined):  # noqa: F811
 
 def test_an_input_not_kept_is_named_first_with_no_link(tmp_path, monkeypatch, examined):
     from onetrace_console.demo_store import fill_inspection
+
     page = _unkept_p6_page(tmp_path, monkeypatch)
     examined(1, "comparison page")
-    old, new = (_short(json.dumps(fill_inspection.frame_bytes(f).decode("utf-8")).encode("utf-8"))
-                for f in ("full", "low"))
+    old, new = (
+        _short(json.dumps(fill_inspection.frame_bytes(f).decode("utf-8")).encode("utf-8")) for f in ("full", "low")
+    )
     assert card_problems(page, "frame.json", old, new, linked=False) == []

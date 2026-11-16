@@ -12,9 +12,9 @@ The run is written here by the installed onetrace: `prep` keeps `question` and n
 `receipt:prep`, not kept), and writes a model-call record naming the test's tokenizer and
 a steps file. Test data, written for these tests; no model is called and nothing is downloaded.
 """
+
 from __future__ import annotations
 
-import hashlib
 import html
 import re
 from pathlib import Path
@@ -33,19 +33,29 @@ def _record_run(folder: Path, tokenizer_digest: str) -> Path:
     import onetrace as ot
     from onetrace import model_call as m
     from onetrace.emit import Instrument, current_stage
+
     from tests.test_model_call import raw, record
 
-    @ot.stage("prep", instrument=Instrument("tool", "tool", "1.0.0", {}), keep_inputs=["question"],
-              trust="operator-authored")
+    @ot.stage(
+        "prep", instrument=Instrument("tool", "tool", "1.0.0", {}), keep_inputs=["question"], trust="operator-authored"
+    )
     def prep(question, note):
         return "Q: " + question
 
-    @ot.stage("call", instrument=Instrument("example-model", "model", "1.0.0", {}), keep_inputs=["system"],
-              trust="operator-authored")
+    @ot.stage(
+        "call",
+        instrument=Instrument("example-model", "model", "1.0.0", {}),
+        keep_inputs=["system"],
+        trust="operator-authored",
+    )
     def call(prompt, system, extra):
         digest, name = m.write_steps(current_stage(), "model_call.json", {"token_ids": IDS, "level": "L1"})
-        rec = record(**{"tokenizer.digest": m.observed(tokenizer_digest, "written for this test"),
-                        "steps": m.observed(digest, name)})
+        rec = record(
+            **{
+                "tokenizer.digest": m.observed(tokenizer_digest, "written for this test"),
+                "steps": m.observed(digest, name),
+            }
+        )
         current_stage().write("model_call.json", raw(rec), "application/json")
         return "answered"
 
@@ -63,6 +73,7 @@ def page(tmp_path, store):
     from onetrace_console.pages import render_execution
     from tests.test_checks import _require_installed
     from tests.test_stage_pages import _stored
+
     _require_installed()
     files = {"tokenizer.json": _tokenizer_json()}
     folder = _folder(tmp_path, files)
@@ -75,8 +86,11 @@ def page(tmp_path, store):
 def _rows(page: str) -> dict[str, tuple[str, str]]:
     """{word, stripped: (data-appears state, the cell's text)} for each decoded step."""
     out = {}
-    for word, state, cell in re.findall(r'<code class="token-text">([^<]*)</code></td><td[^>]*data-appears="(\w+)"'
-                                        r'[^>]*>([^<]*)</td>', page):
+    for word, state, cell in re.findall(
+        r'<code class="token-text">([^<]*)</code></td><td[^>]*data-appears="(\w+)"'
+        r"[^>]*>([^<]*)</td>",
+        page,
+    ):
         out[html.unescape(word).strip()] = (state, html.unescape(cell))
     return out
 
@@ -97,13 +111,18 @@ def test_a_word_no_kept_input_holds_says_so_and_names_what_was_not_kept(page, ex
     assert cell.startswith("appears in no kept input · not kept, not searched: ")
     for name in ("receipt:prep (call)", "extra (call)", "note (prep)"):
         assert name in cell, "an input that was not kept is named, never read as searched"
-    assert "mat" in NOTE and "mat" in EXTRA, "the word is in inputs that were not kept, and the page does not claim otherwise"
+    assert "mat" in NOTE and "mat" in EXTRA, (
+        "the word is in inputs that were not kept, and the page does not claim otherwise"
+    )
 
 
 def test_the_page_says_what_was_searched_and_that_it_is_a_string_match(page, examined):
     said = _text(page)
     examined(1, "search note")
-    assert "Each word is searched for, as a literal string, in the kept inputs of this step and of the steps it came from" in said
+    assert (
+        "Each word is searched for, as a literal string, in the kept inputs of this step and of the steps it came from"
+        in said
+    )
     assert "A string match says nothing about meaning." in said
     assert "Searched: system (call), question (prep)." in said
     assert re.search(r"not kept, not searched: [^<]*extra \(call\)", said)

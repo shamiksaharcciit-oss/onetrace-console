@@ -11,6 +11,7 @@ Checked here:
    carry their state's tone;
 4. sabotage: "Not anchored" drawn red is named.
 """
+
 from __future__ import annotations
 
 import re
@@ -21,23 +22,44 @@ from onetrace_console import tones
 
 #: The rule, applied by hand to each state the console can show.
 BY_THE_RULE = {
-    "RUNG": {"yes": "held", "no": "failed",
-             "couldnt-check": "not-done", "does-not-verify": "not-done", "not-checked": "not-done",
-             "no-verdict": "not-done", "signed-untrusted": "not-done",
-             "unsigned": "not-made", "not-anchored": "not-made", "not-declared": "not-made",
-             "not-a-graph-run": "not-made", "no-records": "not-made", "not-yet-available": "not-made",
-             "not-reached": "declined"},
-    "ATTENTION": {"contradicts": "failed", "missing-stage": "failed", "couldnt-check": "not-done",
-                  "not-checked": "not-done", "no-verdict": "not-done", "last-attempt-failed": "not-done",
-                  "stopped-at-a-step": "declined", "changed": "not-made"},
-    "BASELINE": {"same": "held", "changed": "not-made", "couldnt-check": "not-done",
-                 "not-compared": "not-made"},
+    "RUNG": {
+        "yes": "held",
+        "no": "failed",
+        "couldnt-check": "not-done",
+        "does-not-verify": "not-done",
+        "not-checked": "not-done",
+        "no-verdict": "not-done",
+        "signed-untrusted": "not-done",
+        "unsigned": "not-made",
+        "not-anchored": "not-made",
+        "not-declared": "not-made",
+        "not-a-graph-run": "not-made",
+        "no-records": "not-made",
+        "not-yet-available": "not-made",
+        "not-reached": "declined",
+    },
+    "ATTENTION": {
+        "contradicts": "failed",
+        "missing-stage": "failed",
+        "couldnt-check": "not-done",
+        "not-checked": "not-done",
+        "no-verdict": "not-done",
+        "last-attempt-failed": "not-done",
+        "stopped-at-a-step": "declined",
+        "changed": "not-made",
+    },
+    "BASELINE": {"same": "held", "changed": "not-made", "couldnt-check": "not-done", "not-compared": "not-made"},
     #: A run stopped by a step's own rule: its own kind, the declined outline, never red.
     "STOPPED": {"declined": "declined"},
     #: A comparison's findings, never a check's result: the first difference amber filled, a step
     #: changed after it amber outlined, a step the same green.
-    "DIFF": {"same": "held", "reconverged": "held", "FIRST DIFFERENCE": "first-difference",
-             "downstream": "changed-after", "COULD NOT CHECK": "not-done"},
+    "DIFF": {
+        "same": "held",
+        "reconverged": "held",
+        "FIRST DIFFERENCE": "first-difference",
+        "downstream": "changed-after",
+        "COULD NOT CHECK": "not-done",
+    },
 }
 
 
@@ -45,14 +67,22 @@ BY_THE_RULE = {
 def test_every_state_is_the_kind_the_rule_makes_it(table, examined):
     examined(len(BY_THE_RULE[table]), f"{table} states")
     assert getattr(tones, table) == BY_THE_RULE[table]
-    assert tones.TONE == {"held": "ok", "failed": "bad", "not-done": "cc", "not-made": "neu",
-                          "declined": "dec", "first-difference": "fd", "changed-after": "ca"}
+    assert tones.TONE == {
+        "held": "ok",
+        "failed": "bad",
+        "not-done": "cc",
+        "not-made": "neu",
+        "declined": "dec",
+        "first-difference": "fd",
+        "changed-after": "ca",
+    }
     assert tones.tone(tones.STOPPED, "declined") != tones.TONE[tones.FAILED], "a decline is never red"
 
 
 @pytest.fixture(scope="module")
 def pages(shared_demo) -> dict[str, str]:
     from tests.test_checks import _require_installed
+
     _require_installed()
     folder = shared_demo["folder"]
     root = folder / "store" / "pages"
@@ -60,8 +90,9 @@ def pages(shared_demo) -> dict[str, str]:
 
 
 def test_every_state_the_demo_shows_is_placed_by_the_rule(pages, examined):
-    shown = {s for page in pages.values()
-             for s in re.findall(r'<tr data-(?:rung|badge)="[^"]*" data-state="([^"]*)">', page)}
+    shown = {
+        s for page in pages.values() for s in re.findall(r'<tr data-(?:rung|badge)="[^"]*" data-state="([^"]*)">', page)
+    }
     examined(len(shown), "rung and badge states shown")
     assert shown - set(tones.RUNG) == set(), "a state no rule places"
     assert {"yes", "no", "not-anchored", "unsigned", "signed-untrusted", "not-checked"} <= shown
@@ -83,18 +114,23 @@ def _drawn(css: str) -> dict[str, set[str]]:
 
 def tone_problems(css: str) -> list[str]:
     drawn = _drawn(css)
-    return [f"{state} is drawn {sorted(drawn.get(state, set()))}, not {tones.tone(tones.RUNG, state)}"
-            for state in tones.RUNG if drawn.get(state) != {tones.tone(tones.RUNG, state)}]
+    return [
+        f"{state} is drawn {sorted(drawn.get(state, set()))}, not {tones.tone(tones.RUNG, state)}"
+        for state in tones.RUNG
+        if drawn.get(state) != {tones.tone(tones.RUNG, state)}
+    ]
 
 
 def test_the_stylesheet_draws_each_state_in_its_tone(examined):
     from onetrace_console.frame import stylesheet
+
     examined(len(tones.RUNG), "rung and badge states")
     assert tone_problems(stylesheet().decode("utf-8")) == []
 
 
 def test_the_overviews_pills_carry_their_states_tone(pages, examined):
     from onetrace_console.overview import ATTENTION_WORDS
+
     home = pages["home.html"]
     items = re.findall(r'<li data-attention="([^"]+)"><span><span class="pill (\w+)">([^<]*)</span>', home)
     examined(len(items), "needs-attention pills")
@@ -105,10 +141,12 @@ def test_the_overviews_pills_carry_their_states_tone(pages, examined):
 
 def test_sabotage_not_anchored_drawn_red_is_named(examined):
     from onetrace_console.frame import stylesheet
+
     examined(1, "planted rule")
     planted = stylesheet().decode("utf-8") + (
         ".shell .page tr[data-rung][data-state=not-anchored]>td:last-child>span:first-child"
-        "{background:var(--bad-bg);color:var(--bad-ink)}")
+        "{background:var(--bad-bg);color:var(--bad-ink)}"
+    )
     assert any(p.startswith("not-anchored is drawn") for p in tone_problems(planted))
 
 

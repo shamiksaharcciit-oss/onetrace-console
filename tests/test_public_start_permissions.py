@@ -11,6 +11,7 @@ Both run here as the image runs: the demo copied, owned by root, given the Docke
 permission step, and the check run by `nobody` in a child process. Root only (the serving user is
 another user), and not on Windows, where the image does not run.
 """
+
 from __future__ import annotations
 
 import os
@@ -26,8 +27,11 @@ from tests.test_public_mode import _clean_env, built  # noqa: F401
 REPO = Path(__file__).resolve().parent.parent
 NOBODY = 65534
 
-pytestmark = pytest.mark.skipif(os.name == "nt" or getattr(os, "geteuid", lambda: 1)() != 0,
-                                reason="the image's serving user is another user: needs root, not Windows")
+pytestmark = pytest.mark.skipif(
+    os.name == "nt" or getattr(os, "geteuid", lambda: 1)() != 0,
+    reason="the image's serving user is another user: needs root, not Windows",
+)
+
 
 def _image_permissions(folder: Path) -> None:
     """As the image: owned by root, then the Dockerfile's own chmod over the demo folder."""
@@ -44,18 +48,25 @@ def _check_as_nobody(folder: str, packaged: bytes, conn) -> None:
     traceback."""
     import json
     import traceback
+
     code, out, err = 0, "", ""
     try:
         import importlib.readers  # noqa: F401  (the packaged trust file is read through it)
+
         import onetrace_console.demo_store  # noqa: F401
         import onetrace_console.neighbours  # noqa: F401  (the check refuses a store holding its folder)
-        import onetrace_console.serve  # noqa: F401
         import onetrace_console.public as public
+        import onetrace_console.serve  # noqa: F401
         from onetrace_console.config import Config
         from onetrace_console.public import start_refusal
+
         public.demo_trust_bytes = lambda: packaged
-        config = Config(public=True, store_root=str(Path(folder) / "store"),
-                        trust_file=str(Path(folder) / "trust.json"), sign_in={"enabled": False})
+        config = Config(
+            public=True,
+            store_root=str(Path(folder) / "store"),
+            trust_file=str(Path(folder) / "trust.json"),
+            sign_in={"enabled": False},
+        )
         os.setgid(NOBODY)
         os.setuid(NOBODY)
         refused = start_refusal(config, Path(folder) / "store")
@@ -72,7 +83,9 @@ def _as_nobody(folder: Path) -> tuple[int, str, str]:
     such a process is what Python warns of. The child drops to `nobody` itself (`_check_as_nobody`)."""
     import json
     import multiprocessing
+
     import onetrace_console.public as public
+
     #: The packaged trust file, read now: the check compares the demo's with it, and this checkout
     #: may sit where `nobody` can't read (under root's home); the image's code is under /app,
     #: readable by every user. Read once here, handed to the child.
@@ -94,6 +107,7 @@ def _as_nobody(folder: Path) -> tuple[int, str, str]:
 def imaged(built, tmp_path_factory):  # noqa: F811
     """A copy of the built demo under /tmp (which `nobody` can reach), with the image's permissions."""
     import tempfile
+
     work = Path(tempfile.mkdtemp(prefix="onetrace-image-perm-", dir="/tmp"))
     os.chmod(work, 0o755)
     folder = work / "demo"
@@ -106,7 +120,7 @@ def imaged(built, tmp_path_factory):  # noqa: F811
 
 def test_the_serving_user_can_check_the_demo_as_the_image_leaves_it(imaged, examined):
     """The SDK's owner-only files, after the image's permission step, read by the serving user."""
-    manifest = next(imaged.glob("runs/*/MANIFEST.json"))
+    manifest = sorted(imaged.glob("runs/*/MANIFEST.json"))[0]
     examined(1, "start check as nobody")
     assert manifest.stat().st_mode & 0o004, "the image leaves the manifest readable by others"
     assert not manifest.stat().st_mode & 0o222, "and writable by no one"
@@ -116,12 +130,14 @@ def test_the_serving_user_can_check_the_demo_as_the_image_leaves_it(imaged, exam
 
 def test_a_file_it_cannot_read_is_a_one_line_refusal_never_a_traceback(imaged, examined):
     from onetrace_console.public import UNREADABLE_FIX
-    manifest = next(imaged.glob("runs/*/MANIFEST.json"))
-    os.chmod(manifest, 0o400)   # the owner's (root's) alone, as the SDK wrote it
+
+    manifest = sorted(imaged.glob("runs/*/MANIFEST.json"))[0]
+    os.chmod(manifest, 0o400)  # the owner's (root's) alone, as the SDK wrote it
     examined(1, "start check as nobody, one file unreadable")
     code, out, err = _as_nobody(imaged)
     assert code == 0 and "Traceback" not in err, err
     import json
+
     message, fix = json.loads(out)
     assert "cannot be read" in message and str(manifest) in message and "\n" not in message
     assert fix == UNREADABLE_FIX
@@ -132,6 +148,7 @@ def test_the_check_as_nobody_never_forks_a_multi_threaded_process(imaged, examin
     the child raises no warning of a fork in a multi-threaded process: it is spawned, never forked."""
     import threading
     import warnings
+
     stop = threading.Event()
     other = threading.Thread(target=stop.wait, daemon=True)
     other.start()

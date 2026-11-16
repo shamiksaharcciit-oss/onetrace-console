@@ -12,10 +12,11 @@
 
 Each check has its sabotage.
 """
+
 from __future__ import annotations
 
-import hashlib
 import base64
+import hashlib
 import http.client
 import re
 from urllib.parse import urlparse
@@ -26,11 +27,16 @@ from tests.test_public_mode import _pages, built, served  # noqa: F401
 
 #: Every source a directive may name, by directive; anything else is a problem.
 ALLOWED = {
-    "default-src": {"'none'"}, "style-src": {"'self'", "'unsafe-inline'"}, "font-src": {"'self'"},
-    "img-src": {"'self'", "data:"}, "connect-src": {"'self'"}, "base-uri": {"'none'"},
+    "default-src": {"'none'"},
+    "style-src": {"'self'", "'unsafe-inline'"},
+    "font-src": {"'self'"},
+    "img-src": {"'self'", "data:"},
+    "connect-src": {"'self'"},
+    "base-uri": {"'none'"},
     #: A form goes to the console itself only, never 'none' since console 0.5.0: the index's search
     #: box (a GET form, on both consoles) and a public console's Compare picker (a POST form) need it.
-    "form-action": {"'self'"}, "frame-ancestors": {"'none'"},
+    "form-action": {"'self'"},
+    "frame-ancestors": {"'none'"},
 }
 
 
@@ -41,20 +47,39 @@ def _hash(script: str) -> str:
 
 def policy_problems(policy: str, *, local: bool) -> list[str]:
     from onetrace_console.public import inline_scripts
+
     directives = {}
     for part in filter(None, (p.strip() for p in policy.split(";"))):
         name, *sources = part.split()
         directives[name] = sources
     out = []
     from onetrace_console.benchmark_script import BENCHMARK_SCRIPT
+    from onetrace_console.busy_script import BUSY_SCRIPT
     from onetrace_console.compare_script import COMPARE_SCRIPT
-    from onetrace_console.explain_script import EXPLAIN_SCRIPT
     from onetrace_console.expectations_script import EXPECTATIONS_SCRIPT
+    from onetrace_console.explain_script import EXPLAIN_SCRIPT
+    from onetrace_console.run_lock_script import LOAD_NOT_CLOSED_SCRIPT
     from onetrace_console.token_script import TOKEN_SCRIPT
+
     #: The explanation panel's, the Compare buttons', the benchmark mark's, the expectations file's and the
     #: tokenizer picker's are the local console's only.
-    shipped = {_hash(s) for s in inline_scripts()
-               + ((EXPLAIN_SCRIPT, COMPARE_SCRIPT, BENCHMARK_SCRIPT, EXPECTATIONS_SCRIPT, TOKEN_SCRIPT) if local else ())}
+    shipped = {
+        _hash(s)
+        for s in inline_scripts()
+        + (
+            (
+                EXPLAIN_SCRIPT,
+                COMPARE_SCRIPT,
+                BENCHMARK_SCRIPT,
+                EXPECTATIONS_SCRIPT,
+                TOKEN_SCRIPT,
+                LOAD_NOT_CLOSED_SCRIPT,
+                BUSY_SCRIPT,
+            )
+            if local
+            else ()
+        )
+    }
     if set(directives.get("script-src", [])) != shipped:
         out.append(f"script-src is not exactly the shipped scripts' hashes: {directives.get('script-src')}")
     for name, sources in directives.items():
@@ -73,6 +98,7 @@ def policy_problems(policy: str, *, local: bool) -> list[str]:
 @pytest.mark.parametrize("local", [False, True])
 def test_each_mode_s_policy_runs_only_the_shipped_scripts_by_hash(local, examined):
     from onetrace_console.public import content_security_policy, inline_scripts
+
     examined(len(inline_scripts()), "shipped scripts")
     assert policy_problems(content_security_policy(local=local), local=local) == []
 
@@ -82,17 +108,22 @@ WIDENED = {
     "script-src gains 'unsafe-inline'": (("script-src ", "script-src 'unsafe-inline' "), "script-src is not exactly"),
     "script-src gains an unknown hash": (("script-src ", "script-src 'sha256-AAAA' "), "script-src is not exactly"),
     "fonts from another host": (("font-src 'self'", "font-src 'self' https://fonts.example.org"), "font-src names"),
-    "styles from another host": (("style-src 'self' 'unsafe-inline'",
-                                  "style-src 'self' 'unsafe-inline' https://cdn.example.org"), "style-src names"),
+    "styles from another host": (
+        ("style-src 'self' 'unsafe-inline'", "style-src 'self' 'unsafe-inline' https://cdn.example.org"),
+        "style-src names",
+    ),
     "images from blob:": (("img-src 'self' data:", "img-src 'self' data: blob:"), "img-src names"),
-    "forms to another host": (("form-action 'self'", "form-action 'self' https://forms.example.org"),
-                              "form-action names"),
+    "forms to another host": (
+        ("form-action 'self'", "form-action 'self' https://forms.example.org"),
+        "form-action names",
+    ),
 }
 
 
 @pytest.mark.parametrize("what", sorted(WIDENED))
 def test_sabotage_a_policy_that_widens_is_named(what, examined):
     from onetrace_console.public import content_security_policy
+
     (old, new), said = WIDENED[what]
     policy = content_security_policy()
     assert policy.count(old) == 1, old
@@ -111,6 +142,7 @@ def _get(base: str, path: str) -> tuple[int, dict, bytes]:
 
 def test_a_local_console_sends_the_local_policy(server, examined):
     from onetrace_console.public import content_security_policy
+
     base, _ = server
     examined(2, "responses")
     for path in ("/", "/static/console.css"):
@@ -120,6 +152,7 @@ def test_a_local_console_sends_the_local_policy(server, examined):
 
 def test_a_public_console_sends_the_public_policy_and_each_page_s_scripts_are_in_it(served, examined):  # noqa: F811
     from onetrace_console.public import content_security_policy
+
     base, folder, _c = served
     pages = _pages(folder)
     examined(len(pages), "public pages served")
@@ -132,10 +165,12 @@ def test_a_public_console_sends_the_public_policy_and_each_page_s_scripts_are_in
 
 
 #: A resource a page or the stylesheet loads, as the browser reads it.
-_LOADS = (re.compile(r'<(?:script|img|iframe|source|audio|video|embed)\b[^>]*\bsrc="([^"]*)"', re.I),
-          re.compile(r'<link\b[^>]*\bhref="([^"]*)"', re.I),
-          re.compile(r"url\(\s*['\"]?([^'\")]+)"),
-          re.compile(r"@import\s+['\"]([^'\"]+)"))
+_LOADS = (
+    re.compile(r'<(?:script|img|iframe|source|audio|video|embed)\b[^>]*\bsrc="([^"]*)"', re.I),
+    re.compile(r'<link\b[^>]*\bhref="([^"]*)"', re.I),
+    re.compile(r"url\(\s*['\"]?([^'\")]+)"),
+    re.compile(r"@import\s+['\"]([^'\"]+)"),
+)
 
 
 def external_loads(text: str) -> list[str]:
@@ -146,6 +181,7 @@ def external_loads(text: str) -> list[str]:
 
 def test_no_page_and_no_stylesheet_loads_from_another_host(built, examined):  # noqa: F811
     from onetrace_console.frame import stylesheet
+
     root = built / "store" / "pages"
     pages = {p.relative_to(root).as_posix(): p.read_text(encoding="utf-8") for p in root.rglob("*.html")}
     pages["static/console.css"] = stylesheet().decode("utf-8")
@@ -154,12 +190,15 @@ def test_no_page_and_no_stylesheet_loads_from_another_host(built, examined):  # 
     assert "url(/static/fonts/" in pages["static/console.css"], "the fonts are not the console's own"
 
 
-@pytest.mark.parametrize("planted", [
-    '<link rel="stylesheet" href="https://fonts.example.org/plex.css">',
-    "@font-face{src:url(https://fonts.example.org/plex.woff2)}",
-    '<script src="//cdn.example.org/x.js"></script>',
-    '<img src="http://example.org/logo.png">',
-])
+@pytest.mark.parametrize(
+    "planted",
+    [
+        '<link rel="stylesheet" href="https://fonts.example.org/plex.css">',
+        "@font-face{src:url(https://fonts.example.org/plex.woff2)}",
+        '<script src="//cdn.example.org/x.js"></script>',
+        '<img src="http://example.org/logo.png">',
+    ],
+)
 def test_sabotage_an_external_load_is_named(planted, examined):
     examined(1, "planted load")
     assert external_loads("<p>a page</p>" + planted), planted

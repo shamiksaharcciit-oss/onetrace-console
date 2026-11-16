@@ -8,6 +8,7 @@ that line and exits 1. The top-level keys are checked for their types here too: 
 `port` written as a string passed loading and failed at bind with a traceback, and a port past
 65535 did the same.
 """
+
 from __future__ import annotations
 
 import io
@@ -58,24 +59,25 @@ def _refused(err: str, says: str, start: str) -> None:
 
 
 @pytest.mark.parametrize("case,content,says", BAD, ids=[c for c, _, _ in BAD])
-def test_serve_refuses_a_file_it_cannot_use_with_a_fix_line(case, content, says, tmp_path,
-                                                           monkeypatch, capsys):
+def test_serve_refuses_a_file_it_cannot_use_with_a_fix_line(case, content, says, tmp_path, monkeypatch, capsys):
     from onetrace_console import serve
 
     def never(*a, **k):
         raise AssertionError("it reached the listener with a configuration it cannot use")
+
     monkeypatch.setattr(serve, "ConsoleServer", never)
     _named(tmp_path, monkeypatch, content)
     assert serve.main([]) == 1
     _refused(capsys.readouterr().err, says, "refusing to start: ")
 
 
-@pytest.mark.parametrize("argv", [["admin", "create", "alice"], ["token", "create", "ingester"]],
-                         ids=["admin-create", "token-create"])
+@pytest.mark.parametrize(
+    "argv", [["admin", "create", "alice"], ["token", "create", "ingester"]], ids=["admin-create", "token-create"]
+)
 @pytest.mark.parametrize("case,content,says", [BAD[2], BAD[5]], ids=["not-json", "port-a-string"])
-def test_the_admin_commands_refuse_it_the_same_way(argv, case, content, says, tmp_path,
-                                                   monkeypatch, capsys):
+def test_the_admin_commands_refuse_it_the_same_way(argv, case, content, says, tmp_path, monkeypatch, capsys):
     from onetrace_console.__main__ import main
+
     _named(tmp_path, monkeypatch, content)
     monkeypatch.setattr("sys.stdin", io.StringIO("a long enough password\n"))
     assert main(argv) == 1
@@ -84,7 +86,7 @@ def test_the_admin_commands_refuse_it_the_same_way(argv, case, content, says, tm
 
 def test_a_file_it_can_use_still_loads(tmp_path, monkeypatch):
     from onetrace_console.config import load_from_env
-    _named(tmp_path, monkeypatch, {"host": "127.0.0.1", "port": 8081, "max_members": 64,
-                                   "request_timeout_seconds": 12})
+
+    _named(tmp_path, monkeypatch, {"host": "127.0.0.1", "port": 8081, "max_members": 64, "request_timeout_seconds": 12})
     config = load_from_env()
     assert (config.port, config.max_members, config.request_timeout_seconds) == (8081, 64, 12)

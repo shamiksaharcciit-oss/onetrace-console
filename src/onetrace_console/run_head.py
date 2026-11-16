@@ -7,15 +7,17 @@ naming its baseline), the record's own start time and format, the time this cons
 and the page's own ladder rungs. Nothing is counted that the record does not hold, so a stage's
 domain counts ("chunks", "vectors") never appear. The answer page draws the same head.
 """
+
 from __future__ import annotations
 
 import re
 
 from onetrace_console import tones, twins
+from onetrace_console.store import Store, StoredRun
+
 #: The viewer's one escape: HTML, and a record's words shown by its display rule (control and
 #: direction characters drawn visibly), as every run page draws them.
 from onetrace_console.viewer.page import escape
-from onetrace_console.store import Store, StoredRun
 
 #: The four rungs the head shows first, in the ladder's own words, each as the ladder states it.
 HEAD_RUNGS = ("records-agree", "approved", "signed", "anchored")
@@ -29,8 +31,7 @@ HEAD_FROM_CONTENTS = {"approved"}
 FROM_CONTENTS = ' data-from="contents"'
 
 #: The tabs: each a page this run already has, or a place on this page.
-TAB_GRAPH, TAB_TABLE, TAB_IO, TAB_RECEIPT, TAB_COMPARE = (
-    "Graph", "Table", "Inputs & outputs", "Receipt", "Compare")
+TAB_GRAPH, TAB_TABLE, TAB_IO, TAB_RECEIPT, TAB_COMPARE = ("Graph", "Table", "Inputs & outputs", "Receipt", "Compare")
 #: The run's page as run A, the baseline: the pipeline's other runs as run B (`choose_pages`).
 TAB_CHOOSE = "Choose as run A"
 
@@ -75,8 +76,8 @@ def _chip(tone: str, words: str, href: str = "") -> str:
 
 def _time(value: str) -> str:
     from onetrace_console.words import short_time
-    return (f'<time datetime="{escape(value)}" title="{escape(value)}">'
-            f"{escape(short_time(value))}</time>")
+
+    return f'<time datetime="{escape(value)}" title="{escape(value)}">{escape(short_time(value))}</time>'
 
 
 def compared_with(model) -> tuple[str, str, bool] | None:
@@ -101,27 +102,34 @@ def comparison_chip(model) -> str:
     first = [n for n in model.graph_nodes if n.mark == "first"]
     if first:
         from onetrace_console.viewer.model import name_shown
+
         stage = name_shown(first[0].name)
-        return _chip(tones.tone(tones.DIFF, "FIRST DIFFERENCE"), f"Changed vs {baseline} · first difference at {stage}", href)
+        return _chip(
+            tones.tone(tones.DIFF, "FIRST DIFFERENCE"), f"Changed vs {baseline} · first difference at {stage}", href
+        )
     return _chip(tones.tone(tones.DIFF, "same"), f"No difference found vs {baseline}", href)
 
 
 def declined_chip(run) -> str:
-    """"Declined at <step>" where the run stopped at a step's own rule, in the declined outline;
+    """ "Declined at <step>" where the run stopped at a step's own rule, in the declined outline;
     nothing otherwise. From the run's stored reading, as the runs list and the Overview read it."""
     from onetrace_console.overview import declined
     from onetrace_console.viewer.model import name_shown
     from onetrace_console.viewer.sentences import template
+
     found = declined(run)
     if found is None:
         return ""
-    return (f'<span class="pill {tones.tone(tones.STOPPED, "declined")}" data-declined="true">'
-            f'{escape(template("declined.chip").format(stage=name_shown(found["stage"])))}</span>')
+    return (
+        f'<span class="pill {tones.tone(tones.STOPPED, "declined")}" data-declined="true">'
+        f"{escape(template('declined.chip').format(stage=name_shown(found['stage'])))}</span>"
+    )
 
 
 def _rungs(model) -> str:
     from onetrace_console.viewer.page import _line
     from onetrace_console.viewer.sentences import template
+
     items = []
     for key in HEAD_RUNGS:
         found = [r for r in model.ladder if r.key == key]
@@ -133,16 +141,28 @@ def _rungs(model) -> str:
         else:
             said = " ".join(_line(e) for e in r.evidence)
         mark = FROM_CONTENTS if key in HEAD_FROM_CONTENTS else ""
-        items.append(f'<li data-head-rung="{escape(key)}" data-state="{escape(r.state)}"{mark}>'
-                     f'<span class="q">{escape(template("rung." + key))}</span> <span>{said}</span></li>')
+        items.append(
+            f'<li data-head-rung="{escape(key)}" data-state="{escape(r.state)}"{mark}>'
+            f'<span class="q">{escape(template("rung." + key))}</span> <span>{said}</span></li>'
+        )
     return f'<ul class="seals">{"".join(items)}</ul>'
 
 
-def run_head(run: StoredRun, store: Store, model, *, stage_page: str = "", receipt: str = "",
-             page: str = "", title_tag: str = "h1", rungs: bool = True,
-             up: str = "../../") -> str:
+def run_head(
+    run: StoredRun,
+    store: Store,
+    model,
+    *,
+    stage_page: str = "",
+    receipt: str = "",
+    page: str = "",
+    title_tag: str = "h1",
+    rungs: bool = True,
+    up: str = "../../",
+) -> str:
     """The head, as HTML. `stage_page` and `receipt` are the run's sibling pages, where it has them."""
     from onetrace_console.overview import pipelines, ran_at
+
     label = next((p.label for p in pipelines(store) for r in p.runs if r.key == run.key), "")
     #: No one-word verdict beside the title: the ladder's questions are separate, and a "Verified"
     #: chip beside "Records agree: Not checked" (a check that held without the output files) would
@@ -150,15 +170,19 @@ def run_head(run: StoredRun, store: Store, model, *, stage_page: str = "", recei
     chips = comparison_chip(model) + declined_chip(run)
     chips = f'<span class="chips"{FROM_CONTENTS}>{chips}</span>' if chips else ""
     ran = ran_at(run)
-    count = (f"{run.delivered_stages} of {run.stage_count} declared stages"
-             + (f"; {run.retries} retr{'y' if run.retries == 1 else 'ies'} recorded" if run.retries else ""))
+    count = f"{run.delivered_stages} of {run.stage_count} declared stages" + (
+        f"; {run.retries} retr{'y' if run.retries == 1 else 'ies'} recorded" if run.retries else ""
+    )
     from onetrace_console import closing
+
     #: Whether the run closed and how it ended, in the words of onetrace-verify's own row: read from
     #: the record's contents, with the count.
     ending = f'<span data-ending="{closing.state(run.ending)}">{closing.html(run.ending)}</span>'
-    sub = [f'recorded in the format <span class="mono">{escape(run.format)}</span>' if run.format else "",
-           f"ran {_time(ran)}" if ran else "the record gives no time it ran",
-           f"received by this console {_time(run.received_at)}"]
+    sub = [
+        f'recorded in the format <span class="mono">{escape(run.format)}</span>' if run.format else "",
+        f"ran {_time(ran)}" if ran else "the record gives no time it ran",
+        f"received by this console {_time(run.received_at)}",
+    ]
     source = compared_with(model)
     #: `page`: the run page's file, where the head is on another of the run's pages.
     tabs = [(TAB_GRAPH, f"{page}#graph"), (TAB_TABLE, f"{page}#timeline")]
@@ -167,32 +191,37 @@ def run_head(run: StoredRun, store: Store, model, *, stage_page: str = "", recei
     tabs += [(TAB_COMPARE, source[1])] if source else []
     if label:
         from onetrace_console.choose_pages import pair_href
+
         tabs += [(TAB_CHOOSE, f"{up}{pair_href(label, run.key)}")]
     #: The run's id as the viewer quotes a record word: capped, with what was left out said and
     #: the whole record offered, as the viewer's own header did.
     from onetrace_console.viewer.page import _RECORD_HREF, _named, _rest
+
     token = _RECORD_HREF.set(getattr(model, "record_href", None))
     try:
         rest = _rest(run.run_id)
     finally:
         _RECORD_HREF.reset(token)
-    crumbs = (f'<p class="crumbs"><a href="{up}executions-all.html">Runs</a>'
-              + (f" / {escape(label)}" if label else "")
-              + f' / <span class="mono" data-words="record">{_named(run.run_id)}</span></p>')
-    return (f'<section data-section="run-head">{crumbs}'
-            f'<div class="title"><{title_tag} class="run-title"><span class="mono" data-words="record">'
-            f"{_named(run.run_id)}</span>"
-            + (f" · {escape(label)}" if label else "") + f"</{title_tag}>{rest}{chips}</div>"
-            f'<p class="sub"><span{FROM_CONTENTS}>{count} · {ending} · </span>{" · ".join(s for s in sub if s)}</p>'
-            #: Another folder carrying the same run and chain head: each is read on its own, and
-            #: the page says which folder this is and how the other's files compare.
-            + "".join(f'<p class="sub" data-twin="true">{escape(t)}</p>' for t in twins.sentences(run, store))
-            #: Without its four answers on the authorization page, which must never read as a
-            #: pass: "Ran as approved: Yes" there would read as the action approved.
-            + (_rungs(model) if rungs else "") +
-            f'<nav class="tabs" aria-label="This run\'s pages">'
-            + " ".join(f'<a href="{escape(h)}">{escape(t)}</a>' for t, h in tabs)
-            + "</nav></section>")
+    crumbs = (
+        f'<p class="crumbs"><a href="{up}executions-all.html">Runs</a>'
+        + (f" / {escape(label)}" if label else "")
+        + f' / <span class="mono" data-words="record">{_named(run.run_id)}</span></p>'
+    )
+    return (
+        f'<section data-section="run-head">{crumbs}'
+        f'<div class="title"><{title_tag} class="run-title"><span class="mono" data-words="record">'
+        f"{_named(run.run_id)}</span>" + (f" · {escape(label)}" if label else "") + f"</{title_tag}>{rest}{chips}</div>"
+        f'<p class="sub"><span{FROM_CONTENTS}>{count} · {ending} · </span>{" · ".join(s for s in sub if s)}</p>'
+        #: Another folder carrying the same run and chain head: each is read on its own, and
+        #: the page says which folder this is and how the other's files compare.
+        + "".join(f'<p class="sub" data-twin="true">{escape(t)}</p>' for t in twins.sentences(run, store))
+        #: Without its four answers on the authorization page, which must never read as a
+        #: pass: "Ran as approved: Yes" there would read as the action approved.
+        + (_rungs(model) if rungs else "")
+        + '<nav class="tabs" aria-label="This run\'s pages">'
+        + " ".join(f'<a href="{escape(h)}">{escape(t)}</a>' for t, h in tabs)
+        + "</nav></section>"
+    )
 
 
 _TOP = re.compile(r'<header class="top">.*?</header>', re.S)

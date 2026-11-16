@@ -10,6 +10,7 @@ Every call site that starts a Python child passes `env=utf8_env()`; tests/test_c
 each one to it, and runs a child with non-ASCII output with the forcing removed from the parent's
 environment, as a user's machine has it.
 """
+
 from __future__ import annotations
 
 import os

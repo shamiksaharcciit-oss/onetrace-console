@@ -31,14 +31,15 @@ reader to be uneasy without telling them what about.
 
 It is inserted into pages this console renders **and** into pages the viewer renders, which
 is done by splicing rather than by the viewer because `answer.html` is frozen until the
-reader session. Recorded in DESIGN_GAPS.md: the viewer is the right home for it.
+reader session. Said here: the viewer is the right home for it.
 """
+
 from __future__ import annotations
 
 import json
 import re
 
-from onetrace_console.store import StoredRun, Store
+from onetrace_console.store import Store, StoredRun
 
 #: The format the decision is about, and the words it requires.
 PREVIEW_FORMAT = "stage-receipt-chain/0.0-preview"
@@ -62,9 +63,11 @@ VERIFIER_FORMAT_CHECK = "manifest: format"
 #: the verifier dropping the format: a new preview delivery gets a 422, the row quoted, after
 #: this one sentence. Runs already stored stay.
 PREVIEW_NOT_RUN_ROW = "[NOT-RUN] manifest: chain format -- 'stage-receipt-chain/0.0-preview'"
-PREVIEW_NOT_INGESTED = ("Not ingested: this run is in the preview record format "
-                        "(stage-receipt/0.0-preview), and onetrace-verify does not check that format, "
-                        "so its receipts couldn't be checked.")
+PREVIEW_NOT_INGESTED = (
+    "Not ingested: this run is in the preview record format "
+    "(stage-receipt/0.0-preview), and onetrace-verify does not check that format, "
+    "so its receipts couldn't be checked."
+)
 
 
 def preview_not_run_row(said) -> str | None:
@@ -75,8 +78,7 @@ def preview_not_run_row(said) -> str | None:
     when the check as a whole did not pass (exit status not 0)."""
     if said is None or not said.refused:
         return None
-    return next((r for r in said.rows
-                 if r.startswith(PREVIEW_NOT_RUN_ROW) and "does not implement" in r), None)
+    return next((r for r in said.rows if r.startswith(PREVIEW_NOT_RUN_ROW) and "does not implement" in r), None)
 
 
 def is_format_refusal(said) -> bool:
@@ -106,9 +108,11 @@ def sentence(n: int) -> str:
     The console's own wording, apart from the two fixed words.
     """
     runs = "run" if n == 1 else "runs"
-    return (f"{LABEL}: {n} {runs} shown here declare {PREVIEW_FORMAT}. The pinned verifier "
-            f"reads that format but does not perform the draft-00 checks on it, and says so "
-            f"in its own report.")
+    return (
+        f"{LABEL}: {n} {runs} shown here declare {PREVIEW_FORMAT}. The pinned verifier "
+        f"reads that format but does not perform the draft-00 checks on it, and says so "
+        f"in its own report."
+    )
 
 
 #: The opening `<main …>` of a page, whoever rendered it. The viewer writes
@@ -136,8 +140,10 @@ def label(html_text: str, runs) -> str:
         raise ValueError(
             f"cannot label this page: it has no <main> to place the {LABEL!r} sentence "
             f"after, so the label would be silently absent. Every page showing a preview run "
-            f"must carry it.")
+            f"must carry it."
+        )
     from onetrace_console.words import escape
+
     note = f'<p data-preview="{LABEL}" class="limit">{escape(sentence(len(shown)))}</p>'
     at = found.end()
     return html_text[:at] + "\n" + note + html_text[at:]
@@ -151,27 +157,35 @@ def implemented_formats_the_verifier_accepts(store: Store, formats) -> dict[str,
     """
     import shutil
     import subprocess
-
-    from onetrace_console.child import utf8_env
     import sys
     import tempfile
     from pathlib import Path
 
     from onetrace_console.checks import shipped_verifier
+    from onetrace_console.child import utf8_env
 
     verifier = shipped_verifier()
     out: dict[str, bool] = {}
     for fmt in formats:
         folder = Path(tempfile.mkdtemp(prefix="fmt-probe-"))
         try:
-            (folder / "MANIFEST.json").write_bytes(json.dumps(
-                {"format": fmt, "run_id": "probe", "chain_head": "sha256:" + "0" * 64,
-                 "chain": []}, separators=(",", ":")).encode("utf-8"))
-            proc = subprocess.run([sys.executable, str(verifier), "MANIFEST.json"],
-                                  cwd=str(folder), capture_output=True, text=True,
-                                  encoding="utf-8", env=utf8_env())
-            refused_for_format = proc.returncode != 0 and re.search(
-                re.escape(VERIFIER_FORMAT_CHECK), proc.stdout) is not None
+            (folder / "MANIFEST.json").write_bytes(
+                json.dumps(
+                    {"format": fmt, "run_id": "probe", "chain_head": "sha256:" + "0" * 64, "chain": []},
+                    separators=(",", ":"),
+                ).encode("utf-8")
+            )
+            proc = subprocess.run(
+                [sys.executable, str(verifier), "MANIFEST.json"],
+                cwd=str(folder),
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                env=utf8_env(),
+            )
+            refused_for_format = (
+                proc.returncode != 0 and re.search(re.escape(VERIFIER_FORMAT_CHECK), proc.stdout) is not None
+            )
             out[fmt] = not refused_for_format
         finally:
             shutil.rmtree(folder, ignore_errors=True)

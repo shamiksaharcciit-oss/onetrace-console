@@ -9,6 +9,7 @@ The embedder for most tests is an OpenAI-compatible endpoint (`embedder.Endpoint
 code) whose server is a function here: a bag of words, so near texts are near. The local ONNX model is
 tested where its files are at hand (`ONETRACE_NEIGHBOURS_MODEL_FILES`); the gate sets it.
 """
+
 from __future__ import annotations
 
 import hashlib
@@ -19,25 +20,36 @@ import shutil
 import subprocess
 import sys
 from pathlib import Path
-from tests.http_limits import limit
 
 import pytest
 
+from tests.http_limits import limit
+
 REPO = Path(__file__).resolve().parent.parent
-SPECS = ("p4-29-reply-30-days", "p4-30-reply-14-days", "p7-39-cold-chain-baseline",
-         "p7-40-cold-chain-one-reading-changed", "p2-21-demo-run-1")
+SPECS = (
+    "p4-29-reply-30-days",
+    "p4-30-reply-14-days",
+    "p7-39-cold-chain-baseline",
+    "p7-40-cold-chain-one-reading-changed",
+    "p2-21-demo-run-1",
+)
 ENDPOINT = {"kind": "endpoint", "base_url": "http://127.0.0.1:9/v1", "model": "bag-of-words"}
 #: What names the feature on a page: its sections, its headings and label, its setup page. Not the word
 #: "embedder" alone, which a demo pipeline's own record holds as an instrument's kind.
-NAMES = re.compile(r'data-section="(?:neighbours|nearness)"|data-neighbours|Runs with near inputs|Neighbours by input|'
-                   r"Nearness ladder|/?neighbours/(?:setup|on|off)|embedding model you turned on", re.I)
+NAMES = re.compile(
+    r'data-section="(?:neighbours|nearness)"|data-neighbours|Runs with near inputs|Neighbours by input|'
+    r"Nearness ladder|/?neighbours/(?:setup|on|off)|embedding model you turned on",
+    re.I,
+)
 
 needs_extra = pytest.mark.skipif(
     not __import__("onetrace_console.neighbours", fromlist=["installed"]).installed(),
-    reason="the neighbours extra is not installed: pip install --require-hashes -r requirements-neighbours.lock")
+    reason="the neighbours extra is not installed: pip install --require-hashes -r requirements-neighbours.lock",
+)
 
 
 # ------------------------------------------------------------------------------ the store
+
 
 def bag_of_words(url: str, body: dict) -> dict:
     """The stand-in endpoint: each text a count of its words, hashed into 64 dimensions."""
@@ -52,6 +64,7 @@ def bag_of_words(url: str, body: dict) -> dict:
 
 def _record(names, folder: Path) -> list[Path]:
     from onetrace_console import demo_store
+
     specs = {s.folder: s for s in demo_store.runs()}
     out = []
     for name in names:
@@ -64,6 +77,7 @@ def _record(names, folder: Path) -> list[Path]:
 @pytest.fixture(scope="module")
 def recorded(tmp_path_factory) -> Path:
     from tests.test_checks import _require_installed
+
     _require_installed()
     folder = tmp_path_factory.mktemp("neighbours-runs")
     _record(SPECS, folder)
@@ -75,6 +89,7 @@ def _store(recorded: Path, root: Path):
     from onetrace_console.config import Config
     from onetrace_console.folder_load import deliver_one
     from onetrace_console.store import Store
+
     store = Store(root / "store")
     config = Config(sign_in={**Config().sign_in, "enabled": False})
     runs = {}
@@ -98,6 +113,7 @@ def on(held, monkeypatch, tmp_path):
     """A copy of the store with neighbours on, through the stand-in endpoint, every kept text embedded."""
     from onetrace_console.neighbours import batches, embedder, settings
     from onetrace_console.store import Store
+
     store, runs = held
     shutil.copytree(store.root, tmp_path / "store")
     copy = Store(tmp_path / "store")
@@ -113,12 +129,14 @@ def _comparison(store, a, b):
 
 def _case(run, store) -> str:
     from onetrace_console.pages import CASE, render_execution
+
     with store.reading():
         return render_execution(run, store, generated_at="2026-10-28T00:00:00Z").pages[CASE]
 
 
 def _diff(comparison, store) -> str:
     from onetrace_console.render import render_diff
+
     with store.reading():
         return render_diff(comparison, store, generated_at="2026-10-28T00:00:00Z")
 
@@ -126,19 +144,27 @@ def _diff(comparison, store) -> str:
 def _absent(monkeypatch):
     """The extra's packages not found, as on a base install."""
     import importlib.util
+
     real = importlib.util.find_spec
-    monkeypatch.setattr(importlib.util, "find_spec",
-                        lambda name, *a, **k: None if name in ("onnxruntime", "tokenizers", "numpy") else real(name, *a, **k))
+    monkeypatch.setattr(
+        importlib.util,
+        "find_spec",
+        lambda name, *a, **k: None if name in ("onnxruntime", "tokenizers", "numpy") else real(name, *a, **k),
+    )
 
 
 # ------------------------------------------------------------------------------ 2. the extra
 
+
 def test_the_base_install_gains_no_dependency():
     import tomllib
+
     project = tomllib.loads((REPO / "pyproject.toml").read_text(encoding="utf-8"))["project"]
-    assert project["dependencies"] == ["onetrace==0.7.1", "onetrace-verify[crypto]==0.7.1"]
+    #: PyJWT is the base's own, for sign-in through Microsoft Entra ID, not the extra's.
+    assert project["dependencies"] == ["onetrace==0.8.0", "onetrace-verify[crypto]==0.8.0", "pyjwt[crypto]==2.15.1"]
     assert project["optional-dependencies"] == {
-        "neighbours": ["onnxruntime==1.31.0", "tokenizers==0.23.3", "numpy==2.5.4"]}
+        "neighbours": ["onnxruntime==1.31.0", "tokenizers==0.23.3", "numpy==2.5.4"]
+    }
     base = (REPO / "requirements.lock").read_text(encoding="utf-8")
     assert not re.search(r"^(onnxruntime|tokenizers|numpy|huggingface)", base, re.M)
 
@@ -161,11 +187,17 @@ def test_the_extra_is_pinned_by_hash_in_its_own_lock():
 def test_the_console_never_imports_the_extra_until_it_is_on():
     """Importing the console, drawing its pages' code and asking whether neighbours exist imports none of
     the extra's packages, nor huggingface_hub, which tokenizers brings and the console never uses."""
-    code = ("import sys, onetrace_console.serve, onetrace_console.render, onetrace_console.pages, "
-            "onetrace_console.neighbours.pages as p, onetrace_console.neighbours as n; n.installed(); "
-            "print(sorted(m for m in ('onnxruntime','tokenizers','numpy','huggingface_hub') if m in sys.modules))")
-    out = subprocess.run([sys.executable, "-I", "-c", f"import sys; sys.path.insert(0, {str(REPO / 'src')!r}); {code}"],
-                         capture_output=True, text=True, timeout=120)
+    code = (
+        "import sys, onetrace_console.serve, onetrace_console.render, onetrace_console.pages, "
+        "onetrace_console.neighbours.pages as p, onetrace_console.neighbours as n; n.installed(); "
+        "print(sorted(m for m in ('onnxruntime','tokenizers','numpy','huggingface_hub') if m in sys.modules))"
+    )
+    out = subprocess.run(
+        [sys.executable, "-I", "-c", f"import sys; sys.path.insert(0, {str(REPO / 'src')!r}); {code}"],
+        capture_output=True,
+        text=True,
+        timeout=120,
+    )
     assert out.returncode == 0, out.stderr
     assert out.stdout.strip() == "[]"
 
@@ -177,6 +209,7 @@ def test_with_the_extra_absent_no_page_has_a_word_of_it(on, monkeypatch):
     assert NAMES.search(_case(runs["p7-40-cold-chain-one-reading-changed"], store))
     _absent(monkeypatch)
     from onetrace_console import neighbours
+
     assert not neighbours.installed()
     for run in runs.values():
         assert not NAMES.search(_case(run, store)), run.run_id
@@ -187,6 +220,7 @@ def test_with_the_extra_absent_no_page_has_a_word_of_it(on, monkeypatch):
 def test_with_the_extra_absent_no_route_answers(server, monkeypatch):
     import urllib.error
     import urllib.request
+
     base, _root = server
     _absent(monkeypatch)
 
@@ -196,16 +230,20 @@ def test_with_the_extra_absent_no_route_answers(server, monkeypatch):
             return r.status, r.read()
         except urllib.error.HTTPError as e:
             return e.code, e.read()
+
     #: The setup page says the extra is missing (console 0.6.1 item 2, tests/test_neighbours_missing.py);
     #: the routes that turn it on or off answer exactly as a route the console never had.
     status, page = ask("/neighbours/setup")
     assert status == 200 and b'data-neighbours="extra-missing"' in page and b"not rendered" not in page
-    assert ask("/neighbours/on", b"embedder=all-MiniLM-L6-v2") == ask("/no-such-route", b"x") == (404, b"no such route\n")
+    assert (
+        ask("/neighbours/on", b"embedder=all-MiniLM-L6-v2") == ask("/no-such-route", b"x") == (404, b"no such route\n")
+    )
     assert ask("/neighbours/off", b"") == (404, b"no such route\n")
 
 
 def test_without_the_extra_the_feature_does_not_exist(monkeypatch):
     from onetrace_console import neighbours
+
     _absent(monkeypatch)
     assert not neighbours.exists(public=False)
     assert not neighbours.here()
@@ -214,8 +252,10 @@ def test_without_the_extra_the_feature_does_not_exist(monkeypatch):
 
 # ------------------------------------------------------------------------------ 3. grouping
 
+
 def test_a_group_is_every_steps_configuration_exactly(held):
     from onetrace_console.neighbours import grouping
+
     store, runs = held
     with store.reading():
         sig = grouping.signatures(store)
@@ -235,6 +275,7 @@ def test_the_signature_reads_the_run_indexs_own_settings(held, monkeypatch):
     """A setting is what part 1's run index reads as one: changing that reading changes the groups."""
     from onetrace_console import run_index
     from onetrace_console.neighbours import grouping
+
     store, runs = held
     a, b = runs["p4-29-reply-30-days"], runs["p4-30-reply-14-days"]
     monkeypatch.setattr(run_index, "_settings", lambda receipt: {})
@@ -243,15 +284,22 @@ def test_the_signature_reads_the_run_indexs_own_settings(held, monkeypatch):
 
 # ------------------------------------------------------------------------------ 4. what is embedded
 
+
 def test_only_kept_files_are_embedded_never_a_record(held):
     from onetrace_console.neighbours import kept
     from onetrace_console.stage_pages import _steps
+
     store, runs = held
     seen = 0
     for run in runs.values():
         steps = _steps(run, store)
-        recorded = {str(i.get("digest")) for s in steps for k in ("inputs", "outputs")
-                    for i in s["receipt"].get(k) or [] if not str(i.get("name", "")).startswith("receipt:")}
+        recorded = {
+            str(i.get("digest"))
+            for s in steps
+            for k in ("inputs", "outputs")
+            for i in s["receipt"].get(k) or []
+            if not str(i.get("name", "")).startswith("receipt:")
+        }
         receipts = {json.dumps(s["receipt"]) for s in steps}
         for p in kept.parts(run, store):
             if p.text is None:
@@ -266,6 +314,7 @@ def test_only_kept_files_are_embedded_never_a_record(held):
 @needs_extra
 def test_a_run_that_kept_nothing_has_nothing_embedded_and_its_page_says_so(on):
     from onetrace_console.neighbours import kept
+
     store, runs = on
     run = runs["p2-21-demo-run-1"]
     assert all(p.text is None for p in kept.parts(run, store))
@@ -276,6 +325,7 @@ def test_a_run_that_kept_nothing_has_nothing_embedded_and_its_page_says_so(on):
 def test_outputs_are_kept_only_under_the_input_opt_in(held):
     """A run that keeps an input has its stored outputs read; one that keeps none has none read."""
     from onetrace_console.neighbours import kept
+
     store, runs = held
     p7 = kept.parts(runs["p7-39-cold-chain-baseline"], store)
     assert any(p.kind == kept.OUTPUT and p.text is not None for p in p7)
@@ -285,9 +335,11 @@ def test_outputs_are_kept_only_under_the_input_opt_in(held):
 
 # ------------------------------------------------------------------------------ the derived file
 
+
 @needs_extra
 def test_deleting_the_derived_file_and_rebuilding_gives_the_same_results(on):
     from onetrace_console.neighbours import batches, nearness
+
     store, runs = on
     path = Path(store.root) / "neighbours" / batches.DERIVED
     before = path.read_bytes()
@@ -304,7 +356,8 @@ def test_deleting_the_derived_file_and_rebuilding_gives_the_same_results(on):
 
 @needs_extra
 def test_a_changed_embedder_invalidates_the_vectors(on, monkeypatch):
-    from onetrace_console.neighbours import batches, embedder, settings
+    from onetrace_console.neighbours import batches, settings
+
     store, _runs = on
     first = batches.current(store)
     assert first[1]
@@ -319,10 +372,13 @@ def test_a_changed_embedder_invalidates_the_vectors(on, monkeypatch):
 
 # ------------------------------------------------------------------------------ 5. batches are runs
 
+
 @needs_extra
 def test_each_embedding_batch_is_a_recorded_run_with_a_model_call_record_per_text(on):
     from onetrace import model_call
+
     from onetrace_console.checks import HOLDS, check
+
     store, _runs = on
     runs = sorted((Path(store.root) / "neighbours" / "runs").iterdir())
     assert runs
@@ -343,6 +399,7 @@ def test_each_embedding_batch_is_a_recorded_run_with_a_model_call_record_per_tex
         #: The batch keeps no text: its inputs are digests only.
         assert not (folder / "inputs").exists()
     from onetrace_console.neighbours import batches
+
     assert texts == len(batches.wanted(store))
 
 
@@ -350,7 +407,9 @@ def test_each_embedding_batch_is_a_recorded_run_with_a_model_call_record_per_tex
 def test_the_local_records_fields_are_honest(tmp_path):
     """The local embedder's record, built without its files: every field it cannot observe says so."""
     from onetrace import model_call
+
     from onetrace_console.neighbours import embedder
+
     local = embedder.Local.__new__(embedder.Local)
     local.model = embedder.MODELS[embedder.DEFAULT]
     local.max_length, local.engine_version, local.threads = 256, "1.31.0", 8
@@ -365,6 +424,7 @@ def test_the_local_records_fields_are_honest(tmp_path):
 
 
 # ------------------------------------------------------------------------------ 6. the pages
+
 
 @needs_extra
 def test_a_run_page_lists_its_neighbours_with_a_number_and_compare(on):
@@ -394,17 +454,21 @@ def test_the_nearness_ladder_beside_the_exact_one(on, held):
     assert "digest differs" in marked
     #: Nothing else on the page moved: without the section it is the page drawn with neighbours off.
     off_store, off_runs = held
-    off = _diff(_comparison(off_store, off_runs["p7-39-cold-chain-baseline"],
-                            off_runs["p7-40-cold-chain-one-reading-changed"]), off_store)
+    off = _diff(
+        _comparison(off_store, off_runs["p7-39-cold-chain-baseline"], off_runs["p7-40-cold-chain-one-reading-changed"]),
+        off_store,
+    )
     assert re.sub(r"\n?" + re.escape(section), "", page) == off
     #: Two runs of another configuration each are not neighbours: no ladder.
     assert 'data-section="nearness"' not in _diff(
-        _comparison(store, runs["p4-29-reply-30-days"], runs["p4-30-reply-14-days"]), store)
+        _comparison(store, runs["p4-29-reply-30-days"], runs["p4-30-reply-14-days"]), store
+    )
 
 
 @needs_extra
 def test_equal_fingerprints_are_one_by_the_record_and_not_embedded(on):
     from onetrace_console.neighbours import kept, nearness
+
     store, runs = on
     a, b = runs["p7-39-cold-chain-baseline"], runs["p7-40-cold-chain-one-reading-changed"]
     #: Equal digests: 1.00 by the record, with no text and no vector at all.
@@ -428,20 +492,32 @@ def test_equal_fingerprints_are_one_by_the_record_and_not_embedded(on):
 def test_no_threshold_and_no_word_of_cause(on):
     store, runs = on
     page = _case(runs["p7-40-cold-chain-one-reading-changed"], store) + _diff(
-        _comparison(store, runs["p7-39-cold-chain-baseline"], runs["p7-40-cold-chain-one-reading-changed"]), store)
+        _comparison(store, runs["p7-39-cold-chain-baseline"], runs["p7-40-cold-chain-one-reading-changed"]), store
+    )
     shown = " ".join(re.findall(r'<section data-section="(?:neighbours|nearness)".*?</section>', page, re.S))
     assert shown
-    for word in ("caused", "because", "threshold", "same input", "the change that", "changed the answer",
-                 "likely", "probably", "offline"):
+    for word in (
+        "caused",
+        "because",
+        "threshold",
+        "same input",
+        "the change that",
+        "changed the answer",
+        "likely",
+        "probably",
+        "offline",
+    ):
         assert word not in shown.lower(), word
 
 
 # ------------------------------------------------------------------------------ 7. never public
 
+
 @needs_extra
 def test_a_public_drawing_names_nothing_even_with_neighbours_on(on, monkeypatch):
-    from onetrace_console.frame import rendering
     from onetrace_console import neighbours
+    from onetrace_console.frame import rendering
+
     store, runs = on
     run = runs["p7-40-cold-chain-one-reading-changed"]
     c = _comparison(store, runs["p7-39-cold-chain-baseline"], run)
@@ -456,18 +532,19 @@ def test_a_public_drawing_names_nothing_even_with_neighbours_on(on, monkeypatch)
 @needs_extra
 def test_a_static_export_names_nothing(on):
     from onetrace_console.explain import no_presses
+
     store, runs = on
     with no_presses():
         assert not NAMES.search(_case(runs["p7-40-cold-chain-one-reading-changed"], store))
 
 
 def test_a_public_console_refuses_a_store_with_an_embedder(shared_demo, tmp_path):
-    from tests.conftest import demo_copy
     from onetrace_console.config import Config
     from onetrace_console.public import start_refusal
+    from tests.conftest import demo_copy
+
     folder = demo_copy(shared_demo, tmp_path / "demo")
-    config = Config(public=True, trust_file=str(folder / "trust.json"),
-                    sign_in={**Config().sign_in, "enabled": False})
+    config = Config(public=True, trust_file=str(folder / "trust.json"), sign_in={**Config().sign_in, "enabled": False})
     store_root = folder / "store"
     assert start_refusal(config, store_root) is None
     (store_root / "store" / "neighbours").mkdir()
@@ -479,8 +556,10 @@ def test_a_public_console_has_no_route(monkeypatch, tmp_path):
     """On a public console neither route answers, the extra installed or not: GET is not a page, and
     POST is refused before its body is read, as every write there is."""
     from onetrace_console import neighbours
+
     assert not neighbours.exists(public=True)
     import onetrace_console.serve as serve
+
     handler = serve.Handler.__new__(serve.Handler)
     handler.config = type("C", (), {"public": True})()
     assert handler._neighbours() is False
@@ -498,24 +577,33 @@ def test_the_public_page_check_catches_each_planted_marker(shared_demo):
     """Sabotage for the check below: each marker of the feature, planted on a real public page, is caught;
     and the first pattern, too broad, matched the public pages with nothing planted."""
     from onetrace_console.neighbours import pages as words
+
     page = next(p for p in sorted(Path(shared_demo["folder"]).rglob("case.html"))).read_text(encoding="utf-8")
     assert not NAMES.search(page)
-    planted = (f"<h2>{words.heading(1)}</h2>", f'<span class="note">{words.LABEL}</span>',
-               f'<a href="../../{words.PATH}">{words.TURN_ON}</a>', f"<p>{words.OFF}</p>",
-               f"<h2>{words.LADDER_TITLE}</h2>", '<section data-section="neighbours">',
-               '<section data-section="nearness">', '<form method="post" action="/neighbours/on">')
+    planted = (
+        f"<h2>{words.heading(1)}</h2>",
+        f'<span class="note">{words.LABEL}</span>',
+        f'<a href="../../{words.PATH}">{words.TURN_ON}</a>',
+        f"<p>{words.OFF}</p>",
+        f"<h2>{words.LADDER_TITLE}</h2>",
+        '<section data-section="neighbours">',
+        '<section data-section="nearness">',
+        '<form method="post" action="/neighbours/on">',
+    )
     for marker in planted:
         at = page.index("</main>")
         assert NAMES.search(page[:at] + marker + page[at:]), marker
-    every = " ".join(p.read_text(encoding="utf-8", errors="replace")
-                     for p in Path(shared_demo["folder"]).rglob("*.html"))
+    every = " ".join(
+        p.read_text(encoding="utf-8", errors="replace") for p in Path(shared_demo["folder"]).rglob("*.html")
+    )
     assert TOO_BROAD.search(every).group(0).lower() == "embedd" and not NAMES.search(every)
 
 
 def test_the_public_demo_build_has_no_embedder(shared_demo):
     assert not list(Path(shared_demo["folder"]).rglob("neighbours"))
-    pages = " ".join(p.read_text(encoding="utf-8", errors="replace")
-                     for p in Path(shared_demo["folder"]).rglob("*.html"))
+    pages = " ".join(
+        p.read_text(encoding="utf-8", errors="replace") for p in Path(shared_demo["folder"]).rglob("*.html")
+    )
     assert not NAMES.search(pages)
 
 
@@ -530,6 +618,7 @@ def test_the_non_claims_word_for_word_on_the_setup_page_and_in_the_docs(held, mo
     from onetrace_console.neighbours import NON_CLAIMS
     from onetrace_console.neighbours.pages import setup_page
     from onetrace_console.words import escape
+
     store, _ = held
     page = setup_page(store)
     note = DOC.read_text(encoding="utf-8").replace("\n", " ") if DOC.is_file() else None
@@ -542,22 +631,33 @@ def test_the_operator_readme_says_what_the_extra_is_and_what_it_is_not():
     extra is, how to install it, local only and off by default, the four non-claims word for word, and
     the setup page; and the image it describes installs no extra."""
     from onetrace_console.neighbours import NON_CLAIMS
+
     text = (REPO / "OPERATOR_README.md").read_bytes().decode("utf-8")
     head = "## Neighbours by input: an optional extra, local only"
     assert text.count(head) == 1
     section = text.split(head, 1)[1].split("\r\n## ", 1)[0]
     for claim in NON_CLAIMS:
         assert f"- {claim}\r\n" in section, claim
-    for said in ("`onetrace-console[neighbours]`", "python -m pip install --require-hashes -r requirements-neighbours.lock",
-                 "**Local only.**", "**Off by default.**", "`/neighbours/setup`"):
+    for said in (
+        "`onetrace-console[neighbours]`",
+        "python -m pip install --require-hashes -r requirements-neighbours.lock",
+        "**Local only.**",
+        "**Off by default.**",
+        "`/neighbours/setup`",
+    ):
         assert said in section, said
     assert "neighbours" not in (REPO / "deploy" / "fly" / "Dockerfile").read_text(encoding="utf-8")
     #: As the README says them: what turning it on fetches, and the ladder's two fixed readings.
     from onetrace_console.neighbours.pages import BY_RECORD, NEAR_ONE
+
     flat = " ".join(section.split())
-    for said in ("pinned files, once, from huggingface.co at the pinned revision", "no text leaves the machine",
-                 f'"{BY_RECORD}": the two runs\' digests for that file are equal',
-                 f'"{NEAR_ONE}": the digests are not equal', "Neither is a judgement that two runs did the same thing"):
+    for said in (
+        "pinned files, once, from huggingface.co at the pinned revision",
+        "no text leaves the machine",
+        f'"{BY_RECORD}": the two runs\' digests for that file are equal',
+        f'"{NEAR_ONE}": the digests are not equal',
+        "Neither is a judgement that two runs did the same thing",
+    ):
         assert said in flat, said
 
 
@@ -567,20 +667,26 @@ def test_no_network_calls_only_after_the_fetch_and_never_offline():
     for t in texts:
         assert "offline" not in t.lower()
         for m in re.finditer(r"no network calls", t, re.I):
-            assert re.search(r"after the files are fetched", t[max(0, m.start() - 120):m.end()], re.I), t[m.start() - 120:m.end()]
+            assert re.search(r"after the files are fetched", t[max(0, m.start() - 120) : m.end()], re.I), t[
+                m.start() - 120 : m.end()
+            ]
 
 
 # ------------------------------------------------------------------------------ the embedder's files
 
+
 def _small_model():
     from onetrace_console.neighbours.embedder import Model
+
     data = {"onnx/model.onnx": b"weights", "tokenizer.json": b"{}"}
-    return Model("tiny", "example/tiny", "0" * 40, "mean", "none",
-                 {p: hashlib.sha256(d).hexdigest() for p, d in data.items()}), data
+    return Model(
+        "tiny", "example/tiny", "0" * 40, "mean", "none", {p: hashlib.sha256(d).hexdigest() for p, d in data.items()}
+    ), data
 
 
 def test_each_file_is_checked_by_sha256_and_a_mismatch_refuses_by_name(tmp_path):
     from onetrace_console.neighbours import embedder
+
     model, data = _small_model()
     asked = []
 
@@ -588,6 +694,7 @@ def test_each_file_is_checked_by_sha256_and_a_mismatch_refuses_by_name(tmp_path)
         asked.append(url)
         path = url.split(f"/resolve/{model.revision}/", 1)[1]
         return b"tampered" if path == "tokenizer.json" else data[path]
+
     with pytest.raises(embedder.Refused, match=r"tokenizer\.json as fetched has sha256 "):
         embedder.fetch(tmp_path, model, get=get)
     assert not (embedder.folder(tmp_path, model) / "tokenizer.json").exists()
@@ -600,11 +707,19 @@ def test_each_file_is_checked_by_sha256_and_a_mismatch_refuses_by_name(tmp_path)
 
 def test_the_pins_are_the_rulings(monkeypatch):
     from onetrace_console.neighbours import embedder
+
     d, a = embedder.MODELS[embedder.DEFAULT], embedder.MODELS[embedder.ALTERNATE]
-    assert (d.repo, d.revision, d.pooling) == ("sentence-transformers/all-MiniLM-L6-v2",
-                                               "1110a243fdf4706b3f48f1d95db1a4f5529b4d41", "mean")
+    assert (d.repo, d.revision, d.pooling) == (
+        "sentence-transformers/all-MiniLM-L6-v2",
+        "1110a243fdf4706b3f48f1d95db1a4f5529b4d41",
+        "mean",
+    )
     assert d.files["onnx/model.onnx"] == "6fd5d72fe4589f189f8ebc006442dbb529bb7ce38f8082112682524616046452"
-    assert (a.repo, a.revision, a.pooling) == ("BAAI/bge-small-en-v1.5", "5c38ec7c405ec4b44b94cc5a9bb96e735b38267a", "cls")
+    assert (a.repo, a.revision, a.pooling) == (
+        "BAAI/bge-small-en-v1.5",
+        "5c38ec7c405ec4b44b94cc5a9bb96e735b38267a",
+        "cls",
+    )
     assert a.files["onnx/model.onnx"] == "828e1496d7fabb79cfa4dcd84fa38625c0d3d21da474a00f08db0f559940cf35"
     #: The maximum length is read from the model's own configuration, never written here.
     assert "max_seq_length" in Path(embedder.__file__).read_text(encoding="utf-8")
@@ -614,6 +729,7 @@ def test_the_pins_are_the_rulings(monkeypatch):
 def test_turning_on_needs_the_confirmation_that_names_the_embedder(held, tmp_path):
     from onetrace_console.neighbours import embedder, settings
     from onetrace_console.store import Store
+
     store = Store(tmp_path / "store")
     local = {"kind": "local", "model": embedder.DEFAULT}
     words = settings.confirmation(local)
@@ -627,12 +743,14 @@ def test_turning_on_needs_the_confirmation_that_names_the_embedder(held, tmp_pat
         settings.choose({"embedder": "endpoint", "base_url": "http://user:pw@127.0.0.1/v1", "model": "m"})
     #: No hosted provider is offered or named.
     from onetrace_console.neighbours.pages import setup_page
+
     assert not re.search(r"openai\.com|api\.|cohere|voyage|anthropic", setup_page(store), re.I)
 
 
 def test_off_by_default_and_off_draws_every_page_as_before(held, monkeypatch):
     """Off is the default, and off, every run page and comparison is the page drawn without the extra."""
     from onetrace_console.neighbours import settings
+
     store, runs = held
     assert settings.read(store) is None
     pages = [_case(r, store) for r in runs.values()] + [_diff(c, store) for c in store.comparisons()]
@@ -646,21 +764,35 @@ def test_the_setup_page_turns_it_on_and_off_over_http(server, monkeypatch):
     import urllib.error
     import urllib.parse
     import urllib.request
+
     from onetrace_console.neighbours import embedder, settings
     from onetrace_console.serve import Handler
+
     base, _root = server
     monkeypatch.setattr(embedder, "_post_json", bag_of_words)
-    page = urllib.request.urlopen(base + "/neighbours/setup?" + urllib.parse.urlencode(
-        {"embedder": "endpoint", "base_url": ENDPOINT["base_url"], "model": ENDPOINT["model"]}), timeout=30).read().decode()
+    page = (
+        urllib.request.urlopen(
+            base
+            + "/neighbours/setup?"
+            + urllib.parse.urlencode(
+                {"embedder": "endpoint", "base_url": ENDPOINT["base_url"], "model": ENDPOINT["model"]}
+            ),
+            timeout=30,
+        )
+        .read()
+        .decode()
+    )
     words = settings.confirmation(ENDPOINT)
     assert f'value="{words}"' in page.replace("&#x27;", "'")
 
     class NoRedirect(urllib.request.HTTPRedirectHandler):
         def redirect_request(self, *a, **k):
             return None
+
     opener = urllib.request.build_opener(NoRedirect)
-    body = urllib.parse.urlencode({"embedder": "endpoint", "base_url": ENDPOINT["base_url"],
-                                   "model": ENDPOINT["model"], "confirmed": words}).encode()
+    body = urllib.parse.urlencode(
+        {"embedder": "endpoint", "base_url": ENDPOINT["base_url"], "model": ENDPOINT["model"], "confirmed": words}
+    ).encode()
     with pytest.raises(urllib.error.HTTPError) as got:
         opener.open(urllib.request.Request(base + "/neighbours/on", data=body), timeout=limit(60))
     assert got.value.code == 303
@@ -674,9 +806,13 @@ def test_an_embedder_number_that_rounds_to_one_never_reads_as_the_record_s_equal
     """1.000 is never shown: an embedder's number at 0.9995 or more, where the digests differ, reads
     "≥ 0.9995, digests differ"; the record's equality reads "1.00 by the record"; below, three places."""
     import html as _html
+
     from onetrace_console.neighbours import pages as np_pages
     from onetrace_console.neighbours.nearness import BY_EMBEDDER, BY_RECORD, Near
-    said = lambda v, how=BY_EMBEDDER: _html.unescape(re.sub(r"<[^>]+>", "", np_pages._number(Near(v, how))))
+
+    def said(v, how=BY_EMBEDDER):
+        return _html.unescape(re.sub(r"<[^>]+>", "", np_pages._number(Near(v, how))))
+
     for v in (0.9995, 0.99996, 1.0, 1.0000002):
         assert said(v) == "≥ 0.9995, digests differ", v
     assert said(0.99949) == "0.999" and said(0.997) == "0.997"
@@ -690,11 +826,16 @@ MODEL_FILES = os.environ.get("ONETRACE_NEIGHBOURS_MODEL_FILES", "")
 
 
 @needs_extra
-@pytest.mark.skipif(not MODEL_FILES, reason="ONETRACE_NEIGHBOURS_MODEL_FILES names no folder of the model's "
-                                           "files (the gate sets it; the suite never fetches them)")
+@pytest.mark.skipif(
+    not MODEL_FILES,
+    reason="ONETRACE_NEIGHBOURS_MODEL_FILES names no folder of the model's "
+    "files (the gate sets it; the suite never fetches them)",
+)
 def test_the_local_model_embeds_on_the_cpu(tmp_path):
     import numpy as np
+
     from onetrace_console.neighbours import embedder
+
     for name in (embedder.DEFAULT, embedder.ALTERNATE):
         model = embedder.MODELS[name]
         shutil.copytree(embedder.folder(Path(MODEL_FILES), model), embedder.folder(tmp_path, model))
@@ -705,5 +846,6 @@ def test_the_local_model_embeds_on_the_cpu(tmp_path):
         assert v.shape == (3, 384) and np.allclose(np.linalg.norm(v, axis=1), 1.0, atol=1e-5)
         assert v[0] @ v[1] > v[0] @ v[2]
         from onetrace import model_call
+
         for row in batch.rows:
             model_call.validate({"format": model_call.FORMAT, **batch.shared, **row, "fingerprints": []})

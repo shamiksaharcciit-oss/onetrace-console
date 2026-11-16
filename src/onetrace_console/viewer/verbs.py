@@ -1,15 +1,14 @@
 """Read what the verbs write: `onetrace-report/0.1`, strictly.
 
-The format is the report format's draft (029), read from the reports the verbs actually wrote at
+The format is the report format's draft, read from the reports the verbs actually wrote at
 `c325c94` (the samples kept with the viewer's development history). It **binds by addition** when the
-upstream item 3 lands, so this reader is built to survive additions:
+SDK adds node ids, so this reader is built to survive additions:
 
-- **a key it does not know, it ignores** (029 §0's stability promise);
-- **the node id is read from `node`, and `stage` stays the bare name.** C029 §7 said the node
-  id would appear *in* `stage`; a relay of 2026-09-18 corrected that by addition (R-C006). Rows
+- **a key it does not know, it ignores** (the format's stability promise);
+- **the node id is read from `node`, and `stage` stays the bare name.** The draft first said the
+  node id would appear *in* `stage`; it was corrected to add `node` instead. Rows
   expose `.key` — the node id where one is given, the index otherwise — and **nothing renders a
-  node id yet**: §7's *anticipate it, do not build it* still governs, and
-  `first_difference_frontier` is unbuilt;
+  node id yet**: it is anticipated, not built, and `first_difference_frontier` is unbuilt;
 - **a value it does not know in a closed vocabulary, it refuses** — the vocabularies are
   named here and an unlisted value raises `VerbReportUnreadable`. A page that renders an
   unknown verdict has guessed at what it means;
@@ -19,16 +18,15 @@ upstream item 3 lands, so this reader is built to survive additions:
   guess; so is `null` where the SDK writes `[]`. An absent key still reads as none.
 
 Two shapes arrive under one format. A verb that could not start writes the **failure shape**,
-and 029 §1 says how to tell: **the absence of `mode`** — never by reading stderr.
+and the format says how to tell: **the absence of `mode`** — never by reading stderr.
 
 `exit`, indices and counts are **decimal strings** in the format and stay strings here. They
-are identifiers and record values, not arithmetic (E006's spirit: no float, and no number the
-page invents).
+are identifiers and record values, not arithmetic: no float, and no number the page invents.
 
 WHAT THIS MODULE DOES NOT DO
 ----------------------------
 It renders nothing and it decides no sentence: `viewer/model.py` maps these states onto the
-translation table. It also does not read the `verifier-<side>-<n>.json` files yet — 029 §8
+translation table. It also does not read the `verifier-<side>-<n>.json` files yet — the format
 says those carry `rows[]` machine-readably and that the strict text parser can go the day the
 viewer consumes them. That is a separate change, not smuggled into this one.
 """
@@ -45,17 +43,16 @@ from onetrace_console.viewer.record import unshowable_bytes
 FORMAT = "onetrace-report/0.1"
 VERBS = ("diff", "localize", "reproduce")
 
-#: 029 §2. The envelope of a two-run report.
+#: The envelope of a two-run report.
 ENVELOPES = ("identical", "diverged", "not comparable", "refused", "could not check")
-#: 029 §3. The ladder's closed five.
+#: The ladder's closed five.
 VERDICTS = ("same", "FIRST DIFFERENCE", "downstream", "reconverged", "COULD NOT CHECK")
-#: 029 §4. Single-run `localize`.
+#: Single-run `localize`.
 SINGLE_RESULTS = ("clean", "located", "COULD NOT CHECK", "refused")
 
-#: 022 §2 / O5: on a topological run `localize` answers with a SET of nodes, and `shape`
-#: says so. The only value the SDK emits is "dag" (`report.single_run_dag`), so an unknown
-#: shape is refused rather than read as linear — a DAG read as a line is the defect R40
-#: existed to prevent and O5 replaced with a real answer.
+#: On a topological run `localize` answers with a SET of nodes, and `shape` says so. The only
+#: value the SDK emits is "dag" (`report.single_run_dag`), so an unknown shape is refused rather
+#: than read as linear: a DAG read as a line is the defect the set answer replaced.
 SHAPES = ("dag",)
 
 #: `localize.walk_dag`'s own two kinds, measured in the SDK: a node unclean on its own
@@ -64,10 +61,10 @@ SHAPES = ("dag",)
 DAG_KINDS = ("located", "could not check")
 SINGLE_CHECKS = ("outcome", "chain continuity", "absent output", "emission gaps", "coverage",
                  "boundary")
-#: 029 §5. `reproduce`.
+#: `reproduce`.
 #: As `reproduce.run` writes them (pinned SDK 0.1.0): one stage is mode "stage", and a record
 #: its verifier call refused is result "refused" with no stages. "single-stage" was this
-#: reader's word, never the SDK's -- found by the confirmation review.
+#: reader's word, never the SDK's, and it read no report the SDK writes.
 REPRODUCE_MODES = ("whole-run", "stage")
 REPRODUCE_RESULTS = ("all REPRODUCED", "DIVERGED", "COULD NOT CHECK", "refused")
 STAGE_OUTCOMES = ("REPRODUCED", "DIVERGED", "COULD NOT CHECK")
@@ -89,7 +86,7 @@ class VerbReportUnreadable(ValueError):
 
 @dataclass(frozen=True, slots=True)
 class Failure:
-    """A verb that could not start (029 §1). No `mode`, so no report body."""
+    """A verb that could not start. No `mode`, so no report body."""
 
     verb: str
     envelope: str
@@ -106,7 +103,7 @@ class LadderRow:
     baseline: dict | None
     candidate: dict | None
     reason: str | None
-    node: str | None = None       # item 3's node id, absent at c325c94
+    node: str | None = None       # the node id, absent at c325c94
 
     @property
     def key(self) -> str:
@@ -155,7 +152,7 @@ class DagNode:
 
 @dataclass(frozen=True, slots=True)
 class SingleRunDag:
-    """`localize --mode single-run` on a run that declares a topology (022 §2).
+    """`localize --mode single-run` on a run that declares a topology.
 
     `nodes` replaces `stage`/`check`/`words`: the answer on a DAG is a set, not one stage. The
     tuple is kept in the report's own order — **sorting by node id is the page's job**, so that
@@ -179,7 +176,7 @@ class ReproduceRow:
     declared: str | None
     recorded: dict | None
     produced: dict | None
-    node: str | None = None       # item 3's node id, absent at c325c94
+    node: str | None = None       # the node id, absent at c325c94
 
     @property
     def key(self) -> str:
@@ -277,7 +274,7 @@ def _decimal(obj: dict, key: str, what: str) -> str:
     """A decimal string, as the SDK writes every index (`str(i + 1)`)."""
     v = obj.get(key)
     # Bounded: no run has a billion stages, and a 5000-digit index passed here and then broke
-    # `int()` on the console's Diff page (the second confirmation review, N5).
+    # `int()` on the console's Diff page.
     if not (isinstance(v, str) and v.isascii() and v.isdigit() and len(v) <= 9):
         raise VerbReportUnreadable(f"{what}: {key!r} is {_shown(v)}, not a decimal string")
     return v
@@ -352,7 +349,7 @@ def read_report(where: Path, *, two_run_dag: bool = False) -> Report:
             f"{path.name} declares format {data.get('format')!r}, not {FORMAT!r}")
     verb = _closed(data.get("verb"), VERBS, f"{path.name}: verb")
 
-    # 029 §1: the failure shape is told by the ABSENCE of `mode`, not by reading stderr.
+    # The failure shape is told by the ABSENCE of `mode`, not by reading stderr.
     if "mode" not in data:
         inputs = data.get("inputs")
         if not isinstance(inputs, list) or not all(isinstance(x, str) for x in inputs):
@@ -378,7 +375,8 @@ def read_report(where: Path, *, two_run_dag: bool = False) -> Report:
             elif category is not None:
                 raise VerbReportUnreadable(
                     f"{path.name}: stage {raw.get('index')!r} is {outcome} and carries a "
-                    f"category {category!r}; 029 §5 puts a category only on COULD NOT CHECK")
+                    f"category {category!r}, but only a COULD NOT CHECK stage carries a category. The report "
+                    f"is not one the pinned SDK's `reproduce` writes: write it again with that SDK")
             rows.append(ReproduceRow(
                 index=_string(raw, "index", path.name), stage=_string(raw, "stage", path.name),
                 outcome=outcome, category=category, reason=_optional(raw, "reason"),
@@ -418,8 +416,9 @@ def read_report(where: Path, *, two_run_dag: bool = False) -> Report:
             for key in ("stage", "check", "words"):
                 if data.get(key) is not None:
                     raise VerbReportUnreadable(
-                        f"{path.name}: shape is 'dag' and yet {key!r} is set; 022 §2 has `nodes` "
-                        f"replace stage/check/words on a topological read")
+                        f"{path.name}: shape is 'dag' and yet {key!r} is set, but a report of that shape "
+                        f"names its nodes in `nodes`, never in stage, check or words. Write the report again "
+                        f"with the pinned SDK")
             raw_nodes = data.get("nodes")
             if not isinstance(raw_nodes, list):
                 raise VerbReportUnreadable(
@@ -443,15 +442,15 @@ def read_report(where: Path, *, two_run_dag: bool = False) -> Report:
             _closed(check, SINGLE_CHECKS, f"{path.name}: check")
         if result == "clean" and any(x is not None for x in (data.get("stage"), check)):
             raise VerbReportUnreadable(
-                f"{path.name}: result is 'clean' and yet a stage or check is named; 029 §4 has "
-                f"both null when clean")
+                f"{path.name}: result is 'clean' and yet a stage or check is named, but a clean result "
+                f"names neither. Write the report again with the pinned SDK")
         return SingleRun(verb=verb, result=result, exit_code=_string(data, "exit", path.name),
                          stage=_optional(data, "stage"), check=check,
                          words=_optional(data, "words"))
 
     # The SDK's `two_run_dag` (report.py) keys its rows by node and carries no index. This
     # release's pages draw only a comparison of two linear runs, and say that in words, rather
-    # than refusing the rows as malformed (review note 6).
+    # than refusing the rows as malformed: they are the SDK's own shape.
     if data.get("shape") is not None:
         if not two_run_dag:
             shape = _shown(data.get("shape"))
@@ -544,7 +543,7 @@ def _two_run_dag(data: dict, verb: str, name: str) -> TwoRunDag:
 
 
 def boundary_covers(report: TwoRun, row: LadderRow) -> bool:
-    """029 §6: a ladder row is past a declared boundary.
+    """A ladder row is past a declared boundary.
 
     `verdict = COULD NOT CHECK` **and** the report's `boundary` is set **and** the row is at or
     after the boundary's index. All three, because a COULD NOT CHECK row before a boundary is

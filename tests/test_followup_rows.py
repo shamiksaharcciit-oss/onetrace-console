@@ -8,6 +8,7 @@ report block and the incident quotes. 100 declared names of 50,000 characters, a
 wrote 24.9 MB of run pages and 10 MB of others. Each such row is now drawn as its first NAME_CAP
 characters and the same marker; the whole row stays in the check report the run keeps.
 """
+
 from __future__ import annotations
 
 import io
@@ -36,7 +37,8 @@ def _long_names(files) -> bytes:
     for entry in manifest["chain"]:
         receipt = json.loads(out[entry["file"]].decode("utf-8"))
         receipt["coverage"]["declared_stages"] = receipt["coverage"]["declared_stages"] + [
-            f"{i:03d}" + "n" * LENGTH for i in range(97)]
+            f"{i:03d}" + "n" * LENGTH for i in range(97)
+        ]
         out[entry["file"]] = json.dumps(receipt, separators=(",", ":")).encode("utf-8")
     buf = io.BytesIO()
     with tarfile.open(fileobj=buf, mode="w:gz") as tar:
@@ -73,5 +75,6 @@ def test_the_whole_row_stays_in_the_check_report_the_run_keeps(files, store):
     rows = [r for r in stdout.splitlines() if r.startswith("[FAIL") and "n" * LENGTH in r]
     assert rows, "the stored report keeps each row whole"
     from onetrace_console.viewer.sentences import template
+
     shown = render_execution(run, store, generated_at=GENERATED_AT).pages["case.html"]
     assert template("name.more").split(" (+")[0].strip() in shown

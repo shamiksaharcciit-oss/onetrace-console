@@ -57,28 +57,29 @@ differed from the running one was re-run even if the key matched); it was
 removed as redundant, since the wheel's own hash already cannot fail to change when the
 SDK's source does.
 """
+
 from __future__ import annotations
 
 import hashlib
 import json
-from onetrace_console.bounded_json import load_json_bounded
 import shutil
 import subprocess
 import sys
 import tempfile
 from dataclasses import asdict, dataclass, field, replace
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
+from onetrace_console.bounded_json import load_json_bounded
 from onetrace_console.checks import materialise
 from onetrace_console.child import utf8_env
 from onetrace_console.ingest import bundle
-from onetrace_console.store import StoredRun, Store, StoreError, digest
+from onetrace_console.store import Store, StoredRun, StoreError, digest
 
 COMPARISON_FORMAT = "onetrace-console/comparison/0.1"
 
 #: The verbs this slice runs. `reproduce` is deliberately absent: it re-executes stages, so
-#: it is not free and the design note says it runs only when asked.
+#: it is not free, so it runs only when asked.
 DIFF = "diff"
 LOCALIZE = "localize"
 VERBS = (DIFF, LOCALIZE)
@@ -107,14 +108,15 @@ class ComparisonError(RuntimeError):
 @dataclass(frozen=True, slots=True)
 class VerbRun:
     """One invocation of one verb, and everything it produced."""
+
     verb: str
-    command: tuple[str, ...]        # what ran, recorded rather than reconstructed
-    shown_command: str              # what a reader types to repeat it
+    command: tuple[str, ...]  # what ran, recorded rather than reconstructed
+    shown_command: str  # what a reader types to repeat it
     exit_status: str
-    stdout_key: str                 # the verb's stdout, verbatim, as an object
-    reports: tuple[tuple[str, str], ...] = ()   # (filename, object key), as written
+    stdout_key: str  # the verb's stdout, verbatim, as an object
+    reports: tuple[tuple[str, str], ...] = ()  # (filename, object key), as written
     refused: bool = False
-    note: str = ""                  # `timed out`, or why it could not be run
+    note: str = ""  # `timed out`, or why it could not be run
 
     @property
     def report_names(self) -> tuple[str, ...]:
@@ -124,6 +126,7 @@ class VerbRun:
 @dataclass(frozen=True, slots=True)
 class StoredComparison:
     """One pair, compared. Content-addressed by the order's key."""
+
     key: str
     run_a: str
     run_b: str
@@ -168,10 +171,9 @@ class StoredComparison:
         d = load_json_bounded(text, "a stored comparison record")
         d.pop("format", None)
         d["verbs"] = tuple(
-            VerbRun(**{**v,
-                       "command": tuple(v["command"]),
-                       "reports": tuple((n, k) for n, k in v["reports"])})
-            for v in d["verbs"])
+            VerbRun(**{**v, "command": tuple(v["command"]), "reports": tuple((n, k) for n, k in v["reports"])})
+            for v in d["verbs"]
+        )
         return StoredComparison(**d)
 
 
@@ -183,7 +185,7 @@ def sdk_version() -> str:
     """
     try:
         import onetrace
-    except ImportError as e:                                  # pragma: no cover
+    except ImportError as e:  # pragma: no cover
         raise ComparisonError(f"the SDK is not installed: {e}") from None
     return str(getattr(onetrace, "__version__", "unknown"))
 
@@ -228,7 +230,9 @@ def _wheel_hash_from_direct_url(dist) -> str:
 #: module the installer loads by path before anything is installed. Re-exported
 #: here, so every caller that read them from `compare` still does.
 from onetrace_console.install_report import (  # noqa: E402,F401
-    INSTALL_REPORT_FILENAME, install_report_path)
+    INSTALL_REPORT_FILENAME,
+    install_report_path,
+)
 
 
 def _wheel_hash_from_install_report(name: str) -> str:
@@ -264,9 +268,9 @@ def _own_file(path: str) -> bool:
     """Whether a RECORD path is one of the distribution's own files, as the wheel lists them."""
     parts = path.split("/")
     if path.startswith("/") or ".." in parts or (len(parts[0]) == 2 and parts[0][1] == ":"):
-        return False    # outside the install root: the console-script launchers pip writes per venv
+        return False  # outside the install root: the console-script launchers pip writes per venv
     if "__pycache__" in parts or path.endswith(".pyc"):
-        return False    # compiled at install time, by the installing Python
+        return False  # compiled at install time, by the installing Python
     if len(parts) == 2 and parts[0].endswith(".dist-info") and parts[1] in _INSTALL_TIME_FILES:
         return False
     return True
@@ -292,6 +296,7 @@ def record_digest(version: str, record_lines: list[str]) -> str:
     A `wheel:` identity is the sha256 of the wheel file itself, and a `record:` one is this, so the
     two forms never name the same build alike."""
     import csv
+
     kept = []
     for row in csv.reader(line for line in record_lines if line.strip()):
         if len(row) >= 2 and row[1].startswith("sha256=") and _own_file(row[0]):
@@ -335,7 +340,7 @@ def sdk_build_digest() -> str:
 
     record = dist.read_text("RECORD") if dist is not None else None
     if record:
-        return record_digest(dist.version, record.splitlines())
+        return record_digest(dist.version, record.splitlines())  # type: ignore[union-attr]  # a RECORD is read only from a distribution
 
     #: Loaded from a clone: the commit the clone is checked out at. Read from git rather
     #: than from a file this console wrote, so it is the clone's own answer.
@@ -349,7 +354,8 @@ def sdk_build_digest() -> str:
         f"direct_url.json, the installed RECORD, and git (only onetrace's own checkout counts, "
         f"and {root} is not in one). Refusing rather than keying a comparison under an identity "
         f"that names nothing, or names another project -- a report reused across two different "
-        f"builds is worse than one recomputed. Reinstall onetrace with pip.")
+        f"builds is worse than one recomputed. Reinstall onetrace with pip."
+    )
 
 
 def _own_checkout_commit(package_dir: Path) -> str:
@@ -389,8 +395,7 @@ def _own_checkout_commit(package_dir: Path) -> str:
 #: to `""`, only so a record written before this change still loads.
 
 
-def comparison_key(bundle_sha_a: str, bundle_sha_b: str,
-                   distribution_version: str, build_digest: str) -> str:
+def comparison_key(bundle_sha_a: str, bundle_sha_b: str, distribution_version: str, build_digest: str) -> str:
     """The key: A's bundle, B's bundle, distribution version, build digest, in that order.
 
     A is the baseline throughout. `build_digest` must be non-empty. A key without it is
@@ -400,9 +405,9 @@ def comparison_key(bundle_sha_a: str, bundle_sha_b: str,
     if not build_digest:
         raise ComparisonError(
             "a comparison key needs the SDK's build digest. Without it the key cannot tell "
-            "two builds apart, which is the whole reason the key carries it.")
-    return digest("\0".join((bundle_sha_a, bundle_sha_b, distribution_version,
-                             build_digest)).encode("utf-8"))
+            "two builds apart, which is the whole reason the key carries it."
+        )
+    return digest("\0".join((bundle_sha_a, bundle_sha_b, distribution_version, build_digest)).encode("utf-8"))
 
 
 #: How a verb's interpreter is recorded: by name, never this machine's path to it.
@@ -414,6 +419,7 @@ def portable(args, root: Path) -> tuple[tuple[str, ...], tuple[str, ...]]:
     relative to it, and the interpreter as `python` in the record, so a stored comparison holds no
     path of the machine that made it."""
     import os
+
     rel = []
     for a in args:
         p = Path(a)
@@ -427,6 +433,7 @@ def verifier_copy(root: Path) -> Path:
     the SDK records the verifier's folder in its text diff, so it is named there as `verifier`, a
     folder beside the runs, never this machine's install path."""
     from onetrace_console.checks import shipped_verifier
+
     dest = root / "verifier"
     if not dest.is_dir():
         shutil.copytree(shipped_verifier().parent, dest, ignore=shutil.ignore_patterns("__pycache__"))
@@ -438,6 +445,7 @@ def nested_options(runs, store: Store, root: Path) -> tuple[str, ...]:
     holds, laid out under `root`; the SDK then descends into it ("into run <id> at <child>")."""
     from onetrace_console.nesting_view import nested_inputs
     from onetrace_console.render import _receipts_in_order
+
     ids = []
     for run in runs:
         for r in _receipts_in_order(run.key, store):
@@ -445,7 +453,7 @@ def nested_options(runs, store: Store, root: Path) -> tuple[str, ...]:
     if not ids:
         return ()
     held = {r.run_id: r for r in store.runs() if r.run_id in ids}
-    opts = ()
+    opts: tuple[str, ...] = ()
     for n, rid in enumerate(i for i in ids if i in held):
         try:
             inner = materialise(held[rid], store, root / f"nested-{n}")
@@ -455,60 +463,101 @@ def nested_options(runs, store: Store, root: Path) -> tuple[str, ...]:
     return opts
 
 
-def _run_verb(verb: str, folder_a: Path, folder_b: Path, out: Path, timeout: int,
-              store: Store, nested: tuple[str, ...] = ()) -> VerbRun:
+def _run_verb(
+    verb: str, folder_a: Path, folder_b: Path, out: Path, timeout: int, store: Store, nested: tuple[str, ...] = ()
+) -> VerbRun:
     """Invoke one verb as a subprocess and keep what it wrote.
 
     Through `sys.executable -m onetrace`, never the name `python3`, and the exit
-    status is the process's own rather than a shell pipeline's (R29).
+    status is the process's own rather than a shell pipeline's, so a failure is never hidden by a pipe.
     """
     root = Path(folder_a).parent
-    run_command, command = portable((verb, folder_a, folder_b, *nested, "--verifier", verifier_copy(root),
-                                     "--out", out), root)
+    run_command, command = portable(
+        (verb, folder_a, folder_b, *nested, "--verifier", verifier_copy(root), "--out", out), root
+    )
     shown = f"python -m onetrace {verb} RUN_A RUN_B --out OUT" + "".join(
-        " --nested-run INNER" for a in nested if a == "--nested-run")
+        " --nested-run INNER" for a in nested if a == "--nested-run"
+    )
     try:
         proc = subprocess.run(run_command, capture_output=True, timeout=timeout, env=utf8_env(), cwd=root)
     except subprocess.TimeoutExpired:
         # A timeout is not a verdict and is not a refusal by the SDK. It is this runner
         # failing to obtain an answer, and it says so in its own name.
-        return VerbRun(verb=verb, command=command, shown_command=shown,
-                       exit_status="", stdout_key=store.put(b""), refused=False,
-                       note=f"{TIMED_OUT} after {timeout}s")
+        return VerbRun(
+            verb=verb,
+            command=command,
+            shown_command=shown,
+            exit_status="",
+            stdout_key=store.put(b""),
+            refused=False,
+            note=f"{TIMED_OUT} after {timeout}s",
+        )
 
     stdout_key = store.put(proc.stdout)
     reports: list[tuple[str, str]] = []
     if out.is_dir():
         for path in sorted(p for p in out.rglob("*") if p.is_file()):
             reports.append((path.relative_to(out).as_posix(), store.put(path.read_bytes())))
-    return VerbRun(verb=verb, command=command, shown_command=shown,
-                   exit_status=str(proc.returncode), stdout_key=stdout_key,
-                   reports=tuple(reports), refused=proc.returncode != 0)
+    return VerbRun(
+        verb=verb,
+        command=command,
+        shown_command=shown,
+        exit_status=str(proc.returncode),
+        stdout_key=stdout_key,
+        reports=tuple(reports),
+        refused=proc.returncode != 0,
+    )
 
 
-def _run_text_diff(folder_a: Path, folder_b: Path, out: Path, timeout: int, store: Store,
-                   max_lines: int | None = None) -> VerbRun:
+def _run_text_diff(
+    folder_a: Path, folder_b: Path, out: Path, timeout: int, store: Store, max_lines: int | None = None
+) -> VerbRun:
     """`onetrace diff A B --text --json --no-follow`, its stdout kept byte for byte. `--out` goes
     to the scratch folder: without it the SDK writes `onetrace-report/` where it runs."""
     limit = ("--max-lines", str(max_lines)) if max_lines is not None else ()
     root = Path(folder_a).parent
-    run_command, command = portable(("diff", folder_a, folder_b, "--text", "--json", "--no-follow", *limit,
-                                     "--verifier", verifier_copy(root), "--out", out), root)
-    shown = ("python -m onetrace diff RUN_A RUN_B --text --json --no-follow"
-             + (f" --max-lines {max_lines}" if max_lines is not None else ""))
+    run_command, command = portable(
+        (
+            "diff",
+            folder_a,
+            folder_b,
+            "--text",
+            "--json",
+            "--no-follow",
+            *limit,
+            "--verifier",
+            verifier_copy(root),
+            "--out",
+            out,
+        ),
+        root,
+    )
+    shown = "python -m onetrace diff RUN_A RUN_B --text --json --no-follow" + (
+        f" --max-lines {max_lines}" if max_lines is not None else ""
+    )
     verb = TEXT_DIFF if max_lines is None else f"{TEXT_DIFF} --max-lines {max_lines}"
     try:
         proc = subprocess.run(run_command, capture_output=True, timeout=timeout, env=utf8_env(), cwd=root)
     except subprocess.TimeoutExpired:
-        return VerbRun(verb=verb, command=command, shown_command=shown, exit_status="",
-                       stdout_key=store.put(b""), note=f"{TIMED_OUT} after {timeout}s")
-    return VerbRun(verb=verb, command=command, shown_command=shown,
-                   exit_status=str(proc.returncode), stdout_key=store.put(proc.stdout),
-                   refused=proc.returncode not in (0, 1))
+        return VerbRun(
+            verb=verb,
+            command=command,
+            shown_command=shown,
+            exit_status="",
+            stdout_key=store.put(b""),
+            note=f"{TIMED_OUT} after {timeout}s",
+        )
+    return VerbRun(
+        verb=verb,
+        command=command,
+        shown_command=shown,
+        exit_status=str(proc.returncode),
+        stdout_key=store.put(proc.stdout),
+        refused=proc.returncode not in (0, 1),
+    )
 
 
-def show_more(comparison: "StoredComparison", store: Store, *,
-              timeout: int = DEFAULT_TIMEOUT) -> "StoredComparison":
+def show_more(comparison: StoredComparison, store: Store, *, timeout: int = DEFAULT_TIMEOUT) -> StoredComparison:
     """The text diff again, with `TEXT_DIFF_MORE_LINES` -- the one larger
     limit, never a number from a request -- stored as a run of its own beside the others, which
     are kept exactly as they were. Run once; asked again, the stored run is the answer."""
@@ -523,14 +572,13 @@ def show_more(comparison: "StoredComparison", store: Store, *,
         folder_a = materialise(run_a, store, root / "a")
         folder_b = materialise(run_b, store, root / "b")
         (root / "out-text-more").mkdir()
-        run = _run_text_diff(folder_a, folder_b, root / "out-text-more", timeout, store,
-                             max_lines=TEXT_DIFF_MORE_LINES)
+        run = _run_text_diff(folder_a, folder_b, root / "out-text-more", timeout, store, max_lines=TEXT_DIFF_MORE_LINES)
     updated = replace(comparison, verbs=tuple(comparison.verbs) + (run,))
     store.put_comparison(updated)
     return updated
 
 
-def text_diff_raw(comparison: "StoredComparison", store: Store) -> tuple[bytes, str] | None:
+def text_diff_raw(comparison: StoredComparison, store: Store) -> tuple[bytes, str] | None:
     """(the stored text-diff document, the run's verb name): the "Show more" run where there is
     one, else the first; None where this comparison has neither."""
     for verb in (f"{TEXT_DIFF} --max-lines {TEXT_DIFF_MORE_LINES}", TEXT_DIFF):
@@ -540,10 +588,18 @@ def text_diff_raw(comparison: "StoredComparison", store: Store) -> tuple[bytes, 
     return None
 
 
-def compare(run_a: StoredRun, run_b: StoredRun, store: Store, *,
-            timeout: int = DEFAULT_TIMEOUT, verbs: tuple[str, ...] = VERBS,
-            ran_at: str | None = None, force: bool = False,
-            work_root: Path | None = None, text_diff: bool = True) -> StoredComparison:
+def compare(
+    run_a: StoredRun,
+    run_b: StoredRun,
+    store: Store,
+    *,
+    timeout: int = DEFAULT_TIMEOUT,
+    verbs: tuple[str, ...] = VERBS,
+    ran_at: str | None = None,
+    force: bool = False,
+    work_root: Path | None = None,
+    text_diff: bool = True,
+) -> StoredComparison:
     """Compare two stored runs with the SDK's verbs, or return the stored comparison.
 
     `run_a` is the baseline and `run_b` the candidate, in that order, always -- the SDK's
@@ -586,6 +642,7 @@ def compare(run_a: StoredRun, run_b: StoredRun, store: Store, *,
         #: One whose text diff names a changed corpus link, and that holds no
         #: trace run yet, is made again, so that board 7 can be drawn (`board7.needs_trace`).
         from onetrace_console.board7 import needs_trace
+
         no_trace = text_diff and not no_text_diff and needs_trace(held, store)
         if not (unkeyed or other_build or no_text_diff or no_trace):
             return held
@@ -606,8 +663,9 @@ def compare(run_a: StoredRun, run_b: StoredRun, store: Store, *,
         for verb in verbs:
             out = root / f"out-{verb}"
             out.mkdir(parents=True, exist_ok=True)
-            runs.append(_run_verb(verb, folder_a, folder_b, out, timeout, store,
-                                  nested if verb in (DIFF, LOCALIZE) else ()))
+            runs.append(
+                _run_verb(verb, folder_a, folder_b, out, timeout, store, nested if verb in (DIFF, LOCALIZE) else ())
+            )
         if text_diff:
             out = root / "out-text"
             out.mkdir(parents=True, exist_ok=True)
@@ -615,6 +673,7 @@ def compare(run_a: StoredRun, run_b: StoredRun, store: Store, *,
             #: The trace's own run, only where that text diff names a changed
             #: corpus link; the text diff's run stays `--no-follow`.
             from onetrace_console.board7 import trace_run
+
             traced = trace_run(store, folder_a, folder_b, root, timeout, runs[-1])
             if traced is not None:
                 runs.append(traced)
@@ -623,12 +682,17 @@ def compare(run_a: StoredRun, run_b: StoredRun, store: Store, *,
             scratch.cleanup()
 
     comparison = StoredComparison(
-        key=key, run_a=run_a.key, run_b=run_b.key,
-        bundle_sha_a=sha_a, bundle_sha_b=sha_b,
+        key=key,
+        run_a=run_a.key,
+        run_b=run_b.key,
+        bundle_sha_a=sha_a,
+        bundle_sha_b=sha_b,
         sdk_version=version,
-        sdk_distribution_version=distribution, sdk_build_digest=build,
-        ran_at=ran_at or datetime.now(timezone.utc).isoformat(timespec="seconds"),
-        verbs=tuple(runs))
+        sdk_distribution_version=distribution,
+        sdk_build_digest=build,
+        ran_at=ran_at or datetime.now(UTC).isoformat(timespec="seconds"),
+        verbs=tuple(runs),
+    )
     store.put_comparison(comparison)
     return comparison
 

@@ -5,6 +5,7 @@ not a skip: the PC has IPv6, and §5's Windows run is what covers these tests.
 These tests drive `ipv6_loopback_port()` with a stand-in socket, so each outcome is exercised on
 every host: a bind that works, a bind that fails off Windows, and a bind that fails on Windows.
 """
+
 from __future__ import annotations
 
 import errno
@@ -75,22 +76,28 @@ def test_no_ipv6_loopback_on_windows_is_a_failure_not_a_skip(monkeypatch):
 
 def test_a_host_with_no_ipv6_at_all_is_measured_the_same_way(monkeypatch):
     """Creating the AF_INET6 socket can itself fail (EAFNOSUPPORT) where IPv6 is compiled out."""
+
     def no_family(family, kind):
         raise OSError(errno.EAFNOSUPPORT, "Address family not supported by protocol")
+
     monkeypatch.setattr(socket, "socket", no_family)
     kind, said = _outcome(windows=False)
     assert kind == "skipped" and f"Errno {errno.EAFNOSUPPORT}" in said, (kind, said)
     assert _outcome(windows=True)[0] == "failed"
 
 
-@pytest.mark.parametrize("module, test", [
-    ("tests/test_rereview_fixes.py", "test_ipv6_loopback_is_listened_on"),
-    ("tests/test_third_review_fixes.py", "test_an_ipv6_host_is_said_as_a_url"),
-])
+@pytest.mark.parametrize(
+    "module, test",
+    [
+        ("tests/test_rereview_fixes.py", "test_ipv6_loopback_is_listened_on"),
+        ("tests/test_third_review_fixes.py", "test_an_ipv6_host_is_said_as_a_url"),
+    ],
+)
 def test_both_ipv6_tests_take_their_port_from_the_probe(module, test):
     """The skip lives in one place: each IPv6 test gets its port from the probe and binds ::1
     nowhere else."""
     from tests.conftest import REPO
+
     source = (REPO / module).read_text(encoding="utf-8")
     body = source.split(f"def {test}(", 1)[1].split("\ndef ", 1)[0]
     assert "ipv6_loopback_port()" in body

@@ -12,6 +12,7 @@ Each rule, on a real folder and real runs:
 
 The sabotage of rule 2 (a run taken in on its first sight) is tools/sabotage_watch.py's.
 """
+
 from __future__ import annotations
 
 import json
@@ -19,21 +20,34 @@ import shutil
 import time
 from pathlib import Path
 
-import pytest
-
 from onetrace_console import watch
 
 
 def _record(folder: Path, run_id: str, *, between=None) -> None:
     from onetrace.emit import Instrument, Recorder
-    rec = Recorder(str(folder), run_id=run_id, declared_stages=["one", "two"], manifest=Path(__file__),
-                   policy="fail-closed", anchor_reason="a test record")
-    rec.run_node("one", None, Instrument("w", "tool", "1.0.0", {"k": "v"}),
-                 lambda ctx: ctx.write("one.txt", b"1\n", "text/plain"))
+
+    rec = Recorder(
+        str(folder),
+        run_id=run_id,
+        declared_stages=["one", "two"],
+        manifest=Path(__file__),
+        policy="fail-closed",
+        anchor_reason="a test record",
+    )
+    rec.run_node(
+        "one",
+        None,
+        Instrument("w", "tool", "1.0.0", {"k": "v"}),
+        lambda ctx: ctx.write("one.txt", b"1\n", "text/plain"),
+    )
     if between is not None:
         between()
-    rec.run_node("two", None, Instrument("w", "tool", "1.0.0", {"k": "v"}),
-                 lambda ctx: ctx.write("two.txt", b"2\n", "text/plain"))
+    rec.run_node(
+        "two",
+        None,
+        Instrument("w", "tool", "1.0.0", {"k": "v"}),
+        lambda ctx: ctx.write("two.txt", b"2\n", "text/plain"),
+    )
     rec.close()
 
 
@@ -56,7 +70,8 @@ def test_a_run_written_stage_by_stage_is_taken_only_once_finished(tmp_path, exam
     seen_while_writing = []
 
     def mid_run():
-        seen_while_writing.extend([w.scan(), w.scan()])     # two reads while it's being written
+        seen_while_writing.extend([w.scan(), w.scan()])  # two reads while it's being written
+
     _record(runs / "slow", "slow", between=mid_run)
     examined(1, "run written slowly")
     assert seen_while_writing == [[], []] and took.names == [], "never while being written"
@@ -92,11 +107,13 @@ def test_taken_in_once_a_changed_run_is_noted_and_a_deleted_one_noted_neutral(tm
     _record(runs / "b", "b")
     took = _Intake()
     w = watch.Watcher(runs, took, interval=0.01, examine=lambda d: ("bad", f"{d.name} now contradicts"))
-    w.scan(); w.scan()
+    w.scan()
+    w.scan()
     assert took.names == ["a", "b"]
     (runs / "a" / "artifacts" / "01-one" / "one.txt").write_bytes(b"changed\n")
     shutil.rmtree(runs / "b")
-    w.scan(); w.scan()
+    w.scan()
+    w.scan()
     examined(2, "runs changed after intake")
     assert took.names == ["a", "b"], "never taken in a second time"
     assert w.state.changed == {"a": ("bad", "a now contradicts"), "b": watch.GONE}
@@ -125,6 +142,7 @@ def test_an_error_in_one_intake_is_kept_and_the_pass_goes_on(tmp_path, examined)
         if run_dir.name == "a":
             raise RuntimeError("the store is full")
         return True
+
     w = watch.Watcher(runs, intake, interval=0.01)
     w.scan()
     examined(1, "pass")
@@ -134,6 +152,7 @@ def test_an_error_in_one_intake_is_kept_and_the_pass_goes_on(tmp_path, examined)
 def test_the_console_shows_a_run_recorded_into_its_folder_after_it_started(tmp_path, examined):
     from tests.test_checks import _require_installed
     from tests.test_folder_load import _Console, _free_port, _get
+
     _require_installed()
     (tmp_path / "runs").mkdir()
     port = _free_port()
@@ -159,6 +178,7 @@ def test_the_console_shows_a_run_recorded_into_its_folder_after_it_started(tmp_p
 def test_no_watch_reads_once_and_compare_waits_when_watched(tmp_path, examined):
     from tests.test_checks import _require_installed
     from tests.test_folder_load import _Console, _free_port
+
     _require_installed()
     (tmp_path / "runs").mkdir()
     c = _Console(tmp_path, "runs", "--no-watch", "--port", str(_free_port()))
@@ -186,6 +206,7 @@ def test_a_watched_console_has_no_form_and_no_read_now_route(tmp_path, examined)
 
     from tests.test_checks import _require_installed
     from tests.test_folder_load import _Console, _free_port, _get
+
     _require_installed()
     _record(tmp_path / "runs" / "a", "a")
     port = _free_port()
@@ -200,8 +221,9 @@ def test_a_watched_console_has_no_form_and_no_read_now_route(tmp_path, examined)
             time.sleep(0.5)
         pages = {name: _get(f"{base}/{name}") for name in ("home.html", "executions-all.html")}
         try:
-            with urllib.request.urlopen(urllib.request.Request(
-                    base + "/v1/folder/read", data=b"", method="POST"), timeout=10) as r:
+            with urllib.request.urlopen(
+                urllib.request.Request(base + "/v1/folder/read", data=b"", method="POST"), timeout=10
+            ) as r:
                 answered = (r.status, r.read())
         except urllib.error.HTTPError as e:
             answered = (e.code, e.read())
@@ -212,6 +234,7 @@ def test_a_watched_console_has_no_form_and_no_read_now_route(tmp_path, examined)
         assert 'data-section="watched"' in page, name
         from tests.run_tools import without_run_tools
         from tests.test_theme_switch import without_the_console_s_own
+
         #: The index's search box (console 0.5.0) reads; it is no "read now", and is taken out by its
         #: exact markup.
         #: The settings menu's gear (console 0.6.1 item 13) is setup, not a read: taken out by its markup.
@@ -220,8 +243,7 @@ def test_a_watched_console_has_no_form_and_no_read_now_route(tmp_path, examined)
     assert answered == (404, b"no such route\n"), answered
 
 
-def test_the_watched_line_shows_the_folder_as_written_not_with_doubled_backslashes(tmp_path, monkeypatch,
-                                                                                    examined):
+def test_the_watched_line_shows_the_folder_as_written_not_with_doubled_backslashes(tmp_path, monkeypatch, examined):
     """The watched-folder line shows the folder's path as written. On Windows every separator is a
     backslash, and the page's record-word escape doubled each one (`C:\\\\Users\\\\...`). Here the
     folder's own name holds a backslash, so the same line is checked on every platform; on Windows
@@ -230,6 +252,7 @@ def test_the_watched_line_shows_the_folder_as_written_not_with_doubled_backslash
     import re
 
     from onetrace_console.render import watched_section
+
     folder = tmp_path / "my\\runs"
     folder.mkdir(parents=True)
     monkeypatch.setattr(watch, "CURRENT", watch.Watcher(folder, lambda run_dir: True, interval=1.0))
@@ -241,6 +264,7 @@ def test_the_watched_line_shows_the_folder_as_written_not_with_doubled_backslash
 
 def test_a_watched_path_s_control_characters_are_still_shown_as_escapes(examined):
     from onetrace_console.words import path_text
+
     shown = path_text("C:\\Users\\a\x07b\u202e<c>")
     examined(1, "paths")
     assert shown == "C:\\Users\\a\\u0007b\\u202e&lt;c&gt;", shown

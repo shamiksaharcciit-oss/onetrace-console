@@ -9,6 +9,7 @@ replace onto a file another replace is writing is refused, and a font answered 5
 Off Windows, Windows' refusal is modelled: a replace onto a target another replace is still
 writing raises PermissionError, as Windows' does. The Windows probe runs this file for real.
 """
+
 from __future__ import annotations
 
 import os
@@ -17,7 +18,6 @@ import time
 import urllib.error
 import urllib.request
 
-import pytest
 from tests.http_limits import limit
 
 FONT = "/static/fonts/IBMPlexSans-Regular-Latin1.woff2"
@@ -39,6 +39,7 @@ def _windows_like_replace(real):
         finally:
             with guard:
                 busy.discard(key)
+
     return replace
 
 
@@ -48,6 +49,7 @@ def _concurrently(n: int, f) -> list:
     def one(i):
         start.wait()
         out[i] = f(i)
+
     threads = [threading.Thread(target=one, args=(i,)) for i in range(n)]
     for t in threads:
         t.start()
@@ -59,6 +61,7 @@ def _concurrently(n: int, f) -> list:
 def test_concurrent_appends_keep_one_chain(tmp_path, monkeypatch, examined):
     from onetrace_console import store as store_module
     from onetrace_console.access_log import AccessLog
+
     log = AccessLog(tmp_path / "log", max_segment_bytes=10_000_000)
     monkeypatch.setattr(store_module.os, "replace", _windows_like_replace(os.replace))
     errors = []
@@ -69,6 +72,7 @@ def test_concurrent_appends_keep_one_chain(tmp_path, monkeypatch, examined):
                 log.append(principal="anonymous", method="GET", path=FONT, status=200)
             except BaseException as e:  # noqa: BLE001 - counted
                 errors.append(type(e).__name__)
+
     _concurrently(8, append)
     examined(80, "appends")
     assert errors == []
@@ -78,6 +82,7 @@ def test_concurrent_appends_keep_one_chain(tmp_path, monkeypatch, examined):
 
 def test_concurrent_requests_for_one_font_all_answer_200(server, monkeypatch, examined):
     from onetrace_console import store as store_module
+
     base, _ = server
     monkeypatch.setattr(store_module.os, "replace", _windows_like_replace(os.replace))
 
@@ -87,6 +92,7 @@ def test_concurrent_requests_for_one_font_all_answer_200(server, monkeypatch, ex
                 return r.status
         except urllib.error.HTTPError as e:
             return e.code
+
     got = _concurrently(16, get)
     examined(16, "concurrent font requests")
     assert got == [200] * 16
@@ -98,6 +104,7 @@ def test_sabotage_the_append_unlocked_is_named(tmp_path, monkeypatch, examined):
 
     from onetrace_console import access_log
     from onetrace_console import store as store_module
+
     monkeypatch.setattr(store_module.os, "replace", _windows_like_replace(os.replace))
     monkeypatch.setattr(access_log, "_APPEND_LOCK", contextlib.nullcontext())
     log = access_log.AccessLog(tmp_path / "log", max_segment_bytes=10_000_000)
@@ -109,6 +116,7 @@ def test_sabotage_the_append_unlocked_is_named(tmp_path, monkeypatch, examined):
                 log.append(principal="anonymous", method="GET", path=FONT, status=200)
             except BaseException as e:  # noqa: BLE001 - counted
                 errors.append(type(e).__name__)
+
     _concurrently(8, append)
     examined(1, "unlocked appends")
     assert errors or log.verify_chain()[0] is False
@@ -118,6 +126,9 @@ def test_the_start_up_line_names_the_store_s_own_folder(examined):
     """The line names the folder the store is in, as the explanations' paths use it: the store
     root's `store`, where `x/` and every record are."""
     from onetrace_console.serve import startup_line
+
     examined(1, "start-up line")
     line = startup_line("http://127.0.0.1:8080", "/srv/demo/store")
-    assert line == f"onetrace-console serving on http://127.0.0.1:8080 (store: {os.path.join('/srv/demo/store', 'store')})"
+    assert (
+        line == f"onetrace-console serving on http://127.0.0.1:8080 (store: {os.path.join('/srv/demo/store', 'store')})"
+    )

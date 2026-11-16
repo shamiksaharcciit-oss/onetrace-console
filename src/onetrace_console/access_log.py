@@ -1,8 +1,8 @@
 """The console's own access log: append-only, hash-chained, one entry per request.
 
-The design note: *"every ingest and every page view is attributable to a named
-principal, recorded in the console's own access log, which is append-only and
-hash-chained like our other records."* This is step 1, with a configured maximum size
+The rule: every ingest and every page view is attributable to a named principal, recorded in
+the console's own access log, which is append-only and hash-chained like the records it keeps.
+This is step 1, with a configured maximum size
 per segment, `StoreExhausted`-style fail-closed behaviour, and rotation to a new
 chained segment.
 
@@ -43,17 +43,18 @@ segment, the same way a run's chain does not restart at a stage boundary. `HEAD.
 its size so far, and the chain head, so a restart resumes the same chain rather than a new
 one.
 """
+
 from __future__ import annotations
 
 import hashlib
-from onetrace_console.bounded_json import load_json_bounded
 import json
 import re
 import threading
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
+from onetrace_console.bounded_json import load_json_bounded
 from onetrace_console.oserror import said
 from onetrace_console.store import _atomic_write
 
@@ -76,7 +77,7 @@ def entry_digest(entry: dict) -> str:
 
 
 def _now_iso() -> str:
-    return datetime.now(timezone.utc).isoformat(timespec="seconds")
+    return datetime.now(UTC).isoformat(timespec="seconds")
 
 
 def _segment_path(root: Path, segment: int) -> Path:
@@ -95,22 +96,19 @@ def _read_head(path: Path) -> dict:
     try:
         head = load_json_bounded(path.read_text(encoding="utf-8"), path.name)
     except RecursionError:
-        raise ValueError(f"{path.name} is nested past what JSON can read, so it is not the "
-                         f"access log's own") from None
+        raise ValueError(f"{path.name} is nested past what JSON can read, so it is not the access log's own") from None
     if not isinstance(head, dict):
         raise ValueError(f"{path.name} is a {type(head).__name__}, not the access log's own")
     #: Bounded above too: a segment number of 10**400 started, and then every
     #: request answered 500. A segment's number is what its file name spells in SEGMENT_DIGITS.
-    bounds = {"segment": (1, 10 ** SEGMENT_DIGITS - 1), "segment_size": (0, 2 ** 62)}
+    bounds = {"segment": (1, 10**SEGMENT_DIGITS - 1), "segment_size": (0, 2**62)}
     for key in ("segment", "segment_size"):
         value = head.get(key)
         low, high = bounds[key]
         if isinstance(value, bool) or not isinstance(value, int) or not low <= value <= high:
-            raise ValueError(f"{path.name}'s {key} is {value!r}, not the whole number the "
-                             f"access log writes")
+            raise ValueError(f"{path.name}'s {key} is {value!r}, not the whole number the access log writes")
     chain_head = head.get("chain_head")
-    if not (chain_head is None or isinstance(chain_head, str)
-            and _CHAIN_HEAD.fullmatch(chain_head)):
+    if not (chain_head is None or isinstance(chain_head, str) and _CHAIN_HEAD.fullmatch(chain_head)):
         raise ValueError(f"{path.name}'s chain_head is {chain_head!r}, not a sha256 digest")
     return head
 
@@ -125,6 +123,7 @@ _APPEND_LOCK = threading.Lock()
 @dataclass
 class AccessLog:
     """One access log, rooted at `root` (typically `<store-root>/access_log/`)."""
+
     root: Path
     max_segment_bytes: int
 
@@ -144,12 +143,10 @@ class AccessLog:
             self._write_head()
 
     def _write_head(self) -> None:
-        head = {"segment": self._segment, "segment_size": self._segment_size,
-               "chain_head": self._chain_head}
+        head = {"segment": self._segment, "segment_size": self._segment_size, "chain_head": self._chain_head}
         _atomic_write(self._head_path, (json.dumps(head, sort_keys=True) + "\n").encode("utf-8"))
 
-    def append(self, *, principal: str, method: str, path: str, status: int,
-              now: str | None = None) -> dict:
+    def append(self, *, principal: str, method: str, path: str, status: int, now: str | None = None) -> dict:
         """Append one entry. Raises `AccessLogExhausted` -- never returns partially --
         if the entry cannot be written at all (rotation itself failing, or the
         underlying filesystem refusing the write). One at a time (`_APPEND_LOCK`).
@@ -214,8 +211,7 @@ class AccessLog:
         prev = None
         for i, entry in enumerate(entries):
             if entry["prev"] != prev:
-                return False, (f"entry {i}: prev={entry['prev']!r} but the chain up to "
-                              f"here computes {prev!r}")
+                return False, (f"entry {i}: prev={entry['prev']!r} but the chain up to here computes {prev!r}")
             prev = entry_digest(entry)
         if prev != self._chain_head:
             return False, f"recomputed head {prev!r} disagrees with recorded head {self._chain_head!r}"

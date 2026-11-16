@@ -18,6 +18,7 @@ console serves it, for every run and every state:
 Each check returns the problems it finds, and each has its sabotage: a planted page or line that
 must be named.
 """
+
 from __future__ import annotations
 
 import html
@@ -29,16 +30,34 @@ import pytest
 
 #: Each state as a count says it in a sentence ("28 of 31 records agree"), and as the receipt page
 #: and the comparison pages say it of one run.
-COUNTED = {"yes": "records agree", "no": "contradict their record", "couldnt-check": "couldn't check",
-           "not-checked": "not checked", "no-verdict": "no verdict recorded"}
-RECEIPT = {"yes": "Records agree: yes", "no": "Records agree: no",
-           "couldnt-check": "Records agree: couldn't check", "not-checked": "Records agree: not checked"}
+COUNTED = {
+    "yes": "records agree",
+    "no": "contradict their record",
+    "couldnt-check": "couldn't check",
+    "not-checked": "not checked",
+    "no-verdict": "no verdict recorded",
+}
+RECEIPT = {
+    "yes": "Records agree: yes",
+    "no": "Records agree: no",
+    "couldnt-check": "Records agree: couldn't check",
+    "not-checked": "Records agree: not checked",
+}
 #: Needs attention first: the kind each state is listed under (a yes is not listed for it).
-ATTENTION = {"no": "contradicts", "couldnt-check": "couldnt-check", "not-checked": "not-checked",
-             "no-verdict": "no-verdict"}
+ATTENTION = {
+    "no": "contradicts",
+    "couldnt-check": "couldnt-check",
+    "not-checked": "not-checked",
+    "no-verdict": "no-verdict",
+}
 #: One run in a comparison's records sentence.
-COMPARED = {"yes": "records agree", "no": "contradict", "couldnt-check": "couldn't be checked",
-            "not-checked": "not checked", "no-verdict": "no verdict recorded"}
+COMPARED = {
+    "yes": "records agree",
+    "no": "contradict",
+    "couldnt-check": "couldn't be checked",
+    "not-checked": "not checked",
+    "no-verdict": "no verdict recorded",
+}
 
 
 def _text(fragment: str) -> str:
@@ -54,6 +73,7 @@ def reread(run, store):
     from dataclasses import replace
 
     from onetrace_console.checks import agree_state, materialise
+
     envelope = json.loads(store.get(run.check_report).decode("utf-8")) if run.check_report else None
     with tempfile.TemporaryDirectory() as tmp:
         fields = agree_state(materialise(run, store, Path(tmp) / "run"), envelope)
@@ -64,6 +84,7 @@ class Demo:
     def __init__(self, folder: Path, said):
         from onetrace_console import records
         from onetrace_console.store import Store
+
         self.folder, self.pages = folder, folder / "store" / "pages"
         self.store = Store(folder / "store" / "store")
         self.runs = self.store.runs()
@@ -77,6 +98,7 @@ class Demo:
 
 def _build(folder: Path) -> Demo:
     from onetrace_console.folder_load import build_public
+
     said, _ = build_public(folder)
     return Demo(folder, said)
 
@@ -84,11 +106,13 @@ def _build(folder: Path) -> Demo:
 @pytest.fixture(scope="module")
 def demo(shared_demo) -> Demo:
     from tests.test_checks import _require_installed
+
     _require_installed()
     return Demo(shared_demo["folder"], shared_demo["said"])
 
 
 # ------------------------------------------------------------- the checks
+
 
 def run_page_problems(d: Demo) -> list[str]:
     """Rung 1 on each run's own page is the one function's state; a run not checked because its
@@ -115,7 +139,11 @@ def runs_list_problems(d: Demo) -> list[str]:
     out = []
     for r in d.runs:
         row = re.search(rf'<tr data-run="[^"]*" data-key="{r.key}">(.*?)</tr>', page, re.S)
-        cell = re.search(r'<td[^>]*data-answer="records-agree"[^>]*>.*?data-state="([^"]+)"', row.group(1), re.S) if row else None
+        cell = (
+            re.search(r'<td[^>]*data-answer="records-agree"[^>]*>.*?data-state="([^"]+)"', row.group(1), re.S)
+            if row
+            else None
+        )
         got = cell.group(1) if cell else None
         if got != d.state[r.key]:
             out.append(f"{r.run_id}: the Runs list says {got!r}, the one function {d.state[r.key]!r}")
@@ -128,7 +156,9 @@ def receipt_problems(d: Demo) -> list[str]:
         if d.state[r.key] == "no-verdict":
             continue
         want = RECEIPT[d.state[r.key]] + (f" ({d.why[r.key]})" if d.why[r.key] else "")
-        said = re.findall(r"Records agree(?:: [a-z']+(?: [a-z']+)*(?: \([a-z' ]+\))?)?", _text(d.page(f"runs/{r.key}/receipt.html")))
+        said = re.findall(
+            r"Records agree(?:: [a-z']+(?: [a-z']+)*(?: \([a-z' ]+\))?)?", _text(d.page(f"runs/{r.key}/receipt.html"))
+        )
         if said[:1] != [want]:
             out.append(f"{r.run_id}: the receipt page says {said[:1]}, the one function {want!r}")
     return out
@@ -142,6 +172,7 @@ def card_problems(d: Demo) -> list[str]:
     """The Records agree card: its headline is the yes count; its line gives each state with runs,
     each opening exactly those runs, and names each state at 0."""
     from onetrace_console.records import HELD_WITHOUT, STATES
+
     home = d.page("home.html")
     card = re.search(r'<div data-card="records-agree">(.*?)</div>', home, re.S).group(1)
     total, out = len(d.runs), []
@@ -151,8 +182,11 @@ def card_problems(d: Demo) -> list[str]:
     line = re.search(r'<p data-line="states">(.*?)</p>', card, re.S)
     links = re.findall(r'<a href="([^"]+)">(\d+) of \d+ ([^<]+)</a>', line.group(1) if line else "")
     got = {html.unescape(w): (href, int(n)) for href, n, w in links}
-    zero = _text(re.search(r'<p class="zero" data-line="zero">(.*?)</p>', card, re.S).group(1)) \
-        if 'data-line="zero"' in card else ""
+    zero = (
+        _text(re.search(r'<p class="zero" data-line="zero">(.*?)</p>', card, re.S).group(1))
+        if 'data-line="zero"' in card
+        else ""
+    )
     for s in STATES:
         n = _count(d, s)
         words = COUNTED[s]
@@ -180,14 +214,18 @@ def rung_row_problems(d: Demo) -> list[str]:
     for s in ("not-checked", "couldnt-check", "no", "no-verdict"):
         m = re.search(rf"(\d+) {re.escape(COUNTED[s])}", row)
         if not m or int(m.group(1)) != _count(d, s):
-            out.append(f"the rung row gives {COUNTED[s]!r} as {m.group(1) if m else None}, the one function {_count(d, s)}")
+            out.append(
+                f"the rung row gives {COUNTED[s]!r} as {m.group(1) if m else None}, the one function {_count(d, s)}"
+            )
     return out
 
 
 def _table(section: str) -> tuple[list[str], list[list[str]]]:
     head = [_text(c) for c in re.findall(r"<th>(.*?)</th>", section, re.S)]
-    rows = [[_text(c) for c in re.findall(r"<td[^>]*>(.*?)</td>", r, re.S)]
-            for r in re.findall(r"<tr data-(?:pipeline|day)=.*?</tr>", section, re.S)]
+    rows = [
+        [_text(c) for c in re.findall(r"<td[^>]*>(.*?)</td>", r, re.S)]
+        for r in re.findall(r"<tr data-(?:pipeline|day)=.*?</tr>", section, re.S)
+    ]
     return head, rows
 
 
@@ -196,6 +234,7 @@ def table_problems(d: Demo, name: str) -> list[str]:
     each cell the one function's count of that row's runs."""
     from onetrace_console.overview import days, pipelines
     from onetrace_console.records import LABEL, STATES
+
     home = d.page("home.html")
     section = re.search(rf'<section data-section="{name}">.*?</section>', home, re.S).group(0)
     head, rows = _table(section)
@@ -216,8 +255,13 @@ def table_problems(d: Demo, name: str) -> list[str]:
 def counts_problems(d: Demo) -> list[str]:
     """All counts: each state's tally, under its slug, counts the one function's runs."""
     page = d.page("counts.html")
-    slugs = {"yes": "records-agree", "no": "contradicts", "couldnt-check": "could-not-check",
-             "not-checked": "not-checked", "no-verdict": "no-verdict"}
+    slugs = {
+        "yes": "records-agree",
+        "no": "contradicts",
+        "couldnt-check": "could-not-check",
+        "not-checked": "not-checked",
+        "no-verdict": "no-verdict",
+    }
     out = []
     for s, slug in slugs.items():
         m = re.search(rf'href="executions-{slug}\.html"[^>]*>\s*(\d+) runs? of', page)
@@ -228,6 +272,7 @@ def counts_problems(d: Demo) -> list[str]:
 
 def recent_problems(d: Demo) -> list[str]:
     from onetrace_console import records
+
     home = d.page("home.html")
     out, by_key = [], {r.key: r for r in d.runs}
     rows = re.findall(r'<tr data-recent="([0-9a-f]+)">(.*?)</tr>', home, re.S)
@@ -235,7 +280,9 @@ def recent_problems(d: Demo) -> list[str]:
         cell = re.search(r'<td data-label="Records">(.*?)</td>', row, re.S)
         want = records.said(by_key[key], d.store)
         if not cell or _text(cell.group(1)) != want:
-            out.append(f"Recent runs: {by_key[key].run_id} reads {_text(cell.group(1)) if cell else None!r}, not {want!r}")
+            out.append(
+                f"Recent runs: {by_key[key].run_id} reads {_text(cell.group(1)) if cell else None!r}, not {want!r}"
+            )
     return out + ([] if rows else ["Recent runs: no rows"])
 
 
@@ -244,6 +291,7 @@ def attention_problems(d: Demo) -> list[str]:
     state's kind."""
     from onetrace_console.checks import is_preview_not_verified
     from onetrace_console.overview import needs_attention
+
     listed = {r.key: kind for kind, r in needs_attention(d.store)}
     out = []
     for r in d.runs:
@@ -254,7 +302,7 @@ def attention_problems(d: Demo) -> list[str]:
             out.append(f"{r.run_id}: rung 1 {d.state[r.key]!r}, listed as {listed.get(r.key)!r}, not {kind!r}")
     home = d.page("home.html")
     words = re.findall(r'<li data-attention="([a-z-]+)">', home)
-    if sorted(words) != sorted(k for k in listed.values())[:len(words)] and len(words) == len(listed):
+    if sorted(words) != sorted(k for k in listed.values())[: len(words)] and len(words) == len(listed):
         out.append(f"the Overview lists {sorted(words)}, needs_attention {sorted(listed.values())}")
     return out
 
@@ -270,14 +318,17 @@ def comparison_problems(d: Demo) -> list[str]:
         for who, key in (("baseline", c.run_a), ("candidate", c.run_b)):
             words = COMPARED[d.state[key]]
             if words not in text:
-                out.append(f"comparison {c.key[:12]}: its {who}'s rung 1 is {d.state[key]!r}, "
-                           f"and the page doesn't say {words!r}")
+                out.append(
+                    f"comparison {c.key[:12]}: its {who}'s rung 1 is {d.state[key]!r}, "
+                    f"and the page doesn't say {words!r}"
+                )
     return out + ([] if seen else ["no comparison summarises a first difference"])
 
 
 def startup_problems(d: Demo) -> list[str]:
     """The start-up list: each run folder's line ends with the one function's words for it."""
     from onetrace_console import records
+
     by_key = {r.key: r for r in d.runs}
     out, seen = [], 0
     for text, href in d.said:
@@ -306,6 +357,7 @@ def planted_table_problems(d: Demo) -> list[str]:
     """The public Overview's table of planted runs: each row's badge is the one function's state,
     in its words, and every run the builder planted has its row."""
     from onetrace_console import demo_store, records
+
     home = d.page("home.html")
     rows = re.findall(r'<tr data-planted="([0-9a-f]{64})">(.*?)</tr>', home, re.S)
     by_key = {r.key: r for r in d.runs}
@@ -317,20 +369,35 @@ def planted_table_problems(d: Demo) -> list[str]:
         badge = re.search(r'<span data-reading="([^"]+)">(.*?)</span>', row, re.S)
         got = badge.group(1) if badge else None
         if got != d.state.get(key):
-            out.append(f"{by_key[key].run_id if key in by_key else key[:12]}: the planted table says {got!r}, "
-                       f"its page {d.state.get(key)!r}")
+            out.append(
+                f"{by_key[key].run_id if key in by_key else key[:12]}: the planted table says {got!r}, "
+                f"its page {d.state.get(key)!r}"
+            )
         elif _text(badge.group(2)) != records.said(by_key[key], d.store):
             out.append(f"{by_key[key].run_id}: the planted table's words {_text(badge.group(2))!r}")
     return out
 
 
-CHECKS = (run_page_problems, runs_list_problems, receipt_problems, card_problems, rung_row_problems,
-          lambda d: table_problems(d, "pipelines"), lambda d: table_problems(d, "by-day"),
-          counts_problems, recent_problems, attention_problems, comparison_problems,
-          startup_problems, verified_problems, planted_table_problems)
+CHECKS = (
+    run_page_problems,
+    runs_list_problems,
+    receipt_problems,
+    card_problems,
+    rung_row_problems,
+    lambda d: table_problems(d, "pipelines"),
+    lambda d: table_problems(d, "by-day"),
+    counts_problems,
+    recent_problems,
+    attention_problems,
+    comparison_problems,
+    startup_problems,
+    verified_problems,
+    planted_table_problems,
+)
 
 
 # ------------------------------------------------------------- on the demo
+
 
 def test_the_demo_reads_as_its_table_says(demo, examined):
     """The demo's states, from the one function: the run held without its output files required is
@@ -357,6 +424,7 @@ def test_pipelines_and_by_day_agree(demo, examined):
 
 # ------------------------------------------------------------- sabotages
 
+
 def _planted(demo: Demo, tmp_path: Path, rel: str, old: str, new: str) -> Demo:
     """A copy of the demo's pages with one page changed: `old` replaced by `new`, exactly once."""
     copy = tmp_path / "demo"
@@ -375,8 +443,9 @@ def _p116(demo: Demo) -> str:
 def test_sabotage_the_runs_list_with_its_own_reading_is_named(demo, tmp_path, examined):
     page = demo.page("executions-all.html")
     row = re.search(rf'<tr data-run="[^"]*" data-key="{_p116(demo)}">.*?</tr>', page, re.S).group(0)
-    bad = _planted(demo, tmp_path, "executions-all.html", row,
-                   row.replace('data-state="not-checked"', 'data-state="yes"', 1))
+    bad = _planted(
+        demo, tmp_path, "executions-all.html", row, row.replace('data-state="not-checked"', 'data-state="yes"', 1)
+    )
     examined(1, "planted row")
     assert any("the Runs list says 'yes'" in p for p in runs_list_problems(bad))
 
@@ -437,12 +506,14 @@ def test_sabotage_the_receipt_page_s_own_words_are_named(demo, tmp_path, examine
 
 # ------------------------------------------------------------- the latent gap, on a fixture run
 
+
 @pytest.fixture(scope="module")
 def outputs_differ(demo, tmp_path_factory) -> Demo:
     """A run whose check holds but whose run with the output files required fails: one of a demo
     run's output files moved after it was recorded. Not in the demo; delivered with the
     demo's own runs into a store of its own."""
     from onetrace_console import demo_store
+
     root = tmp_path_factory.mktemp("outputs-differ")
     folder = root / "demo"
     shutil.copytree(demo.folder / demo_store.RUNS_DIRNAME, folder / demo_store.RUNS_DIRNAME)
@@ -462,9 +533,14 @@ def outputs_differ(demo, tmp_path_factory) -> Demo:
     from onetrace_console.folder_load import announce, load_folder
     from onetrace_console.serve import _render_startup_pages
     from onetrace_console.store import Store
+
     store_root = folder / "store"
-    config = Config(public=True, store_root=str(store_root), trust_file=str(folder / demo_store.TRUST_NAME),
-                    sign_in={**Config().sign_in, "enabled": False})
+    config = Config(
+        public=True,
+        store_root=str(store_root),
+        trust_file=str(folder / demo_store.TRUST_NAME),
+        sign_in={**Config().sign_in, "enabled": False},
+    )
     store = Store(store_root / "store")
     loaded = load_folder(runs, store, config)
     _render_startup_pages(store, store_root, config)
@@ -476,12 +552,24 @@ def test_a_check_that_held_whose_outputs_differ_contradicts_its_record_everywher
     d = outputs_differ
     run = next(r for r in d.runs if r.run_id == "p1-02-baseline-set2")
     from onetrace_console.checks import HOLDS
+
     examined(len(d.runs), "fixture runs")
     assert run.check_verdict == HOLDS, "the fixture's plain check must hold"
     assert d.state[run.key] == "no"
-    problems = [p for check in (run_page_problems, runs_list_problems, receipt_problems, rung_row_problems,
-                                counts_problems, attention_problems, startup_problems, verified_problems)
-                for p in check(d)]
+    problems = [
+        p
+        for check in (
+            run_page_problems,
+            runs_list_problems,
+            receipt_problems,
+            rung_row_problems,
+            counts_problems,
+            attention_problems,
+            startup_problems,
+            verified_problems,
+        )
+        for p in check(d)
+    ]
     assert problems == []
     card = _text(re.search(r'<div data-card="records-agree">(.*?)</div>', d.page("home.html"), re.S).group(1))
     #: p1-16 is the one run held without its output files required; the moved run is not.

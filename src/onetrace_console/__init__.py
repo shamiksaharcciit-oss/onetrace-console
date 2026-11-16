@@ -5,6 +5,7 @@ stores the bytes an emitter wrote, keeps the reports the verifier and the verbs 
 over them, and reads those reports. If the console and the offline file ever disagree,
 the file is right and the console has a defect.
 """
+
 __all__ = ["__version__"]
 
-__version__ = "0.7.0"
+__version__ = "0.8.0"

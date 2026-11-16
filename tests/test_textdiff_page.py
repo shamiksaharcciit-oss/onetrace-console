@@ -7,12 +7,11 @@ SDK's order with the inputs the SDK says changed, and the right pane draws each 
 exactly as the Diff page draws it. A comparison with no shown text diff has no page and no link.
 Each check has its sabotage.
 """
+
 from __future__ import annotations
 
 import re
 from html import escape
-
-import pytest
 
 from tests.test_runs_list import demo  # noqa: F401
 
@@ -23,6 +22,7 @@ LISTED = ("FIRST DIFFERENCE", "downstream")
 def page_problems(page: str, diff_page: str, comparison, store) -> list[str]:
     from onetrace_console.textdiff_page import OPEN, page_name, shown_document
     from onetrace_console.textdiff_view import _render_output
+
     out = []
     doc = shown_document(comparison, store)
     link = f'<a href="{escape(page_name(comparison))}">{escape(OPEN)}</a>'
@@ -35,6 +35,7 @@ def page_problems(page: str, diff_page: str, comparison, store) -> list[str]:
     if f'href="{escape(comparison.key)}.html"' not in page:
         out.append("no way back to the Diff page")
     from onetrace_console.kept_inputs import JSON_DIFFS
+
     listed = [(n["node"], o) for n in doc["nodes"] if n["verdict"] in LISTED for o in n["outputs"]]
     #: Each JSON output's members, drawn under it as the Diff page draws them.
     members = {(n["node"], k): m for n in doc["nodes"] for k, m in (n.get(JSON_DIFFS) or {}).items()}
@@ -47,9 +48,11 @@ def page_problems(page: str, diff_page: str, comparison, store) -> list[str]:
         drawn = re.search(rf'<div id="{anchor}" data-pane-output><h3>(.*?)</h3>', page)
         if drawn is None or drawn.group(1) != escape(stage):
             out.append(f"{anchor}: no diff on the right")
-        elif (f'<div id="{anchor}" data-pane-output><h3>{escape(stage)}</h3>'
-              f'{_render_output(output, members.get((stage, output["name"])) if output["verified"] is True else None)}'
-              '</div>') not in page:
+        elif (
+            f'<div id="{anchor}" data-pane-output><h3>{escape(stage)}</h3>'
+            f"{_render_output(output, members.get((stage, output['name'])) if output['verified'] is True else None)}"
+            "</div>"
+        ) not in page:
             out.append(f"{anchor}: not drawn as the Diff page draws it")
     inputs = list(dict.fromkeys(s for n in doc["nodes"] if n["verdict"] in LISTED for s in n["inputs"]))
     if re.findall(r"<p data-input>(.*?)</p>", page) != [escape(s) for s in inputs]:
@@ -69,6 +72,7 @@ def _pages(demo):
 
 def test_every_shown_text_diff_has_its_page_and_says_only_what_the_document_says(demo, examined):
     from onetrace_console.textdiff_page import shown_document
+
     store, found = _pages(demo)
     shown = 0
     for comparison, text, diff in found:
@@ -85,6 +89,7 @@ def test_a_comparison_without_a_shown_text_diff_has_no_page_and_no_link(demo, mo
     from onetrace_console import compare
     from onetrace_console.render import render_diff
     from onetrace_console.textdiff_page import render_text_diff_page
+
     store, found = _pages(demo)
     comparison = found[0][0]
     monkeypatch.setattr(compare, "text_diff_raw", lambda c, s: None)
@@ -97,6 +102,7 @@ def _plantable(found, store):
     """The comparisons, in the store's order, whose text diff is shown and lists inputs: the ones
     every fault below can be planted in, whatever order a build's keys come in."""
     from onetrace_console.textdiff_page import shown_document
+
     out = []
     for f in found:
         doc = shown_document(f[0], store)
@@ -108,16 +114,33 @@ def _plantable(found, store):
 def test_sabotage_each_check_catches_its_fault(demo, examined):
     store, found = _pages(demo)
     plantable = _plantable(found, store)
-    assert plantable, ("no comparison of this build has a shown text diff that lists inputs, so the "
-                       "faults have nowhere to be planted")
+    assert plantable, (
+        "no comparison of this build has a shown text diff that lists inputs, so the faults have nowhere to be planted"
+    )
     comparison, text, diff = plantable[0]
     page = text.read_text(encoding="utf-8")
     faults = {
         "no link from the Diff page": (lambda p: p, lambda d: d.replace("-text.html", "-gone.html"), "does not link"),
-        "the title names another stage": (lambda p: re.sub(r"<h1>Text diff · [^<]*</h1>", "<h1>Text diff · elsewhere</h1>", p), None, "title"),
-        "an output left out of the list": (lambda p: re.sub(r'<li data-listed="output-\d+">.*?</li>', "", p, count=1, flags=re.S), None, "left pane"),
-        "a line of a diff changed": (lambda p: p.replace("<mark class=\"ins\">", "<mark class=\"ins\">!", 1), None, "not drawn as"),
-        "an input of the page's own": (lambda p: p.replace("<p data-input>", "<p data-input>made up</p><p data-input>", 1), None, "inputs"),
+        "the title names another stage": (
+            lambda p: re.sub(r"<h1>Text diff · [^<]*</h1>", "<h1>Text diff · elsewhere</h1>", p),
+            None,
+            "title",
+        ),
+        "an output left out of the list": (
+            lambda p: re.sub(r'<li data-listed="output-\d+">.*?</li>', "", p, count=1, flags=re.S),
+            None,
+            "left pane",
+        ),
+        "a line of a diff changed": (
+            lambda p: p.replace('<mark class="ins">', '<mark class="ins">!', 1),
+            None,
+            "not drawn as",
+        ),
+        "an input of the page's own": (
+            lambda p: p.replace("<p data-input>", "<p data-input>made up</p><p data-input>", 1),
+            None,
+            "inputs",
+        ),
     }
     caught = 0
     for name, (on_page, on_diff, said) in faults.items():
@@ -129,12 +152,12 @@ def test_sabotage_each_check_catches_its_fault(demo, examined):
     examined(caught, "faults caught")
 
 
-def test_a_redrawing_without_a_shown_text_diff_removes_the_page_drawn_before(demo, tmp_path, monkeypatch,
-                                                                            examined):
+def test_a_redrawing_without_a_shown_text_diff_removes_the_page_drawn_before(demo, tmp_path, monkeypatch, examined):
     """Never a page left from an earlier drawing: GET serves what is on disk."""
     from onetrace_console import compare
     from onetrace_console.serve import PAGES_DIRNAME, _render_diff_page
     from onetrace_console.textdiff_page import page_name, shown_document
+
     store, found = _pages(demo)
     comparison = next(f[0] for f in found if shown_document(f[0], store) is not None)
     _render_diff_page(comparison, store, tmp_path)

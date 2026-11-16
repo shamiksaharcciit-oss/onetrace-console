@@ -1,15 +1,14 @@
 """The access log. Append-only, hash-chained, one
 entry per request, with change 8's size-bounded rotation and fail-closed behaviour.
 """
+
 from __future__ import annotations
 
 import urllib.error
 import urllib.request
 
-import pytest
-from tests.http_limits import limit
-
 from onetrace_console.access_log import AccessLog, AccessLogExhausted, entry_digest
+from tests.http_limits import limit
 
 
 def _get(base: str, path: str) -> tuple[int, bytes]:
@@ -21,6 +20,7 @@ def _get(base: str, path: str) -> tuple[int, bytes]:
 
 
 # --------------------------------------------------------------- the log, as a unit
+
 
 def test_appending_chains_each_entry_to_the_last(tmp_path, examined):
     log = AccessLog(tmp_path / "access_log", max_segment_bytes=1_000_000)
@@ -46,6 +46,7 @@ def test_sabotage_a_dropped_chain_link_is_caught_by_verify_chain(tmp_path, exami
     segment = sorted((tmp_path / "access_log").glob("*.jsonl"))[0]
     lines = segment.read_text(encoding="utf-8").splitlines()
     import json
+
     second = json.loads(lines[1])
     second["prev"] = None
     lines[1] = json.dumps(second, sort_keys=True, separators=(",", ":"))
@@ -63,8 +64,7 @@ def test_rotation_carries_the_chain_across_segments(tmp_path, examined):
     """
     # A tiny bound forces a rotation after very few entries.
     log = AccessLog(tmp_path / "access_log", max_segment_bytes=1)
-    entries = [log.append(principal="anonymous", method="GET", path=f"/p{i}", status=200)
-              for i in range(5)]
+    entries = [log.append(principal="anonymous", method="GET", path=f"/p{i}", status=200) for i in range(5)]
     segments = sorted((tmp_path / "access_log").glob("*.jsonl"))
     examined(len(segments), "segments produced by a 1-byte segment bound")
     assert len(segments) >= 2, "the tiny bound should have forced at least one rotation"
@@ -92,6 +92,7 @@ def test_a_fresh_accesslog_instance_resumes_the_same_chain(tmp_path, examined):
 
 
 # ------------------------------------------------------------- wired into the server
+
 
 def test_every_request_appends_one_chained_access_log_entry(server, examined):
     base, store_root = server

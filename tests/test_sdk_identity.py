@@ -6,6 +6,7 @@ commit of the checkout onetrace is loaded from. It must never read the commit of
 project that merely contains the installed package (a `.venv` inside a repository is common):
 that would put another project's commit on screen as onetrace's build.
 """
+
 from __future__ import annotations
 
 import importlib.metadata
@@ -18,17 +19,20 @@ from onetrace_console.compare import ComparisonError, sdk_build_digest
 
 
 def _git(cwd: Path, *args: str) -> str:
-    return subprocess.run(["git", "-c", "user.name=test", "-c", "user.email=test@example.invalid",
-                           "-c", "commit.gpgsign=false", *args], cwd=cwd, check=True,
-                          capture_output=True, text=True).stdout.strip()
+    return subprocess.run(
+        ["git", "-c", "user.name=test", "-c", "user.email=test@example.invalid", "-c", "commit.gpgsign=false", *args],
+        cwd=cwd,
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.strip()
 
 
 def _repo(root: Path, project: str, package: str) -> tuple[Path, str]:
     """A git repository at `root` whose pyproject.toml names `project`, holding an `onetrace`
     package at `package` (relative to `root`). Returns the package folder and the commit."""
     root.mkdir(parents=True)
-    (root / "pyproject.toml").write_text(f'[project]\nname = "{project}"\nversion = "1.0"\n',
-                                         encoding="utf-8")
+    (root / "pyproject.toml").write_text(f'[project]\nname = "{project}"\nversion = "1.0"\n', encoding="utf-8")
     pkg = root / package
     pkg.mkdir(parents=True)
     (pkg / "__init__.py").write_text("", encoding="utf-8")
@@ -56,12 +60,14 @@ def loaded_from(tmp_path, monkeypatch):
 
     def load(package_dir: Path) -> None:
         monkeypatch.setattr(onetrace, "__file__", str(package_dir / "__init__.py"))
+
     return load
 
 
 def test_onetrace_in_a_venv_inside_another_repository_is_refused(tmp_path, loaded_from, examined):
-    pkg, stranger = _repo(tmp_path / "someone-elses-project", "someone-elses-project",
-                          ".venv/lib/python3.12/site-packages/onetrace")
+    pkg, stranger = _repo(
+        tmp_path / "someone-elses-project", "someone-elses-project", ".venv/lib/python3.12/site-packages/onetrace"
+    )
     loaded_from(pkg)
     examined(1, "installation inside another project's repository")
     with pytest.raises(ComparisonError) as refused:
@@ -73,8 +79,7 @@ def test_onetrace_in_a_venv_inside_another_repository_is_refused(tmp_path, loade
 
 
 @pytest.mark.parametrize("layout", ["src/onetrace", "onetrace"])
-def test_onetrace_loaded_from_its_own_checkout_is_named_by_its_commit(tmp_path, loaded_from, examined,
-                                                                      layout):
+def test_onetrace_loaded_from_its_own_checkout_is_named_by_its_commit(tmp_path, loaded_from, examined, layout):
     pkg, head = _repo(tmp_path / "onetrace", "onetrace", layout)
     loaded_from(pkg)
     examined(1, "onetrace's own checkout")

@@ -1,5 +1,7 @@
 # The public site's links into the hosted demo: each one's path on the demo, in the site's order.
 # Never grows by itself: a link the site adds is added here by hand, with the site's change.
+# A comparison link whose runs were recorded again names, after its path, the two runs it showed: its
+# old name is sent to their comparison now (src/onetrace_console/site_links.py, read_pairs).
 /
 /pipeline-p1.html
 /pipeline-p4.html
@@ -8,5 +10,5 @@
 /pipeline-p7.html
 /pipeline-p8.html
 /pipeline-p9.html
-/diff/b56e0b73e5e3324556fbdbcfc2a5561a1389322ba405c2184f2fdb620f8284da.html
-/diff/85dc0852a57737a69d71b9e12c697b77e69ab92d30b5c358ca9f8fb7cfc7dd1b.html
+/diff/b56e0b73e5e3324556fbdbcfc2a5561a1389322ba405c2184f2fdb620f8284da.html p1-02-baseline-set2 p1-08-candidate-set2
+/diff/85dc0852a57737a69d71b9e12c697b77e69ab92d30b5c358ca9f8fb7cfc7dd1b.html p1-02-baseline-set2 p1-08-candidate-set2

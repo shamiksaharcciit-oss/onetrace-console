@@ -9,6 +9,7 @@ Held here, each with a sabotage that the check names:
 3. run in node: a refusal is said as the console words it, with a full stop put at its end where it
    has none and none added where it has one; the button is offered again.
 """
+
 from __future__ import annotations
 
 import json
@@ -28,6 +29,7 @@ needs_node = pytest.mark.skipif(NODE is None, reason="node is not installed here
 def _not_compared_cell(store, comparison) -> str:
     from onetrace_console.choose_pages import pair_href
     from onetrace_console.overview import pipelines
+
     (p,) = pipelines(store)
     page = _pages(store)[pair_href(p.label, comparison.run_a)]
     (row, *_) = re.findall(r'<tr data-run="[0-9a-f]{64}" data-pair="not-compared">(.*?)</tr>', page, re.S)
@@ -35,6 +37,7 @@ def _not_compared_cell(store, comparison) -> str:
 
 
 # ------------------------------------------------------------------ 1. the line
+
 
 def line_problems(cell: str) -> list[str]:
     out = []
@@ -48,6 +51,7 @@ def line_problems(cell: str) -> list[str]:
 
 def stylesheet_text() -> str:
     from onetrace_console.frame import stylesheet
+
     return stylesheet().decode("utf-8")
 
 
@@ -63,15 +67,18 @@ def test_sabotage_the_line_before_the_request_is_named(three, examined):
     comparison, store, _hostile = three
     cell = _not_compared_cell(store, comparison)
     planted = cell.replace('<span data-compare-said role="status"></span>', "").replace(
-        "Not compared yet.", '<span data-compare-said role="status"></span> Not compared yet.')
+        "Not compared yet.", '<span data-compare-said role="status"></span> Not compared yet.'
+    )
     examined(1, "planted cell")
     assert line_problems(planted) != []
 
 
 # ------------------------------------------------------------------ 2. the look
 
+
 def look_problems(css: str) -> list[str]:
     from tests.test_shared_style import _tokens
+
     rules = re.findall(r"\.cp button\[data-compare-post\][^{]*\{([^}]*)\}", css)
     if not rules:
         return ["no rule for the button"]
@@ -100,8 +107,16 @@ def test_the_button_takes_the_consoles_look_from_the_themes_tokens(examined):
 def test_sabotage_a_colour_of_its_own_or_no_rule_is_named(examined):
     css = stylesheet_text()
     examined(2, "planted stylesheets")
-    assert look_problems(css.replace("background:var(--surface);\n  border:1px solid var(--line-strong)",
-                                     "background:#e5e7eb;\n  border:1px solid var(--line-strong)", 1)) != []
+    assert (
+        look_problems(
+            css.replace(
+                "background:var(--surface);\n  border:1px solid var(--line-strong)",
+                "background:#e5e7eb;\n  border:1px solid var(--line-strong)",
+                1,
+            )
+        )
+        != []
+    )
     assert look_problems(re.sub(r"\.cp button\[data-compare-post\]", ".cp button[data-other]", css)) != []
 
 
@@ -135,20 +150,25 @@ MISSING = "run 1350c35dd19e: couldn't check: the stored record is missing MANIFE
 
 def _run(script: str, answers: list[dict]) -> list[dict]:
     body = script.removeprefix("<script>").removesuffix("</script>")
-    done = subprocess.run([NODE, "-e", _HARNESS], input=json.dumps([body, answers]), capture_output=True,
-                          text=True, timeout=60)
+    done = subprocess.run(
+        [NODE, "-e", _HARNESS], input=json.dumps([body, answers]), capture_output=True, text=True, timeout=60
+    )
     assert done.returncode == 0, done.stderr
     return json.loads(done.stdout)
 
 
-ANSWERS = [{"status": 409, "body": {"error": MISSING}}, {"status": 409, "body": {"error": "Already said."}},
-           {"status": 200, "body": {"answer": "Not compared: the pair is the same run"}}]
+ANSWERS = [
+    {"status": 409, "body": {"error": MISSING}},
+    {"status": 409, "body": {"error": "Already said."}},
+    {"status": 200, "body": {"answer": "Not compared: the pair is the same run"}},
+]
 WANT = [MISSING + ".", "Already said.", "Not compared: the pair is the same run."]
 
 
 @needs_node
 def test_a_refusal_is_said_as_worded_ending_in_a_full_stop_and_the_button_offered_again(examined):
     from onetrace_console.compare_script import COMPARE_SCRIPT
+
     seen = _run(COMPARE_SCRIPT, ANSWERS)
     examined(len(seen), "answers")
     assert [s["said"] for s in seen] == WANT
@@ -158,6 +178,7 @@ def test_a_refusal_is_said_as_worded_ending_in_a_full_stop_and_the_button_offere
 @needs_node
 def test_sabotage_a_refusal_said_without_its_full_stop_is_named(examined):
     from onetrace_console.compare_script import COMPARE_SCRIPT
+
     planted = COMPARE_SCRIPT.replace("s.textContent=said(", "s.textContent=(")
     assert planted != COMPARE_SCRIPT
     examined(1, "planted script")

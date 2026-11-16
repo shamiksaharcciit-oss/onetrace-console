@@ -1,11 +1,16 @@
 """The Policy page, over the real fixture export."""
+
 from __future__ import annotations
 
 import pytest
 
 from onetrace_console.onedoor_ext.decisions import accept_export
-from onetrace_console.onedoor_ext.policy_pages import (all_decisions, render_decision_detail,
-                                                       render_policy, render_policy_pages)
+from onetrace_console.onedoor_ext.policy_pages import (
+    all_decisions,
+    render_decision_detail,
+    render_policy,
+    render_policy_pages,
+)
 from tests.test_upload_hardening import _member, _tar
 
 
@@ -13,8 +18,7 @@ from tests.test_upload_hardening import _member, _tar
 def ingested(onedoor_fixture_dir, store):
     jsonl = (onedoor_fixture_dir / "onedoor-export.jsonl").read_bytes()
     sidecar = (onedoor_fixture_dir / "onedoor-export.jsonl.sha256").read_bytes()
-    archive = _tar(_member("onedoor-export.jsonl", jsonl),
-                   _member("onedoor-export.jsonl.sha256", sidecar))
+    archive = _tar(_member("onedoor-export.jsonl", jsonl), _member("onedoor-export.jsonl.sha256", sidecar))
     accept_export(archive, store)
     return store
 
@@ -31,8 +35,7 @@ def test_the_policy_page_shows_one_row_per_request_id_not_per_audit_row(ingested
     assert html.count("<tr data-request-id=") == 5
 
 
-def test_two_row_decisions_show_the_exec_result_as_their_representative(
-        ingested, examined):
+def test_two_row_decisions_show_the_exec_result_as_their_representative(ingested, examined):
     """The permit and its resumption are each a two-row decision (exec_intent then
     exec_result); both must pick exec_result as their representative row.
     """
@@ -63,29 +66,31 @@ def test_the_detail_page_shows_a_decision_digest_per_row(ingested, examined):
     assert "sha256:" in html
 
 
-def test_a_tampered_stored_row_is_reported_as_not_matching_not_shown_altered(
-        ingested, examined):
+def test_a_tampered_stored_row_is_reported_as_not_matching_not_shown_altered(ingested, examined):
     """Sabotage: flip one byte of the STORED record (not the content-addressed
     object) and confirm the detail page refuses to show the row's fields or verdict.
     """
     import dataclasses
 
-    from onetrace_console.onedoor_ext.decisions import DecisionRow, StoredDecisionExport
+    from onetrace_console.onedoor_ext.decisions import StoredDecisionExport
 
     export = ingested.decision_exports()[0]
     tampered_row = dataclasses.replace(
-        export.rows[0],
-        raw_line=export.rows[0].raw_line.replace('"decision":"', '"decision":"TAMPERED_'))
+        export.rows[0], raw_line=export.rows[0].raw_line.replace('"decision":"', '"decision":"TAMPERED_')
+    )
     tampered = StoredDecisionExport(
-        key=export.key, export_object=export.export_object,
+        key=export.key,
+        export_object=export.export_object,
         received_at=export.received_at,
-        rows=(tampered_row,) + export.rows[1:])
+        rows=(tampered_row,) + export.rows[1:],
+    )
     ingested.put_decision_export(tampered)
 
     d = next(dd for dd in all_decisions(ingested) if dd.request_id == export.rows[0].request_id)
     examined(1, "decisions whose stored record was tampered after ingest")
     html = render_decision_detail(d, ingested, generated_at="now")
     import html as _html
+
     assert "couldn't check: stored record changed since delivery" in _html.unescape(html)
     assert "TAMPERED" not in html
 
@@ -106,13 +111,11 @@ def _stored_record(store):
 def _write_record(path, record) -> None:
     import json
 
-    path.write_text(json.dumps(record, indent=1, sort_keys=True, ensure_ascii=False) + "\n",
-                    encoding="utf-8")
+    path.write_text(json.dumps(record, indent=1, sort_keys=True, ensure_ascii=False) + "\n", encoding="utf-8")
 
 
 @pytest.mark.parametrize("column,forged", [("decision", "executed"), ("request_id", OTHER)])
-def test_a_fields_only_tamper_never_reaches_a_page_or_the_join(ingested, examined,
-                                                              column, forged):
+def test_a_fields_only_tamper_never_reaches_a_page_or_the_join(ingested, examined, column, forged):
     """`fields` must equal `json.loads(raw_line)` on every path
     that displays or joins on them. The existing tamper test changes `raw_line` only; this
     one changes only the stored `fields` of the deny, leaving its `raw_line` intact."""
@@ -123,8 +126,7 @@ def test_a_fields_only_tamper_never_reaches_a_page_or_the_join(ingested, examine
     from onetrace_console.onedoor_ext.decision_refs import STATE_MATCH, join_stage
 
     export, path, record = _stored_record(ingested)
-    i = next(n for n, r in enumerate(record["rows"])
-             if json.loads(r["raw_line"])["request_id"] == DENIED)
+    i = next(n for n, r in enumerate(record["rows"]) if json.loads(r["raw_line"])["request_id"] == DENIED)
     raw_before = record["rows"][i]["raw_line"]
     forged_fields = json.loads(raw_before)
     forged_fields[column] = forged
@@ -136,18 +138,20 @@ def test_a_fields_only_tamper_never_reaches_a_page_or_the_join(ingested, examine
     examined(6, "paths that display or join on a row, after a fields-only tamper")
     assert len(all_decisions(ingested)) == 5
     #: Bounded to the deny's own row: an unbounded `.*?` could pass on a later row's cell.
-    assert re.search(rf'<tr data-request-id="{DENIED}">(?:(?!</tr>).)*?'
-                     rf'<td data-verdict="denied">', pages["policy.html"], re.S)
+    assert re.search(
+        rf'<tr data-request-id="{DENIED}">(?:(?!</tr>).)*?'
+        rf'<td data-verdict="denied">',
+        pages["policy.html"],
+        re.S,
+    )
     assert DENIED in pages.get("policy-verdict-denied.html", "")
     assert DENIED not in pages.get("policy-verdict-executed.html", "")
     detail = pages[f"policy/{DENIED}.html"]
     assert 'data-verdict="denied"' in detail and "executed" not in detail
     assert DENIED in {x.subject for x in derive_decision_incidents(ingested)}
     digest = next(r for r in export.rows if r.request_id == DENIED).decision_digest
-    assert join_stage("s", {"request_id": DENIED, "decision_digest": digest}, True,
-                      ingested).verdict == "denied"
-    assert join_stage("s", {"request_id": OTHER, "decision_digest": digest}, True,
-                      ingested).state != STATE_MATCH
+    assert join_stage("s", {"request_id": DENIED, "decision_digest": digest}, True, ingested).verdict == "denied"
+    assert join_stage("s", {"request_id": OTHER, "decision_digest": digest}, True, ingested).state != STATE_MATCH
 
 
 def test_a_stored_row_that_no_longer_parses_is_counted_not_dropped(ingested, examined):
@@ -172,18 +176,16 @@ SPLIT = "e5504d65-cfd0-494e-b98e-9a49f77207b3"
 def _delivery(name: str, data: bytes) -> bytes:
     import hashlib
 
-    sidecar = f"{hashlib.sha256(data).hexdigest()}  {name}\n".encode("utf-8")
+    sidecar = f"{hashlib.sha256(data).hexdigest()}  {name}\n".encode()
     return _tar(_member(name, data), _member(f"{name}.sha256", sidecar))
 
 
 def _fixture_lines(onedoor_fixture_dir) -> list[str]:
-    return (onedoor_fixture_dir / "onedoor-export.jsonl").read_bytes().decode("utf-8") \
-        .split("\n")[:-1]
+    return (onedoor_fixture_dir / "onedoor-export.jsonl").read_bytes().decode("utf-8").split("\n")[:-1]
 
 
 def _ingest_lines(store, name: str, lines: list[str], received_at: str) -> None:
-    accept_export(_delivery(name, ("\n".join(lines) + "\n").encode("utf-8")), store,
-                  received_at=received_at)
+    accept_export(_delivery(name, ("\n".join(lines) + "\n").encode("utf-8")), store, received_at=received_at)
 
 
 @pytest.fixture
@@ -225,14 +227,11 @@ def test_overlapping_exports_show_each_distinct_row_once(onedoor_fixture_dir, st
     by_id = {d.request_id: d for d in all_decisions(store)}
     examined(len(by_id), "request_ids across two overlapping exports")
     assert len(by_id) == 5
-    assert render_decision_detail(by_id[SPLIT], store, generated_at="now") \
-        .count("<section data-kind=") == 2
-    assert render_decision_detail(by_id[DENIED], store, generated_at="now") \
-        .count("<section data-kind=") == 1
+    assert render_decision_detail(by_id[SPLIT], store, generated_at="now").count("<section data-kind=") == 2
+    assert render_decision_detail(by_id[DENIED], store, generated_at="now").count("<section data-kind=") == 1
 
 
-def test_a_tampered_copy_held_by_a_second_export_is_checked_against_that_export(
-        onedoor_fixture_dir, store, examined):
+def test_a_tampered_copy_held_by_a_second_export_is_checked_against_that_export(onedoor_fixture_dir, store, examined):
     """Each copy is verified against the export that holds it, not the first one found."""
     import json
 
@@ -242,10 +241,10 @@ def test_a_tampered_copy_held_by_a_second_export_is_checked_against_that_export(
     subset = next(e for e in store.decision_exports() if len(e.rows) == 3)
     path = store.root / "decision_exports" / f"{subset.key}.json"
     record = json.loads(path.read_text(encoding="utf-8"))
-    i = next(n for n, r in enumerate(record["rows"])
-             if json.loads(r["raw_line"])["request_id"] == DENIED)
+    i = next(n for n, r in enumerate(record["rows"]) if json.loads(r["raw_line"])["request_id"] == DENIED)
     record["rows"][i]["raw_line"] = record["rows"][i]["raw_line"].replace(
-        '"decision":"denied"', '"decision":"executed"')
+        '"decision":"denied"', '"decision":"executed"'
+    )
     assert '"decision":"executed"' in record["rows"][i]["raw_line"]
     _write_record(path, record)
 
@@ -253,14 +252,13 @@ def test_a_tampered_copy_held_by_a_second_export_is_checked_against_that_export(
     examined(len(d.rows), "distinct rows of the deny, one stored copy of it tampered")
     html = render_decision_detail(d, store, generated_at="now")
     import html as _html
+
     text = _html.unescape(html)
     #: The tampered copy is found by checking it against the export that holds it (the
     #: subset), and is named by that export. By the literal rule the row is then
     #: withheld altogether, although the full export's copy is intact.
-    assert f"couldn't check: stored record changed since delivery (export {subset.key[:12]}" \
-        in text
-    good = next(r for r in next(e for e in store.decision_exports() if len(e.rows) == 7).rows
-                if r.request_id == DENIED)
+    assert f"couldn't check: stored record changed since delivery (export {subset.key[:12]}" in text
+    good = next(r for r in next(e for e in store.decision_exports() if len(e.rows) == 7).rows if r.request_id == DENIED)
     assert good.decision_digest not in html and "<tbody>" not in html
 
 
@@ -302,5 +300,5 @@ def test_render_policy_pages_covers_every_decision_and_every_verdict(ingested, e
     assert "policy.html" in pages
     for d in decisions:
         assert any(p.startswith("policy/") for p in pages if d.request_id and d.request_id in p)
-    for v in {d.verdict for d in decisions if d.verdict}:
+    for _v in {d.verdict for d in decisions if d.verdict}:
         assert any(p.startswith("policy-verdict-") for p in pages)

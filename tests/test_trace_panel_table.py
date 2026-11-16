@@ -6,6 +6,7 @@ differ come first, marked; the rows that are the same are folded under "N attrib
 it). The heading in plain words: "At step `<step>`: spans from your app's traces (the files under
 traces/)", or the run's own export where that is the source. Facts from the traces only, never a cause.
 """
+
 from __future__ import annotations
 
 import html
@@ -17,19 +18,47 @@ from onetrace_console import trace_panel
 
 
 def _span(name, sid, parent, start, end, attrs):
-    return {"spanId": sid, "parentSpanId": parent, "name": name, "startTimeUnixNano": str(start),
-            "endTimeUnixNano": str(end),
-            "attributes": [{"key": k, "value": {"stringValue": v} if isinstance(v, str) else {"intValue": v}}
-                           for k, v in attrs.items()]}
+    return {
+        "spanId": sid,
+        "parentSpanId": parent,
+        "name": name,
+        "startTimeUnixNano": str(start),
+        "endTimeUnixNano": str(end),
+        "attributes": [
+            {"key": k, "value": {"stringValue": v} if isinstance(v, str) else {"intValue": v}} for k, v in attrs.items()
+        ],
+    }
 
 
 def _doc(model: str, tokens: int):
-    return {"resourceSpans": [{"scopeSpans": [{"spans": [
-        _span("onetrace.stage call", "a" * 16, "", 1_000_000, 9_000_000,
-              {"onetrace.stage": "call", "gen_ai.request.model": model, "gen_ai.usage.output_tokens": tokens,
-               "gen_ai.system": "example"}),
-        _span("http.request", "b" * 16, "a" * 16, 2_000_000, 3_000_000, {"gen_ai.system": "example"}),
-    ]}]}]}
+    return {
+        "resourceSpans": [
+            {
+                "scopeSpans": [
+                    {
+                        "spans": [
+                            _span(
+                                "onetrace.stage call",
+                                "a" * 16,
+                                "",
+                                1_000_000,
+                                9_000_000,
+                                {
+                                    "onetrace.stage": "call",
+                                    "gen_ai.request.model": model,
+                                    "gen_ai.usage.output_tokens": tokens,
+                                    "gen_ai.system": "example",
+                                },
+                            ),
+                            _span(
+                                "http.request", "b" * 16, "a" * 16, 2_000_000, 3_000_000, {"gen_ai.system": "example"}
+                            ),
+                        ]
+                    }
+                ]
+            }
+        ]
+    }
 
 
 def _text(s: str) -> str:
@@ -43,12 +72,17 @@ def drawn():
 
 def test_the_heading_is_in_plain_words_and_names_where_the_spans_come_from(drawn, examined):
     examined(1, "panel")
+
     def heading(page):
         return html.unescape(re.search(r"<h2>.*?</h2>", page, re.S).group(0))
-    assert heading(drawn) == "<h2>At step <code>call</code>: spans from your app's traces (the files under traces/)</h2>"
+
+    assert (
+        heading(drawn) == "<h2>At step <code>call</code>: spans from your app's traces (the files under traces/)</h2>"
+    )
     exported = trace_panel.panel("call", (_doc("m", 1), _doc("m", 1)), ("export", "export"), ("", ""))
-    assert heading(exported) == ("<h2>At step <code>call</code>: spans from your app's traces "
-                                 "(onetrace export otel of each run)</h2>")
+    assert heading(exported) == (
+        "<h2>At step <code>call</code>: spans from your app's traces (onetrace export otel of each run)</h2>"
+    )
 
 
 def test_one_row_per_attribute_the_differing_ones_first_and_marked(drawn, examined):
@@ -63,7 +97,9 @@ def test_one_row_per_attribute_the_differing_ones_first_and_marked(drawn, examin
 
 
 def test_the_same_rows_are_folded_under_a_count_that_opens_from_the_keyboard(drawn, examined):
-    fold = re.search(r"<details data-trace-same><summary>(\d+) attributes the same</summary>(.*?)</details>", drawn, re.S)
+    fold = re.search(
+        r"<details data-trace-same><summary>(\d+) attributes the same</summary>(.*?)</details>", drawn, re.S
+    )
     examined(1, "fold")
     assert fold, drawn
     same = re.findall(r"<tr[^>]*>", re.search(r"<tbody>.*?</tbody>", fold.group(2), re.S).group(0))
@@ -80,6 +116,7 @@ def test_no_line_says_what_produced_the_difference(word, examined):
 
 def test_the_differing_rows_are_tinted_by_the_page_s_stylesheet(examined):
     from onetrace_console.frame import PAGE_CSS
+
     rules = {k.strip(): v for k, v in re.findall(r"([^{}]+)\{([^{}]*)\}", PAGE_CSS)}
     examined(1, "rule")
     assert "background:var(--hl)" in rules[".cp .trace-panel tr[data-differs]>*"]

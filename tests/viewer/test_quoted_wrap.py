@@ -9,6 +9,7 @@ the next line; `overflow-wrap: anywhere` moves the word to the next line first a
 if it is longer than the line. The two rules that broke quoted text were `pre` (every verbatim
 layer, the report's quoted lines among them) and `.fp` (fingerprints and record words).
 """
+
 from __future__ import annotations
 
 import re

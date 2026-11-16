@@ -1,0 +1,57 @@
+{
+ "checks": [
+  {
+   "check": "for",
+   "node": "split"
+  },
+  {
+   "check": "match",
+   "run": "baseline"
+  },
+  {
+   "check": "text",
+   "node": "split"
+  },
+  {
+   "check": "reproduce",
+   "node": "split",
+   "run": "baseline"
+  }
+ ],
+ "checks_dropped": {},
+ "claims": [
+  {
+   "cites": [
+    "comparison/verdict",
+    "node/split",
+    "node/load_docs"
+   ],
+   "kind": "lead",
+   "text": "The first difference is located at the `split` node, which is the only node flagged as diverged; all upstream nodes (`load_docs`) are identical."
+  },
+  {
+   "cites": [
+    "node/split/constant/chunk_size",
+    "node/split/instrument"
+   ],
+   "kind": "lead",
+   "text": "The `chunk_size` constant differs between runs: baseline uses `1024` and candidate uses `512`, and the two instruments have different config digests (`sha256:aaa2d6fad5864b8cba214fa5faa00631cb0095a469199a7082748a2a98eaea7e` vs `sha256:a034738a4cba13157b75e97e84345b2eef08cb70ed9bf6464ee524c044d22df4`), confirming a configuration change in the splitter."
+  },
+  {
+   "cites": [
+    "node/load_docs",
+    "node/load_docs/instrument",
+    "node/load_docs/input/documents",
+    "node/load_docs/output/documents.json"
+   ],
+   "kind": "ruled out",
+   "text": "The `load_docs` node, its instrument, inputs, and outputs are all identical, ruling out any document-loading difference."
+  }
+ ],
+ "dropped": {
+  "quotes a value its cites don't hold": "3"
+ },
+ "label": "Suggested explanation \u2014 AI-generated, may be wrong",
+ "model": "anthropic:claude-sonnet-4-6",
+ "record": "2026-11-10T16-03-48.768496Z"
+}

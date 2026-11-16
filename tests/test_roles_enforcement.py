@@ -8,22 +8,24 @@ representative case per credential kind (none, viewer session, ingester token),
 proving the mapping is actually WIRED to `serve.py`, not just correct in the
 abstract.
 """
+
 from __future__ import annotations
 
 import shutil
 import subprocess
 import sys
 from pathlib import Path
-from tests.http_limits import limit
 
 import pytest
 
 from onetrace_console.accounts import AccountStore
 from onetrace_console.config import Config
+from onetrace_console.ingester_tokens import TokenStore
 from onetrace_console.rate_limit import ConcurrencyLimiter, RateLimiter
 from onetrace_console.serve import ACCOUNTS_DIRNAME, TOKENS_DIRNAME, Handler
 from onetrace_console.sessions import SessionStore
-from onetrace_console.ingester_tokens import TokenStore
+from tests.conftest import only
+from tests.http_limits import limit
 from tests.test_signin_flow import _cookie_value, _get, _get_signin_form, _post
 
 REPO = Path(__file__).resolve().parent.parent
@@ -38,9 +40,15 @@ def roles_enabled(server, tmp_path):
     base, store_root = server
     saved = {
         name: getattr(Handler, name)
-        for name in ("config", "account_store", "session_store", "token_store",
-                     "rate_limit_per_account", "rate_limit_per_client",
-                     "rate_limit_concurrent_hashes")
+        for name in (
+            "config",
+            "account_store",
+            "session_store",
+            "token_store",
+            "rate_limit_per_account",
+            "rate_limit_per_client",
+            "rate_limit_concurrent_hashes",
+        )
     }
 
     Handler.config = Config(sign_in={"enabled": True})
@@ -48,8 +56,7 @@ def roles_enabled(server, tmp_path):
     Handler.account_store.create("alice", b"correct horse battery staple")
     Handler.token_store = TokenStore(store_root / TOKENS_DIRNAME)
     _record, raw_token = Handler.token_store.create("ci-pipeline")
-    Handler.session_store = SessionStore(idle_timeout_seconds=1800,
-                                         absolute_timeout_seconds=43200)
+    Handler.session_store = SessionStore(idle_timeout_seconds=1800, absolute_timeout_seconds=43200)
     Handler.rate_limit_per_account = RateLimiter(max_attempts=100, window_seconds=60)
     Handler.rate_limit_per_client = RateLimiter(max_attempts=100, window_seconds=60)
     Handler.rate_limit_concurrent_hashes = ConcurrencyLimiter(max_concurrent=100)
@@ -64,16 +71,18 @@ def _sign_in(base) -> tuple[str, str]:
     """Returns `(session_cookie, action_csrf)` for a real, signed-in `alice`."""
     csrf, form_token = _get_signin_form(base)
     _status, _body, headers, _ = _post(
-        base, "/signin",
+        base,
+        "/signin",
         f"username=alice&password=correct+horse+battery+staple&csrf_token={form_token}".encode(),
-        headers={"Cookie": f"onetrace_csrf={csrf}",
-                "Content-Type": "application/x-www-form-urlencoded"})
+        headers={"Cookie": f"onetrace_csrf={csrf}", "Content-Type": "application/x-www-form-urlencoded"},
+    )
     session_cookie = _cookie_value(headers.get("Set-Cookie"), "onetrace_session")
     action_csrf = _cookie_value(headers.get("Set-Cookie"), "onetrace_csrf")
     return session_cookie, action_csrf
 
 
 # ------------------------------------------------------------ item 7: role enforcement
+
 
 def test_an_unauthenticated_get_redirects_to_signin(roles_enabled, examined):
     base, _token = roles_enabled
@@ -94,8 +103,7 @@ def test_a_signed_in_session_can_reach_a_viewer_page(roles_enabled, examined):
     base, _token = roles_enabled
     session_cookie, _csrf = _sign_in(base)
     examined(1, "GET /home.html with a real viewer session")
-    status, _body, _headers, _ = _get(
-        base, "/home.html", headers={"Cookie": f"onetrace_session={session_cookie}"})
+    status, _body, _headers, _ = _get(base, "/home.html", headers={"Cookie": f"onetrace_session={session_cookie}"})
     assert status == 200
 
 
@@ -105,8 +113,8 @@ def test_a_session_on_an_ingester_route_gets_403(roles_enabled, examined):
     session_cookie, _csrf = _sign_in(base)
     examined(1, "POST /v1/runs with a real viewer session, no token")
     status, _body, _headers, _ = _post(
-        base, "/v1/runs", b"not-a-real-tar",
-        headers={"Cookie": f"onetrace_session={session_cookie}"})
+        base, "/v1/runs", b"not-a-real-tar", headers={"Cookie": f"onetrace_session={session_cookie}"}
+    )
     assert status == 403
 
 
@@ -114,39 +122,35 @@ def test_a_token_on_a_viewer_page_gets_403(roles_enabled, examined):
     """A token on `GET /home.html` gets 403."""
     base, raw_token = roles_enabled
     examined(1, "GET /home.html with a valid ingester token")
-    status, _body, _headers, _ = _get(
-        base, "/home.html", headers={"Authorization": f"Bearer {raw_token}"})
+    status, _body, _headers, _ = _get(base, "/home.html", headers={"Authorization": f"Bearer {raw_token}"})
     assert status == 403
 
 
 def test_a_revoked_token_gets_401(roles_enabled, examined):
     """A revoked token gets 401."""
     base, raw_token = roles_enabled
-    Handler.token_store.revoke(next(iter(
-        p.stem for p in (Handler.token_store.root).glob("*.json"))))
+    Handler.token_store.revoke(only(p.stem for p in (Handler.token_store.root).glob("*.json")))
     examined(1, "POST /v1/runs with a now-revoked token")
     status, _body, _headers, _ = _post(
-        base, "/v1/runs", b"not-a-real-tar", headers={"Authorization": f"Bearer {raw_token}"})
+        base, "/v1/runs", b"not-a-real-tar", headers={"Authorization": f"Bearer {raw_token}"}
+    )
     assert status == 401
 
 
 def test_an_ingest_with_a_valid_token_succeeds(roles_enabled, delivery, examined):
     base, raw_token = roles_enabled
     examined(1, "POST /v1/runs with a valid ingester token and a real delivery")
-    status, _body, _headers, _ = _post(
-        base, "/v1/runs", delivery, headers={"Authorization": f"Bearer {raw_token}"})
+    status, _body, _headers, _ = _post(base, "/v1/runs", delivery, headers={"Authorization": f"Bearer {raw_token}"})
     assert status == 200
 
 
-def test_a_runs_authorization_page_is_a_viewer_page_over_http(roles_enabled, delivery,
-                                                              examined):
+def test_a_runs_authorization_page_is_a_viewer_page_over_http(roles_enabled, delivery, examined):
     """The run's authorization page shape, wired: no credential is sent to sign in, a viewer
     session reads it, and an ingester token -- which delivered the run -- may not."""
     import json
 
     base, raw_token = roles_enabled
-    status, body, _headers, _ = _post(
-        base, "/v1/runs", delivery, headers={"Authorization": f"Bearer {raw_token}"})
+    status, body, _headers, _ = _post(base, "/v1/runs", delivery, headers={"Authorization": f"Bearer {raw_token}"})
     assert status == 200, body
     page = json.loads(body)["pages"]["authorization"]
     session_cookie, _csrf = _sign_in(base)
@@ -154,8 +158,7 @@ def test_a_runs_authorization_page_is_a_viewer_page_over_http(roles_enabled, del
 
     status, _body, headers, _ = _get(base, page)
     assert (status, headers.get("Location")) == (303, "/signin")
-    status, body, _headers, _ = _get(
-        base, page, headers={"Cookie": f"onetrace_session={session_cookie}"})
+    status, body, _headers, _ = _get(base, page, headers={"Cookie": f"onetrace_session={session_cookie}"})
     assert status == 200 and b"No authorization records for this run" in body
     status, _body, _headers, _ = _get(base, page, headers={"Authorization": f"Bearer {raw_token}"})
     assert status == 403
@@ -169,8 +172,7 @@ def test_no_log_line_contains_the_token(roles_enabled, delivery, examined):
     assert raw_token not in log_text
 
 
-def test_the_ingest_access_log_entry_names_the_tokens_own_principal(roles_enabled, delivery,
-                                                                     examined):
+def test_the_ingest_access_log_entry_names_the_tokens_own_principal(roles_enabled, delivery, examined):
     base, raw_token = roles_enabled
     _post(base, "/v1/runs", delivery, headers={"Authorization": f"Bearer {raw_token}"})
     entries = Handler.access_log.read_all_entries()
@@ -180,6 +182,7 @@ def test_the_ingest_access_log_entry_names_the_tokens_own_principal(roles_enable
 
 
 # ---------------------------------------------------------------- item 9: CSRF on /compare
+
 
 def _two_run_keys(base: str, raw_token: str) -> tuple[str, str]:
     """Two DISTINCT, real SDK bench runs (the same `ingest-r1/run_C` /
@@ -194,8 +197,7 @@ def _two_run_keys(base: str, raw_token: str) -> tuple[str, str]:
     exam = REPO / ".sdk-fixtures" / "exam" / "fixtures" / "ingest-r1"
     run_c, run_c_poppler24 = exam / "run_C", exam / "run_C_poppler24"
     if not (run_c.is_dir() and run_c_poppler24.is_dir()):
-        pytest.fail(f"the SDK's exam fixtures are not there under {exam}\n"
-                   f"    python tools/fetch_sdk_fixtures.py")
+        pytest.fail(f"the SDK's exam fixtures are not there under {exam}\n    python tools/fetch_sdk_fixtures.py")
     headers = {"Authorization": f"Bearer {raw_token}"}
     _s1, b1, _h1, _ = _post(base, "/v1/runs", _real_delivery(run_c), headers=headers)
     _s2, b2, _h2, _ = _post(base, "/v1/runs", _real_delivery(run_c_poppler24), headers=headers)
@@ -212,8 +214,8 @@ def test_compare_without_a_csrf_token_is_refused(roles_enabled, examined):
     session_cookie, _csrf = _sign_in(base)
     examined(1, "POST /compare with a real viewer session but no CSRF token")
     status, _body, _headers, _ = _post(
-        base, f"/compare?a={key_a}&b={key_b}", b"",
-        headers={"Cookie": f"onetrace_session={session_cookie}"})
+        base, f"/compare?a={key_a}&b={key_b}", b"", headers={"Cookie": f"onetrace_session={session_cookie}"}
+    )
     assert status == 403
 
 
@@ -227,8 +229,11 @@ def test_compare_with_a_valid_csrf_token_succeeds(roles_enabled, examined):
     session_cookie, action_csrf = _sign_in(base)
     examined(1, "POST /compare with a real viewer session and its own CSRF token")
     status, _body, _headers, _ = _post(
-        base, f"/compare?a={key_a}&b={key_b}&csrf_token={action_csrf}", b"",
-        headers={"Cookie": f"onetrace_session={session_cookie}; onetrace_csrf={action_csrf}"})
+        base,
+        f"/compare?a={key_a}&b={key_b}&csrf_token={action_csrf}",
+        b"",
+        headers={"Cookie": f"onetrace_session={session_cookie}; onetrace_csrf={action_csrf}"},
+    )
     assert status == 200
 
 
@@ -243,12 +248,13 @@ def test_an_ingester_token_on_compare_gets_403(roles_enabled, examined):
     key_a, key_b = _two_run_keys(base, raw_token)
     examined(1, "POST /compare with a valid ingester token")
     status, _body, _headers, _ = _post(
-        base, f"/compare?a={key_a}&b={key_b}", b"",
-        headers={"Authorization": f"Bearer {raw_token}"})
+        base, f"/compare?a={key_a}&b={key_b}", b"", headers={"Authorization": f"Bearer {raw_token}"}
+    )
     assert status == 403
 
 
 # ---------------------------------------------------------------- item 7's own sabotage
+
 
 def test_sabotage_a_new_route_with_no_role_table_entry_is_caught(tmp_path, examined):
     """Item 7's own named sabotage: add a route to `serve.py` with no matching
@@ -271,48 +277,54 @@ def test_sabotage_a_new_route_with_no_role_table_entry_is_caught(tmp_path, exami
     sabotaged = text.replace(
         needle,
         '            elif split.path == "/unwired-new-route":\n'
-        '                #: sabotage: answers directly, skipping _enforce_role entirely --\n'
-        '                #: exactly the shape item 7 exists to catch.\n'
-        '                self._respond(200, b"should never be reachable\\n", "text/plain")\n'
-        + needle,
-        1)
+        "                #: sabotage: answers directly, skipping _enforce_role entirely --\n"
+        "                #: exactly the shape item 7 exists to catch.\n"
+        '                self._respond(200, b"should never be reachable\\n", "text/plain")\n' + needle,
+        1,
+    )
     assert sabotaged != text, "the sabotage's own replacement did not apply"
     serve_py.write_text(sabotaged, encoding="utf-8")
 
     probe_test = copy_root / "tests" / "test_unwired_route_probe.py"
     probe_test.write_text(
-        'from onetrace_console.config import Config\n'
-        'from onetrace_console.serve import Handler\n'
-        '\n'
-        '\n'
-        'def test_the_new_route_is_refused_like_every_other_one(server):\n'
-        '    base, _store_root = server\n'
-        '    old_config = Handler.config\n'
+        "from onetrace_console.config import Config\n"
+        "from onetrace_console.serve import Handler\n"
+        "\n"
+        "\n"
+        "def test_the_new_route_is_refused_like_every_other_one(server):\n"
+        "    base, _store_root = server\n"
+        "    old_config = Handler.config\n"
         '    Handler.config = Config(sign_in={"enabled": True})\n'
-        '    try:\n'
-        '        import urllib.error\n'
-        '        import urllib.request\n'
+        "    try:\n"
+        "        import urllib.error\n"
+        "        import urllib.request\n"
         '        req = urllib.request.Request(base + "/unwired-new-route", data=b"", method="POST")\n'
-        '        try:\n'
-        f'            resp = urllib.request.urlopen(req, timeout={limit(5)})\n'
-        '            status = resp.status\n'
-        '        except urllib.error.HTTPError as e:\n'
-        '            status = e.code\n'
-        '        assert status in (401, 403, 404), (\n'
+        "        try:\n"
+        f"            resp = urllib.request.urlopen(req, timeout={limit(5)})\n"
+        "            status = resp.status\n"
+        "        except urllib.error.HTTPError as e:\n"
+        "            status = e.code\n"
+        "        assert status in (401, 403, 404), (\n"
         '            f"an unauthenticated request to an unwired route answered {status}, "\n'
         '            f"not a refusal -- it bypassed role enforcement entirely")\n'
-        '    finally:\n'
-        '        Handler.config = old_config\n',
-        encoding="utf-8")
+        "    finally:\n"
+        "        Handler.config = old_config\n",
+        encoding="utf-8",
+    )
 
     examined(1, "the probe test, run for real against the sabotaged copy")
     import os
+
     env = dict(os.environ, PYTHONPATH=str(copy_root / "src"))
     result = subprocess.run(
-        [sys.executable, "-m", "pytest",
-         "tests/test_unwired_route_probe.py", "-q"],
-        cwd=str(copy_root), env=env, capture_output=True, text=True, timeout=60)
+        [sys.executable, "-m", "pytest", "tests/test_unwired_route_probe.py", "-q"],
+        cwd=str(copy_root),
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=60,
+    )
     assert result.returncode != 0, (
         "the unwired-route probe PASSED against a tree with an unrouted, unenforced "
-        "path added -- the sabotage did not fire:\n"
-        + result.stdout[-2000:] + result.stderr[-2000:])
+        "path added -- the sabotage did not fire:\n" + result.stdout[-2000:] + result.stderr[-2000:]
+    )

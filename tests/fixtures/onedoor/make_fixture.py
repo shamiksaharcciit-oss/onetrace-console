@@ -83,7 +83,7 @@ def main() -> int:
     db = Database(str(db_path))
     db.init()
     conn = db.connect()
-    policy_loader.load_file(conn, Path(__file__).parent / "wo_c9_policies.yaml")
+    policy_loader.load_file(conn, Path(__file__).parent / "onedoor_policies.yaml")
     registry = mock.build_registry()
 
     print("1) permit-shaped: a reversible Tier-1 action auto-executes (enforce mode)")

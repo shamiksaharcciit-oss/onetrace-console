@@ -21,6 +21,7 @@ where a member differs, so a Linux build's wheel is setuptools' own bytes):
 pyproject.toml names this module (`backend-path`), and MANIFEST.in carries it into the sdist, so
 a wheel builds from the sdist by the same backend.
 """
+
 from __future__ import annotations
 
 import base64
@@ -72,8 +73,12 @@ def as_linux(path: Path) -> bool:
 
     def plain(i: zipfile.ZipInfo, data: bytes) -> bool:
         mode = i.external_attr >> 16
-        return (i.create_system == _UNIX and _text(i.filename, data) == data
-                and (i.filename == record or stat.S_IMODE(mode) == _mode(mode, i.is_dir())))
+        return (
+            i.create_system == _UNIX
+            and _text(i.filename, data) == data
+            and (i.filename == record or stat.S_IMODE(mode) == _mode(mode, i.is_dir()))
+        )
+
     if all(plain(i, data) for i, data in infos):
         return False
     changed: dict[str, bytes] = {}
@@ -85,8 +90,9 @@ def as_linux(path: Path) -> bool:
         n = zipfile.ZipInfo(i.filename, i.date_time)
         n.compress_type, n.create_system = i.compress_type, _UNIX
         mode = i.external_attr >> 16
-        n.external_attr = (mode if i.filename == record
-                           else stat.S_IFMT(mode) | _mode(mode, i.is_dir())) << 16 | (i.external_attr & 0xFFFF)
+        n.external_attr = (mode if i.filename == record else stat.S_IFMT(mode) | _mode(mode, i.is_dir())) << 16 | (
+            i.external_attr & 0xFFFF
+        )
         out.append((n, new))
     with zipfile.ZipFile(path, "w", zipfile.ZIP_DEFLATED, allowZip64=True) as z:
         for n, data in out:
@@ -102,8 +108,10 @@ def _record(data: bytes, changed: dict[str, bytes]) -> bytes:
     for row in rows:
         if row and row[0] in changed:
             body = changed[row[0]]
-            row[1:3] = ["sha256=" + base64.urlsafe_b64encode(hashlib.sha256(body).digest()).rstrip(b"=").decode("ascii"),
-                        str(len(body))]
+            row[1:3] = [
+                "sha256=" + base64.urlsafe_b64encode(hashlib.sha256(body).digest()).rstrip(b"=").decode("ascii"),
+                str(len(body)),
+            ]
     s = io.StringIO()
     csv.writer(s, delimiter=",", quotechar='"', lineterminator="\n").writerows(rows)
     return s.getvalue().encode("utf-8")

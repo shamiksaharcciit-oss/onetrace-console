@@ -17,6 +17,7 @@ differences begin at each stage that differs while every stage it reads from (th
 edges) is the same. The strip follows the graph view's order, and the line under the headline gives
 counts only: on a graph, "before" has no single meaning.
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -50,14 +51,17 @@ CHECKED = "Checked from the records. The same answer every time."
 #: The ladder's verdicts in the console's own words (`render._RESULT_WORDS`), for the strip.
 DIFFERS = frozenset({"FIRST DIFFERENCE", "downstream"})
 #: How the stages after the first difference came out, counted.
-_AFTER = (("downstream", "differs", "differ"),
-          ("reconverged", "is the same again", "are the same again"),
-          ("COULD NOT CHECK", "could not be checked", "could not be checked"))
+_AFTER = (
+    ("downstream", "differs", "differ"),
+    ("reconverged", "is the same again", "are the same again"),
+    ("COULD NOT CHECK", "could not be checked", "could not be checked"),
+)
 
 
 @dataclass(frozen=True)
 class Code:
     """A name from the record, set as code: a stage, a setting, an input or a value."""
+
     text: str
 
 
@@ -88,8 +92,10 @@ def _split(differs: dict) -> tuple[list[tuple[str, str, str]], bool]:
     """(each setting named with its values, whether a fingerprint differs) from an annotation's
     `differs`: a digest-valued field is a fingerprint, said as the configuration."""
     from onetrace_console.render import _is_digest, short_setting
-    named = [(short_setting(f), old, new) for f, (old, new) in differs.items()
-             if not (_is_digest(old) or _is_digest(new))]
+
+    named = [
+        (short_setting(f), old, new) for f, (old, new) in differs.items() if not (_is_digest(old) or _is_digest(new))
+    ]
     prints = any(_is_digest(old) or _is_digest(new) for old, new in differs.values())
     return named, prints
 
@@ -153,7 +159,7 @@ def _agree(notes: list[dict], inputs: list[tuple[str, str]]) -> list:
 class Answer:
     headline: list
     second: list
-    strip: tuple[tuple[str, str, bool], ...]   # (stage, verdict, marked as where differences begin)
+    strip: tuple[tuple[str, str, bool], ...]  # (stage, verdict, marked as where differences begin)
 
 
 def for_line(report, annotations: list[dict], inputs_at, input_notes: dict[str, list[str]]) -> Answer:
@@ -166,8 +172,15 @@ def for_line(report, annotations: list[dict], inputs_at, input_notes: dict[str, 
     if first is None:
         unchecked = [r for r in ladder if r.verdict == "COULD NOT CHECK"]
         if unchecked:
-            return Answer(["No recorded output differs where checked; ",
-                           _plural(len(unchecked), "stage", "stages"), " could not be checked."], [], strip)
+            return Answer(
+                [
+                    "No recorded output differs where checked; ",
+                    _plural(len(unchecked), "stage", "stages"),
+                    " could not be checked.",
+                ],
+                [],
+                strip,
+            )
         ins = [(s, n) for s in (r.stage for r in ladder) for n in input_notes.get(s, [])]
         return Answer(_agree(annotations, ins), [], strip)
     differs = (notes.get(first.index) or {}).get("differs") or {}
@@ -181,17 +194,23 @@ def for_line(report, annotations: list[dict], inputs_at, input_notes: dict[str, 
         second.append("Every stage before it is the same.")
     else:
         same = sum(r.verdict == "same" for r in before)
-        second.append(f"{same} of the {_plural(len(before), 'stage', 'stages')} before it "
-                      f"{'is' if same == 1 else 'are'} the same.")
+        second.append(
+            f"{same} of the {_plural(len(before), 'stage', 'stages')} before it "
+            f"{'is' if same == 1 else 'are'} the same."
+        )
     if not after:
         second.append(" No stage comes after it.")
     else:
-        counts = [(n, one, many) for v, one, many in _AFTER
-                  if (n := sum(r.verdict == v for r in after))]
+        counts = [(n, one, many) for v, one, many in _AFTER if (n := sum(r.verdict == v for r in after))]
         if len(counts) == 1 and counts[0][0] == len(after):
             n, one, many = counts[0]
-            second.append(f" The stage after it {one}." if n == 1 else f" Both stages after it {many}." if n == 2
-                          else f" All {n} stages after it {many}.")
+            second.append(
+                f" The stage after it {one}."
+                if n == 1
+                else f" Both stages after it {many}."
+                if n == 2
+                else f" All {n} stages after it {many}."
+            )
         else:
             said = "; ".join(f"{n} {one if n == 1 else many}" for n, one, many in counts)
             second.append(f" Of the {_plural(len(after), 'stage', 'stages')} after it, {said}.")
@@ -200,8 +219,15 @@ def for_line(report, annotations: list[dict], inputs_at, input_notes: dict[str, 
         named, _ = _split((notes.get(r.index) or {}).get("differs") or {})
         later += [(name, r.stage, old, new) for name, old, new in named]
     if later:
-        second += [" A recorded setting also changed later: " if len(later) == 1
-                   else " Recorded settings also changed later: "] + _settings_said(later) + ["."]
+        second += (
+            [
+                " A recorded setting also changed later: "
+                if len(later) == 1
+                else " Recorded settings also changed later: "
+            ]
+            + _settings_said(later)
+            + ["."]
+        )
     return Answer(head, second, strip)
 
 
@@ -212,8 +238,9 @@ def begins(ladder, edges) -> list[str]:
     reads: dict[str, list[str]] = {}
     for e in edges or ():
         reads.setdefault(e["to"], []).append(e["from"])
-    return [r.node for r in ladder if r.verdict in DIFFERS
-            and all(verdict.get(u) == "same" for u in reads.get(r.node, []))]
+    return [
+        r.node for r in ladder if r.verdict in DIFFERS and all(verdict.get(u) == "same" for u in reads.get(r.node, []))
+    ]
 
 
 def for_graph(report, annotations: list[dict], edges, inputs_at, input_notes: dict[str, list[str]]) -> Answer:
@@ -226,13 +253,20 @@ def for_graph(report, annotations: list[dict], edges, inputs_at, input_notes: di
     if not any(r.verdict in DIFFERS for r in ladder):
         unchecked = [r for r in ladder if r.verdict == "COULD NOT CHECK"]
         if unchecked:
-            return Answer(["No recorded output differs where checked; ",
-                           _plural(len(unchecked), "stage", "stages"), " could not be checked."], [], strip)
+            return Answer(
+                [
+                    "No recorded output differs where checked; ",
+                    _plural(len(unchecked), "stage", "stages"),
+                    " could not be checked.",
+                ],
+                [],
+                strip,
+            )
         ins = [(r.node, n) for r in ladder for n in input_notes.get(r.node.split("#", 1)[0], [])]
         return Answer(_agree(annotations, ins), [], strip)
     if len(starts) == 1:
         place = str(next(n for n, r in enumerate(ladder, start=1) if r.node == starts[0]))
-        differs = next((a["differs"] for a in annotations if a["index"] == place), {})
+        differs: dict = next((a["differs"] for a in annotations if a["index"] == place), {})
         head = ["The runs first differ at ", Code(starts[0])] + _where(differs, inputs_at(starts[0].split("#", 1)[0]))
     else:
         head = [f"Differences begin at {len(starts)} stages: "] + _and([Code(s) for s in starts]) + ["."]
@@ -249,14 +283,21 @@ def with_descent(answer: Answer, nested_at: str) -> Answer:
     at `settle`"); where an inner run's folder was not given, the second line says so, as the CLI
     does. Unchanged with no descent."""
     from onetrace_console.nesting_view import descent
+
     d = descent(nested_at)
     if d is None:
         return answer
     if "not_given" in d:
         extra = [" "] + [x for rid in d["not_given"] for x in ("Nested run ", Code(rid), ": folder not given. ")]
-        return Answer(answer.headline, (answer.second + extra[:-1] + [extra[-1].rstrip()]) if answer.second
-                      else extra[1:-1] + [extra[-1].rstrip()], answer.strip)
+        return Answer(
+            answer.headline,
+            (answer.second + extra[:-1] + [extra[-1].rstrip()])  # type: ignore[union-attr]  # the last is a string
+            if answer.second
+            else extra[1:-1] + [extra[-1].rstrip()],  # type: ignore[union-attr]  # as above
+            answer.strip,
+        )
     from onetrace_console.nesting_view import path_parts
+
     head = ["The runs first differ "] + path_parts(d["path"]) + ["."]
     return Answer(head, answer.second, answer.strip)
 
@@ -268,8 +309,7 @@ def with_authorization(answer: Answer, found: list[tuple[str, str]]) -> Answer:
         return answer
     #: "The two runs agree." only where nothing recorded differs: a decision or a permit is
     #: recorded, so its difference is named and the outputs said to be the same.
-    headline = (["Every recorded output is the same."] if answer.headline == ["The two runs agree."]
-                else answer.headline)
+    headline = ["Every recorded output is the same."] if answer.headline == ["The two runs agree."] else answer.headline
     answer = Answer(headline, answer.second, answer.strip)
     extra: list = []
     for stage, what in found:
@@ -282,7 +322,9 @@ def _count_mark(answer: Answer) -> str:
     """The line under the headline counts stages; its mark says what was counted, the
     comparison's rows by the SDK's own verdicts, adding up to the stages compared."""
     from collections import Counter
+
     from onetrace_console.info_mark import mark, stages_note
+
     if not answer.strip or not any(ch.isdigit() for ch in text(answer.second)):
         return ""
     counts = Counter(v for _, v, _ in answer.strip)
@@ -293,15 +335,21 @@ def render(answer: Answer) -> str:
     """The short answer, drawn: the kicker, the headline, the line under it, the stage strip, and
     the line saying it is checked from the records."""
     from onetrace_console.render import _RESULT_WORDS
+
     marks = []
     for stage, verdict, first in answer.strip:
         word = _RESULT_WORDS.get(verdict, verdict)
-        marks.append(f'<li data-verdict="{escape(verdict)}"' + (' data-mark="first"' if first else "")
-                     + f' class="{tones.tone(tones.DIFF, verdict)}"><span class="name">{escape(shown_name(stage))}'
-                     f'</span><span class="word">{escape(word)}</span></li>')
-    return ('<section data-section="short-answer" class="short-answer">'
-            f'<p class="kicker">{escape(KICKER)}</p>'
-            f'<p class="headline" data-short="headline">{_html(answer.headline)}</p>'
-            + (f'<p data-short="second">{_html(answer.second)}{_count_mark(answer)}</p>' if answer.second else "")
-            + f'<ol class="strip" data-short="strip" aria-label="Each stage, in order, with its result">{"".join(marks)}</ol>'
-            f'<p class="checked" data-short="checked">{escape(CHECKED)}</p></section>')
+        marks.append(
+            f'<li data-verdict="{escape(verdict)}"'
+            + (' data-mark="first"' if first else "")
+            + f' class="{tones.tone(tones.DIFF, verdict)}"><span class="name">{escape(shown_name(stage))}'
+            f'</span><span class="word">{escape(word)}</span></li>'
+        )
+    return (
+        '<section data-section="short-answer" class="short-answer">'
+        f'<p class="kicker">{escape(KICKER)}</p>'
+        f'<p class="headline" data-short="headline">{_html(answer.headline)}</p>'
+        + (f'<p data-short="second">{_html(answer.second)}{_count_mark(answer)}</p>' if answer.second else "")
+        + f'<ol class="strip" data-short="strip" aria-label="Each stage, in order, with its result">{"".join(marks)}</ol>'
+        f'<p class="checked" data-short="checked">{escape(CHECKED)}</p></section>'
+    )

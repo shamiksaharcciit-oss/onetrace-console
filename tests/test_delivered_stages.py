@@ -6,6 +6,7 @@ stages delivered and one retried is 6 receipts, which read "6 of 6".
 A retry is a further receipt of a stage after one of that stage's receipts failed with an error;
 two instances of one stage that both succeed are not a retry. Tier A: what the evidence shows.
 """
+
 from __future__ import annotations
 
 import re
@@ -21,22 +22,35 @@ from tests.test_checks import FIXED_RAN_AT, _require_installed
 GENERATED_AT = "2026-10-02T12:00:00+00:00"
 
 
-@pytest.mark.parametrize("attempts, declared, expected", [
-    #: The demo: six stages, the tests stage's first attempt failed and was retried.
-    ([("request", "ok"), ("context", "ok"), ("tests", "error"), ("tests", "ok"), ("model", "ok"),
-      ("proposal", "ok"), ("config applied", "ok")],
-     {"request", "context", "tests", "model", "proposal", "config applied"}, (6, 1)),
-    #: No retry.
-    ([("a", "ok"), ("b", "ok"), ("c", "ok")], {"a", "b", "c"}, (3, 0)),
-    #: A stage missing and another retried: as many receipts as stages, and a stage missing.
-    ([("a", "ok"), ("b", "error"), ("b", "ok")], {"a", "b", "c"}, (2, 1)),
-    #: Two instances of one stage, both ok, are not a retry; the stage counts once.
-    ([("a", "ok"), ("b", "ok"), ("b", "ok"), ("c", "ok")], {"a", "b", "c"}, (3, 0)),
-    #: Retried twice: each attempt after a failure is a retry.
-    ([("a", "error"), ("a", "error"), ("a", "ok")], {"a"}, (1, 2)),
-    #: A failed attempt never retried still delivered a receipt for its stage.
-    ([("a", "ok"), ("b", "error")], {"a", "b"}, (2, 0)),
-])
+@pytest.mark.parametrize(
+    "attempts, declared, expected",
+    [
+        #: The demo: six stages, the tests stage's first attempt failed and was retried.
+        (
+            [
+                ("request", "ok"),
+                ("context", "ok"),
+                ("tests", "error"),
+                ("tests", "ok"),
+                ("model", "ok"),
+                ("proposal", "ok"),
+                ("config applied", "ok"),
+            ],
+            {"request", "context", "tests", "model", "proposal", "config applied"},
+            (6, 1),
+        ),
+        #: No retry.
+        ([("a", "ok"), ("b", "ok"), ("c", "ok")], {"a", "b", "c"}, (3, 0)),
+        #: A stage missing and another retried: as many receipts as stages, and a stage missing.
+        ([("a", "ok"), ("b", "error"), ("b", "ok")], {"a", "b", "c"}, (2, 1)),
+        #: Two instances of one stage, both ok, are not a retry; the stage counts once.
+        ([("a", "ok"), ("b", "ok"), ("b", "ok"), ("c", "ok")], {"a", "b", "c"}, (3, 0)),
+        #: Retried twice: each attempt after a failure is a retry.
+        ([("a", "error"), ("a", "error"), ("a", "ok")], {"a"}, (1, 2)),
+        #: A failed attempt never retried still delivered a receipt for its stage.
+        ([("a", "ok"), ("b", "error")], {"a", "b"}, (2, 0)),
+    ],
+)
 def test_the_count_is_of_declared_stages_and_retries_are_apart(attempts, declared, expected):
     got = delivered_and_retries(attempts, declared)
     assert (got["delivered_stages"], got["retries"]) == expected
@@ -47,13 +61,20 @@ class _Run:
         self.__dict__.update(kw)
 
 
-@pytest.mark.parametrize("fields, shown", [
-    (dict(stage_count=6, delivered_stages=6, retries=1, recorded_count=7),
-     "6 of 6 declared stages; 1 retry recorded"),
-    (dict(stage_count=6, delivered_stages=6, retries=0, recorded_count=6), "6 of 6 declared stages"),
-    (dict(stage_count=6, delivered_stages=5, retries=1, recorded_count=6),
-     "5 of 6 declared stages; 1 retry recorded"),
-])
+@pytest.mark.parametrize(
+    "fields, shown",
+    [
+        (
+            dict(stage_count=6, delivered_stages=6, retries=1, recorded_count=7),
+            "6 of 6 declared stages; 1 retry recorded",
+        ),
+        (dict(stage_count=6, delivered_stages=6, retries=0, recorded_count=6), "6 of 6 declared stages"),
+        (
+            dict(stage_count=6, delivered_stages=5, retries=1, recorded_count=6),
+            "5 of 6 declared stages; 1 retry recorded",
+        ),
+    ],
+)
 def test_the_three_ruled_cases_read_as_ruled(fields, shown):
     assert _recorded_of_declared(_Run(**fields)) == shown
 
@@ -61,9 +82,16 @@ def test_the_three_ruled_cases_read_as_ruled(fields, shown):
 def _emit_missing_and_retried(out: Path) -> None:
     """A real SDK record: declared a, b, c; a ran; b failed once and was retried; c never ran."""
     from onetrace.emit import Instrument, Recorder
-    rec = Recorder(str(out), run_id="missing-and-retried", declared_stages=["a", "b", "c"],
-                   manifest=Path(__file__), policy="fail-closed", topology=True,
-                   anchor_reason="a test record")
+
+    rec = Recorder(
+        str(out),
+        run_id="missing-and-retried",
+        declared_stages=["a", "b", "c"],
+        manifest=Path(__file__),
+        policy="fail-closed",
+        topology=True,
+        anchor_reason="a test record",
+    )
     tool = Instrument("tool", "tool", "1.0.0", {"x": "1"})
 
     def a(ctx):
@@ -86,6 +114,7 @@ def test_a_retry_never_hides_a_missing_stage_end_to_end(tmp_path, store):
     _require_installed()
     from onetrace_console.checks import run_and_record
     from tests.test_home_and_diff import _deliver
+
     _emit_missing_and_retried(tmp_path / "run")
     run = run_and_record(_deliver(tmp_path / "run", store), store, ran_at=FIXED_RAN_AT)
     #: Three receipts for three declared stages -- and one of the three never ran.
@@ -103,8 +132,8 @@ def test_the_demo_s_runs_read_six_of_six_with_one_retry_and_others_none(store):
     from onetrace_console.checks import run_and_record
     from tests.test_home_and_diff import _deliver
     from tests.test_reference_demo import RUNS
-    demo = [run_and_record(_deliver(RUNS / f"day-{d}", store), store, ran_at=FIXED_RAN_AT)
-            for d in (1, 2)]
+
+    demo = [run_and_record(_deliver(RUNS / f"day-{d}", store), store, ran_at=FIXED_RAN_AT) for d in (1, 2)]
     assert [(r.delivered_stages, r.retries) for r in demo] == [(6, 1), (6, 1)]
     home = unescape(render_all(store, generated_at=GENERATED_AT)[HOME])
     assert home.count("6 of 6 declared stages; 1 retry recorded") == 2
@@ -115,9 +144,11 @@ def test_a_run_stored_before_this_is_re_derived_with_the_count(store):
     """Stored under the earlier derivation, a run has no count; start-up re-derives it once."""
     _require_installed()
     from dataclasses import replace
+
     from onetrace_console.checks import DERIVED, rederive, run_and_record
     from tests.test_home_and_diff import _deliver
     from tests.test_reference_demo import RUNS
+
     run = run_and_record(_deliver(RUNS / "day-1", store), store, ran_at=FIXED_RAN_AT)
     old = replace(run, delivered_stages=0, retries=0, derived="derivation-1")
     store.put_run(old)
@@ -125,8 +156,7 @@ def test_a_run_stored_before_this_is_re_derived_with_the_count(store):
     assert (again.delivered_stages, again.retries, again.derived) == (6, 1, DERIVED)
 
 
-def test_a_stage_whose_only_receipt_failed_counts_as_delivered_and_where_the_failure_shows(
-        tmp_path, store):
+def test_a_stage_whose_only_receipt_failed_counts_as_delivered_and_where_the_failure_shows(tmp_path, store):
     """A stage with only a failed receipt has a receipt, so it counts as
     delivered -- the rung states presence. What this run's pages show of the failure, measured:
     the step's own row says it failed, with the error it recorded. The verdict strip does not:
@@ -134,13 +164,21 @@ def test_a_stage_whose_only_receipt_failed_counts_as_delivered_and_where_the_fai
     rung 3 reads Yes. Reported as found, since the strip was asked to show it."""
     _require_installed()
     from onetrace.emit import Instrument, Recorder
+
     from onetrace_console.checks import run_and_record
     from onetrace_console.pages import CASE, render_execution
     from tests.test_home_and_diff import _deliver
+
     out = tmp_path / "run"
-    rec = Recorder(str(out), run_id="failed-never-retried", declared_stages=["a", "b"],
-                   manifest=Path(__file__), policy="fail-closed", topology=True,
-                   anchor_reason="a test record")
+    rec = Recorder(
+        str(out),
+        run_id="failed-never-retried",
+        declared_stages=["a", "b"],
+        manifest=Path(__file__),
+        policy="fail-closed",
+        topology=True,
+        anchor_reason="a test record",
+    )
     tool = Instrument("tool", "tool", "1.0.0", {"x": "1"})
     rec.run_node("a", None, tool, lambda ctx: ctx.write_json("a.json", {"a": "1"}))
 

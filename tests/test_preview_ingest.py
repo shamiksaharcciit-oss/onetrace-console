@@ -3,6 +3,7 @@ the pinned verifier checks it; it no longer checks preview receipts (NOT-RUN, NO
 NEW preview delivery gets a 422: one console sentence, then the verifier's own row, verbatim, and
 nothing is stored. Runs already stored stay. A 0.1 or 0.2 delivery is taken.
 """
+
 from __future__ import annotations
 
 import hashlib
@@ -16,8 +17,10 @@ from onetrace_console.preview import PREVIEW_NOT_INGESTED, PREVIEW_NOT_RUN_ROW
 from tests.test_checks import _require_installed
 from tests.test_compare import EXAM, RUN_C, _deliver, _require_exam
 
-RULED = ("Not ingested: this run is in the preview record format (stage-receipt/0.0-preview), and "
-         "onetrace-verify does not check that format, so its receipts couldn't be checked.")
+RULED = (
+    "Not ingested: this run is in the preview record format (stage-receipt/0.0-preview), and "
+    "onetrace-verify does not check that format, so its receipts couldn't be checked."
+)
 
 
 def _delivery(folder: Path) -> bytes:
@@ -26,8 +29,9 @@ def _delivery(folder: Path) -> bytes:
     files = {"MANIFEST.json": (folder / "MANIFEST.json").read_bytes()}
     for entry in manifest["chain"]:
         files[entry["file"]] = (folder / entry["file"]).read_bytes()
-    files[SUMS_NAME] = ("\n".join(f"{hashlib.sha256(b).hexdigest()}  {p}"
-                                  for p, b in files.items()) + "\n").encode("utf-8")
+    files[SUMS_NAME] = ("\n".join(f"{hashlib.sha256(b).hexdigest()}  {p}" for p, b in files.items()) + "\n").encode(
+        "utf-8"
+    )
     buf = io.BytesIO()
     with tarfile.open(fileobj=buf, mode="w") as tar:
         for path, blob in files.items():
@@ -66,14 +70,15 @@ def test_a_0_1_delivery_is_taken(store, examined):
 
 
 def test_a_delivery_in_the_installed_sdk_s_format_is_taken(store, tmp_path, examined):
-    """What the pinned SDK writes now (format 0.4, onetrace 0.7.1) is taken."""
+    """What the pinned SDK writes now (format 0.5, onetrace 0.8.0) is taken."""
     _require_installed()
     from tests.test_last_attempt_failed import _emit
-    _emit(tmp_path / "r", "a-0-4-run", [("a", "1", "ok"), ("b", "1", "ok")])
+
+    _emit(tmp_path / "r", "a-0-5-run", [("a", "1", "ok"), ("b", "1", "ok")])
     got = accept(_delivery(tmp_path / "r"), store)
-    examined(1, "0.4 delivery taken")
+    examined(1, "0.5 delivery taken")
     assert got.run is not None, getattr(got, "body", got)
-    assert got.run.format == "stage-receipt-chain/0.4", got.run.format
+    assert got.run.format == "stage-receipt-chain/0.5", got.run.format
 
 
 def test_a_0_2_delivery_is_taken(store, examined):

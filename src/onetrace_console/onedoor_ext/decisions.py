@@ -4,8 +4,8 @@ already accepts.
 
 WHY AN ARCHIVE, NOT A NEW TWO-PART BODY FORMAT
 -----------------------------------------------
-The specification says: "wrap it in the same kind of archive, or define a two-part body;
-choose one and say why." Chosen: the same kind of archive -- a tar, read with
+The choice was between the same kind of archive and a new two-part body, with the reason
+said. Chosen: the same kind of archive -- a tar, read with
 `onetrace_console.ingest.read_tar`, imported and called here unchanged, never copied.
 That one function already carries every upload-hardening check that applies to an
 archive body (traversal, links/special files, member-count and size limits before any
@@ -41,13 +41,15 @@ storage and not shown." A float inside a caller's own action parameters, nested
 inside one of those string columns, is not what onedoor's contract or this check is
 about.
 """
+
 from __future__ import annotations
 
 import hashlib
-from onetrace_console.bounded_json import TooDeep, load_json_bounded
 import json
-from dataclasses import asdict, dataclass, field
+from dataclasses import dataclass, field
+from datetime import UTC
 
+from onetrace_console.bounded_json import TooDeep, load_json_bounded
 from onetrace_console.ingest import DeliveryRefused, parse_sums, read_tar
 from onetrace_console.store import Store, digest
 
@@ -77,7 +79,7 @@ class DecisionRow:
 
     `raw_line` is the row's own line of the JSONL file, verbatim, with no re-encoding
     -- `decision_digest` hashes THIS, not a re-serialization of `fields`, because the
-    specified definition is "the sha256 of the canonical JSON of the row, exactly as
+    definition onedoor gives is "the sha256 of the canonical JSON of the row, exactly as
     `python -m onedoor.export` writes it": the delivered bytes already are that
     canonical form, and reconstructing it from the parsed dict would risk a
     byte-for-byte disagreement with onedoor's own `json.dumps(..., sort_keys=True,
@@ -89,6 +91,7 @@ class DecisionRow:
     `fields` and a plain-words `unreadable` reason; it is counted and reported by the
     pages, never silently dropped, and never raises here.
     """
+
     raw_line: str
     fields: dict = field(init=False, repr=False, compare=False)
     unreadable: str | None = field(init=False, repr=False, compare=False)
@@ -129,7 +132,7 @@ class DecisionRow:
         return {"raw_line": self.raw_line}
 
     @staticmethod
-    def from_json_obj(d: dict) -> "DecisionRow":
+    def from_json_obj(d: dict) -> DecisionRow:
         #: A record written before `fields` was derived still carries a "fields" key, and
         #: re-ingesting the same export never rewrites it: ignored, not trusted.
         return DecisionRow(raw_line=d["raw_line"])
@@ -141,8 +144,9 @@ class StoredDecisionExport:
     bytes) -- re-ingesting the identical export is acknowledged, not stored again, the
     same rule `/v1/runs` uses for `(run_id, chain_head)`.
     """
+
     key: str
-    export_object: str      # onetrace_console.store object key: the raw bytes, verbatim
+    export_object: str  # onetrace_console.store object key: the raw bytes, verbatim
     received_at: str
     rows: tuple[DecisionRow, ...]
 
@@ -156,7 +160,7 @@ class StoredDecisionExport:
         return json.dumps(d, indent=1, sort_keys=True, ensure_ascii=False) + "\n"
 
     @staticmethod
-    def from_json(text: str) -> "StoredDecisionExport":
+    def from_json(text: str) -> StoredDecisionExport:
         d = load_json_bounded(text, "a stored decision export")
         return StoredDecisionExport(
             key=d["key"],
@@ -191,20 +195,20 @@ def _validate_rows(jsonl: bytes, *, limits) -> list[DecisionRow]:
 
     lines = text.split("\n")
     if lines and lines[-1] == "":
-        lines = lines[:-1]          # the trailing newline every row ends with
+        lines = lines[:-1]  # the trailing newline every row ends with
 
     if len(lines) > limits.max_decision_rows:
         raise DecisionsRejection(
-            f"the export holds {len(lines)} rows, over the configured "
-            f"{limits.max_decision_rows}-row limit")
+            f"the export holds {len(lines)} rows, over the configured {limits.max_decision_rows}-row limit"
+        )
 
     rows: list[DecisionRow] = []
     seen: set[tuple[str | None, str | None]] = set()
     for i, line in enumerate(lines):
         if len(line.encode("utf-8")) > limits.max_decision_line_length:
             raise DecisionsRejection(
-                f"row {i}: line is over the configured "
-                f"{limits.max_decision_line_length}-byte line limit")
+                f"row {i}: line is over the configured {limits.max_decision_line_length}-byte line limit"
+            )
         try:
             obj = load_json_bounded(line, f"row {i}")
         except TooDeep:
@@ -219,8 +223,7 @@ def _validate_rows(jsonl: bytes, *, limits) -> list[DecisionRow]:
         row = DecisionRow(raw_line=line)
         pair = (row.request_id, row.kind)
         if pair in seen:
-            raise DecisionsRejection(
-                f"row {i}: duplicate (request_id, kind) = {pair!r} within one export")
+            raise DecisionsRejection(f"row {i}: duplicate (request_id, kind) = {pair!r} within one export")
         seen.add(pair)
         rows.append(row)
 
@@ -229,15 +232,14 @@ def _validate_rows(jsonl: bytes, *, limits) -> list[DecisionRow]:
     return rows
 
 
-def accept_export(data: bytes, store: Store, *, received_at: str | None = None,
-                   limits=None) -> DecisionsAccepted:
+def accept_export(data: bytes, store: Store, *, received_at: str | None = None, limits=None) -> DecisionsAccepted:
     """Validate a decision-export delivery completely, then store it completely, or
     store nothing. Raises `DecisionsRejection` -- never returns one -- so the route
     handler's `except` maps it to a 422 the same way `ingest.Rejection` is handled,
     without a shared exception type between the two (they refuse for unrelated
     reasons and this keeps that visibly separate).
     """
-    from datetime import datetime, timezone
+    from datetime import datetime
 
     try:
         files = read_tar(data, limits=limits)
@@ -247,14 +249,14 @@ def accept_export(data: bytes, store: Store, *, received_at: str | None = None,
     sidecar_names = [n for n in files if n.endswith(SIDECAR_SUFFIX)]
     if len(sidecar_names) != 1:
         raise DecisionsRejection(
-            f"the delivery must carry exactly one {SIDECAR_SUFFIX} sidecar, found "
-            f"{len(sidecar_names)}")
+            f"the delivery must carry exactly one {SIDECAR_SUFFIX} sidecar, found {len(sidecar_names)}"
+        )
     sidecar_name = sidecar_names[0]
     payload_names = [n for n in files if n != sidecar_name]
     if len(payload_names) != 1:
         raise DecisionsRejection(
-            f"the delivery must carry exactly one export file beside its sidecar, "
-            f"found {len(payload_names)}")
+            f"the delivery must carry exactly one export file beside its sidecar, found {len(payload_names)}"
+        )
     payload_name = payload_names[0]
 
     try:
@@ -263,8 +265,8 @@ def accept_export(data: bytes, store: Store, *, received_at: str | None = None,
         raise DecisionsRejection("; ".join(e.rows)) from None
     if payload_name not in sums:
         raise DecisionsRejection(
-            f"the sidecar names {sorted(sums)}, not {payload_name!r}: checksum does not "
-            f"cover the delivered file")
+            f"the sidecar names {sorted(sums)}, not {payload_name!r}: checksum does not cover the delivered file"
+        )
     #: Both ways, as a run delivery checks (the pin re-check, note 1): the side-car names the
     #: delivered file and nothing else. A second entry -- `./x`, another case, another file -- is a
     #: second digest no check would read, so it is refused, by name.
@@ -272,13 +274,13 @@ def accept_export(data: bytes, store: Store, *, received_at: str | None = None,
     if others:
         raise DecisionsRejection(
             f"{sidecar_name} names {others!r} beside {payload_name!r}: a side-car names the "
-            f"delivered file and nothing else")
+            f"delivered file and nothing else"
+        )
     jsonl = files[payload_name]
     got = digest(jsonl)
     want = sums[payload_name]
     if got != want:
-        raise DecisionsRejection(
-            f"{payload_name}: sha256 {got} does not match the sidecar's {want}")
+        raise DecisionsRejection(f"{payload_name}: sha256 {got} does not match the sidecar's {want}")
 
     rows = _validate_rows(jsonl, limits=(limits or _default_limits()))
 
@@ -288,15 +290,16 @@ def accept_export(data: bytes, store: Store, *, received_at: str | None = None,
         #: rows -- never the stored record, which may have been edited since. The record
         #: is not rewritten: an edited one keeps reading "couldn't check".
         return DecisionsAccepted(
-            export=StoredDecisionExport(key=key, export_object=key, received_at="",
-                                        rows=tuple(rows)),
-            created=False, status=200)
+            export=StoredDecisionExport(key=key, export_object=key, received_at="", rows=tuple(rows)),
+            created=False,
+            status=200,
+        )
 
     export_object = store.put(jsonl)
     export = StoredDecisionExport(
         key=key,
         export_object=export_object,
-        received_at=received_at or datetime.now(timezone.utc).isoformat(timespec="seconds"),
+        received_at=received_at or datetime.now(UTC).isoformat(timespec="seconds"),
         rows=tuple(rows),
     )
     store.put_decision_export(export)
@@ -305,6 +308,7 @@ def accept_export(data: bytes, store: Store, *, received_at: str | None = None,
 
 def _default_limits():
     from onetrace_console.config import Config
+
     return Config()
 
 
@@ -325,6 +329,7 @@ class CheckedRow:
     values may ever be shown, and only when `problem` is None. `problem` is None when the
     stored line equals the delivered one; otherwise it says why the row cannot be checked.
     """
+
     export: StoredDecisionExport
     index: int
     delivered: DecisionRow | None
@@ -334,8 +339,7 @@ class CheckedRow:
     def name(self) -> str:
         """Which row: its export and position, and its request id from the delivery."""
         rid = self.delivered.request_id if self.delivered is not None else None
-        return (f"export {self.export.key[:12]}…, row {self.index}"
-                + (f", request {rid}" if rid else ""))
+        return f"export {self.export.key[:12]}…, row {self.index}" + (f", request {rid}" if rid else "")
 
     @property
     def couldnt_check(self) -> str | None:
@@ -347,8 +351,9 @@ def delivered_lines(key: object, store: Store) -> list[str] | None:
     or None when there is no such delivery or it cannot be read: missing, bytes moved
     (`Store.get` refuses both), not UTF-8, or a key that is not a content address."""
     from onetrace_console.store import StoreError
+
     try:
-        text = store.get(key).decode("utf-8")
+        text = store.get(key).decode("utf-8")  # type: ignore[arg-type]  # a key that is not a string raises TypeError, caught below
     except (StoreError, UnicodeDecodeError, TypeError, ValueError):
         return None
     lines = text.split("\n")
@@ -357,8 +362,7 @@ def delivered_lines(key: object, store: Store) -> list[str] | None:
     return lines
 
 
-def check_export(export: StoredDecisionExport, store: Store, *,
-                 filed_as: str | None = None) -> tuple[CheckedRow, ...]:
+def check_export(export: StoredDecisionExport, store: Store, *, filed_as: str | None = None) -> tuple[CheckedRow, ...]:
     """Every row position of `export`, each checked against its delivery.
 
     `filed_as` is the record's filename stem: the delivery's content address, and the only
@@ -375,12 +379,10 @@ def check_export(export: StoredDecisionExport, store: Store, *,
     anchor = export.export_object if filed_as is None else filed_as
     intact = filed_as is None or (export.key == filed_as and export.export_object == filed_as)
     if not intact:
-        export = StoredDecisionExport(key=filed_as, export_object=filed_as, received_at="",
-                                      rows=export.rows)
+        export = StoredDecisionExport(key=filed_as, export_object=filed_as, received_at="", rows=export.rows)  # type: ignore[arg-type]  # not intact: filed_as is given
     lines = delivered_lines(anchor, store)
     if lines is None:
-        return tuple(CheckedRow(export, i, None, DELIVERY_MISSING)
-                     for i in range(max(len(export.rows), 1)))
+        return tuple(CheckedRow(export, i, None, DELIVERY_MISSING) for i in range(max(len(export.rows), 1)))
     same_count = len(lines) == len(export.rows)
     out = []
     for i in range(max(len(lines), len(export.rows))):

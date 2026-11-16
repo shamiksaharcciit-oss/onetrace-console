@@ -8,6 +8,7 @@ Every row of the demo's lists is held to its run's own page: each chip's state e
 rung, the link opens a page this console has, and the times and counts are the run's. Each check
 has its sabotage.
 """
+
 from __future__ import annotations
 
 import re
@@ -29,6 +30,7 @@ def _text(html: str) -> str:
 def demo(shared_demo):
     from onetrace_console.store import Store
     from tests.test_checks import _require_installed
+
     _require_installed()
     folder = shared_demo["folder"]
     return Store(folder / "store" / "store"), folder / "store" / "pages"
@@ -37,6 +39,7 @@ def demo(shared_demo):
 def row_problems(list_page: str, store, pages) -> list[str]:
     from onetrace_console.overview import pipelines, ran_at
     from onetrace_console.words import short_time
+
     label = {r.key: p.label for p in pipelines(store) for r in p.runs}
     out = []
     rows = re.findall(r'<tr data-run="[^"]*" data-key="([0-9a-f]+)">(.*?)</tr>', list_page, re.S)
@@ -81,8 +84,9 @@ def test_every_row_is_its_run_s_page_in_brief(demo, examined):
     examined(rows, "rows across the runs lists")
     every = (pages / "executions-all.html").read_text(encoding="utf-8")
     assert len(re.findall(r'<tr data-run="', every)) == len(store.runs())
-    assert "Ran as approved" in _text(re.search(r'<table class="timeline" data-section="runs-table">.*?</thead>',
-                                                every, re.S).group(0))
+    assert "Ran as approved" in _text(
+        re.search(r'<table class="timeline" data-section="runs-table">.*?</thead>', every, re.S).group(0)
+    )
 
 
 def test_sabotage_a_row_that_strays_from_its_run_is_named(demo, examined):
@@ -93,9 +97,13 @@ def test_sabotage_a_row_that_strays_from_its_run_is_named(demo, examined):
     state = re.search(r'data-answer="signed"[^>]*><span class="pill \w+" data-state="([^"]+)"', row).group(1)
     other = "no" if state != "no" else "yes"
     planted = {
-        "a chip its page doesn't say": every.replace(row, row.replace(
-            f'data-answer="signed"><span class="pill', f'data-answer="signed"><span class="pill', 1).replace(
-            f'data-state="{state}">', f'data-state="{other}">', 1), 1),
+        "a chip its page doesn't say": every.replace(
+            row,
+            row.replace('data-answer="signed"><span class="pill', 'data-answer="signed"><span class="pill', 1).replace(
+                f'data-state="{state}">', f'data-state="{other}">', 1
+            ),
+            1,
+        ),
         "a link to nowhere": every.replace(f'href="runs/{key}/case.html"', 'href="runs/nowhere/case.html"', 1),
     }
     examined(len(planted), "planted pages")
@@ -107,9 +115,13 @@ def test_sabotage_a_row_that_strays_from_its_run_is_named(demo, examined):
 def test_a_list_with_no_run_says_so_in_one_grey_line(demo, examined):
     """A count at zero opens a list with no run: no empty table, one line, its sentence kept."""
     from onetrace_console.pages import NO_RUNS
+
     store, pages = demo
-    empty = [p for p in sorted(pages.glob("executions-*.html"))
-             if not re.findall(r'<tr data-run="', p.read_text(encoding="utf-8"))]
+    empty = [
+        p
+        for p in sorted(pages.glob("executions-*.html"))
+        if not re.findall(r'<tr data-run="', p.read_text(encoding="utf-8"))
+    ]
     examined(len(empty), "lists with no run")
     assert empty, "the demo has counts at zero"
     for p in empty:
@@ -120,10 +132,18 @@ def test_a_list_with_no_run_says_so_in_one_grey_line(demo, examined):
 
 
 #: Every state the run page's plan rung can decide (`viewer.model.Approval`), and the list's.
-APPROVAL_STATES = {"approved": "yes", "departed": "no", "edges-mismatch": "no", "no-plan": "not-declared",
-                   "not-a-graph-run": "not-a-graph-run", "cant-check": "couldnt-check", "no-paths": "couldnt-check",
-                   "does-not-verify": "couldnt-check", "couldnt-check": "couldnt-check",
-                   "not-checked": "not-checked"}
+APPROVAL_STATES = {
+    "approved": "yes",
+    "departed": "no",
+    "edges-mismatch": "no",
+    "no-plan": "not-declared",
+    "not-a-graph-run": "not-a-graph-run",
+    "cant-check": "couldnt-check",
+    "no-paths": "couldnt-check",
+    "does-not-verify": "couldnt-check",
+    "couldnt-check": "couldnt-check",
+    "not-checked": "not-checked",
+}
 
 
 def test_ran_as_approved_is_listed_in_every_state_the_run_page_decides(examined):
@@ -135,6 +155,7 @@ def test_ran_as_approved_is_listed_in_every_state_the_run_page_decides(examined)
     from onetrace_console.pages import _APPROVED_STATE
     from onetrace_console.viewer.model import Approval
     from onetrace_console.viewer.sentences import template
+
     named = set(re.findall(r"`([a-z-]+)`", inspect.getdoc(Approval).split("is one of:")[1].split("`detail`")[0]))
     examined(len(named), "plan rung states")
     assert named == set(APPROVAL_STATES), named ^ set(APPROVAL_STATES)
@@ -148,13 +169,21 @@ def test_ran_as_approved_is_listed_in_every_state_the_run_page_decides(examined)
 def test_sabotage_a_run_that_does_not_verify_listed_as_approved_is_named(demo, monkeypatch, examined):
     from onetrace_console import pages as pages_module
     from onetrace_console.pages import runs_table
+
     store, pages = demo
     every = (pages / "executions-all.html").read_text(encoding="utf-8")
     run = next(r for r in store.runs() if r.approved == "approved")
     monkeypatch.setitem(pages_module._APPROVED_STATE, "approved", "no")
-    bad = re.sub(r'<table class="timeline" data-section="runs-table">.*?</table>', lambda m: re.search(
-        r'<table class="timeline" data-section="runs-table">.*?</table>', runs_table(store.runs(), store), re.S).group(0),
-        every, count=1, flags=re.S)
+    bad = re.sub(
+        r'<table class="timeline" data-section="runs-table">.*?</table>',
+        lambda m: re.search(
+            r'<table class="timeline" data-section="runs-table">.*?</table>', runs_table(store.runs(), store), re.S
+        ).group(0),
+        every,
+        count=1,
+        flags=re.S,
+    )
     examined(1, "planted list")
-    assert bad != every and any(f"{run.run_id}: approved no on the list, yes on its page" == p
-                                for p in row_problems(bad, store, pages))
+    assert bad != every and any(
+        f"{run.run_id}: approved no on the list, yes on its page" == p for p in row_problems(bad, store, pages)
+    )

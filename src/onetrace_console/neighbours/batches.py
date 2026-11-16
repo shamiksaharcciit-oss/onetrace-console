@@ -18,13 +18,14 @@ embedder record digest), rebuilt from the batch runs alone (`rebuild`): deleting
 the same file, byte for byte. A vector under another embedder's digest is never read for the embedder in
 use, so a changed embedder invalidates every vector until its own batches are recorded.
 """
+
 from __future__ import annotations
 
 import base64
 import json
 import re
 import time
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 from onetrace_console.bounded_json import load_json_bounded
@@ -41,33 +42,38 @@ INSTRUMENT_ID = "onetrace-console-neighbours"
 
 def _root(store) -> Path:
     from onetrace_console.neighbours import FOLDER
+
     return Path(store.root) / FOLDER
 
 
 def identity_bytes(embedder) -> bytes:
     """`embedder.json` as the batch's stage writes it: canonical, as the SDK's `write_json` writes."""
     from onetrace.canonical import canonicalize
+
     return canonicalize({"format": EMBEDDER_FORMAT, **embedder.identity()})
 
 
 def embedder_digest(embedder) -> str:
     """The embedder record digest: the digest the batch's receipt records for its `embedder.json`."""
     from onetrace.canonical import digest
+
     return digest(identity_bytes(embedder))
 
 
 def encode(vector) -> str:
     import numpy as np
+
     return base64.b64encode(np.asarray(vector, dtype="<f4").tobytes()).decode("ascii")
 
 
 def decode(text: str):
     import numpy as np
+
     return np.frombuffer(base64.b64decode(text), dtype="<f4")
 
 
 def _run_id() -> str:
-    return "embed-" + datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")
+    return "embed-" + datetime.now(UTC).strftime("%Y%m%dT%H%M%S%fZ")
 
 
 def record_batch(store, embedder, items: list) -> str:
@@ -75,37 +81,61 @@ def record_batch(store, embedder, items: list) -> str:
     from onetrace import __version__ as sdk_version
     from onetrace import model_call
     from onetrace.emit import Instrument, Recorder
+
     from onetrace_console import __version__
+
     run_id = _run_id()
     out = _root(store) / RUNS / run_id
     out.parent.mkdir(parents=True, exist_ok=True)
     ident = load_json_bounded(identity_bytes(embedder), "embedder.json")
     #: The instrument's configuration: what the embedder is, as its own identity names it.
-    config = {"embedder": embedder.kind, "api": embedder.API, "onetrace": sdk_version,
-              "model": str(ident["model.requested"].get("value", ""))}
-    rec = Recorder(str(out), run_id=run_id, declared_stages=[STAGE], manifest=Path(__file__), policy="fail-closed",
-                   anchor_reason="an embedding batch of this console's neighbours; not anchored")
+    config = {
+        "embedder": embedder.kind,
+        "api": embedder.API,
+        "onetrace": sdk_version,
+        "model": str(ident["model.requested"].get("value", "")),
+    }
+    rec = Recorder(
+        str(out),
+        run_id=run_id,
+        declared_stages=[STAGE],
+        manifest=Path(__file__),
+        policy="fail-closed",
+        anchor_reason="an embedding batch of this console's neighbours; not anchored",
+    )
 
     def embed(ctx):
         names = []
         for n, item in enumerate(items, start=1):
             name = f"text-{n:03d}"
-            ctx.read_memory(item.data, "application/json" if item.data[:1] in b'"{[' else "text/plain",
-                            name=name, trust_class=item.trust_class or "externally-sourced")
+            ctx.read_memory(
+                item.data,
+                "application/json" if item.data[:1] in b'"{[' else "text/plain",
+                name=name,
+                trust_class=item.trust_class or "externally-sourced",
+            )
             names.append(name)
         ctx.write_json("embedder.json", ident)
-        started = datetime.now(timezone.utc).isoformat(timespec="seconds")
+        started = datetime.now(UTC).isoformat(timespec="seconds")
         t0 = time.perf_counter()
         batch = embedder.embed([item.text for item in items])
         seconds = time.perf_counter() - t0
-        ended = datetime.now(timezone.utc).isoformat(timespec="seconds")
+        ended = datetime.now(UTC).isoformat(timespec="seconds")
         for j in range(len(items)):
             fields = {"format": model_call.FORMAT, **batch.shared, **batch.rows[j], "fingerprints": []}
             raw = model_call.record_bytes(fields)
             model_call.write(raw, model_call.timing(raw, started, ended, seconds), ctx=ctx)
-        ctx.write_json("vectors.json", {"format": FORMAT, "dimensions": str(len(batch.vectors[0])),
-                                        "vectors": [{"input": name, "digest": item.digest, "vector": encode(v)}
-                                                    for name, item, v in zip(names, items, batch.vectors)]})
+        ctx.write_json(
+            "vectors.json",
+            {
+                "format": FORMAT,
+                "dimensions": str(len(batch.vectors[0])),
+                "vectors": [
+                    {"input": name, "digest": item.digest, "vector": encode(v)}
+                    for name, item, v in zip(names, items, batch.vectors)
+                ],
+            },
+        )
         return None
 
     rec.run_node(STAGE, None, Instrument(INSTRUMENT_ID, "embedder", __version__, config), embed)
@@ -115,8 +145,10 @@ def record_batch(store, embedder, items: list) -> str:
 
 # ------------------------------------------------------------------------------ the derived file
 
+
 def _verified_output(folder: Path, receipt: dict, name: str) -> tuple[bytes, str] | None:
     import hashlib
+
     item = next((o for o in receipt.get("outputs") or [] if isinstance(o, dict) and o.get("name") == name), None)
     if item is None:
         return None
@@ -133,13 +165,17 @@ def _batch(folder: Path) -> tuple[str, dict[str, str]] | None:
     """(embedder record digest, {input digest: vector}) of one batch run, where its receipt's outputs
     match their stored bytes and each vector's input is one the receipt records by that digest."""
     try:
-        receipt = load_json_bounded((folder / "receipts" / "01-embed.json").read_text(encoding="utf-8"),
-                                    "an embedding batch's receipt")
+        receipt = load_json_bounded(
+            (folder / "receipts" / "01-embed.json").read_text(encoding="utf-8"), "an embedding batch's receipt"
+        )
     except (OSError, ValueError, UnicodeDecodeError, RecursionError):
         return None
     if not isinstance(receipt, dict):
         return None
-    ident, vectors = _verified_output(folder, receipt, "embedder.json"), _verified_output(folder, receipt, "vectors.json")
+    ident, vectors = (
+        _verified_output(folder, receipt, "embedder.json"),
+        _verified_output(folder, receipt, "vectors.json"),
+    )
     if ident is None or vectors is None:
         return None
     inputs = {str(i.get("name")): str(i.get("digest")) for i in receipt.get("inputs") or [] if isinstance(i, dict)}
@@ -151,7 +187,11 @@ def _batch(folder: Path) -> tuple[str, dict[str, str]] | None:
         return None
     out = {}
     for v in doc.get("vectors") or []:
-        if isinstance(v, dict) and inputs.get(str(v.get("input"))) == v.get("digest") and isinstance(v.get("vector"), str):
+        if (
+            isinstance(v, dict)
+            and inputs.get(str(v.get("input"))) == v.get("digest")
+            and isinstance(v.get("vector"), str)
+        ):
             out[str(v["digest"])] = v["vector"]
     return ident[1], out
 
@@ -161,8 +201,11 @@ def build(store) -> dict:
     embedded twice by one embedder."""
     runs = _root(store) / RUNS
     table: dict[str, dict[str, dict[str, str]]] = {}
-    for folder in sorted(p for p in runs.iterdir() if p.is_dir() and re.fullmatch(r"embed-[0-9TZ]+", p.name)) \
-            if runs.is_dir() else ():
+    for folder in (
+        sorted(p for p in runs.iterdir() if p.is_dir() and re.fullmatch(r"embed-[0-9TZ]+", p.name))
+        if runs.is_dir()
+        else ()
+    ):
         got = _batch(folder)
         if got is None:
             continue
@@ -179,6 +222,7 @@ def encode_file(doc: dict) -> bytes:
 
 def rebuild(store) -> Path:
     from onetrace_console.store import _atomic_write
+
     path = _root(store) / DERIVED
     path.parent.mkdir(parents=True, exist_ok=True)
     _atomic_write(path, encode_file(build(store)))
@@ -201,10 +245,12 @@ def vectors_for(store, who: str) -> dict[str, str]:
 
 # ------------------------------------------------------------------------------ keeping up
 
+
 def wanted(store) -> list:
     """Every kept text of every run that keeps inputs, once per digest, in the order of arrival."""
     from onetrace_console.neighbours import kept
     from onetrace_console.store import arrival_order
+
     seen, out = set(), []
     for run in arrival_order(store.runs(), newest_first=False):
         try:
@@ -221,7 +267,9 @@ def wanted(store) -> list:
 def refresh(store) -> int:
     """Where neighbours are on: rebuild the derived file, embed every kept text it lacks for the
     embedder in use as recorded batches, and rebuild it again. The number of texts embedded."""
-    from onetrace_console.neighbours import embedder as embedders, settings
+    from onetrace_console.neighbours import embedder as embedders
+    from onetrace_console.neighbours import settings
+
     setting = settings.read(store)
     if setting is None:
         return 0
@@ -230,7 +278,7 @@ def refresh(store) -> int:
     have = vectors_for(store, embedder_digest(emb))
     missing = [p for p in wanted(store) if p.digest not in have]
     for i in range(0, len(missing), BATCH):
-        record_batch(store, emb, missing[i:i + BATCH])
+        record_batch(store, emb, missing[i : i + BATCH])
     if missing:
         rebuild(store)
     return len(missing)
@@ -239,7 +287,9 @@ def refresh(store) -> int:
 def current(store) -> tuple[str, dict[str, str]] | None:
     """(the embedder record digest in use, its vectors), where neighbours are on and the embedder can be
     named; None otherwise. Reads the derived file; embeds nothing, fetches nothing."""
-    from onetrace_console.neighbours import embedder as embedders, settings
+    from onetrace_console.neighbours import embedder as embedders
+    from onetrace_console.neighbours import settings
+
     setting = settings.read(store)
     if setting is None:
         return None

@@ -20,10 +20,10 @@ control shows zero proves the measurement was broken, not that the page is quiet
 Usage:
     python tools/offline_check.py [--browser chrome|edge|both]
 """
+
 from __future__ import annotations
 
 import json
-import os
 import re
 import shutil
 import subprocess
@@ -36,10 +36,14 @@ PROBE = '<img src="https://control.invalid/probe.png" alt="">'
 PROBE_HOST = "control.invalid"
 
 BROWSERS = {
-    "chrome": [r"C:\Program Files\Google\Chrome\Application\chrome.exe",
-               r"C:\Program Files (x86)\Google\Chrome\Application\chrome.exe"],
-    "edge": [r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe",
-             r"C:\Program Files\Microsoft\Edge\Application\msedge.exe"],
+    "chrome": [
+        r"C:\Program Files\Google\Chrome\Application\chrome.exe",
+        r"C:\Program Files (x86)\Google\Chrome\Application\chrome.exe",
+    ],
+    "edge": [
+        r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe",
+        r"C:\Program Files\Microsoft\Edge\Application\msedge.exe",
+    ],
 }
 
 
@@ -71,8 +75,7 @@ def render_pages(dest: Path) -> dict[str, Path]:
     files = {"MANIFEST.json": (run_folder / "MANIFEST.json").read_bytes()}
     for entry in manifest["chain"]:
         files[entry["file"]] = (run_folder / entry["file"]).read_bytes()
-    files["SHA256SUMS"] = ("\n".join(
-        f"{hashlib.sha256(b).hexdigest()}  {p}" for p, b in files.items()) + "\n").encode()
+    files["SHA256SUMS"] = ("\n".join(f"{hashlib.sha256(b).hexdigest()}  {p}" for p, b in files.items()) + "\n").encode()
 
     buf = io.BytesIO()
     with tarfile.open(fileobj=buf, mode="w") as tar:
@@ -83,7 +86,7 @@ def render_pages(dest: Path) -> dict[str, Path]:
 
     store = Store(dest / "store")
     accepted = accept(buf.getvalue(), store)
-    if accepted.run is None:                                  # pragma: no cover
+    if accepted.run is None:  # pragma: no cover
         raise SystemExit(f"the fixture delivery was refused: {accepted.rows}")
     run = run_and_record(accepted.run, store)
     at = "2026-09-26T12:00:00+02:00"
@@ -131,8 +134,7 @@ def render_pages(dest: Path) -> dict[str, Path]:
                 raise SystemExit(f"the diff pair was refused: {accepted.rows}")
             stored.append(accepted.run)
         comparison = compare(stored[0], stored[1], store)
-        (dest / DIFF_PAGE).write_bytes(
-            render_diff(comparison, store, generated_at=at).encode("utf-8"))
+        (dest / DIFF_PAGE).write_bytes(render_diff(comparison, store, generated_at=at).encode("utf-8"))
         out[DIFF_PAGE] = dest / DIFF_PAGE
     else:
         print(f"WARNING: the diff pair is not there, so diff.html was NOT measured: {pair}")
@@ -151,10 +153,18 @@ def load(browser: Path, page: Path, workdir: Path, tag: str) -> tuple[int, int]:
     for p in (profile, netlog, dump):
         shutil.rmtree(p, ignore_errors=True) if p.is_dir() else p.unlink(missing_ok=True)
 
-    argv = [str(browser), "--headless=new", "--disable-gpu", "--no-first-run",
-            f"--user-data-dir={profile}", f"--log-net-log={netlog}",
-            '--host-resolver-rules=MAP * ~NOTFOUND', "--virtual-time-budget=4000",
-            "--dump-dom", page.resolve().as_uri()]
+    argv = [
+        str(browser),
+        "--headless=new",
+        "--disable-gpu",
+        "--no-first-run",
+        f"--user-data-dir={profile}",
+        f"--log-net-log={netlog}",
+        "--host-resolver-rules=MAP * ~NOTFOUND",
+        "--virtual-time-budget=4000",
+        "--dump-dom",
+        page.resolve().as_uri(),
+    ]
     r = subprocess.run(argv, capture_output=True, timeout=180)
     dump.write_bytes(r.stdout)
     hits = 0
@@ -182,11 +192,9 @@ def main(argv: list[str]) -> int:
             print(f"\n{name}: not installed where this can reach it -- NOT MEASURED")
             problems += 1
             continue
-        version = subprocess.run([str(browser), "--version"], capture_output=True,
-                                 text=True).stdout.strip()
+        version = subprocess.run([str(browser), "--version"], capture_output=True, text=True).stdout.strip()
         print(f"\n{name}: {browser}\n  {version or '(version unavailable headless)'}")
-        print(f"  {'page':<18} {'clean DOM':>10} {'clean hits':>11} "
-              f"{'control DOM':>12} {'control hits':>13}  verdict")
+        print(f"  {'page':<18} {'clean DOM':>10} {'clean hits':>11} {'control DOM':>12} {'control hits':>13}  verdict")
         for page_name, path in sorted(pages.items()):
             clean_bytes, clean_hits = load(browser, path, work, f"{name}-clean")
 
@@ -197,17 +205,21 @@ def main(argv: list[str]) -> int:
             ctrl_bytes, ctrl_hits = load(browser, probed, work, f"{name}-control")
 
             ok = clean_hits == 0 and ctrl_hits > 0
-            verdict = "quiet, control fired" if ok else (
-                "*** CONTROL DID NOT FIRE: the measurement is broken ***"
-                if ctrl_hits == 0 else "*** THE PAGE REACHED OUT ***")
+            verdict = (
+                "quiet, control fired"
+                if ok
+                else (
+                    "*** CONTROL DID NOT FIRE: the measurement is broken ***"
+                    if ctrl_hits == 0
+                    else "*** THE PAGE REACHED OUT ***"
+                )
+            )
             if not ok:
                 problems += 1
-            print(f"  {page_name:<18} {clean_bytes:>10} {clean_hits:>11} "
-                  f"{ctrl_bytes:>12} {ctrl_hits:>13}  {verdict}")
+            print(f"  {page_name:<18} {clean_bytes:>10} {clean_hits:>11} {ctrl_bytes:>12} {ctrl_hits:>13}  {verdict}")
 
     print(f"\nproblems: {problems}")
-    print("A control showing zero would mean the measurement was broken, not that the "
-          "page was quiet.")
+    print("A control showing zero would mean the measurement was broken, not that the page was quiet.")
     return 1 if problems else 0
 
 

@@ -5,6 +5,7 @@ A path is absolute when it has a root or a drive under POSIX rules or under Wind
 console's own rule for a configured path does (`config.from_folder`): a page drawn on Windows
 holds a drive path, and a checker that knows only a leading `/` lets it through.
 """
+
 from __future__ import annotations
 
 from pathlib import PurePosixPath, PureWindowsPath

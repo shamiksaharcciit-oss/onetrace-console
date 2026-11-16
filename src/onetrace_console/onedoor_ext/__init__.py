@@ -10,4 +10,5 @@ See `tests/test_onedoor_ext_isolation.py` for the two properties this claims:
      `config.extensions["onedoor"]` is true);
   2. nothing under `onetrace_console`, this package included, imports `onedoor`.
 """
+
 from __future__ import annotations

@@ -11,6 +11,7 @@ the specification asks for -- a mounted test certificate reaches /health over TL
 without one the container refuses -- are `tools/container_tls_check.py`, whose output is in the
 report: this suite runs offline and without Docker.
 """
+
 from __future__ import annotations
 
 import json
@@ -59,12 +60,15 @@ def _container_config_here(tmp_path, *, cert: bool, key: bool) -> dict:
     return body
 
 
-@pytest.mark.parametrize("cert,key,says", [
-    (False, False, "no TLS certificate at"),
-    (True, False, "no TLS key at"),
-], ids=["nothing-mounted", "no-key"])
-def test_without_a_mounted_certificate_it_refuses_with_a_fix_line(tmp_path, monkeypatch, capsys,
-                                                                  cert, key, says):
+@pytest.mark.parametrize(
+    "cert,key,says",
+    [
+        (False, False, "no TLS certificate at"),
+        (True, False, "no TLS key at"),
+    ],
+    ids=["nothing-mounted", "no-key"],
+)
+def test_without_a_mounted_certificate_it_refuses_with_a_fix_line(tmp_path, monkeypatch, capsys, cert, key, says):
     body = _container_config_here(tmp_path, cert=cert, key=key)
     assert _serve_with(tmp_path, monkeypatch, body) == 1
     err = _refused_in_words(capsys, says)

@@ -8,6 +8,7 @@ them; the last pattern that matches decides, `!` letting a path back in) to ever
 - `.dockerignore` names no path under the export's `NEVER`, so it carries no internal name;
 - no tracked file under `NEVER` reaches the build.
 """
+
 from __future__ import annotations
 
 import json
@@ -17,15 +18,20 @@ from pathlib import Path
 
 try:
     from tools.export_public import NEVER
-except ImportError:   # the public tree has no export tool, and its never-ship files are already absent
+except ImportError:  # the public tree has no export tool, and its never-ship files are already absent
     NEVER = ()
 
 REPO = Path(__file__).resolve().parent.parent
 
 
 def tracked() -> list[str]:
-    return [p for p in subprocess.run(["git", "ls-files", "-z"], cwd=REPO, capture_output=True, text=True,
-                                      check=True).stdout.split("\0") if p]
+    return [
+        p
+        for p in subprocess.run(
+            ["git", "ls-files", "-z"], cwd=REPO, capture_output=True, text=True, check=True
+        ).stdout.split("\0")
+        if p
+    ]
 
 
 def patterns(text: str) -> list[tuple[bool, re.Pattern]]:
@@ -38,8 +44,10 @@ def patterns(text: str) -> list[tuple[bool, re.Pattern]]:
         keep = line.startswith("!")
         body = line[1:] if keep else line
         body = body.strip("/")
-        rx = "".join(".*" if tok == "**" else "[^/]*" if tok == "*" else "[^/]" if tok == "?" else re.escape(tok)
-                     for tok in re.findall(r"\*\*|\*|\?|[^*?]+", body))
+        rx = "".join(
+            ".*" if tok == "**" else "[^/]*" if tok == "*" else "[^/]" if tok == "?" else re.escape(tok)
+            for tok in re.findall(r"\*\*|\*|\?|[^*?]+", body)
+        )
         out.append((keep, re.compile(rx + r"\Z")))
     return out
 
@@ -98,11 +106,18 @@ def test_every_copy_source_of_every_dockerfile_reaches_the_build(examined):
 
 
 def test_the_dockerignore_names_no_path_the_export_never_ships():
-    named = [line.strip() for line in (REPO / ".dockerignore").read_text(encoding="utf-8").splitlines()
-             if line.strip() and not line.startswith("#")]
+    named = [
+        line.strip()
+        for line in (REPO / ".dockerignore").read_text(encoding="utf-8").splitlines()
+        if line.strip() and not line.startswith("#")
+    ]
     bare = [n.lstrip("!").strip("/") for n in named]
-    hits = [n for n, b in zip(named, bare) for never in NEVER
-            if b == never.rstrip("/") or b.startswith(never) or never.startswith(b + "/")]
+    hits = [
+        n
+        for n, b in zip(named, bare)
+        for never in NEVER
+        if b == never.rstrip("/") or b.startswith(never) or never.startswith(b + "/")
+    ]
     assert not hits, hits
 
 

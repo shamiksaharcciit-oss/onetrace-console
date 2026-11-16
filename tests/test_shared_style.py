@@ -16,6 +16,7 @@ parts:
 3. The type scale: sizes are the boards' 26, 15, 13 and 12, plus the two the boards also draw
    (the 30px count and the 14px navigation, `--fs-kpi` and `--fs-nav`) and the 20px brand.
 """
+
 from __future__ import annotations
 
 import re
@@ -67,6 +68,7 @@ def _declared(body: str, prop: str) -> str | None:
 def _tokens(theme: str = "light") -> dict[str, str]:
     """{role: #rrggbb} in a theme: the skin's own block for light, the dark theme's mix for dark."""
     from onetrace_console.viewer.tokens import dark_palette, root_css
+
     if theme == "dark":
         return dict(dark_palette())
     return dict(re.findall(r"--([\w-]+):\s*(#[0-9a-fA-F]{6})", root_css()))
@@ -76,7 +78,8 @@ def _luminance(hex_colour: str) -> float:
     def channel(c: int) -> float:
         c = c / 255
         return c / 12.92 if c <= 0.03928 else ((c + 0.055) / 1.055) ** 2.4
-    r, g, b = (int(hex_colour[i:i + 2], 16) for i in (1, 3, 5))
+
+    r, g, b = (int(hex_colour[i : i + 2], 16) for i in (1, 3, 5))
     return 0.2126 * channel(r) + 0.7152 * channel(g) + 0.0722 * channel(b)
 
 
@@ -114,12 +117,16 @@ def text_pairs(css: str) -> tuple[list[tuple[str, str, str]], list[str]]:
 def contrast_problems(css: str, theme: str = "light") -> list[str]:
     tokens = _tokens(theme)
     pairs, unplaced = text_pairs(css)
-    return unplaced + [f"{s}: --{fg} on --{bg} reads {ratio(fg, bg, tokens):.2f}:1"
-                       for s, fg, bg in pairs if ratio(fg, bg, tokens) < 4.5]
+    return unplaced + [
+        f"{s}: --{fg} on --{bg} reads {ratio(fg, bg, tokens):.2f}:1"
+        for s, fg, bg in pairs
+        if ratio(fg, bg, tokens) < 4.5
+    ]
 
 
 def _sheet() -> str:
     from onetrace_console.frame import stylesheet
+
     return stylesheet().decode("utf-8")
 
 
@@ -131,12 +138,15 @@ def test_every_text_colour_in_the_whole_stylesheet_reads_on_its_background(theme
     assert contrast_problems(_sheet(), theme) == []
 
 
-@pytest.mark.parametrize("planted, said", [
-    (".last-failed{background:var(--cc-bg);color:var(--ink-faint)}", "--ink-faint on --cc-bg"),
-    (".card .step{color:var(--line-strong)}", "--line-strong on --page"),
-    ("nav.frame .later{color:var(--nav-ink)}", "with no background named"),
-    (".later{color:#777777}", "not a skin token"),
-])
+@pytest.mark.parametrize(
+    "planted, said",
+    [
+        (".last-failed{background:var(--cc-bg);color:var(--ink-faint)}", "--ink-faint on --cc-bg"),
+        (".card .step{color:var(--line-strong)}", "--line-strong on --page"),
+        ("nav.frame .later{color:var(--nav-ink)}", "with no background named"),
+        (".later{color:#777777}", "not a skin token"),
+    ],
+)
 def test_the_contrast_check_names_a_pair_that_doesnt_read(planted, said, examined):
     """Sabotage: a pair that falls short, a rule the check can't place, a literal colour."""
     examined(1, "planted rule")
@@ -160,13 +170,20 @@ TONES = {("ok-ink", "ok-bg"), ("cc-ink", "cc-bg"), ("bad-ink", "bad-bg"), ("neu-
 
 def chip_problems(css: str) -> list[str]:
     from onetrace_console.frame import CHIP_SHAPE
+
     rules = _rules(css)
     shaped = [s for s, body in rules if body.strip().rstrip(";") == CHIP_SHAPE.strip().rstrip(";")]
-    problems = [f"{c}: not given the one chip shape" for c in CHIPS
-                if not any(c in [x.strip() for x in s.split(",")] for s in shaped)]
+    problems = [
+        f"{c}: not given the one chip shape"
+        for c in CHIPS
+        if not any(c in [x.strip() for x in s.split(",")] for s in shaped)
+    ]
     for selector, body in rules:
-        if not (any(c in selector for c in CHIPS) or "data-state" in selector
-                or re.search(r"\.cp \.(?:ok|cc|cco|bad|neu)\b", selector)):
+        if not (
+            any(c in selector for c in CHIPS)
+            or "data-state" in selector
+            or re.search(r"\.cp \.(?:ok|cc|cco|bad|neu)\b", selector)
+        ):
             continue
         fg, bg = _var(_declared(body, "color") or ""), _var(_declared(body, "background") or "")
         if fg and bg and (fg, bg) not in TONES:
@@ -185,11 +202,14 @@ def test_every_state_chip_has_the_one_shape_and_one_of_four_tones(examined):
     assert chip_problems(_sheet()) == []
 
 
-@pytest.mark.parametrize("planted, said", [
-    (".cp .bad{background:var(--accent);color:var(--accent-ink)}", "is not one of the four tones"),
-    #: The declined chip filled red, as a failure would be.
-    (":is(.cp,.shell .page) .dec{background:var(--bad-bg);color:var(--bad-ink)}", "not the declined outline"),
-])
+@pytest.mark.parametrize(
+    "planted, said",
+    [
+        (".cp .bad{background:var(--accent);color:var(--accent-ink)}", "is not one of the four tones"),
+        #: The declined chip filled red, as a failure would be.
+        (":is(.cp,.shell .page) .dec{background:var(--bad-bg);color:var(--bad-ink)}", "not the declined outline"),
+    ],
+)
 def test_the_chip_check_names_a_fifth_tone(planted, said, examined):
     examined(1, "planted chip tone")
     found = chip_problems(_sheet() + planted)
@@ -198,6 +218,7 @@ def test_the_chip_check_names_a_fifth_tone(planted, said, examined):
 
 def test_the_chip_check_names_a_chip_without_the_shape(examined, monkeypatch):
     from onetrace_console import frame
+
     examined(1, "chip shape removed")
     sheet = _sheet().replace(frame.CHIP_SHAPE, "display:inline")
     assert any("not given the one chip shape" in p for p in chip_problems(sheet))
@@ -205,14 +226,29 @@ def test_the_chip_check_names_a_chip_without_the_shape(examined, monkeypatch):
 
 # ------------------------------------------------------------------ 3. the type scale
 
-SIZES = {"12px", "13px", "15px", "26px", "30px", "14px", "20px",
-         "var(--fs-small)", "var(--fs-body)", "var(--fs-h1)", "var(--fs-kpi)", "var(--fs-nav)",
-         "var(--nav-brand-size)"}
+SIZES = {
+    "12px",
+    "13px",
+    "15px",
+    "26px",
+    "30px",
+    "14px",
+    "20px",
+    "var(--fs-small)",
+    "var(--fs-body)",
+    "var(--fs-h1)",
+    "var(--fs-kpi)",
+    "var(--fs-nav)",
+    "var(--nav-brand-size)",
+}
 
 
 def size_problems(css: str) -> list[str]:
-    return [f"{s}: font-size {v}" for s, body in _rules(css)
-            if (v := _declared(body, "font-size")) is not None and v not in SIZES]
+    return [
+        f"{s}: font-size {v}"
+        for s, body in _rules(css)
+        if (v := _declared(body, "font-size")) is not None and v not in SIZES
+    ]
 
 
 def test_every_font_size_is_on_the_scale(examined):
@@ -228,9 +264,11 @@ def test_the_scale_check_names_a_size_off_the_scale(examined):
 
 # ------------------------------------------------------------------ 4. every chip keeps its words
 
+
 @pytest.fixture(scope="module")
 def demo_pages(shared_demo) -> dict[str, str]:
     from tests.test_checks import _require_installed
+
     _require_installed()
     folder = shared_demo["folder"]
     root = folder / "store" / "pages"
@@ -238,15 +276,15 @@ def demo_pages(shared_demo) -> dict[str, str]:
 
 
 #: A chip as each page draws it: a pill, a rung's or a badge's state word, the "No records" chip.
-_CHIP_MARKUP = (re.compile(r'<span class="pill[^"]*">(.*?)</span>', re.S),
-                re.compile(r'<tr data-(?:rung|badge)="[^"]*" data-state="[^"]*"><td>.*?</td><td><span>(.*?)</span>',
-                           re.S),
-                re.compile(r'<p data-state="no-records">(.*?)</p>', re.S))
+_CHIP_MARKUP = (
+    re.compile(r'<span class="pill[^"]*">(.*?)</span>', re.S),
+    re.compile(r'<tr data-(?:rung|badge)="[^"]*" data-state="[^"]*"><td>.*?</td><td><span>(.*?)</span>', re.S),
+    re.compile(r'<p data-state="no-records">(.*?)</p>', re.S),
+)
 
 
 def test_every_chip_on_every_demo_page_carries_its_words(demo_pages, examined):
-    chips = [(rel, m) for rel, page in demo_pages.items() for rx in _CHIP_MARKUP
-             for m in rx.findall(page)]
+    chips = [(rel, m) for rel, page in demo_pages.items() for rx in _CHIP_MARKUP for m in rx.findall(page)]
     kinds = {rx.pattern for rx in _CHIP_MARKUP for page in demo_pages.values() if rx.search(page)}
     examined(len(chips), "chips on the demo's pages")
     assert len(kinds) == len(_CHIP_MARKUP), "each kind of chip is drawn somewhere in the demo"

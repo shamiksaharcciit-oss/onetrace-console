@@ -7,6 +7,7 @@ The FAIL case is the pinned verifier's own verdict on a placeholder anchor; the 
 cases edit that stored report's one anchor row (the viewer's own tests hold each rule; here it is
 the console's wiring that is tested).
 """
+
 from __future__ import annotations
 
 import json
@@ -32,10 +33,10 @@ def anchored(tmp_path):
     from onetrace_console.store import Store
     from tests.test_checks import FIXED_RAN_AT, _require_installed
     from tests.test_reference_demo import RUNS, _delivery
+
     _require_installed()
     store = Store(tmp_path / "store")
-    accepted = accept(_delivery(RUNS / "day-1", {"anchors/1.json": b'{"placeholder":"anchor"}'}),
-                      store)
+    accepted = accept(_delivery(RUNS / "day-1", {"anchors/1.json": b'{"placeholder":"anchor"}'}), store)
     assert getattr(accepted, "run", None) is not None, getattr(accepted, "rows", accepted)
     return run_and_record(accepted.run, store, ran_at=FIXED_RAN_AT), store
 
@@ -47,17 +48,31 @@ def declared(tmp_path, monkeypatch):
     `anchors/` file -- a declaration nothing committed, delivered whole and checked."""
     import functools
     import sys
+
     from onetrace_console.checks import run_and_record
     from onetrace_console.ingest import accept
     from onetrace_console.store import Store
     from tests.test_checks import FIXED_RAN_AT, _require_installed
     from tests.test_reference_demo import DEMO, _delivery
+
     _require_installed()
     monkeypatch.syspath_prepend(str(DEMO))
     import demo as pipeline
-    monkeypatch.setattr(pipeline, "Recorder", functools.partial(pipeline.Recorder, anchor={
-        "kind": "demo", "reference": "declared only, never committed", "cadence": "per-run",
-        "heads": ["sha256:" + "ab" * 32], "index": 0}))
+
+    monkeypatch.setattr(
+        pipeline,
+        "Recorder",
+        functools.partial(
+            pipeline.Recorder,
+            anchor={
+                "kind": "demo",
+                "reference": "declared only, never committed",
+                "cadence": "per-run",
+                "heads": ["sha256:" + "ab" * 32],
+                "index": 0,
+            },
+        ),
+    )
     out = tmp_path / "declared"
     pipeline.main(str(out), "exec-declared", 1, "2026-09-28T10:00:00.000+00:00")
     sys.modules.pop("demo", None)
@@ -84,6 +99,7 @@ def _anchor_row_as(run, store, status: str, detail: str):
     if status == "NOT-RUN":
         #: The verifier counts a record beside the chain not run, before the caveat.
         from onetrace_console.viewer.report import BESIDE_NOT_RUN_NOTE
+
         summary += f"\nrecords beside the chain: 1 not run -- {BESIDE_NOT_RUN_NOTE}"
     out = SUMMARY.sub(summary, out)
     envelope["stdout"], envelope["exit_status"] = out, "1" if f else "0"
@@ -92,8 +108,9 @@ def _anchor_row_as(run, store, status: str, detail: str):
     doc = json.loads(rows["stdout"])
     (row,) = [r for r in doc["rows"] if r["name"] == "anchors/1.json: originality"]
     row["result"], row["detail"] = status, detail
-    doc["summary"].update({"pass": p, "fail": f, "not_run": n, "exit": 1 if f else 0,
-                           "result": "FAIL" if f else "PASS"})
+    doc["summary"].update(
+        {"pass": p, "fail": f, "not_run": n, "exit": 1 if f else 0, "result": "FAIL" if f else "PASS"}
+    )
     rows["stdout"] = json.dumps(doc, indent=2, sort_keys=True) + "\n"
     rows["exit_status"] = envelope["exit_status"]
     _read_by_the_viewer(envelope)
@@ -104,12 +121,14 @@ def _read_by_the_viewer(envelope: dict) -> None:
     """The premise: the viewer reads this report row by row, so the rung is the verifier's, not
     what the record declares (which is all an unreadable report leaves)."""
     from onetrace_console.viewer.report import parse
+
     assert parse(envelope).rows_readable
 
 
 def _case_rung(run, store) -> str:
     from onetrace_console.pages import CASE, RUN_PROOF, render_execution
     from tests.test_stage_pages import GENERATED_AT
+
     #: The ladder is on "What changed", or on "Proof" for a run whose records don't hold up.
     drawn = render_execution(run, store, generated_at=GENERATED_AT).pages
     case = drawn[CASE] + drawn[RUN_PROOF]
@@ -170,6 +189,5 @@ def test_the_signature_row_and_pill_are_the_run_pages_signing_rung(anchored):
     """Since the Signed half: this run carries a placeholder anchor and no
     signature, so it reads Unsigned (tests/test_signed_surfaces.py holds each state)."""
     run, store = anchored
-    assert _row(_receipt(run, store), "signature") == (
-        "Signature Unsigned · no signature beside the chain")
+    assert _row(_receipt(run, store), "signature") == ("Signature Unsigned · no signature beside the chain")
     assert "Signed: Unsigned" in _pills(run, store)

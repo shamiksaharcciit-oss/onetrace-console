@@ -1,6 +1,7 @@
 """per-ingester bearer tokens -- random, shown once, stored only
 as a hash, checked with `hmac.compare_digest`.
 """
+
 from __future__ import annotations
 
 import hmac

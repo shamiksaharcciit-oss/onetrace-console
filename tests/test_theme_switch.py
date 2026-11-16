@@ -16,6 +16,7 @@
 The switch's contrast, in both themes, is held with every other pair in tests/test_shared_style.py.
 Each check has its sabotage.
 """
+
 from __future__ import annotations
 
 import base64
@@ -34,6 +35,7 @@ from onetrace_console import frame
 @pytest.fixture(scope="module")
 def pages(shared_demo) -> Path:
     from tests.test_checks import _require_installed
+
     _require_installed()
     folder = shared_demo["folder"]
     return folder
@@ -42,19 +44,18 @@ def pages(shared_demo) -> Path:
 class Served:
     """A page of the demo as a public console serves it: its frame filled (a sealed page's was
     filled before its seal, and is served as written)."""
+
     def __init__(self, path: Path, root: Path):
         self.path, self.name = path, path.relative_to(root).as_posix()
 
     def read_text(self, encoding: str = "utf-8") -> str:
-        return frame.fill(self.path.read_bytes(), self.name, onedoor=False, user=None,
-                          public=True).decode(encoding)
+        return frame.fill(self.path.read_bytes(), self.name, onedoor=False, user=None, public=True).decode(encoding)
 
 
 def _framed(folder: Path) -> list[Served]:
     """Every page of the demo that carries the sidebar, as it is served."""
     root = folder / "store" / "pages"
-    return [Served(p, root) for p in sorted(root.rglob("*.html"))
-            if 'class="frame"' in p.read_text(encoding="utf-8")]
+    return [Served(p, root) for p in sorted(root.rglob("*.html")) if 'class="frame"' in p.read_text(encoding="utf-8")]
 
 
 def without_the_console_s_own(page: str) -> str:
@@ -62,6 +63,7 @@ def without_the_console_s_own(page: str) -> str:
     theme switch taken out, each where it is: what other tests' "no script, no button" rules then
     read. The switch is the one named exception to "no mechanism to press"."""
     from onetrace_console.public import inline_scripts
+
     for own in (*inline_scripts(), frame.THEME_SWITCH):
         page = page.replace(own, "")
     return page
@@ -78,7 +80,7 @@ def head_problems(page: str) -> list[str]:
     if at < 0:
         return ["the head script is not in <head>"]
     out = []
-    sheet = inner.find("<link rel=\"stylesheet\"")
+    sheet = inner.find('<link rel="stylesheet"')
     if sheet >= 0 and sheet < at:
         out.append("the stylesheet is linked before the head script")
     if re.search(r"<script[^>]*\b(?:async|defer)\b", inner):
@@ -93,6 +95,7 @@ def switch_problems(page: str) -> list[str]:
     page's only buttons; no form, no input; nothing in the page sets a theme of its own. Console
     0.5.0's own controls are taken out first, each by its exact markup (`tests/run_tools.py`)."""
     from tests.run_tools import without_run_tools
+
     page = without_run_tools(page)
     out = []
     footer = re.findall(r"<footer>(.*?)</footer>", page, re.S)
@@ -121,11 +124,15 @@ def csp_problems(page: str, policy: str) -> list[str]:
         digest = "'sha256-" + base64.b64encode(hashlib.sha256(body.encode()).digest()).decode() + "'"
         if digest not in policy:
             out.append(f"a script the policy doesn't name: {body[:60]!r}")
-    return out + ([] if "'unsafe-inline'" not in policy.split("script-src", 1)[1].split(";")[0]
-                  else ["script-src allows 'unsafe-inline'"])
+    return out + (
+        []
+        if "'unsafe-inline'" not in policy.split("script-src", 1)[1].split(";")[0]
+        else ["script-src allows 'unsafe-inline'"]
+    )
 
 
 # ------------------------------------------------------------------ on every framed page
+
 
 def test_every_framed_page_sets_the_stored_choice_before_paint(pages, examined):
     found = _framed(pages)
@@ -143,6 +150,7 @@ def test_every_framed_page_has_the_switch_and_no_other_mechanism(pages, examined
 @pytest.mark.parametrize("local", [False, True], ids=["public", "local"])
 def test_the_policy_names_both_scripts_hashes(pages, local, examined):
     from onetrace_console.public import content_security_policy
+
     policy = content_security_policy(local=local)
     found = _framed(pages)
     examined(len(found), "framed pages' scripts")
@@ -153,6 +161,7 @@ def test_the_default_is_dark(examined):
     """No page sets a theme; the stylesheet's dark theme applies unless a reader chose light, or
     chose to follow a system set to light."""
     from onetrace_console.viewer.tokens import theme_css
+
     css = theme_css()
     examined(1, "the theme rules")
     assert css.startswith(":root:not([data-theme=light]){color-scheme:dark;")
@@ -160,8 +169,14 @@ def test_the_default_is_dark(examined):
 
 
 def test_served_sealed_and_public_footers_all_carry_the_switch(examined):
-    feet = [frame.footer(None), frame.footer("ana"), frame.footer(None, public=True),
-            frame.sealed_footer(True), frame.sealed_footer(False), frame.sealed_footer(False, public=True)]
+    feet = [
+        frame.footer(None),
+        frame.footer("ana"),
+        frame.footer(None, public=True),
+        frame.sealed_footer(True),
+        frame.sealed_footer(False),
+        frame.sealed_footer(False, public=True),
+    ]
     examined(len(feet), "footers")
     assert all(f.count(frame.THEME_SWITCH) == 1 and f.count(frame.THEME_SCRIPT) == 1 for f in feet)
     #: Beside the version line.
@@ -171,12 +186,16 @@ def test_served_sealed_and_public_footers_all_carry_the_switch(examined):
 def test_the_static_export_carries_the_switch(pages, tmp_path, examined):
     from onetrace_console.export_static import export
     from onetrace_console.store import Store
+
     #: A run whose records agree: the export refuses a run that contradicts its record, as its
     #: incident page links the verifier's errors page on another host (a known issue).
     key = next(r.key for r in Store(pages / "store" / "store").runs() if r.check_verdict == "holds")
     written = export(pages / "store", [key], tmp_path / "export")
-    found = [tmp_path / "export" / p for p in written if p.endswith(".html")
-             and 'class="frame"' in (tmp_path / "export" / p).read_text(encoding="utf-8")]
+    found = [
+        tmp_path / "export" / p
+        for p in written
+        if p.endswith(".html") and 'class="frame"' in (tmp_path / "export" / p).read_text(encoding="utf-8")
+    ]
     examined(len(found), "exported framed pages")
     assert found
     for p in found:
@@ -218,8 +237,13 @@ def _run(stored, steps=(), *, blocked=False, dark=False, head=None, foot=None) -
     head = (head or frame.THEME_HEAD_SCRIPT).removeprefix("<script>").removesuffix("</script>")
     foot = (foot or frame.THEME_SCRIPT).removeprefix("<script>").removesuffix("</script>")
     harness = _HARNESS.replace("KEY", frame.THEME_KEY)
-    done = subprocess.run([NODE, "-e", harness], input=json.dumps([head, foot, stored, blocked, dark, list(steps)]),
-                          capture_output=True, text=True, timeout=60)
+    done = subprocess.run(
+        [NODE, "-e", harness],
+        input=json.dumps([head, foot, stored, blocked, dark, list(steps)]),
+        capture_output=True,
+        text=True,
+        timeout=60,
+    )
     assert done.returncode == 0, done.stderr
     return json.loads(done.stdout)
 
@@ -261,9 +285,12 @@ def test_a_stored_choice_shows_the_way_back_to_the_system(examined):
 
 # ------------------------------------------------------------------ sabotages
 
+
 def test_sabotage_the_head_script_after_the_stylesheet_is_named(pages, examined):
     page = _framed(pages)[0].read_text(encoding="utf-8")
-    moved = page.replace(frame.THEME_HEAD_SCRIPT + "\n", "", 1).replace("</head>", frame.THEME_HEAD_SCRIPT + "</head>", 1)
+    moved = page.replace(frame.THEME_HEAD_SCRIPT + "\n", "", 1).replace(
+        "</head>", frame.THEME_HEAD_SCRIPT + "</head>", 1
+    )
     gone = page.replace(frame.THEME_HEAD_SCRIPT, "", 1)
     examined(2, "planted heads")
     assert "the stylesheet is linked before the head script" in head_problems(moved)
@@ -279,23 +306,29 @@ def test_sabotage_a_head_script_that_does_nothing_is_caught(examined):
 def test_sabotage_a_page_setting_its_own_theme_is_named(pages, examined):
     page = _framed(pages)[0].read_text(encoding="utf-8")
     examined(1, "planted page")
-    assert any("a saved choice no longer decides it" in p
-               for p in switch_problems(page.replace("<html", '<html data-theme="dark"', 1)))
+    assert any(
+        "a saved choice no longer decides it" in p
+        for p in switch_problems(page.replace("<html", '<html data-theme="dark"', 1))
+    )
 
 
 def test_sabotage_a_changed_script_the_policy_doesn_t_name_is_named(pages, examined):
     from onetrace_console.public import content_security_policy
+
     page = _framed(pages)[0].read_text(encoding="utf-8")
     changed = page.replace("'Switch to '", "'Switch to the '", 1)
     examined(1, "planted script")
     assert changed != page and csp_problems(changed, content_security_policy())
 
 
-@pytest.mark.parametrize("planted, said", [
-    ('<form action="/x"></form>', "'<form'"),
-    ('<input name="q">', "'<input'"),
-    ("<button>re-check</button>", "buttons other than the switch's"),
-])
+@pytest.mark.parametrize(
+    "planted, said",
+    [
+        ('<form action="/x"></form>', "'<form'"),
+        ('<input name="q">', "'<input'"),
+        ("<button>re-check</button>", "buttons other than the switch's"),
+    ],
+)
 def test_sabotage_a_form_an_input_or_another_button_is_named(pages, planted, said, examined):
     page = _framed(pages)[0].read_text(encoding="utf-8")
     examined(1, "planted page")
@@ -305,5 +338,9 @@ def test_sabotage_a_form_an_input_or_another_button_is_named(pages, planted, sai
 def test_sabotage_a_switch_shown_without_the_script_is_named(pages, examined):
     page = _framed(pages)[0].read_text(encoding="utf-8")
     examined(1, "planted page")
-    shown = page.replace("<button type=\"button\" data-theme-switch hidden>", "<button type=\"button\" data-theme-switch>", 1)
+    shown = page.replace(
+        '<button class="btn-secondary" type="button" data-theme-switch hidden>',
+        '<button class="btn-secondary" type="button" data-theme-switch>',
+        1,
+    )
     assert "a switch button is shown without the script" in switch_problems(shown)

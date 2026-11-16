@@ -18,6 +18,7 @@ A public console never runs the command; it reads what its build kept (`ensure_a
 The page names the command and its exit, not when it ran: the record keeps `ran_at`, and two
 consoles drawing the same runs with the same SDK draw the same page.
 """
+
 from __future__ import annotations
 
 import hashlib
@@ -25,7 +26,7 @@ import json
 import subprocess
 import sys
 import tempfile
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 from onetrace_console.store import Store, StoreError
@@ -55,6 +56,7 @@ def page_href(label: str, against: str = "first") -> str:
 
 def _public() -> bool:
     from onetrace_console.frame import rendering_public
+
     return rendering_public()
 
 
@@ -62,8 +64,8 @@ def drift_key(store: Store, runs, against: str) -> str:
     from onetrace_console.compare import sdk_build_digest, sdk_distribution_version
     from onetrace_console.ingest import bundle
     from onetrace_console.store import digest
-    parts = [against, *(digest(bundle(r, store)) for r in runs),
-             sdk_distribution_version(), sdk_build_digest()]
+
+    parts = [against, *(digest(bundle(r, store)) for r in runs), sdk_distribution_version(), sdk_build_digest()]
     return hashlib.sha256(json.dumps(parts).encode("utf-8")).hexdigest()
 
 
@@ -78,19 +80,41 @@ def run_drift(store: Store, runs, against: str, *, timeout: int = TIMEOUT) -> di
     from onetrace_console.checks import materialise
     from onetrace_console.child import utf8_env
     from onetrace_console.compare import sdk_build_digest, sdk_version
+
     key = drift_key(store, runs, against)
-    record = {"format": DRIFT_FORMAT, "key": key, "against": against, "runs": [r.key for r in runs],
-              "sdk_version": sdk_version(), "sdk_build_digest": sdk_build_digest(),
-              "ran_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
-              "command": shown_command(len(runs), against), "exit": "", "note": "",
-              "report_key": "", "text_key": "", "stderr_key": ""}
+    record = {
+        "format": DRIFT_FORMAT,
+        "key": key,
+        "against": against,
+        "runs": [r.key for r in runs],
+        "sdk_version": sdk_version(),
+        "sdk_build_digest": sdk_build_digest(),
+        "ran_at": datetime.now(UTC).isoformat(timespec="seconds"),
+        "command": shown_command(len(runs), against),
+        "exit": "",
+        "note": "",
+        "report_key": "",
+        "text_key": "",
+        "stderr_key": "",
+    }
     with tempfile.TemporaryDirectory(prefix="onetrace-drift-") as tmp:
         root = Path(tmp)
         names = [f"run-{i}" for i in range(1, len(runs) + 1)]
         for run, name in zip(runs, names):
             materialise(run, store, root / name)
-        command = [sys.executable, "-m", "onetrace", "drift", *names, "--against", against,
-                   "--durations", "--quiet", "--out", "out"]
+        command = [
+            sys.executable,
+            "-m",
+            "onetrace",
+            "drift",
+            *names,
+            "--against",
+            against,
+            "--durations",
+            "--quiet",
+            "--out",
+            "out",
+        ]
         try:
             proc = subprocess.run(command, cwd=root, capture_output=True, timeout=timeout, env=utf8_env())
         except subprocess.TimeoutExpired:
@@ -120,6 +144,7 @@ def drift_record(store: Store, pipeline, against: str, *, compute: bool) -> dict
 def report_of(record: dict, store: Store) -> dict | None:
     """drift.json as the command wrote it, read strictly; None where it wrote none."""
     from onetrace_console.bounded_json import load_json_bounded
+
     if not record.get("report_key"):
         return None
     rep = load_json_bounded(store.get(record["report_key"]).decode("utf-8"), "drift.json")
@@ -131,6 +156,7 @@ def report_of(record: dict, store: Store) -> dict | None:
 def ensure_all(store: Store) -> None:
     """Every pipeline's two reports, made where none is kept: what a public demo's build keeps."""
     from onetrace_console.overview import pipelines
+
     for p in pipelines(store):
         for against in AGAINST:
             drift_record(store, p, against, compute=True)
@@ -148,28 +174,46 @@ def _line(c: dict | None) -> str:
     return what
 
 
-def render_drift(pipeline, store: Store, *, generated_at: str, against: str = "first",
-                 held: dict | None = None, compute: bool | None = None) -> str:
+def render_drift(
+    pipeline,
+    store: Store,
+    *,
+    generated_at: str,
+    against: str = "first",
+    held: dict | None = None,
+    compute: bool | None = None,
+) -> str:
     """The drift page of `pipeline` in mode `against`. `compute`: run the command where no report
     is kept; by default a local console does and a public one never does."""
     from onetrace_console.choose_pages import b_anchor, held_comparisons, pair_href
-    from onetrace_console.pipeline_pages import named, page_href as pipeline_href
+    from onetrace_console.pipeline_pages import named
+    from onetrace_console.pipeline_pages import page_href as pipeline_href
     from onetrace_console.render import _document, _tag
     from onetrace_console.words import escape, generated_footer, scroll_region, verbatim
+
     compute = (not _public()) if compute is None else (compute and not _public())
     label = pipeline.label
-    toggle = ('<p data-section="toggle">Each run against: '
-              + " · ".join((f'<a href="{_tag(page_href(label, a))}" aria-current="page">{w}</a>'
-                            if a == against else f'<a href="{_tag(page_href(label, a))}">{w}</a>')
-                           for a, w in (("first", "the first run"), ("previous", "the run before it")))
-              + "</p>")
-    body = ['<p class="crumbs" data-section="crumbs"><a href="home.html">Overview</a> / '
-            f'<a href="{_tag(pipeline_href(label))}">{escape(label)}</a> / Drift</p>',
-            f"<h1>Drift · {named(pipeline)}</h1>",
-            f'<p data-section="what">{len(pipeline.runs)} runs, oldest first as this console received '
-            f"them, {escape(HOW[against])}, as <code>onetrace drift</code> reports it. This console "
-            "computes no verdict of its own.</p>",
-            toggle]
+    toggle = (
+        '<p data-section="toggle">Each run against: '
+        + " · ".join(
+            (
+                f'<a href="{_tag(page_href(label, a))}" aria-current="page">{w}</a>'
+                if a == against
+                else f'<a href="{_tag(page_href(label, a))}">{w}</a>'
+            )
+            for a, w in (("first", "the first run"), ("previous", "the run before it"))
+        )
+        + "</p>"
+    )
+    body = [
+        '<p class="crumbs" data-section="crumbs"><a href="home.html">Overview</a> / '
+        f'<a href="{_tag(pipeline_href(label))}">{escape(label)}</a> / Drift</p>',
+        f"<h1>Drift · {named(pipeline)}</h1>",
+        f'<p data-section="what">{len(pipeline.runs)} runs, oldest first as this console received '
+        f"them, {escape(HOW[against])}, as <code>onetrace drift</code> reports it. This console "
+        "computes no verdict of its own.</p>",
+        toggle,
+    ]
     record = rep = None
     try:
         record = drift_record(store, pipeline, against, compute=compute)
@@ -182,9 +226,12 @@ def render_drift(pipeline, store: Store, *, generated_at: str, against: str = "f
     elif record is None:
         body.append(f'<p data-section="drift-none">{escape(NO_REPORT)}</p>')
     else:
-        body.append(f'<p data-section="drift-command">Command: <code>{verbatim(record["command"])}</code>'
-                    + (f', exit <span data-exit>{escape(record["exit"])}</span>' if record["exit"] else "")
-                    + (f" ({escape(record['note'])})" if record["note"] else "") + ".</p>")
+        body.append(
+            f'<p data-section="drift-command">Command: <code>{verbatim(record["command"])}</code>'
+            + (f", exit <span data-exit>{escape(record['exit'])}</span>" if record["exit"] else "")
+            + (f" ({escape(record['note'])})" if record["note"] else "")
+            + ".</p>"
+        )
     if rep is not None:
         held = held_comparisons(store) if held is None else held
         runs = list(pipeline.runs)
@@ -196,50 +243,70 @@ def render_drift(pipeline, store: Store, *, generated_at: str, against: str = "f
             if a is None or b is None:
                 return escape(text)
             found = held.get((a.key, b.key))
-            href = (f"diff/{found.key}.html" if found is not None
-                    else f"{pair_href(label, a.key)}#{b_anchor(b.key)}")
+            href = f"diff/{found.key}.html" if found is not None else f"{pair_href(label, a.key)}#{b_anchor(b.key)}"
             return f'<a href="{_tag(href)}">{escape(text)}</a>'
 
         rows = []
         for r in rep["runs"]:
             run = by_index.get(r["index"])
             c = by_cand.get(r["index"])
-            name = (f'<a href="runs/{_tag(run.key)}/case.html" class="mono">{escape(run.run_id)}</a>'
-                    if run is not None else escape(str(r.get("run_id") or "")))
-            rows.append(f'<tr data-run="{_tag(r["index"])}"><td{GAP}>{escape(r["index"])}</td><td{GAP}>{name}</td>'
-                        f'<td data-line>{pair_link(c, _line(c)) if c else escape(_line(c))}</td></tr>')
-        body.append(scroll_region(f'<table data-section="drift-runs"><thead><tr><th{GAP}>#</th><th{GAP}>Run</th>'
-                                  "<th>Against the run it was compared with</th></tr></thead>"
-                                  f"<tbody>{''.join(rows)}</tbody></table>",
-                                  "Each run's verdict", "drift-runs"))
+            name = (
+                f'<a href="runs/{_tag(run.key)}/case.html" class="mono">{escape(run.run_id)}</a>'
+                if run is not None
+                else escape(str(r.get("run_id") or ""))
+            )
+            rows.append(
+                f'<tr data-run="{_tag(r["index"])}"><td{GAP}>{escape(r["index"])}</td><td{GAP}>{name}</td>'
+                f"<td data-line>{pair_link(c, _line(c)) if c else escape(_line(c))}</td></tr>"
+            )
+        body.append(
+            scroll_region(
+                f'<table data-section="drift-runs"><thead><tr><th{GAP}>#</th><th{GAP}>Run</th>'
+                "<th>Against the run it was compared with</th></tr></thead>"
+                f"<tbody>{''.join(rows)}</tbody></table>",
+                "Each run's verdict",
+                "drift-runs",
+            )
+        )
         comps = rep["comparisons"]
         #: One row per node, its verdicts a list that wraps: each item names its pair and gives the
         #: report's verdict for it, so a pipeline of many runs is never wider than the page.
         nrows = []
         for n in rep["nodes"]:
-            cells = "".join(f'<li data-cell="{_tag(c["candidate"])}"><span data-pair>{escape(c["candidate"])} vs '
-                            f'{escape(c["baseline"])}</span> <span data-verdict>'
-                            f'{pair_link(c, v if v is not None else NULL_CELL)}</span></li>'
-                            for c, v in zip(comps, n["verdicts"]))
-            nrows.append(f'<tr data-node="{_tag(n["node"])}"><td class="mono">{escape(n["node"])}</td>'
-                         f'<td><ul class="plain" data-section="drift-cells" style="display:flex;flex-wrap:wrap;'
-                         f'gap:4px 18px;margin:0;padding:0">{cells}</ul></td></tr>')
+            cells = "".join(
+                f'<li data-cell="{_tag(c["candidate"])}"><span data-pair>{escape(c["candidate"])} vs '
+                f"{escape(c['baseline'])}</span> <span data-verdict>"
+                f"{pair_link(c, v if v is not None else NULL_CELL)}</span></li>"
+                for c, v in zip(comps, n["verdicts"])
+            )
+            nrows.append(
+                f'<tr data-node="{_tag(n["node"])}"><td class="mono">{escape(n["node"])}</td>'
+                f'<td><ul class="plain" data-section="drift-cells" style="display:flex;flex-wrap:wrap;'
+                f'gap:4px 18px;margin:0;padding:0">{cells}</ul></td></tr>'
+            )
         body.append("<h2>Each node, in each comparison</h2>")
-        body.append(scroll_region('<table data-section="drift-nodes"><thead><tr><th>Node</th>'
-                                  "<th>Its verdict in each comparison</th></tr>"
-                                  f"</thead><tbody>{''.join(nrows)}</tbody></table>",
-                                  "Each node's verdicts", "drift-nodes"))
-        text = store.get(record["text_key"]).decode("utf-8", "replace") if record.get("text_key") else ""
+        body.append(
+            scroll_region(
+                '<table data-section="drift-nodes"><thead><tr><th>Node</th>'
+                "<th>Its verdict in each comparison</th></tr>"
+                f"</thead><tbody>{''.join(nrows)}</tbody></table>",
+                "Each node's verdicts",
+                "drift-nodes",
+            )
+        )
+        text = store.get(record["text_key"]).decode("utf-8", "replace") if record.get("text_key") else ""  # type: ignore[index,union-attr]  # a record is read wherever this page draws its nodes
         #: The command's own lines for a slower time, each beginning `slower: `; its legend after
         #: them ("slower means ...") is its own line, shown as written.
         slower = [ln for ln in text.splitlines() if ln.startswith("slower: ")]
         legend = [ln for ln in text.splitlines() if ln.startswith("slower means ")]
         if slower:
-            body.append(f'<section data-section="drift-slower"><h2>{escape(SLOWER_HEAD)}</h2>'
-                        f'<p>{escape(TIMING_NOTE)}</p>'
-                        + "".join(f'<p data-slower class="mono">{escape(ln)}</p>' for ln in slower)
-                        + "".join(f'<p class="mono">{escape(ln)}</p>' for ln in legend)
-                        + "</section>")
+            body.append(
+                f'<section data-section="drift-slower"><h2>{escape(SLOWER_HEAD)}</h2>'
+                f"<p>{escape(TIMING_NOTE)}</p>"
+                + "".join(f'<p data-slower class="mono">{escape(ln)}</p>' for ln in slower)
+                + "".join(f'<p class="mono">{escape(ln)}</p>' for ln in legend)
+                + "</section>"
+            )
     body.append(generated_footer(generated_at))
     title = f"Drift · {label}" + (" · against the run before" if against == "previous" else "")
     return _document(title, "\n".join(['<div class="cp">', *body, "</div>"]))

@@ -10,6 +10,7 @@ kept to damaged sums and unknown formats -- so the run is stored and checked lik
 any other, and its pages must say what happened. Before this change the refusal escaped the
 page code, and each test below names what it did then.
 """
+
 from __future__ import annotations
 
 import hashlib
@@ -20,8 +21,7 @@ import pytest
 
 from onetrace_console.checks import run_and_record
 from onetrace_console.ingest import SUMS_NAME, accept
-from onetrace_console.pages import (ANSWER, AUTHORIZATION, CASE, render_execution,
-                                    render_executions)
+from onetrace_console.pages import ANSWER, AUTHORIZATION, CASE, render_execution, render_executions
 from onetrace_console.unreadable import LIST_HEADING, TITLE
 from tests.conftest import make_tar
 from tests.test_checks import FIXED_RAN_AT, _require_installed
@@ -32,8 +32,9 @@ RUN_ID = "a-run-the-viewer-refuses"
 
 def _resummed(files: dict[str, bytes]) -> dict[str, bytes]:
     body = {p: b for p, b in files.items() if p != SUMS_NAME}
-    body[SUMS_NAME] = ("\n".join(f"{hashlib.sha256(b).hexdigest()}  {p}"
-                                 for p, b in body.items()) + "\n").encode("utf-8")
+    body[SUMS_NAME] = ("\n".join(f"{hashlib.sha256(b).hexdigest()}  {p}" for p, b in body.items()) + "\n").encode(
+        "utf-8"
+    )
     return body
 
 
@@ -75,15 +76,21 @@ def _stored(files, store):
 
 def _text(html: str) -> str:
     from html import unescape
+
     return re.sub(r"\s+", " ", unescape(re.sub(r"<[^>]+>", " ", html))).strip()
 
 
 # ---------------------------------------------------------------- one run's own pages
 
-@pytest.mark.parametrize("build,reason", [
-    (malformed, "`anchor` is 'x', not an object"),
-    (missing_a_receipt, "which is not in the run directory"),
-], ids=["a-part-it-cannot-read", "a-receipt-the-manifest-names-is-missing"])
+
+@pytest.mark.parametrize(
+    "build,reason",
+    [
+        (malformed, "`anchor` is 'x', not an object"),
+        (missing_a_receipt, "which is not in the run directory"),
+    ],
+    ids=["a-part-it-cannot-read", "a-receipt-the-manifest-names-is-missing"],
+)
 def test_a_run_the_viewer_refuses_gets_a_page_that_says_so(files, store, build, reason):
     """Before: `render_execution` raised (RecordUnreadable, or RecordError for the missing
     receipt), so the run had no pages at all."""
@@ -101,12 +108,12 @@ def test_a_run_the_viewer_refuses_gets_a_page_that_says_so(files, store, build, 
 def test_the_stated_page_claims_nothing_about_the_record(files, store):
     run = _stored(malformed(files), store)
     text = _text(render_execution(run, store, generated_at=GENERATED_AT).pages[CASE]).lower()
-    for claim in ("checks out", "records agree", "contradicts itself", "nothing is missing",
-                  "re-run and matched"):
+    for claim in ("checks out", "records agree", "contradicts itself", "nothing is missing", "re-run and matched"):
         assert claim not in text, claim
 
 
 # ---------------------------------------------------------------- the lists
+
 
 def test_a_list_names_the_runs_it_cannot_show_and_counts_them(files, store, checked):  # noqa: F811
     """Before: `render_executions` raised for the whole list, so every list holding the run
@@ -135,10 +142,12 @@ def test_a_list_of_clean_runs_is_unchanged(files, store, checked):  # noqa: F811
 
 # ---------------------------------------------------------------- over HTTP, and on restart
 
+
 def test_ingesting_it_answers_200_and_serves_the_page(server, files):
     """Before: the POST stored the run and answered 500, and each later ingest answered 500
     as well, since every list is rebuilt with every run in it."""
     from tests.test_serve import _get, _post
+
     base, _ = server
     status, body = _post(base, "/v1/runs", make_tar(malformed(files)))
     assert status == 200, body[:300]
@@ -152,9 +161,9 @@ def test_ingesting_it_answers_200_and_serves_the_page(server, files):
 def test_a_restart_over_a_store_holding_it_starts(files, store, tmp_path):
     """Before: `_render_startup_pages` raised, and `main()` never reached the listener."""
     from onetrace_console.serve import _render_startup_pages
+
     _stored(malformed(files), store)
     root = tmp_path / "root"
     root.mkdir()
     _render_startup_pages(store, root)
     assert any(root.rglob("case.html")) and (root / "pages" / "home.html").is_file()
-

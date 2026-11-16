@@ -3,6 +3,7 @@ disabled, with "Needs a running console.", as the first-run-to-leave control is 
 no script that reads `onetrace_csrf`, no `X-CSRF-Token`, no line about the session's token, and no enabled
 button or form but the theme switch's (which changes only the page's look, in the browser). The pages the
 console serves keep their Compare."""
+
 from __future__ import annotations
 
 import re
@@ -13,17 +14,24 @@ from tests.test_bisect_page import CHANGED, SAME, _series
 
 NEEDS = "Needs a running console."
 #: The theme switch's two buttons: the look only, kept in an export (tests/test_theme_switch.py).
-THEME = ('<button type="button" data-theme-switch hidden>', '<button type="button" data-theme-system hidden>')
+THEME = (
+    '<button class="btn-secondary" type="button" data-theme-switch hidden>',
+    '<button class="btn-secondary" type="button" data-theme-system hidden>',
+)
 
 
 @pytest.fixture(scope="module")
 def exported(tmp_path_factory):
     from onetrace_console.export_static import export
+
     t = tmp_path_factory.mktemp("compare-export")
     store, runs = _series(t / "made", [SAME, SAME, CHANGED, SAME], arrival=[1, 2, 3, 4])
     export(t / "made", [r.key for r in runs.values()], t / "export")
-    return {p.relative_to(t / "export").as_posix(): p.read_text(encoding="utf-8", errors="replace")
-            for p in sorted((t / "export").rglob("*")) if p.is_file() and p.suffix in (".html", ".css", ".js", ".txt")}
+    return {
+        p.relative_to(t / "export").as_posix(): p.read_text(encoding="utf-8", errors="replace")
+        for p in sorted((t / "export").rglob("*"))
+        if p.is_file() and p.suffix in (".html", ".css", ".js", ".txt")
+    }
 
 
 def live_controls(pages: dict[str, str]) -> list[str]:
@@ -55,15 +63,22 @@ def test_choose_run_b_and_what_changed_show_compare_disabled_with_its_one_line(e
     examined(len(pages), f"{kind} pages")
     assert held, sorted(pages)
     for rel, s in held.items():
-        assert re.search(r'<button type="button" disabled data-compare-needs-console>[^<]+</button>', s), rel
+        assert re.search(
+            r'<button class="btn-secondary" type="button" disabled data-compare-needs-console>[^<]+</button>', s
+        ), rel
         assert s.count(f"<span data-needs-console>{NEEDS}</span>") == s.count("data-compare-needs-console>"), rel
 
 
 def test_sabotage_a_live_compare_left_in_is_named(exported, examined):
     rel, page = next((r, s) for r, s in exported.items() if "data-compare-needs-console" in s)
-    planted = {rel: page.replace('<button type="button" disabled data-compare-needs-console>',
-                                 '<button type="button" data-compare-post="/compare?a=x&amp;b=y">', 1)
-               + "<script>document.cookie.match(/onetrace_csrf=/)</script>"}
+    planted = {
+        rel: page.replace(
+            '<button class="btn-secondary" type="button" disabled data-compare-needs-console>',
+            '<button class="btn-secondary" type="button" data-compare-post="/compare?a=x&amp;b=y">',
+            1,
+        )
+        + "<script>document.cookie.match(/onetrace_csrf=/)</script>"
+    }
     examined(1, "planted page")
     assert {f"{rel}: onetrace_csrf", f"{rel}: data-compare-post"} <= set(live_controls(planted))
 
@@ -72,6 +87,7 @@ def test_the_served_choose_page_keeps_its_compare(tmp_path, examined):
     from onetrace_console.choose_pages import render_pair
     from onetrace_console.compare_script import COMPARE_SCRIPT
     from onetrace_console.overview import pipelines
+
     store, _ = _series(tmp_path / "made", [SAME, SAME, CHANGED, SAME], arrival=[1, 2, 3, 4])
     (p,) = pipelines(store)
     page = render_pair(p, p.runs[0], store, generated_at="2026-11-08T00:00:00+00:00")

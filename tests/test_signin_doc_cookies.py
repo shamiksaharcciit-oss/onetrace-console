@@ -2,6 +2,7 @@
 is readable by the page, by design (a page's script sends it back as `X-CSRF-Token`). Held against the
 `Set-Cookie` headers a sign-in answers with. The note is read only where it is (the public export leaves
 docs/design/ out)."""
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -12,8 +13,10 @@ from tests.test_signin_flow import _get_signin_form, _post, signin_enabled  # no
 
 NOTE = Path(__file__).resolve().parent.parent / "docs" / "design" / "signin-and-roles.md"
 SESSION_LINE = "The session cookie is `Secure`, `HttpOnly` and `SameSite=Strict`."
-CSRF_LINE = ("The CSRF cookie is `Secure` and `SameSite=Strict`, and readable by the page by design: a page's script "
-             "sends it back as `X-CSRF-Token`.")
+CSRF_LINE = (
+    "The CSRF cookie is `Secure` and `SameSite=Strict`, and readable by the page by design: a page's script "
+    "sends it back as `X-CSRF-Token`."
+)
 
 
 @pytest.mark.skipif(not NOTE.is_file(), reason="the public export leaves docs/design/ out")
@@ -28,8 +31,11 @@ def test_a_sign_in_answers_with_the_cookies_the_note_describes(signin_enabled, e
     base = signin_enabled
     csrf, form_token = _get_signin_form(base)
     _, _, headers, _ = _post(
-        base, "/signin", f"username=alice&password=correct+horse+battery+staple&csrf_token={form_token}".encode(),
-        headers={"Cookie": f"onetrace_csrf={csrf}", "Content-Type": "application/x-www-form-urlencoded"})
+        base,
+        "/signin",
+        f"username=alice&password=correct+horse+battery+staple&csrf_token={form_token}".encode(),
+        headers={"Cookie": f"onetrace_csrf={csrf}", "Content-Type": "application/x-www-form-urlencoded"},
+    )
     cookies = headers.get("Set-Cookie")
     cookies = cookies if isinstance(cookies, list) else [c for c in (cookies or "").split(", ") if "=" in c]
     by_name = {c.split("=", 1)[0]: c for c in cookies}

@@ -14,6 +14,7 @@
 5. A benchmark recorded again on the same configuration shows onetrace's variation profile on its
    page, over it and the repeats whose records agree; a run that is not marked shows none.
 """
+
 from __future__ import annotations
 
 import hashlib
@@ -23,9 +24,9 @@ import urllib.error
 import urllib.request
 
 import pytest
-from tests.http_limits import limit
 
 from onetrace_console.demo_store import BENCHMARKS
+from tests.http_limits import limit
 
 #: Four of the demo's benchmarks, read by name by the tests below.
 NAMED = ("p1-02-baseline-set2", "p5-32-pump-baseline", "p8-42-invoice-tolerance-2pct", "p9-46-torque-baseline")
@@ -36,6 +37,7 @@ def demo(shared_demo, tmp_path_factory):
     """Its own copy of the demo build: marks are made and removed here."""
     from onetrace_console.store import Store
     from tests.conftest import demo_copy
+
     folder = demo_copy(shared_demo, tmp_path_factory.mktemp("benchmarks") / "demo")
     store = Store(folder / "store" / "store")
     return folder, store, {r.run_id: r for r in store.runs()}
@@ -52,9 +54,11 @@ def _section(page: str, name: str) -> str:
 
 # ------------------------------------------------------------------ 1. the demo's marks
 
+
 def test_the_demo_s_benchmarks_are_each_compared_pipeline_s_baseline(demo, examined):
     from onetrace_console import benchmarks
     from onetrace_console.demo_store import COMPARISONS
+
     _folder, store, runs = demo
     marks = benchmarks.marks(store)
     examined(len(runs), "runs")
@@ -62,13 +66,14 @@ def test_the_demo_s_benchmarks_are_each_compared_pipeline_s_baseline(demo, exami
     assert len(BENCHMARKS) == len({a.split("-")[0] for a, _b in COMPARISONS})
     folders = {k: r.folder.rsplit("/", 1)[-1].rsplit("\\", 1)[-1] for k, r in ((r.key, r) for r in runs.values())}
     assert sorted(folders[k] for k in marks) == sorted(BENCHMARKS)
-    for key, m in marks.items():
+    for _key, m in marks.items():
         assert (m["who"], m["note"]) == (benchmarks.DEMO_WHO, benchmarks.DEMO_NOTE)
 
 
 def test_a_mark_is_in_the_store_never_in_the_record(demo, examined):
     from onetrace_console import benchmarks
     from onetrace_console.ingest import bundle
+
     folder, store, runs = demo
     run = runs["p1-08-candidate-set2"]
     record = (store.root / "runs" / f"{run.key}.json").read_bytes()
@@ -86,6 +91,7 @@ def test_a_mark_is_in_the_store_never_in_the_record(demo, examined):
 
 def test_a_note_past_its_length_is_refused(demo, examined):
     from onetrace_console import benchmarks
+
     _folder, store, runs = demo
     examined(1, "mark")
     with pytest.raises(benchmarks.MarkError, match="at most 280"):
@@ -94,12 +100,15 @@ def test_a_note_past_its_length_is_refused(demo, examined):
 
 # ------------------------------------------------------------------ 3. the badge, no verdict
 
+
 def test_the_badge_says_benchmark_never_correct_wherever_a_run_is_listed(demo, examined):
     folder, store, runs = demo
     pages = folder / "store" / "pages"
-    listing = {"executions-all.html": (pages / "executions-all.html").read_text(encoding="utf-8"),
-               "pipeline-p1.html": (pages / "pipeline-p1.html").read_text(encoding="utf-8"),
-               "choose-p1.html": (pages / "choose-p1.html").read_text(encoding="utf-8")}
+    listing = {
+        "executions-all.html": (pages / "executions-all.html").read_text(encoding="utf-8"),
+        "pipeline-p1.html": (pages / "pipeline-p1.html").read_text(encoding="utf-8"),
+        "choose-p1.html": (pages / "choose-p1.html").read_text(encoding="utf-8"),
+    }
     examined(len(listing), "lists of runs")
     p1 = runs["p1-02-baseline-set2"]
     for name, page in listing.items():
@@ -108,7 +117,11 @@ def test_the_badge_says_benchmark_never_correct_wherever_a_run_is_listed(demo, e
         assert {b for _t, b in badges} == {"benchmark"}, name
         assert all("The baseline this demo compares" in t for t, _b in badges), name
         assert "correct" not in " ".join(b for _t, b in badges).lower()
-        row = re.search(rf'<(?:tr|li) data-(?:run|key)="[^"]*"[^>]*>(?:(?!</(?:tr|li)>).)*{p1.key}(?:(?!</(?:tr|li)>).)*</(?:tr|li)>', page, re.S)
+        row = re.search(
+            rf'<(?:tr|li) data-(?:run|key)="[^"]*"[^>]*>(?:(?!</(?:tr|li)>).)*{p1.key}(?:(?!</(?:tr|li)>).)*</(?:tr|li)>',
+            page,
+            re.S,
+        )
         assert row and "data-benchmark" in row.group(0), name
 
 
@@ -118,6 +131,7 @@ def test_no_verdict_rung_or_count_reads_differently_for_a_marked_run(demo, exami
     from onetrace_console import benchmarks, records
     from onetrace_console.config import Config
     from onetrace_console.serve import _render_all_pages, _render_run_pages
+
     folder, store, runs = demo
     run = runs["p1-14-candidate-set3-byte-changed"]
     config = Config(public=True)
@@ -130,13 +144,18 @@ def test_no_verdict_rung_or_count_reads_differently_for_a_marked_run(demo, exami
         #: The benchmark's own sections, its mark and its profile, are what a mark adds; the verdict
         #: section reads against the reference the marks choose, so it follows them too, and so does the
         #: configuration against the reference run the marks choose (`config_compare`).
-        case = re.sub(r'<section data-section="(?:benchmark|profile|verdict|config-compare)".*?</section>', "", case,
-                      flags=re.S)
+        case = re.sub(
+            r'<section data-section="(?:benchmark|profile|verdict|config-compare)".*?</section>', "", case, flags=re.S
+        )
         case = re.sub(r"<!--fingerprint-->[0-9a-f]{64}<!--/fingerprint-->", "", case)
         home = (pages / "home.html").read_text(encoding="utf-8")
-        return (_text(re.sub(r'<span class="pill neu" data-benchmark.*?</span>', "", case)),
-                re.findall(r'data-count="[^"]*"[^>]*>[^<]*', home),
-                records.state(store.get_run(run.key), store), store.get_run(run.key).check_verdict)
+        return (
+            _text(re.sub(r'<span class="pill neu" data-benchmark.*?</span>', "", case)),
+            re.findall(r'data-count="[^"]*"[^>]*>[^<]*', home),
+            records.state(store.get_run(run.key), store),
+            store.get_run(run.key).check_verdict,
+        )
+
     before = drawn()
     benchmarks.mark(store, run, who="a tester")
     try:
@@ -154,6 +173,7 @@ def test_no_verdict_rung_or_count_reads_differently_for_a_marked_run(demo, exami
 
 def test_sabotage_a_badge_that_said_correct_is_caught(examined):
     from onetrace_console import benchmarks
+
     examined(1, "badge word")
     assert benchmarks.BADGE == "benchmark"
     planted = '<span class="pill neu" data-benchmark title="x">correct</span>'
@@ -162,11 +182,15 @@ def test_sabotage_a_badge_that_said_correct_is_caught(examined):
 
 # ------------------------------------------------------------------ 4. "What changed?"
 
+
 def test_what_changed_takes_a_benchmark_first_and_names_its_rule(demo, examined):
     from onetrace_console import what_changed as wc
+
     folder, store, runs = demo
-    want = {"p8-43-invoice-tolerance-5pct": ("p8-42-invoice-tolerance-2pct", wc.BENCHMARK_INPUTS),
-            "p1-08-candidate-set2": ("p1-02-baseline-set2", wc.BENCHMARK_INPUTS)}
+    want = {
+        "p8-43-invoice-tolerance-5pct": ("p8-42-invoice-tolerance-2pct", wc.BENCHMARK_INPUTS),
+        "p1-08-candidate-set2": ("p1-02-baseline-set2", wc.BENCHMARK_INPUTS),
+    }
     examined(len(want), "runs' choices")
     for name, (other, rule) in want.items():
         got = wc.choose(runs[name], store, public=True)
@@ -181,6 +205,7 @@ def test_a_benchmark_taken_over_a_nearer_run_is_said(demo, examined):
     """Marked, an earlier run with the same inputs is taken over the one the rules take without it."""
     from onetrace_console import benchmarks
     from onetrace_console import what_changed as wc
+
     _folder, store, runs = demo
     run, far = runs["p1-08-candidate-set2"], runs["p1-01-baseline-set1"]
     plain = wc.choose(run, store, public=False)
@@ -200,6 +225,7 @@ def test_a_benchmark_taken_over_a_nearer_run_is_said(demo, examined):
 
 def test_without_benchmarks_the_rules_are_as_before(demo, examined):
     from onetrace_console import what_changed as wc
+
     _folder, store, runs = demo
     examined(len(runs), "runs' candidates")
     for run in runs.values():
@@ -209,15 +235,20 @@ def test_without_benchmarks_the_rules_are_as_before(demo, examined):
 
 def test_other_runs_with_the_same_inputs_opens_the_index(demo, examined):
     from urllib.parse import unquote
+
     from onetrace_console import run_index
     from onetrace_console import what_changed as wc
+
     folder, store, runs = demo
     index = run_index.read(folder / "store")
     seen = 0
     for run in runs.values():
         case = (folder / "store" / "pages" / "runs" / run.key / "case.html").read_text(encoding="utf-8")
-        m = re.search(r'<p data-what-changed="same-inputs"><a href="\.\./\.\./search\?q=([^&"]*)&amp;run=([0-9a-f]{64})">'
-                      r"Other runs with the same inputs: (\d+)</a></p>", case)
+        m = re.search(
+            r'<p data-what-changed="same-inputs"><a href="\.\./\.\./search\?q=([^&"]*)&amp;run=([0-9a-f]{64})">'
+            r"Other runs with the same inputs: (\d+)</a></p>",
+            case,
+        )
         if not run_index.first_inputs(next(r for r in index["runs"] if r["key"] == run.key)):
             assert m is None, run.run_id
             continue
@@ -231,9 +262,11 @@ def test_other_runs_with_the_same_inputs_opens_the_index(demo, examined):
 
 # ------------------------------------------------------------------ 5. variation
 
+
 def test_a_benchmark_recorded_again_shows_onetrace_s_profile(demo, examined):
     from onetrace_console import benchmarks
     from onetrace_console.stage_pages import _stage_name, _steps
+
     folder, store, runs = demo
     run = runs["p1-02-baseline-set2"]
     found = benchmarks.repeats(run, store)
@@ -250,8 +283,10 @@ def test_the_reference_takes_only_repeats_whose_records_agree(demo, examined):
     """Each repeat found is in the reference's set or left out of it, and one left out is one whose
     records were not checked as agreeing."""
     from onetrace_console import benchmarks, records, verdicts
+
     _folder, store, runs = demo
     from pathlib import Path
+
     by_folder = {Path(str(r.folder)).name: r for r in runs.values()}
     examined(len(BENCHMARKS), "benchmarks")
     for name in BENCHMARKS:
@@ -277,7 +312,9 @@ def test_the_local_mark_says_it_moves_the_pipeline_s_reference(demo, examined):
     pipeline is then read against the new one; beside its undo, where the reference goes. A public
     console has neither control nor line."""
     import html as _html
+
     from onetrace_console import benchmarks, verdicts
+
     _folder, store, runs = demo
     unmarked, marked = runs["p1-14-candidate-set3-byte-changed"], runs["p1-02-baseline-set2"]
     label = verdicts.pipeline_of(unmarked, store).label
@@ -295,25 +332,38 @@ def test_the_local_mark_says_it_moves_the_pipeline_s_reference(demo, examined):
 
 # ------------------------------------------------------------------ 2. local POST, public refusal
 
+
 def test_mark_and_undo_on_a_local_console(demo, tmp_path, examined):
     from tests.test_folder_load import _Console, _free_port
+
     folder, store, runs = demo
     port = _free_port()
     config = tmp_path / "local.json"
-    config.write_text(json.dumps({"host": "127.0.0.1", "port": port, "store_root": str(folder / "store"),
-                                  "trust_file": str(folder / "trust.json"), "sign_in": {"enabled": False}}),
-                      encoding="utf-8")
+    config.write_text(
+        json.dumps(
+            {
+                "host": "127.0.0.1",
+                "port": port,
+                "store_root": str(folder / "store"),
+                "trust_file": str(folder / "trust.json"),
+                "sign_in": {"enabled": False},
+            }
+        ),
+        encoding="utf-8",
+    )
     run = runs["p9-47-torque-tool-firmware-changed"]
     base = f"http://127.0.0.1:{port}"
 
     def post(query: str, body: bytes = b"") -> tuple[int, dict]:
-        req = urllib.request.Request(f"{base}/benchmark?{query}", data=body, method="POST",
-                                     headers={"Content-Type": "application/json"})
+        req = urllib.request.Request(
+            f"{base}/benchmark?{query}", data=body, method="POST", headers={"Content-Type": "application/json"}
+        )
         try:
             with urllib.request.urlopen(req, timeout=limit(120)) as r:
                 return r.status, json.loads(r.read())
         except urllib.error.HTTPError as e:
             return e.code, json.loads(e.read())
+
     c = _Console(tmp_path, "serve", env={"ONETRACE_CONSOLE_CONFIG": str(config)})
     try:
         c.until("onetrace-console serving on")
@@ -321,8 +371,11 @@ def test_mark_and_undo_on_a_local_console(demo, tmp_path, examined):
         mark_file = json.loads((store.root / "benchmarks" / f"{run.key}.json").read_text(encoding="utf-8"))
         with urllib.request.urlopen(f"{base}/runs/{run.key}/case.html", timeout=limit(60)) as r:
             page = r.read().decode("utf-8")
-        refused = [post(f"run={run.key}&mark=maybe"), post("run=nope&mark=yes"),
-                   post(f"run={run.key}&mark=yes", b"[1]")]
+        refused = [
+            post(f"run={run.key}&mark=maybe"),
+            post("run=nope&mark=yes"),
+            post(f"run={run.key}&mark=yes", b"[1]"),
+        ]
         undone = post(f"run={run.key}&mark=no")
     finally:
         c.stop()
@@ -337,8 +390,9 @@ def test_mark_and_undo_on_a_local_console(demo, tmp_path, examined):
 
 
 def test_a_public_console_has_no_mark_control_and_refuses_the_post(shared_cli_demo, examined):
-    from tools import container_check
     from tests.test_public_mode import _pages
+    from tools import container_check
+
     built = shared_cli_demo["folder"]
     pages = _pages(built)
     examined(len(pages), "public pages")

@@ -5,6 +5,7 @@
 
 With one run signed by a trusted key, there is no banner.
 """
+
 from __future__ import annotations
 
 import re
@@ -25,18 +26,22 @@ def stored(store):
     from tests.test_checks import FIXED_RAN_AT, _require_installed
     from tests.test_compare import _require_exam
     from tests.test_home_and_diff import RUN_C, _deliver, _fake_run
+
     _require_installed()
     _require_exam()
     real = run_and_record(_deliver(RUN_C, store), store, ran_at=FIXED_RAN_AT)
-    made = [_fake_run(store, real, run_id=f"copy-{n}", verdict=real.check_verdict, note=real.check_note)
-            for n in (1, 2)]
+    made = [
+        _fake_run(store, real, run_id=f"copy-{n}", verdict=real.check_verdict, note=real.check_note) for n in (1, 2)
+    ]
     return store, real, made
 
 
 def _banners(store) -> list[str]:
     home = render_all(store, generated_at=GENERATED_AT)[HOME]
-    return [re.sub(r"<[^>]+>", "", b).replace("&#x27;", "'")
-            for b in re.findall(r'<p data-section="banner">(.*?)</p>', home, re.S)]
+    return [
+        re.sub(r"<[^>]+>", "", b).replace("&#x27;", "'")
+        for b in re.findall(r'<p data-section="banner">(.*?)</p>', home, re.S)
+    ]
 
 
 def test_with_no_signed_run_the_banner_is_shown(stored):

@@ -14,6 +14,7 @@ its named `onetrace.kept_inputs` is its own. Files under `inputs/` that no recei
 shown; the step pages count them. On a public console an externally sourced input's kept text is
 never shown, on a step page or in the text diff. This module only reads.
 """
+
 from __future__ import annotations
 
 import hashlib
@@ -40,17 +41,24 @@ ERASED = "Removing kept text is supported: the input's digest still holds."
 RECORDED_DIGEST = "recorded digest"
 FILE_DIGEST = "the file's digest"
 EXTERNAL = "kept, not shown on this public console: an externally sourced input"
-OLDER_SDK = ("not kept: recorded with onetrace {version}, before kept inputs; its "
-             "onetrace.kept_inputs is the run's own setting")
-BANNER_KEPT = ("Outputs are stored and shown after checking; inputs from outside the run are "
-               "fingerprinted, and an input's text is shown only where its step kept it and the "
-               "text matches its digest.")
-INPUTS_NOTE_KEPT = ("A fingerprint shows whether an input changed between runs. This page shows an "
-                    "input's content where its bytes match a stored output of an earlier stage, or "
-                    "where its step kept its text and the text matches its digest.")
+OLDER_SDK = (
+    "not kept: recorded with onetrace {version}, before kept inputs; its onetrace.kept_inputs is the run's own setting"
+)
+BANNER_KEPT = (
+    "Outputs are stored and shown after checking; inputs from outside the run are "
+    "fingerprinted, and an input's text is shown only where its step kept it and the "
+    "text matches its digest."
+)
+INPUTS_NOTE_KEPT = (
+    "A fingerprint shows whether an input changed between runs. This page shows an "
+    "input's content where its bytes match a stored output of an earlier stage, or "
+    "where its step kept its text and the text matches its digest."
+)
 UNTIED = "kept text not shown: this console can't tie the line to the runs' records"
-PUBLIC_RECORD = ("Kept inputs aren't included in this public console's downloads: removing them is "
-                 "supported, and the run still verifies without them.")
+PUBLIC_RECORD = (
+    "Kept inputs aren't included in this public console's downloads: removing them is "
+    "supported, and the run still verifies without them."
+)
 #: Kept text past this many characters is cut on the page, its full size said.
 SHOWN_CAP = 4096
 
@@ -64,8 +72,10 @@ def size_said(characters: int) -> str:
 
 
 def unlisted_note(n: int) -> str:
-    return (f"{n} file{'' if n == 1 else 's'} in this run's inputs/ folder "
-            f"{'is' if n == 1 else 'are'} listed by no step as kept, and never shown.")
+    return (
+        f"{n} file{'' if n == 1 else 's'} in this run's inputs/ folder "
+        f"{'is' if n == 1 else 'are'} listed by no step as kept, and never shown."
+    )
 
 
 def _constants(receipt: dict) -> dict:
@@ -117,6 +127,7 @@ def honoured(version: str | None) -> bool:
 def recorded_with(steps: list[dict]) -> str | None:
     """The SDK version the run's intake stage records, or None where the record does not say."""
     from onetrace_console.receipt_page import INTAKE_INSTRUMENT
+
     for step in steps:
         instrument = step["receipt"].get("instrument")
         if isinstance(instrument, dict) and instrument.get("id") == INTAKE_INSTRUMENT:
@@ -146,8 +157,10 @@ def _matches(data: bytes, digest: str) -> bool:
 #: store can add to them (the digests are the builder's code's, not a file's).
 _EXAMPLES: frozenset = frozenset()
 #: What a public console's run receipt says where the run's download includes its kept inputs.
-EXAMPLE_RECORD = ("This run's kept inputs are the demo's invented example data, so this public "
-                  "console shows them and its download includes them.")
+EXAMPLE_RECORD = (
+    "This run's kept inputs are the demo's invented example data, so this public "
+    "console shows them and its download includes them."
+)
 
 
 def set_examples(digests) -> frozenset:
@@ -167,12 +180,17 @@ def hidden_here(item: dict) -> bool:
     """On a public console, an externally sourced input's kept text is never shown -- except the
     demo builder's own invented example data (`example_allowed`)."""
     from onetrace_console.frame import rendering_public
-    return (rendering_public() and item.get("trust_class") == EXTERNALLY_SOURCED
-            and not example_allowed(str(item.get("digest", ""))))
+
+    return (
+        rendering_public()
+        and item.get("trust_class") == EXTERNALLY_SOURCED
+        and not example_allowed(str(item.get("digest", "")))
+    )
 
 
 def _fp(digest: str) -> str:
     from onetrace_console.viewer.page import fingerprint_html
+
     return fingerprint_html(digest)
 
 
@@ -180,6 +198,7 @@ def _fp(digest: str) -> str:
 class Kept:
     """One input's kept-text reading: `state` is shown, not-kept, missing, mismatch, external or
     older; `text` only where shown."""
+
     state: str
     text: str | None = None
     why: str | None = None
@@ -188,8 +207,14 @@ class Kept:
 
     def words(self) -> str:
         """The reading in plain words, as the text diff says it for one side."""
-        return {"not-kept": NOT_KEPT, "missing": MISSING, "mismatch": MISMATCH, "external": EXTERNAL,
-                "older": older_sdk(self.version), "shown": KEPT_SAID}[self.state]
+        return {
+            "not-kept": NOT_KEPT,
+            "missing": MISSING,
+            "mismatch": MISMATCH,
+            "external": EXTERNAL,
+            "older": older_sdk(self.version),
+            "shown": KEPT_SAID,
+        }[self.state]
 
 
 def read_kept(item: dict, receipt: dict, receipt_file: str, read, version: str | None) -> Kept | None:
@@ -221,24 +246,29 @@ def reading(item: dict, receipt: dict, receipt_file: str, read, version: str | N
     if kept is None:
         return None
     if kept.state == "shown":
-        return _shown(kept.text)
+        return _shown(kept.text)  # type: ignore[arg-type]  # a kept input shown has its text
     if kept.state == "not-kept":
-        return (f'<p data-kept="not-kept">{escape(NOT_KEPT)}'
-                + (f' · <q data-words="record">{escape(kept.why)}</q>' if kept.why else "") + "</p>")
+        return (
+            f'<p data-kept="not-kept">{escape(NOT_KEPT)}'
+            + (f' · <q data-words="record">{escape(kept.why)}</q>' if kept.why else "")
+            + "</p>"
+        )
     if kept.state == "missing":
-        return (f'<p data-kept="missing">{escape(MISSING)}</p>'
-                f'<p class="note">{escape(ERASED)}</p>')
+        return f'<p data-kept="missing">{escape(MISSING)}</p><p class="note">{escape(ERASED)}</p>'
     if kept.state == "mismatch":
-        recorded, found = kept.digests
-        return (f'<p data-kept="mismatch">{escape(MISMATCH)}</p>'
-                f'<p class="note">{escape(RECORDED_DIGEST)}: {_fp(recorded)} · '
-                f"{escape(FILE_DIGEST)}: {_fp(found)}</p>")
+        recorded, found = kept.digests  # type: ignore[misc]  # a mismatch has both digests
+        return (
+            f'<p data-kept="mismatch">{escape(MISMATCH)}</p>'
+            f'<p class="note">{escape(RECORDED_DIGEST)}: {_fp(recorded)} · '
+            f"{escape(FILE_DIGEST)}: {_fp(found)}</p>"
+        )
     return f'<p data-kept="{kept.state}">{escape(kept.words())}</p>'
 
 
 def _text(data: bytes) -> str | None:
     """The kept text: the file is the JSON string the SDK wrote, or it is not kept text."""
     from onetrace_console.bounded_json import load_json_bounded
+
     try:
         value = load_json_bounded(data.decode("utf-8"), "a kept input", "show")
     except (UnicodeDecodeError, ValueError, RecursionError):
@@ -248,17 +278,21 @@ def _text(data: bytes) -> str | None:
 
 def _shown(text: str) -> str:
     from onetrace_console.viewer.page import _t
+
     shown = verbatim(text[:SHOWN_CAP])
     if len(text) > SHOWN_CAP:
         shown += "\n" + escape(_t("text.more", n=str(len(text) - SHOWN_CAP)))
-    return (f'<p data-kept="shown"><span class="pill ok">Verified</span> {escape(KEPT_SAID)} · '
-            f"{escape(size_said(len(text)))}</p><pre data-kept-text>{shown}</pre>")
+    return (
+        f'<p data-kept="shown"><span class="pill ok">Verified</span> {escape(KEPT_SAID)} · '
+        f"{escape(size_said(len(text)))}</p><pre data-kept-text>{shown}</pre>"
+    )
 
 
 def unlisted_count(files: dict[str, str], steps: list[dict]) -> int:
     """How many files under inputs/ no receipt of the run lists as kept. `files`: {path as
     delivered, normalised: object key}; `steps`: the chain's receipts, as the step pages read them."""
     from onetrace_console.ingest import same_file
+
     version = recorded_with(steps)
     expected = set()
     if honoured(version):
@@ -282,12 +316,16 @@ def external_kept(steps: list[dict]) -> list[tuple[str, str]]:
         stage = receipt.get("stage")
         stage = str(stage.get("name", "")) if isinstance(stage, dict) else ""
         names = set(listed(receipt))
-        out += [(stage, str(i.get("name"))) for i in receipt.get("inputs") or []
-                if isinstance(i, dict) and i.get("name") in names and i.get("trust_class") == EXTERNALLY_SOURCED]
+        out += [
+            (stage, str(i.get("name")))
+            for i in receipt.get("inputs") or []
+            if isinstance(i, dict) and i.get("name") in names and i.get("trust_class") == EXTERNALLY_SOURCED
+        ]
     return out
 
 
 # ------------------------------------------------------------------ the text diff
+
 
 def _external_line(line: str) -> bool:
     """A changed input's line in the SDK's text diff that names an externally sourced input:
@@ -317,6 +355,7 @@ def _receipt_for(steps: list[dict], node: str) -> dict | None:
 def _side(store, key: str | None):
     """(steps, a reader of the run's stored files, its SDK version) for one stored run, or None."""
     from onetrace_console.stage_pages import _files, _read, _steps
+
     run = store.get_run(key) if store is not None and key else None
     if run is None:
         return None
@@ -344,14 +383,16 @@ def _named_sides(line: str, node: str, sides) -> tuple[str, list[tuple[str, Kept
     steps = [_receipt_for(s[0], node) for s in sides]
     if None in steps:
         return None
-    items = [{str(i.get("name", "")): i for i in step["receipt"].get("inputs") or [] if isinstance(i, dict)}
-             for step in steps]
+    items = [
+        {str(i.get("name", "")): i for i in step["receipt"].get("inputs") or [] if isinstance(i, dict)}  # type: ignore[index]  # no step is None: returned above
+        for step in steps
+    ]
     name = _input_named(line, set(items[0]) | set(items[1]))
     if name is None or name not in items[0] or name not in items[1]:
         return None
     out = []
     for label, step, side, its in zip(("baseline", "candidate"), steps, sides, items):
-        kept = read_kept(its[name], step["receipt"], step["file"], side[1], side[2])
+        kept = read_kept(its[name], step["receipt"], step["file"], side[1], side[2])  # type: ignore[index]  # as above
         out.append((label, kept if kept is not None else Kept("not-kept")))
     return name, out
 
@@ -374,8 +415,11 @@ def diff_lines(lines: list[str], node: str, sides, kept: list | None = None) -> 
             read = named[1] if named else None
             #: Shown only where both sides read as shown: on a public console, the demo's own
             #: example data (`hidden_here`), and nothing else.
-            hidden = (_external_line(line) and _public()
-                      and not (read is not None and all(k.state == "shown" for _, k in read)))
+            hidden = (
+                _external_line(line)
+                and _public()
+                and not (read is not None and all(k.state == "shown" for _, k in read))
+            )
             if hidden:
                 replaced = ["  " + EXTERNAL]
             elif line.startswith("input ") and read is None:
@@ -384,7 +428,7 @@ def diff_lines(lines: list[str], node: str, sides, kept: list | None = None) -> 
                 replaced = [f"  {label}: {k.words()}" for label, k in read if k.state != "shown"]
             elif read is not None and kept is not None:
                 #: Both texts shown: drawn as a line diff below the line, not as the escaped lines.
-                kept.append((line, named[0], read[0][1].text, read[1][1].text))
+                kept.append((line, named[0], read[0][1].text, read[1][1].text))  # type: ignore[index]  # read is not None only where named is not
                 replaced = []
             continue
         if replaced is not None and _kept_line(line):
@@ -398,6 +442,7 @@ def diff_lines(lines: list[str], node: str, sides, kept: list | None = None) -> 
 
 def _public() -> bool:
     from onetrace_console.frame import rendering_public
+
     return rendering_public()
 
 
@@ -407,14 +452,20 @@ def for_this_console(doc: dict, comparison=None, store=None) -> dict:
     before this, and is not changed."""
     sides = None
     if comparison is not None:
-        sides = (_side(store, getattr(comparison, "run_a", None)),
-                 _side(store, getattr(comparison, "run_b", None)))
+        sides = (_side(store, getattr(comparison, "run_a", None)), _side(store, getattr(comparison, "run_b", None)))
     nodes = []
     for n in doc.get("nodes", []):
         kept: list = []
         from onetrace_console.json_diff import for_node
-        nodes.append({**n, "inputs": diff_lines(list(n.get("inputs") or []), str(n.get("node", "")), sides, kept),
-                      KEPT_DIFFS: kept, JSON_DIFFS: for_node(n, sides)})
+
+        nodes.append(
+            {
+                **n,
+                "inputs": diff_lines(list(n.get("inputs") or []), str(n.get("node", "")), sides, kept),
+                KEPT_DIFFS: kept,
+                JSON_DIFFS: for_node(n, sides),
+            }
+        )
     return {**doc, "nodes": nodes}
 
 

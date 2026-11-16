@@ -14,6 +14,7 @@ now a committed copy under `tests/fixtures/r11/`, with its own `SHA256SUMS` and
 population is zero, and this suite's whole subject is whether real received bytes survive a
 round trip.
 """
+
 from __future__ import annotations
 
 import hashlib
@@ -25,6 +26,48 @@ from contextlib import contextmanager
 from pathlib import Path
 
 import pytest
+
+#: A run of the suite with every directory listing reversed (`ONETRACE_TEST_REVERSED_LISTINGS=1`): `Path.glob`,
+#: `Path.rglob`, `Path.iterdir` and `os.listdir` give their entries in the reverse of the order they would, in this
+#: process. A file system may list a folder in any order, so a test, or the console, that takes the first entry a
+#: listing gives where several match passes on one machine and fails on another; here it fails the same way. Off unless
+#: asked for; never in a released console.
+REVERSED_LISTINGS = os.environ.get("ONETRACE_TEST_REVERSED_LISTINGS") == "1"
+
+
+def _reversing(listing):
+    import functools
+
+    @functools.wraps(listing)
+    def reversed_listing(*args, **kwargs):
+        got = listing(*args, **kwargs)
+        return got[::-1] if isinstance(got, list) else iter(list(got)[::-1])
+
+    return reversed_listing
+
+
+def _reverse_listings(setattr_=setattr) -> None:
+    for name in ("glob", "rglob", "iterdir"):
+        setattr_(Path, name, _reversing(getattr(Path, name)))
+    setattr_(os, "listdir", _reversing(os.listdir))
+
+
+def _reverse_listings_on(monkeypatch) -> None:
+    """Every listing reversed for one test, undone after it."""
+    _reverse_listings(monkeypatch.setattr)
+
+
+if REVERSED_LISTINGS:
+    _reverse_listings()
+
+
+def only(entries):
+    """The one entry a listing gives: a test that takes one where several match would depend on the order the file
+    system lists them in, so more than one, or none, fails here, naming them."""
+    got = list(entries)
+    assert len(got) == 1, f"one entry was expected, the listing gives {len(got)}: {[str(p) for p in got][:5]}"
+    return got[0]
+
 
 REPO = Path(__file__).resolve().parent.parent
 
@@ -40,12 +83,14 @@ SHA256SUMS = REPO / "tests" / "fixtures" / "r11" / "SHA256SUMS"
 ONEDOOR_FIXTURE_DIR = REPO / "tests" / "fixtures" / "onedoor"
 ONEDOOR_SHA256SUMS = ONEDOOR_FIXTURE_DIR / "SHA256SUMS"
 
+
 #: What a delivery carries: the manifest and the receipts it names. `localize/` is a verb
 #: report that happens to live in the same folder; it is not part of the record.
 def _delivery_paths(folder: Path) -> list[Path]:
     manifest = folder / "MANIFEST.json"
     paths = [manifest]
     import json
+
     for entry in json.loads(manifest.read_bytes().decode("utf-8")).get("chain", []):
         paths.append(folder / entry["file"])
     return paths
@@ -58,7 +103,8 @@ def run_folder() -> Path:
             f"the committed run folder is not there: {RUN_FOLDER}\n"
             f"This refuses rather than skips: these tests exist to show that real "
             f"received bytes survive a round trip, and a skip would report success for "
-            f"having examined nothing.")
+            f"having examined nothing."
+        )
     sums = {}
     for line in SHA256SUMS.read_text(encoding="utf-8").splitlines():
         digest, _, rel = line.partition("  ")
@@ -72,7 +118,8 @@ def run_folder() -> Path:
         "the committed r11 fixture has drifted from its recorded digest:\n  "
         + "\n  ".join(mismatched)
         + "\nThis refuses rather than uses the changed bytes: the fixture is meant to be "
-          "the SDK's own frozen output, not something edited in place.")
+        "the SDK's own frozen output, not something edited in place."
+    )
     return RUN_FOLDER
 
 
@@ -81,7 +128,8 @@ def onedoor_fixture_dir() -> Path:
     if not ONEDOOR_FIXTURE_DIR.is_dir():
         pytest.fail(
             f"the committed onedoor fixture is not there: {ONEDOOR_FIXTURE_DIR}\n"
-            f"This refuses rather than skips, for the same reason run_folder does above.")
+            f"This refuses rather than skips, for the same reason run_folder does above."
+        )
     sums = {}
     for line in ONEDOOR_SHA256SUMS.read_text(encoding="utf-8").splitlines():
         digest, _, rel = line.partition("  ")
@@ -91,9 +139,9 @@ def onedoor_fixture_dir() -> Path:
         got = hashlib.sha256((ONEDOOR_FIXTURE_DIR / rel).read_bytes()).hexdigest()
         if got != want:
             mismatched.append(f"{rel}: SHA256SUMS says {want}, file is {got}")
-    assert mismatched == [], (
-        "the committed onedoor fixture has drifted from its recorded digest:\n  "
-        + "\n  ".join(mismatched))
+    assert mismatched == [], "the committed onedoor fixture has drifted from its recorded digest:\n  " + "\n  ".join(
+        mismatched
+    )
     return ONEDOOR_FIXTURE_DIR
 
 
@@ -116,8 +164,7 @@ SYNTHETIC_RECEIPTS_SUMS = SYNTHETIC_RECEIPTS_DIR / "SHA256SUMS"
 @pytest.fixture(scope="session")
 def synthetic_receipts_dir() -> Path:
     if not SYNTHETIC_RECEIPTS_DIR.is_dir():
-        pytest.fail(f"the committed synthetic receipts fixture is not there: "
-                   f"{SYNTHETIC_RECEIPTS_DIR}")
+        pytest.fail(f"the committed synthetic receipts fixture is not there: {SYNTHETIC_RECEIPTS_DIR}")
     sums = {}
     for line in SYNTHETIC_RECEIPTS_SUMS.read_text(encoding="utf-8").splitlines():
         digest, _, rel = line.partition("  ")
@@ -125,7 +172,8 @@ def synthetic_receipts_dir() -> Path:
     mismatched = [
         f"{rel}: SHA256SUMS says {want}, file is {hashlib.sha256((SYNTHETIC_RECEIPTS_DIR / rel).read_bytes()).hexdigest()}"
         for rel, want in sums.items()
-        if hashlib.sha256((SYNTHETIC_RECEIPTS_DIR / rel).read_bytes()).hexdigest() != want]
+        if hashlib.sha256((SYNTHETIC_RECEIPTS_DIR / rel).read_bytes()).hexdigest() != want
+    ]
     assert mismatched == [], "\n".join(mismatched)
     return SYNTHETIC_RECEIPTS_DIR
 
@@ -148,6 +196,7 @@ def preview_veto_off():
     delivery is otherwise refused (422); these fixtures are about what a console does with a run
     it already holds. Every use says why."""
     import onetrace_console.ingest as ingest
+
     original = ingest.preview_not_run_row
     ingest.preview_not_run_row = lambda said: None
     try:
@@ -190,6 +239,7 @@ def ipv6_loopback_port(*, windows: bool | None = None) -> int:
     """
     import os
     import socket
+
     if windows is None:
         windows = os.name == "nt"
     try:
@@ -202,36 +252,58 @@ def ipv6_loopback_port(*, windows: bool | None = None) -> int:
     except OSError as e:
         said = f"Errno {e.errno}: {e.strerror}"
         if windows:
-            pytest.fail(f"no IPv6 loopback on this Windows host ({said}); a skip here would hide "
-                        f"what this test checks")
+            pytest.fail(f"no IPv6 loopback on this Windows host ({said}); a skip here would hide what this test checks")
         pytest.skip(f"this host has no IPv6 loopback ({said})")
 
 
 @pytest.fixture(scope="session")
 def explain_command(tmp_path_factory) -> tuple[Path, Path]:
     """The published onetrace-explain, installed from the wheel cache by its pinned hash into a folder
-    of its own: never into this environment, never a dependency of the console. (command, its
-    library folder), found by the console's own lookup with the folder's scripts first. Refuses
-    rather than skips where the cache is not ready, as the pin tests do."""
+    of its own, with what it asks for (the pinned onetrace and onetrace-verify, by theirs): never into this
+    environment, never a dependency of the console. (command, its library folder), found by the console's own
+    lookup with the folder's scripts first. Refuses rather than skips where the cache is not ready, as the pin
+    tests do."""
     import os
     import subprocess
     import sys
+
     from onetrace_console import explain as e
     from tools import fetch_wheel_cache as w
+
     if not w.check():
-        pytest.fail(f"the local wheel cache is not there or does not match: {w.CACHE}\n"
-                    f"    python tools/fetch_wheel_cache.py")
-    (requirement, (_, sha)), = w.TEST_COMMANDS.items()
+        pytest.fail(
+            f"the local wheel cache is not there or does not match: {w.CACHE}\n    python tools/fetch_wheel_cache.py"
+        )
+    ((requirement, (_, sha)),) = w.TEST_COMMANDS.items()
     root = tmp_path_factory.mktemp("onetrace-explain")
     req = root / "requirement.txt"
-    req.write_text(f"{requirement} --hash=sha256:{sha}\n", encoding="utf-8")
+    req.write_text(
+        "".join(f"{r} --hash=sha256:{h}\n" for r, (_, h) in {requirement: (None, sha), **w.WHEELS}.items()),
+        encoding="utf-8",
+    )
     lib = root / "lib"
-    done = subprocess.run([sys.executable, "-m", "pip", "install", "--no-deps", "--no-index", "--find-links",
-                           str(w.CACHE), "--require-hashes", "--target", str(lib), "-r", str(req)],
-                          capture_output=True, text=True, timeout=300)
+    done = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "pip",
+            "install",
+            "--no-index",
+            "--find-links",
+            str(w.CACHE),
+            "--require-hashes",
+            "--target",
+            str(lib),
+            "-r",
+            str(req),
+        ],
+        capture_output=True,
+        text=True,
+        timeout=300,
+    )
     assert done.returncode == 0, done.stdout + done.stderr
     scripts = next((lib / d for d in ("Scripts", "bin") if (lib / d).is_dir()), None)
-    found = e.find(os.name == "nt", str(scripts) if scripts else None, str(root / "no-python"), lambda n: None)
+    found = e.find(os.name == "nt", str(scripts) if scripts else None, str(root / "no-python"))
     assert found is not None and found.parent == scripts, (found, scripts)
     return found, lib
 
@@ -241,7 +313,9 @@ def explain_installed(explain_command, monkeypatch) -> Path:
     """The console finds the published onetrace-explain: its lookup answers the installed command,
     whose library folder is put first on the command's import path."""
     import os
+
     from onetrace_console import explain as e
+
     found, lib = explain_command
     monkeypatch.setattr(e, "command", lambda: found)
     monkeypatch.setenv("PYTHONPATH", os.pathsep.join(filter(None, [str(lib), os.environ.get("PYTHONPATH")])))
@@ -256,6 +330,7 @@ def delivery(files: dict[str, bytes]) -> bytes:
 @pytest.fixture
 def store(tmp_path):
     from onetrace_console.store import Store
+
     return Store(tmp_path / "store")
 
 
@@ -289,6 +364,7 @@ def in_memory(tmp_path: Path):
     """A folder on tmpfs (`tmpfs_root`), removed afterwards, where the platform has one; else `tmp_path`."""
     import shutil
     import tempfile
+
     root = tmpfs_root()
     if root is None:
         yield tmp_path
@@ -304,7 +380,6 @@ def in_memory(tmp_path: Path):
 def serving(tmp_path: Path):
     """`server`'s console, for a fixture of another scope: the same console, the same teardown."""
     import threading
-
     from http.server import ThreadingHTTPServer
 
     from onetrace_console.access_log import AccessLog
@@ -321,8 +396,9 @@ def serving(tmp_path: Path):
     #: Sign-in named OFF: the schema default is on, and the tests that
     #: exercise sign-in switch it on themselves (`roles_enabled`, `test_signin_flow`).
     Handler.config = Config(sign_in={**Config().sign_in, "enabled": False})
-    Handler.access_log = AccessLog(store_root / "access_log",
-                                   max_segment_bytes=Handler.config.access_log_max_segment_bytes)
+    Handler.access_log = AccessLog(
+        store_root / "access_log", max_segment_bytes=Handler.config.access_log_max_segment_bytes
+    )
     _render_all_pages(Handler.store, store_root, Handler.config)
 
     httpd = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
@@ -338,6 +414,7 @@ def serving(tmp_path: Path):
 
 
 # ---------------------------------------------------------- the standing rule
+
 
 @pytest.fixture
 def examined(request):
@@ -358,7 +435,7 @@ def pytest_terminal_summary(terminalreporter, exitstatus, config):
     """Print what every check examined, so the run states its own coverage.
 
     This is where the work-order report's per-check numbers come from. Generated by the run,
-    never transcribed (X-11).
+    never transcribed.
     """
     from tests.examined import summary_lines
     from tests.http_limits import summary_lines as limits_lines
@@ -376,18 +453,20 @@ def pytest_terminal_summary(terminalreporter, exitstatus, config):
 # printing. Both hooks do nothing in a serial run; `optionalhook` because
 # `pytest_testnodedown` exists only where xdist is installed.
 
+
 def pytest_sessionfinish(session, exitstatus):
     workeroutput = getattr(session.config, "workeroutput", None)
-    if workeroutput is not None:                      # this process is an xdist worker
+    if workeroutput is not None:  # this process is an xdist worker
         from tests.examined import RECORDS
+
         workeroutput["examined"] = [(r.nodeid, r.what, r.count) for r in RECORDS]
 
 
 @pytest.hookimpl(optionalhook=True)
 def pytest_testnodedown(node, error):
     from tests.examined import RECORDS, Report
-    RECORDS.extend(Report(nodeid, what, count)
-                   for nodeid, what, count in node.workeroutput.get("examined", ()))
+
+    RECORDS.extend(Report(nodeid, what, count) for nodeid, what, count in node.workeroutput.get("examined", ()))
 
 
 def whole_folds(html: str) -> str:
@@ -395,6 +474,7 @@ def whole_folds(html: str) -> str:
     it holds kept -- so a check that a page carries a fingerprint reads the whole one, which is
     on the page, one fold away."""
     import re
+
     return re.sub(r'(<details class="fingerprint"[^>]*>)<summary class="mono">[^<]*</summary>', r"\1", html)
 
 
@@ -407,10 +487,11 @@ SHARED: dict[str, dict] = {}
 def tree_digest(root: Path) -> str:
     """The contents digest in its standing form: the sha256 of the `sha256sum -b` lines of every
     file under `root`, named `./<path>` and sorted by bytes (`find . -type f | LC_ALL=C sort`)."""
-    names = sorted(("./" + p.relative_to(root).as_posix()).encode("utf-8")
-                   for p in root.rglob("*") if p.is_file())
-    lines = b"".join(hashlib.sha256((root / n[2:].decode("utf-8")).read_bytes()).hexdigest().encode()
-                     + b" *" + n + b"\n" for n in names)
+    names = sorted(("./" + p.relative_to(root).as_posix()).encode("utf-8") for p in root.rglob("*") if p.is_file())
+    lines = b"".join(
+        hashlib.sha256((root / n[2:].decode("utf-8")).read_bytes()).hexdigest().encode() + b" *" + n + b"\n"
+        for n in names
+    )
     return hashlib.sha256(lines).hexdigest()
 
 
@@ -428,6 +509,7 @@ def shared_demo(tmp_path_factory) -> dict:
     from onetrace_console.folder_load import build_public
     from onetrace_console.store import StoredRun
     from tests.test_checks import _require_installed
+
     _require_installed()
     folder = tmp_path_factory.mktemp("shared-demo") / "demo"
     real, seen = StoredRun.from_json, [0]
@@ -435,6 +517,7 @@ def shared_demo(tmp_path_factory) -> dict:
     def counted(text):
         seen[0] += 1
         return real(text)
+
     StoredRun.from_json = staticmethod(counted)
     try:
         said, _ = build_public(folder)
@@ -452,14 +535,21 @@ def shared_cli_demo(tmp_path_factory) -> dict:
     import os
     import subprocess
     import sys
+
     from tests.test_checks import _require_installed
+
     _require_installed()
     folder = tmp_path_factory.mktemp("shared-cli-demo") / "demo"
-    out = subprocess.run([sys.executable, "-B", "-m", "onetrace_console", "demo", "--public",
-                          "--build", str(folder)], capture_output=True, text=True, timeout=600,
-                         env={**{k: v for k, v in os.environ.items()
-                                 if k != "ONETRACE_CONSOLE_CONFIG"},
-                              "PYTHONPATH": str(REPO / "src")})
+    out = subprocess.run(
+        [sys.executable, "-B", "-m", "onetrace_console", "demo", "--public", "--build", str(folder)],
+        capture_output=True,
+        text=True,
+        timeout=600,
+        env={
+            **{k: v for k, v in os.environ.items() if k != "ONETRACE_CONSOLE_CONFIG"},
+            "PYTHONPATH": str(REPO / "src"),
+        },
+    )
     assert out.returncode == 0, out.stdout + out.stderr
     return _shared("shared_cli_demo", folder)
 
@@ -467,6 +557,7 @@ def shared_cli_demo(tmp_path_factory) -> dict:
 def demo_copy(shared: dict, dest: Path) -> Path:
     """A module's own copy of a shared build, for a module that changes what it reads."""
     import shutil
+
     shutil.copytree(shared["folder"], dest, symlinks=True, copy_function=shutil.copy2)
     return dest
 
@@ -484,6 +575,9 @@ def _shared_demo_unchanged(request):
             changed.append(f"{name} ({shared['folder']}): {shared['digest']} before, {now} after")
             shared["digest"] = now
     if changed:
-        pytest.fail(f"{request.module.__name__} changed a shared demo build, which every module "
-                    f"reads as built: " + "; ".join(changed) + ". Give the module its own copy "
-                    f"(demo_copy).", pytrace=False)
+        pytest.fail(
+            f"{request.module.__name__} changed a shared demo build, which every module "
+            f"reads as built: " + "; ".join(changed) + ". Give the module its own copy "
+            "(demo_copy).",
+            pytrace=False,
+        )

@@ -7,6 +7,7 @@ The runs are `tests/onetrace_runs/0.7.1/expect/` (`tools/make_expectation_runs.p
 whose step declares five expectations (four hold, one is not run), and `calibrate-fails`, whose step
 declares those and two that fail.
 """
+
 from __future__ import annotations
 
 import html
@@ -25,6 +26,7 @@ NON_CLAIM = "An expectation that holds shows the declared rule held, not that th
 @pytest.fixture(scope="module", autouse=True)
 def _installed():
     from tests.test_checks import _require_installed
+
     _require_installed()
 
 
@@ -34,8 +36,12 @@ def _text(block: str) -> str:
 
 
 def _section(pages: dict) -> str:
-    found = [m.group(0) for p in ("case.html", "proof.html")
-             for m in [re.search(r'<section data-section="expectations".*?</section>', pages[p], re.S)] if m]
+    found = [
+        m.group(0)
+        for p in ("case.html", "proof.html")
+        for m in [re.search(r'<section data-section="expectations".*?</section>', pages[p], re.S)]
+        if m
+    ]
     return found[0] if found else ""
 
 
@@ -56,6 +62,7 @@ def _rows(run, store) -> list[dict]:
 
 def _drawn(name: str, tmp_path):
     from onetrace_console.store import Store
+
     store = Store(tmp_path / name)
     run, pages = _pages(EXPECT / name, store)
     return run, pages, store
@@ -71,14 +78,15 @@ def test_each_declared_expectation_has_its_row_in_the_verifier_s_words(name, hel
     assert section, "no expectations section"
     text = _text(section)
     for r in rows:
-        assert f'{r["result"]} {r["name"]} — {r["detail"]}' in text, (r, text)
+        assert f"{r['result']} {r['name']} — {r['detail']}" in text, (r, text)
     for d in declared:
-        assert f'expect {d["step"]}.{d["name"]}' in text, d
+        assert f"expect {d['step']}.{d['name']}" in text, d
 
 
 @pytest.mark.parametrize("name, held, of", [("calibrate-holds", 4, 5), ("calibrate-fails", 4, 7)])
-def test_the_count_of_those_that_held_is_a_line_of_its_own_and_the_non_claim_is_beside_them(name, held, of,
-                                                                                             tmp_path, examined):
+def test_the_count_of_those_that_held_is_a_line_of_its_own_and_the_non_claim_is_beside_them(
+    name, held, of, tmp_path, examined
+):
     _run, pages, _store = _drawn(name, tmp_path)
     section = _section(pages)
     examined(1, f"{name}'s count")
@@ -98,6 +106,7 @@ def test_a_fail_names_the_value_and_the_rule_and_a_not_run_its_reason(tmp_path, 
 
 def test_a_run_with_no_expectations_has_no_section(tmp_path, examined):
     from onetrace_console.store import Store
+
     _run, pages = _pages(EXPECT.parent / "refund-closed", Store(tmp_path / "s"))
     examined(1, "a run declaring no expectations")
     assert _section(pages) == ""
@@ -107,20 +116,27 @@ def test_a_declared_expectation_the_check_gives_no_row_for_reads_not_run(examine
     """An expectation a receipt declares and the check holds no row for (an earlier verifier, say) still
     has its row: NOT-RUN, saying the check holds none."""
     from onetrace_console import expectations
-    declared = [{"step": "calibrate", "name": "in-range", "kind": "range"},
-                {"step": "calibrate", "name": "extra", "kind": "member"}]
+
+    declared = [
+        {"step": "calibrate", "name": "in-range", "kind": "range"},
+        {"step": "calibrate", "name": "extra", "kind": "member"},
+    ]
     rows = [{"name": "expect calibrate.in-range", "result": "PASS", "detail": "1 within [0, 2]"}]
     examined(2, "declared expectations")
     got = expectations.with_rows(declared, rows)
-    assert [(r["name"], r["result"]) for r in got] == [("expect calibrate.in-range", "PASS"),
-                                                       ("expect calibrate.extra", "NOT-RUN")]
+    assert [(r["name"], r["result"]) for r in got] == [
+        ("expect calibrate.in-range", "PASS"),
+        ("expect calibrate.extra", "NOT-RUN"),
+    ]
     assert got[1]["detail"] == expectations.NO_ROW
 
 
 def test_sabotage_a_count_that_takes_not_run_as_held_is_named(tmp_path, monkeypatch, examined):
     from onetrace_console import expectations
+
     monkeypatch.setattr(expectations, "HELD", ("PASS", "NOT-RUN"))
     examined(1, "a count read with NOT-RUN as held")
     with pytest.raises(AssertionError):
         test_the_count_of_those_that_held_is_a_line_of_its_own_and_the_non_claim_is_beside_them(
-            "calibrate-holds", 4, 5, tmp_path, lambda *a: None)
+            "calibrate-holds", 4, 5, tmp_path, lambda *a: None
+        )

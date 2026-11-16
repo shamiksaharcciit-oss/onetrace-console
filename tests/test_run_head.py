@@ -9,14 +9,14 @@ the record's order, with no line drawn between boxes (the record holds no links)
 
 Each check has its sabotage.
 """
+
 from __future__ import annotations
 
 import re
 import shutil
+from html import unescape
 
 import pytest
-from html import unescape
-from pathlib import Path
 
 from tests.test_times_and_words import EXAMPLE, _console, _intake_pair
 
@@ -47,6 +47,7 @@ def head_problems(page: str, run_id: str, label: str, baseline: str | None) -> l
     chips = _text(head)
     from onetrace_console.records import LABEL
     from onetrace_console.words import VERDICT_WORDS
+
     title = _text(re.search(r'<div class="title">(.*?)</div>', head, re.S).group(1))
     if any(word in title for word in (*VERDICT_WORDS.values(), *LABEL.values())):
         out.append("a one-word verdict beside the title")
@@ -61,6 +62,7 @@ def test_the_head_names_the_run_and_states_the_ladder(tmp_path, examined):
     shutil.copytree(EXAMPLE, tmp_path / "runs")
     store, pages, _ = _console(tmp_path, tmp_path / "runs")
     from onetrace_console.overview import pipelines
+
     labels = {r.key: p.label for p in pipelines(store) for r in p.runs}
     runs = store.runs()
     examined(len(runs), "run pages")
@@ -75,13 +77,16 @@ def test_sabotage_a_head_that_disagrees_with_its_ladder_is_named(tmp_path, exami
     shutil.copytree(EXAMPLE, tmp_path / "runs")
     store, pages, _ = _console(tmp_path, tmp_path / "runs")
     from onetrace_console.overview import pipelines
+
     run = store.runs()[0]
     label = next(p.label for p in pipelines(store) for r in p.runs if r.key == run.key)
     page = (pages / "runs" / run.key / "case.html").read_text(encoding="utf-8")
-    planted = page.replace('<li data-head-rung="records-agree" data-state="yes">',
-                           '<li data-head-rung="records-agree" data-state="no">', 1)
+    planted = page.replace(
+        '<li data-head-rung="records-agree" data-state="yes">', '<li data-head-rung="records-agree" data-state="no">', 1
+    )
     chip = page.replace("</h1>", '</h1><span class="pill bad">Changed vs someone</span>', 1)
     from onetrace_console.words import VERDICT_WORDS
+
     verdict = page.replace("</h1>", f'</h1><span class="pill ok">{VERDICT_WORDS["holds"]}</span>', 1)
     examined(3, "planted pages")
     assert planted != page and chip != page and verdict != page
@@ -97,6 +102,7 @@ def test_a_candidate_names_its_baseline_and_its_first_difference(tmp_path, exami
     page = (pages / "runs" / b.key / "case.html").read_text(encoding="utf-8")
     examined(1, "candidate's run page")
     from onetrace_console.overview import pipelines
+
     label = next(p.label for p in pipelines(store) for r in p.runs if r.key == b.key)
     assert head_problems(page, "pair-b", label, "pair-a") == []
     head = _head(page)
@@ -109,8 +115,10 @@ def test_a_candidate_names_its_baseline_and_its_first_difference(tmp_path, exami
 
 def _boxes(page: str) -> list[tuple[int, int, str]]:
     svg = re.search(r'<section data-section="graph".*?<svg class="graph".*?</svg>', page, re.S).group(0)
-    return [(int(y), int(x), href) for href, x, y in
-            re.findall(r'<a href="([^"]+)"><rect class="node" x="(\d+)" y="(\d+)"', svg)]
+    return [
+        (int(y), int(x), href)
+        for href, x, y in re.findall(r'<a href="([^"]+)"><rect class="node" x="(\d+)" y="(\d+)"', svg)
+    ]
 
 
 def graph_problems(page: str, steps: int, reads: int | None = None) -> list[str]:
@@ -134,12 +142,12 @@ def graph_problems(page: str, steps: int, reads: int | None = None) -> list[str]
 def _reads(run, store) -> int | None:
     """The run's consecutive recorded reads, from its stored receipts; None where a name repeats."""
     from onetrace_console.stage_pages import _steps
+
     receipts = [s["receipt"] for s in _steps(run, store)]
     names = [r["stage"]["name"] for r in receipts]
     if len(set(names)) != len(names):
         return None
-    return sum(f"receipt:{a}" in {i.get("name") for i in r.get("inputs") or []}
-               for a, r in zip(names, receipts[1:]))
+    return sum(f"receipt:{a}" in {i.get("name") for i in r.get("inputs") or []} for a, r in zip(names, receipts[1:]))
 
 
 @pytest.fixture(scope="module")
@@ -147,6 +155,7 @@ def demo(shared_demo):
     """The public demo, built once."""
     from onetrace_console.store import Store
     from tests.test_checks import _require_installed
+
     _require_installed()
     folder = shared_demo["folder"]
     return Store(folder / "store" / "store"), folder / "store" / "pages"
@@ -178,9 +187,11 @@ def test_sabotage_a_shuffled_linked_or_single_row_graph_is_named(demo, examined)
     one_row = re.sub(r'(<rect class="node" x="\d+" y=")\d+(")', r"\g<1>12\2", page)
     by_place = sorted(boxes)
     (y1, x1, _), (y2, x2, _) = by_place[0], by_place[1]
-    swapped = (page.replace(f'x="{x1}" y="{y1}"', 'x="SWAP" y="SWAP"', 1)
-               .replace(f'x="{x2}" y="{y2}"', f'x="{x1}" y="{y1}"', 1)
-               .replace('x="SWAP" y="SWAP"', f'x="{x2}" y="{y2}"', 1))
+    swapped = (
+        page.replace(f'x="{x1}" y="{y1}"', 'x="SWAP" y="SWAP"', 1)
+        .replace(f'x="{x2}" y="{y2}"', f'x="{x1}" y="{y1}"', 1)
+        .replace('x="SWAP" y="SWAP"', f'x="{x2}" y="{y2}"', 1)
+    )
     linked = page.replace("</svg>", '<path class="link" d="M0,0"/></svg>', 1)
     examined(3, "planted pages")
     assert "one row" in graph_problems(one_row, len(boxes))
@@ -193,6 +204,7 @@ def test_sabotage_a_shuffled_linked_or_single_row_graph_is_named(demo, examined)
 def test_the_headline_candidate_names_its_baseline_and_split(demo, examined):
     from onetrace_console.demo_store import COMPARISONS
     from onetrace_console.overview import pipelines
+
     store, pages = demo
     by_id = {r.run_id: r for r in store.runs()}
     base, cand = (by_id[name] for name in COMPARISONS[0])
@@ -214,9 +226,12 @@ def _boxes_with_titles(page: str) -> list[tuple[str, str]]:
 def _boxes_drawn(page: str) -> list[tuple[str, str, int]]:
     """(link, title, state lines drawn) for each box: its chip, and each state line under it."""
     svg = re.search(r'<section data-section="graph".*?<svg class="graph".*?</svg>', page, re.S).group(0)
-    return [(h, unescape(t), body.count('class="state"') + body.count('<text class="chip"')) for h, t, body in
-            re.findall(r'<a href="([^"]+)"[^>]*><rect class="node"[^>]*/><title>([^<]*)</title>(.*?)</a>',
-                       svg, re.S)]
+    return [
+        (h, unescape(t), body.count('class="state"') + body.count('<text class="chip"'))
+        for h, t, body in re.findall(
+            r'<a href="([^"]+)"[^>]*><rect class="node"[^>]*/><title>([^<]*)</title>(.*?)</a>', svg, re.S
+        )
+    ]
 
 
 def node_problems(page: str, receipts: list[dict]) -> list[str]:
@@ -226,6 +241,7 @@ def node_problems(page: str, receipts: list[dict]) -> list[str]:
     from collections import Counter
 
     from onetrace_console.render import _RESULT_WORDS
+
     failed, retried = set(), set()
     for r in receipts:
         name = r["stage"]["name"]
@@ -235,8 +251,10 @@ def node_problems(page: str, receipts: list[dict]) -> list[str]:
             failed.add(name)
     count = Counter(r["stage"]["name"] for r in receipts)
     by_name = {r["stage"]["name"]: r for r in receipts}
-    checks = {n: " ".join(unescape(re.sub(r"<[^>]+>", " ", c)).split()) for n, c in
-              re.findall(r'<tr data-step="(\d+)">(?:<td.*?</td>){2}<td[^>]*>(.*?)</td>', page, re.S)}
+    checks = {
+        n: " ".join(unescape(re.sub(r"<[^>]+>", " ", c)).split())
+        for n, c in re.findall(r'<tr data-step="(\d+)">(?:<td.*?</td>){2}<td[^>]*>(.*?)</td>', page, re.S)
+    }
     verdicts = set(_RESULT_WORDS.values())
     out = []
     #: A page whose step table this cannot read would check no chip at all: said, never passed.
@@ -255,8 +273,7 @@ def node_problems(page: str, receipts: list[dict]) -> list[str]:
             out.append(f"{label}: no receipt")
             continue
         n = len(r.get("outputs") or [])
-        want = (f"{count[name]} attempts" if name in retried
-                else f"{n} output file" + ("" if n == 1 else "s"))
+        want = f"{count[name]} attempts" if name in retried else f"{n} output file" + ("" if n == 1 else "s")
         if not lines or lines[0] != want:
             out.append(f"{label}: fact {lines[:1]} for {want!r}")
         step = re.search(r"(\d+)(?:\.html)?$", href).group(1)
@@ -276,6 +293,7 @@ def _graph_view(folder) -> str:
 
 def test_each_node_carries_a_fact_from_the_record_and_its_check(demo, examined):
     from onetrace_console.stage_pages import _steps
+
     store, pages = demo
     boxes = 0
     for run in store.runs():
@@ -291,27 +309,36 @@ def test_each_node_carries_a_fact_from_the_record_and_its_check(demo, examined):
 
 def test_sabotage_a_node_fact_the_record_does_not_hold_is_named(demo, examined):
     from onetrace_console.stage_pages import _steps
+
     store, pages = demo
     #: A run with a box whose fact is "1 output file", to plant on: the store's order of runs varies
     #: from build to build, and an agent's step writes three files.
-    run, page = next((r, p) for r in store.runs() for p in [_graph_view(pages / "runs" / r.key)]
-                     if re.search(r"<title>[^<]*?\b1 output file\b", p))
+    run, page = next(
+        (r, p)
+        for r in store.runs()
+        for p in [_graph_view(pages / "runs" / r.key)]
+        if re.search(r"<title>[^<]*?\b1 output file\b", p)
+    )
     receipts = [s["receipt"] for s in _steps(run, store)]
     planted = re.sub(r"(<title>[^<]*?)\b1 output file\b", r"\g<1>318 chunks", page, count=1)
     examined(1, "planted page")
     assert planted != page and node_problems(page, receipts) == []
     assert any(": fact ['318 chunks']" in p for p in node_problems(planted, receipts))
     #: A run whose graph is unmarked and shows the chip, on the view that holds its graph.
-    unmarked = next((r, p) for r in store.runs()
-                    for p in [_graph_view(pages / "runs" / r.key)]
-                    if 'data-section="graph-marked-from"' not in p
-                    and re.search(r"<title>[^<]*?Checked — it holds\.", p))
+    unmarked = next(
+        (r, p)
+        for r in store.runs()
+        for p in [_graph_view(pages / "runs" / r.key)]
+        if 'data-section="graph-marked-from"' not in p and re.search(r"<title>[^<]*?Checked — it holds\.", p)
+    )
     page2 = unmarked[1]
     chip = re.sub(r"(<title>[^<]*?)Checked — it holds\.", r"\g<1>Checked — all clear.", page2, count=1)
     examined(1, "planted page")
     assert chip != page2
-    assert any(": chip ['Checked — all clear.']" in p for p in node_problems(
-        chip, [s["receipt"] for s in _steps(unmarked[0], store)]))
+    assert any(
+        ": chip ['Checked — all clear.']" in p
+        for p in node_problems(chip, [s["receipt"] for s in _steps(unmarked[0], store)])
+    )
 
 
 def test_sabotage_a_chip_after_a_steps_inside_line_is_named(demo, examined):
@@ -319,6 +346,7 @@ def test_sabotage_a_chip_after_a_steps_inside_line_is_named(demo, examined):
     there is named by its own words, not by the line before it (P10's agent step, whatever the store's
     order of runs)."""
     from onetrace_console.stage_pages import _steps
+
     store, pages = demo
     run = next(r for r in store.runs() if r.run_id == "pz-51-agent-baseline")
     page = _graph_view(pages / "runs" / run.key)

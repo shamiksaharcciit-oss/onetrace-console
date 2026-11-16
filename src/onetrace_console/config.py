@@ -1,8 +1,10 @@
-"""One read-only configuration file. Its path is the only environment variable this
-console reads.
+"""One read-only configuration file, its path in `ONETRACE_CONSOLE_CONFIG`.
 
-*"One configuration file, mounted read-only, with its keys documented. The only
-environment variable allowed is the path to that file."* Before this,
+Every setting of the console is a key of that file, mounted read-only, with its keys documented.
+The other environment variables the console reads are each for one thing, and the operator guide
+names them all ("Configuration"): Entra ID's client secret, by the name the file gives; the proxy
+for Entra ID's addresses; onetrace-explain's configuration; a pinned install's report; the hosted
+apps' addresses; and a recorded run's trace context. Before this,
 `ONETRACE_CONSOLE_HOST`, `ONETRACE_CONSOLE_PORT` and `ONETRACE_CONSOLE_STORE` were three
 separate environment variables; all three are gone, folded into the keys below.
 
@@ -15,15 +17,22 @@ reason a default cannot serve just as well. What is NOT tolerated is the variabl
 to a path that does not exist, or a file that does not parse: those refuse, loudly, because
 an operator who named a file and got silent defaults instead would not know their
 configuration was never read.
+
+The configuration's own exception: with `sign_in.method` `oidc` and a client secret rather than a
+certificate, the file names the environment variable that holds the secret
+(`sign_in.oidc.client_secret_env`), so the secret itself is never in the file.
 """
+
 from __future__ import annotations
 
 import json
-from onetrace_console.bounded_json import TooDeep, load_json_bounded
 import math
 import os
+import re
 from dataclasses import dataclass, field, fields
 from pathlib import Path, PurePath
+
+from onetrace_console.bounded_json import TooDeep, load_json_bounded
 
 #: The one environment variable.
 ENV_VAR = "ONETRACE_CONSOLE_CONFIG"
@@ -48,12 +57,21 @@ _SIGN_IN_SCHEMA: dict[str, tuple[type, object]] = {
     #: Session rules. Defaults: 30 minutes idle, 12 hours absolute.
     "session_idle_timeout_seconds": (int, 1800),
     "session_absolute_timeout_seconds": (int, 43200),
-    #: Rate limiting: per account and per client, both configurable,
-    #: over the same rolling window: at most that many attempts in any
-    #: span of `rate_limit_window_seconds`.
-    "rate_limit_max_attempts_per_account": (int, 10),
+    #: An account's live sessions at most; a sign-in beyond it ends that account's oldest.
+    "max_sessions_per_account": (int, 3),
+    #: Rate limiting, each a rolling window (`rate_limit.account_refusal`). Per client address,
+    #: across accounts: at most `rate_limit_max_attempts_per_client` in any span of
+    #: `rate_limit_window_seconds`. For an account, an attempt from a browser holding a valid device
+    #: cookie for it counts only in that device's window; any other counts in its (account, address)
+    #: pair's window and in the account's ceiling, over all addresses. The device's and the pair's
+    #: span is `rate_limit_pair_window_seconds`; the ceiling's, `rate_limit_account_window_seconds`.
     "rate_limit_max_attempts_per_client": (int, 20),
     "rate_limit_window_seconds": (int, 300),
+    "rate_limit_max_attempts_per_device": (int, 5),
+    "rate_limit_max_attempts_per_pair": (int, 5),
+    "rate_limit_pair_window_seconds": (int, 900),
+    "rate_limit_max_attempts_per_account": (int, 100),
+    "rate_limit_account_window_seconds": (int, 3600),
     #: A global cap on how many scrypt computations may run at once,
     #: independent of which account or client is asking -- a burst spread across
     #: many identities could still exhaust memory even with both limits above.
@@ -64,8 +82,166 @@ _SIGN_IN_SCHEMA: dict[str, tuple[type, object]] = {
     #: can never be used to make a real, network-reachable install serve session
     #: cookies in clear text.
     "insecure_cookie_for_local_dev": (bool, False),
+    #: The origin a browser reaches this console at, as `https://host[:port]`, where that is not
+    #: the request's own scheme and Host (behind a TLS-terminating proxy). Empty: the request's
+    #: own. A session's state-changing request from any other origin is refused (`serve`).
+    "public_url": (str, ""),
+    #: The proxies in front of this console, as addresses and CIDR ranges. Only where the
+    #: connection's peer is one, the sign-in limit's client address is the rightmost
+    #: X-Forwarded-For entry that is not one (`rate_limit.client_address`). Empty: the peer's.
+    "trusted_proxies": (list, []),
+    #: How people sign in, one method at a time: `local`, the console's own accounts, or `oidc`,
+    #: Microsoft Entra ID (`sign_in.oidc`). With `oidc`, local sign-in is off; `onetrace-console admin`
+    #: on the machine stays the way back, as the console never writes its configuration.
+    "method": (str, "local"),
+    #: Entra ID's settings, read where `method` is `oidc` (`_validate_oidc`).
+    "oidc": (dict, {}),
 }
 _KNOWN_SIGN_IN_KEYS = frozenset(_SIGN_IN_SCHEMA)
+SIGN_IN_METHODS = ("local", "oidc")
+
+#: `sign_in.oidc`'s keys and defaults. The client credential is a certificate file (private_key_jwt,
+#: preferred) or the NAME of an environment variable that holds a secret: never the secret itself.
+_OIDC_SCHEMA: dict[str, tuple[type, object]] = {
+    #: The directory (tenant) id, a GUID: the issuer is derived from it, never `common` or `organizations`.
+    "tenant_id": (str, ""),
+    #: The app registration's application (client) id, a GUID.
+    "client_id": (str, ""),
+    #: A PEM file holding the registration's certificate and its private key.
+    "client_certificate": (str, ""),
+    #: The name of the environment variable that holds the client secret.
+    "client_secret_env": (str, ""),
+    #: A session lasts until the ID token expires or this many hours, whichever comes first.
+    "session_max_hours": (int, 8),
+}
+_GUID = re.compile(r"^[0-9a-fA-F]{8}-(?:[0-9a-fA-F]{4}-){3}[0-9a-fA-F]{12}$")
+_ENV_NAME = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+#: Entra's multi-tenant endpoints: an issuer derived from one of them would take any organisation's people.
+_SHARED_TENANTS = ("common", "organizations", "consumers")
+ENTRA_AUTHORITY = "https://login.microsoftonline.com"
+OIDC_CALLBACK_PATH = "/signin/oidc/callback"
+
+
+def _sign_in_defaults() -> dict:
+    """Every sign_in key's default; a list or object default is a fresh copy each time."""
+    return {
+        k: (list(d) if isinstance(d, list) else _oidc_defaults() if isinstance(d, dict) else d)
+        for k, (_t, d) in _SIGN_IN_SCHEMA.items()
+    }
+
+
+def _oidc_defaults() -> dict:
+    return {k: d for k, (_t, d) in _OIDC_SCHEMA.items()}
+
+
+def oidc_issuer(tenant_id: str) -> str:
+    """The issuer, derived from the tenant id alone: Entra ID's v2.0 issuer for that one tenant."""
+    return f"{ENTRA_AUTHORITY}/{tenant_id}/v2.0"
+
+
+def oidc_redirect_uri(public_url: str) -> str:
+    """The redirect URI, derived from `sign_in.public_url` (an origin) and the callback's path."""
+    origin = origin_of(public_url)
+    if origin is None:
+        raise ValueError("sign_in.public_url is not an origin")
+    return origin + OIDC_CALLBACK_PATH
+
+
+def _validate_oidc(value: object, *, source: str) -> dict:
+    """`sign_in.oidc`, checked. No message here quotes a value: a secret pasted into the wrong key
+    must not reach an error, a log or a page. Shapes are described instead."""
+    if not isinstance(value, dict):
+        raise ConfigError(f"{source}: sign_in.oidc must be a JSON object, got {type(value).__name__}")
+    unknown = sorted(set(value) - set(_OIDC_SCHEMA))
+    if unknown:
+        if any(re.search(r"secret|password|private|key|credential", k, re.I) for k in unknown):
+            raise ConfigError(
+                f"{source}: sign_in.oidc holds {unknown}. The client credential is never written in the "
+                f"configuration file.",
+                fix=f"remove {unknown} from {source}; name a PEM file holding the certificate and its private "
+                f"key in sign_in.oidc.client_certificate, or the environment variable that holds the secret "
+                f"in sign_in.oidc.client_secret_env.",
+            )
+        raise ConfigError(f"{source}: unknown sign_in.oidc key(s) {unknown}. Known keys: {sorted(_OIDC_SCHEMA)}.")
+    for key, v in value.items():
+        expected, _default = _OIDC_SCHEMA[key]
+        if expected is int:
+            if isinstance(v, bool) or not isinstance(v, int):
+                raise ConfigError(f"{source}: sign_in.oidc.{key} must be an integer")
+            continue
+        if not isinstance(v, str):
+            raise ConfigError(f"{source}: sign_in.oidc.{key} must be a string")
+        if not _text(v) or _control(v):
+            raise ConfigError(
+                f"{source}: sign_in.oidc.{key} holds a control character or a lone surrogate escape",
+                fix=f"write sign_in.oidc.{key} in {source} as plain text.",
+            )
+    for key, what in (("tenant_id", "the directory (tenant) id"), ("client_id", "the application (client) id")):
+        v = value.get(key, "")
+        if key == "tenant_id" and v.strip().lower() in _SHARED_TENANTS:
+            raise ConfigError(
+                f"{source}: sign_in.oidc.tenant_id is {v.strip().lower()!r}, which lets any organisation's "
+                f"people sign in. The issuer is derived from one tenant's id.",
+                fix=f"set sign_in.oidc.tenant_id in {source} to your directory (tenant) id, a GUID shown on "
+                f"the app registration's Overview.",
+            )
+        if v and not _GUID.match(v):
+            raise ConfigError(
+                f"{source}: sign_in.oidc.{key} must be {what}, a GUID such as "
+                f"00000000-0000-0000-0000-000000000000; the value given is not one.",
+                fix=f"copy {what} from the app registration's Overview into sign_in.oidc.{key} in {source}.",
+            )
+    env = value.get("client_secret_env", "")
+    if env and not _ENV_NAME.match(env):
+        raise ConfigError(
+            f"{source}: sign_in.oidc.client_secret_env must be the NAME of an environment variable "
+            f"(letters, digits and _, not starting with a digit); the value given is not a name.",
+            fix=f"set sign_in.oidc.client_secret_env in {source} to the variable's name, such as "
+            f"ONETRACE_ENTRA_SECRET, and put the secret in that variable, never in the file.",
+        )
+    if value.get("session_max_hours", 8) < 1:
+        raise ConfigError(
+            f"{source}: sign_in.oidc.session_max_hours must be at least 1",
+            fix=f"set sign_in.oidc.session_max_hours in {source} to 1 or more, or leave it out (8).",
+        )
+    merged = _oidc_defaults()
+    merged.update(value)
+    return merged
+
+
+def _check_oidc_method(value: dict, *, source: str) -> None:
+    """With `method` `oidc`: sign-in on, the console's public URL set (the redirect URI is derived
+    from it), both ids, and exactly one client credential."""
+    oidc = value["oidc"]
+    if not value["enabled"]:
+        raise ConfigError(
+            f"{source}: sign_in.method is oidc and sign_in.enabled is false.",
+            fix=f"set sign_in.enabled to true in {source}, or sign_in.method to local.",
+        )
+    if not value["public_url"]:
+        raise ConfigError(
+            f"{source}: sign_in.method is oidc and sign_in.public_url is empty. The redirect URI is derived "
+            f"from it: <public_url>{OIDC_CALLBACK_PATH}.",
+            fix=f"set sign_in.public_url in {source} to the origin your browser opens this console at, such "
+            f"as https://onetrace.example.org, and register <public_url>{OIDC_CALLBACK_PATH} as the app's "
+            f"redirect URI.",
+        )
+    missing = [k for k in ("tenant_id", "client_id") if not oidc[k]]
+    if missing:
+        raise ConfigError(
+            f"{source}: sign_in.method is oidc and sign_in.oidc has no {' and no '.join(missing)}.",
+            fix=f"copy the directory (tenant) id and the application (client) id from the app "
+            f"registration's Overview into sign_in.oidc in {source}.",
+        )
+    given = [k for k in ("client_certificate", "client_secret_env") if oidc[k]]
+    if len(given) != 1:
+        said = "both" if given else "neither"
+        raise ConfigError(
+            f"{source}: sign_in.oidc names {said} of client_certificate and client_secret_env; exactly one "
+            f"client credential is used.",
+            fix=f"in {source}, name the certificate file in sign_in.oidc.client_certificate (preferred), or "
+            f"the environment variable holding the secret in sign_in.oidc.client_secret_env, not both.",
+        )
 
 
 class ConfigError(RuntimeError):
@@ -77,8 +253,10 @@ class ConfigError(RuntimeError):
 
     def __init__(self, message: str, fix: str | None = None) -> None:
         super().__init__(message)
-        self.fix = fix or (f"correct the file (OPERATOR_README.md lists every key, its type and "
-                           f"its default), or unset {ENV_VAR} to run in local mode.")
+        self.fix = fix or (
+            f"correct the file (OPERATOR_README.md lists every key, its type and "
+            f"its default), or unset {ENV_VAR} to run in local mode."
+        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -88,6 +266,7 @@ class Config:
     rather than silently ignored, so a typo in an operator's config is never a silent
     no-op.
     """
+
     #: Network. `host` stays `127.0.0.1` in every example this repository ships --
     #: OPERATOR_README.md is explicit that publishing further is the operator's own choice,
     #: made at `docker run -p`, never assumed here.
@@ -143,7 +322,7 @@ class Config:
     #: enforcement lands. A name not in `_KNOWN_SIGN_IN_KEYS`, or a wrongly-typed
     #: value, is refused the same way an unknown `extensions` name is -- see
     #: `_SIGN_IN_SCHEMA` for every key, its type and its default.
-    sign_in: dict = field(default_factory=lambda: {k: d for k, (_t, d) in _SIGN_IN_SCHEMA.items()})
+    sign_in: dict = field(default_factory=lambda: _sign_in_defaults())
     #: The signing keys this console's operator trusts, a path to an
     #: `onetrace-trust/0.1` file, or absent (the default). Set, every check runs the verifier with
     #: `--trust <that file>`; absent, without it, and a valid signature then reads "Signed, key not
@@ -188,6 +367,9 @@ class Config:
     #: decoded only where the named files, hashed as named, give the record's `tokenizer.digest`
     #: exactly (`token_text`). The console never downloads one. A public console reads none. Empty: none.
     tokenizers: list = field(default_factory=list)
+    #: The close-call flag's margin on a model step's page (`token_levels.close_calls`), in nats: a position whose
+    #: chosen token leads the runner-up by at most this much is a close call. Above zero.
+    close_call_margin: float = 1.0
 
 
 _KEYS = {f.name for f in fields(Config)}
@@ -197,18 +379,20 @@ _KEYS = {f.name for f in fields(Config)}
 #: it is an `int` in Python -- a port is a TCP port, every limit is above zero, and a host or a
 #: store root is never empty. Measured before this: a `port` written as a string passed loading
 #: and failed at bind with a traceback, and a port past 65535 did the same.
-_WANT = {"str": "a non-empty string without control characters",
-         "int": "a whole number above zero", "float": "a finite number above zero"}
+_WANT = {
+    "str": "a non-empty string without control characters",
+    "int": "a whole number above zero",
+    "float": "a finite number above zero",
+}
 
 
 def _control(text: str) -> bool:
-    """A control character: a NUL in a path or a host broke the start with a traceback (the
-    second confirmation review, S2)."""
+    """A control character: a NUL in a path or a host once broke the start with a traceback."""
     return any(ord(c) < 0x20 or ord(c) == 0x7F for c in text)
 
 
 def _text(value: str) -> bool:
-    """Text a host, path or page can carry: no lone surrogate (the third review, NEW-8)."""
+    """Text a host, path or page can carry: no lone surrogate."""
     try:
         value.encode("utf-8")
     except UnicodeEncodeError:
@@ -218,11 +402,10 @@ def _text(value: str) -> bool:
 
 def _fits(name: str, kind: str, value: object) -> bool:
     if kind == "str":
-        return (isinstance(value, str) and bool(value.strip()) and not _control(value)
-                and _text(value))
+        return isinstance(value, str) and bool(value.strip()) and not _control(value) and _text(value)
     if isinstance(value, bool) or not isinstance(value, (int, float) if kind == "float" else int):
         return False
-    #: Finite: an infinite timeout was accepted, and every POST then dropped (NEW-9).
+    #: Finite: an infinite timeout was accepted, and every POST then dropped.
     return math.isfinite(value) and value > 0 and (name != "port" or value <= 65535)
 
 
@@ -234,119 +417,206 @@ def _validate_top(data: dict, *, source: str) -> None:
             #: Named as what it is: it was refused as "a control character", and the fix
             #: pointed at the wrong thing.
             raise ConfigError(
-                f"{source}: {f.name} holds a lone surrogate escape, which is not text: "
-                f"{data[f.name]!r}",
+                f"{source}: {f.name} holds a lone surrogate escape, which is not text: {data[f.name]!r}",
                 fix=f"write {f.name} in {source} as plain text: remove the escape of a "
-                    f"surrogate (U+D800 to U+DFFF) that has no pair.")
+                f"surrogate (U+D800 to U+DFFF) that has no pair.",
+            )
         if not _fits(f.name, f.type, data[f.name]):
             want = "a TCP port, 1 to 65535" if f.name == "port" else _WANT[f.type]
             raise ConfigError(
                 f"{source}: {f.name} must be {want}, got {data[f.name]!r}",
                 fix=f"give {f.name} {want} in {source} (its default is {f.default!r}), or "
-                    f"remove the key to use that default.")
+                f"remove the key to use that default.",
+            )
 
 
 def _validate_tracing(value: object, *, source: str) -> dict:
     """`tracing`: an object with one key, `link`, an http(s) address holding `{trace_id}`."""
     import re
-    fix = (f'give tracing as {{"link": "https://your-tool.example/trace/{{trace_id}}?span={{span_id}}"}} '
-           f"in {source}, or remove it.")
+
+    fix = (
+        f'give tracing as {{"link": "https://your-tool.example/trace/{{trace_id}}?span={{span_id}}"}} '
+        f"in {source}, or remove it."
+    )
     if not isinstance(value, dict) or set(value) - {"link"}:
         raise ConfigError(f"{source}: tracing must be an object with one key, link, got {value!r}", fix=fix)
     link = value.get("link")
     if link is None:
         return {}
     if not (isinstance(link, str) and _text(link) and re.match(r"https?://", link) and "{trace_id}" in link):
-        raise ConfigError(f"{source}: tracing.link must be an http(s) address holding {{trace_id}}, "
-                          f"got {link!r}", fix=fix)
+        raise ConfigError(
+            f"{source}: tracing.link must be an http(s) address holding {{trace_id}}, got {link!r}", fix=fix
+        )
     return {"link": link}
 
 
 def _validate_tokenizers(value: object, *, source: str) -> list:
     """`tokenizers`: a list of objects, each with `folder`, a path, and `files`, the names in that folder
     (relative, with no `..`), each named once."""
-    fix = (f'give tokenizers as [{{"folder": "/models/my-model", "files": ["tokenizer.json"]}}] in {source}, '
-           f"or remove it.")
+    fix = (
+        f'give tokenizers as [{{"folder": "/models/my-model", "files": ["tokenizer.json"]}}] in {source}, or remove it.'
+    )
     if not isinstance(value, list):
         raise ConfigError(f"{source}: tokenizers must be a list, got {value!r}", fix=fix)
     out = []
     for entry in value:
         if not isinstance(entry, dict) or set(entry) != {"folder", "files"}:
-            raise ConfigError(f"{source}: each of tokenizers must be an object with the keys folder and files, "
-                              f"got {entry!r}", fix=fix)
+            raise ConfigError(
+                f"{source}: each of tokenizers must be an object with the keys folder and files, got {entry!r}", fix=fix
+            )
         folder, files = entry["folder"], entry["files"]
         if not (isinstance(folder, str) and _text(folder)):
-            raise ConfigError(f"{source}: tokenizers' folder must be a path ({_WANT['str']}), got {folder!r}",
-                              fix=fix)
-        if not (isinstance(files, list) and files and len(set(map(str, files))) == len(files) and all(
-                isinstance(f, str) and _text(f) and not PurePath(f).anchor and "\\" not in f
-                and ".." not in PurePath(f).parts for f in files)):
-            raise ConfigError(f"{source}: tokenizers' files must be a list of names in its folder, each "
-                              f"relative, without .., and named once, got {files!r}", fix=fix)
+            raise ConfigError(f"{source}: tokenizers' folder must be a path ({_WANT['str']}), got {folder!r}", fix=fix)
+        if not (
+            isinstance(files, list)
+            and files
+            and len(set(map(str, files))) == len(files)
+            and all(
+                isinstance(f, str)
+                and _text(f)
+                and not PurePath(f).anchor
+                and "\\" not in f
+                and ".." not in PurePath(f).parts
+                for f in files
+            )
+        ):
+            raise ConfigError(
+                f"{source}: tokenizers' files must be a list of names in its folder, each "
+                f"relative, without .., and named once, got {files!r}",
+                fix=fix,
+            )
         out.append({"folder": folder, "files": list(files)})
     return out
 
 
 def _validate_extensions(value: object, *, source: str) -> dict:
     if not isinstance(value, dict):
-        raise ConfigError(
-            f"{source}: 'extensions' must be a JSON object, got {type(value).__name__}")
+        raise ConfigError(f"{source}: 'extensions' must be a JSON object, got {type(value).__name__}")
     unknown = set(value) - _KNOWN_EXTENSIONS
     if unknown:
         raise ConfigError(
-            f"{source}: unknown extension(s) {sorted(unknown)}. "
-            f"Known extensions: {sorted(_KNOWN_EXTENSIONS)}.")
+            f"{source}: unknown extension(s) {sorted(unknown)}. Known extensions: {sorted(_KNOWN_EXTENSIONS)}."
+        )
     not_bool = {k: v for k, v in value.items() if not isinstance(v, bool)}
     if not_bool:
-        raise ConfigError(
-            f"{source}: extension flags must be true or false, got {not_bool}")
+        raise ConfigError(f"{source}: extension flags must be true or false, got {not_bool}")
     merged = {name: False for name in _KNOWN_EXTENSIONS}
     merged.update(value)
     return merged
 
 
+_DEFAULT_PORTS = {"http": 80, "https": 443}
+
+
+def origin_of(url: str, *, path_allowed: bool = False) -> str | None:
+    """`scheme://host[:port]`, lower-cased, its port left out where it is the scheme's own, for an
+    http or https URL that names a host; None for anything else (`null`, no host, another scheme,
+    a port that is not a number). A path, query or fragment makes it None unless `path_allowed`
+    (a Referer's), and user info always does."""
+    from urllib.parse import urlsplit
+
+    try:
+        parts = urlsplit(url.strip())
+        port = parts.port
+    except ValueError:
+        return None
+    scheme, host = parts.scheme.lower(), (parts.hostname or "")
+    if scheme not in _DEFAULT_PORTS or not host or "@" in parts.netloc:
+        return None
+    if not path_allowed and (parts.path not in ("", "/") or parts.query or parts.fragment):
+        return None
+    host = f"[{host}]" if ":" in host else host
+    return f"{scheme}://{host}" + (f":{port}" if port is not None and port != _DEFAULT_PORTS[scheme] else "")
+
+
+def validate_sign_in_public_url(url: str, *, source: str = "sign_in") -> str:
+    """The configured public URL's origin; ConfigError where it is not one."""
+    got = origin_of(url)
+    if got is None:
+        raise ConfigError(
+            f"{source}: sign_in.public_url must be an origin, an http or https URL naming a host "
+            f"and nothing after it, such as https://console.example.com, got {url!r}",
+            fix=f"set sign_in.public_url in {source} to the scheme and host your browser opens this "
+            f"console at, or leave it empty.",
+        )
+    return got
+
+
 def _validate_sign_in(value: object, *, source: str) -> dict:
     if not isinstance(value, dict):
-        raise ConfigError(
-            f"{source}: 'sign_in' must be a JSON object, got {type(value).__name__}")
+        raise ConfigError(f"{source}: 'sign_in' must be a JSON object, got {type(value).__name__}")
     unknown = set(value) - _KNOWN_SIGN_IN_KEYS
     if unknown:
         raise ConfigError(
-            f"{source}: unknown sign_in key(s) {sorted(unknown)}. "
-            f"Known keys: {sorted(_KNOWN_SIGN_IN_KEYS)}.")
+            f"{source}: unknown sign_in key(s) {sorted(unknown)}. Known keys: {sorted(_KNOWN_SIGN_IN_KEYS)}."
+        )
     for key, v in value.items():
         expected, _default = _SIGN_IN_SCHEMA[key]
         if expected is bool:
             if not isinstance(v, bool):
-                raise ConfigError(
-                    f"{source}: sign_in.{key} must be true or false, got {v!r}")
+                raise ConfigError(f"{source}: sign_in.{key} must be true or false, got {v!r}")
         elif expected is int:
             #: `bool` is an `int` subclass in Python -- excluded explicitly, so
             #: `true`/`false` typed where a count belongs is refused, not silently 1/0.
             if isinstance(v, bool) or not isinstance(v, int):
                 raise ConfigError(f"{source}: sign_in.{key} must be an integer, got {v!r}")
+        elif expected is list:
+            import ipaddress
+
+            try:
+                ok = isinstance(v, list) and all(
+                    isinstance(t, str) and ipaddress.ip_network(t, strict=False) for t in v
+                )
+            except ValueError:
+                ok = False
+            if not ok:
+                raise ConfigError(
+                    f"{source}: sign_in.{key} must be a list of addresses and CIDR ranges, such as "
+                    f'["127.0.0.1", "10.0.0.0/8"], got {v!r}',
+                    fix=f"write sign_in.{key} in {source} as a JSON list of strings, each an IPv4 or "
+                    f"IPv6 address or range, or leave it out.",
+                )
+        elif expected is dict:
+            value = {**value, key: _validate_oidc(v, source=source)}
         elif expected is str:
             if not isinstance(v, str):
                 raise ConfigError(f"{source}: sign_in.{key} must be a string, got {v!r}")
             if not _text(v):
                 raise ConfigError(
-                    f"{source}: sign_in.{key} holds a lone surrogate escape, which is not "
-                    f"text: {v!r}",
+                    f"{source}: sign_in.{key} holds a lone surrogate escape, which is not text: {v!r}",
                     fix=f"write sign_in.{key} in {source} as plain text: remove the escape "
-                        f"of a surrogate (U+D800 to U+DFFF) that has no pair.")
+                    f"of a surrogate (U+D800 to U+DFFF) that has no pair.",
+                )
             if _control(v):
                 raise ConfigError(
                     f"{source}: sign_in.{key} holds a control character: {v!r}",
-                    fix=f"remove the control character from sign_in.{key} in {source}.")
+                    fix=f"remove the control character from sign_in.{key} in {source}.",
+                )
+    if "max_sessions_per_account" in value and value["max_sessions_per_account"] < 1:
+        raise ConfigError(
+            f"{source}: sign_in.max_sessions_per_account must be at least 1, got {value['max_sessions_per_account']!r}",
+            fix=f"set sign_in.max_sessions_per_account in {source} to 1 or more, or leave it out (3).",
+        )
+    if value.get("public_url"):
+        validate_sign_in_public_url(value["public_url"], source=source)
     cert = value.get("tls_cert_path", "")
     key_path = value.get("tls_key_path", "")
     if bool(cert) != bool(key_path):
         raise ConfigError(
             f"{source}: sign_in.tls_cert_path and sign_in.tls_key_path must be set "
             f"together, or neither -- one alone ({cert=!r}, {key_path=!r}) is not a "
-            f"usable TLS configuration and would otherwise be silently incomplete.")
-    merged = {k: default for k, (_typ, default) in _SIGN_IN_SCHEMA.items()}
+            f"usable TLS configuration and would otherwise be silently incomplete."
+        )
+    if value.get("method", "local") not in SIGN_IN_METHODS:
+        raise ConfigError(
+            f"{source}: sign_in.method must be one of {list(SIGN_IN_METHODS)}, got {value['method']!r}",
+            fix=f"set sign_in.method in {source} to local (the console's own accounts) or oidc "
+            f"(Microsoft Entra ID), or leave it out (local).",
+        )
+    merged = _sign_in_defaults()
     merged.update(value)
+    if merged["method"] == "oidc":
+        _check_oidc_method(merged, source=source)
     return merged
 
 
@@ -357,60 +627,73 @@ def _from_mapping(data: dict, *, source: str) -> Config:
             f"{source}: unknown configuration key(s) {sorted(unknown)}. "
             f"Every key this file may set: {sorted(_KEYS)}. A typo here would otherwise "
             f"be silently ignored, which is worse than refusing.",
-            fix=f"remove {sorted(unknown)} from {source}, or correct the spelling to one of "
-                f"the keys listed above.")
+            fix=f"remove {sorted(unknown)} from {source}, or correct the spelling to one of the keys listed above.",
+        )
     _validate_top(data, source=source)
     if "public" in data and not isinstance(data["public"], bool):
         raise ConfigError(
             f"{source}: public must be true or false, got {data['public']!r}",
             fix=f"give public true or false in {source} (its default is false), or remove the "
-                f"key to leave the console as it is.")
+            f"key to leave the console as it is.",
+        )
     shipped = Config()
-    for name in ("compare_per_minute", "compare_running", "compare_queue", "compare_wait_seconds",
-                 "compare_verb_seconds"):
-        if name in data and _fits(name, type(getattr(shipped, name)).__name__, data[name]) \
-                and data[name] > getattr(shipped, name):
+    for name in (
+        "compare_per_minute",
+        "compare_running",
+        "compare_queue",
+        "compare_wait_seconds",
+        "compare_verb_seconds",
+    ):
+        if (
+            name in data
+            and _fits(name, type(getattr(shipped, name)).__name__, data[name])
+            and data[name] > getattr(shipped, name)
+        ):
             raise ConfigError(
                 f"{source}: {name} is {data[name]!r}, above the shipped {getattr(shipped, name)!r}; Compare's "
-                f"bounds can be lowered, not raised, so every page's \"at most\" stays true",
-                fix=f"give {name} a number from 1 to {getattr(shipped, name)!r} in {source}, or remove the key.")
+                f'bounds can be lowered, not raised, so every page\'s "at most" stays true',
+                fix=f"give {name} a number from 1 to {getattr(shipped, name)!r} in {source}, or remove the key.",
+            )
     if data.get("compare_client_header") is not None and data.get("public") is not True:
         raise ConfigError(
             f"{source}: compare_client_header is set and public is not true. Only a public console's "
             f"Compare reads a client-address header; any other console reads none.",
-            fix=f"remove compare_client_header from {source}, or set public to true.")
+            fix=f"remove compare_client_header from {source}, or set public to true.",
+        )
     for name, what in (("compare_cache", "a folder's path"), ("compare_client_header", "a header's name")):
         if name in data and data[name] is not None and not _fits(name, "str", data[name]):
             raise ConfigError(
                 f"{source}: {name} must be {what} ({_WANT['str']}) or null, got {data[name]!r}",
-                fix=f"give {name} {what} in {source}, or null, or remove the key.")
-    if "trust_file" in data and data["trust_file"] is not None and not _fits(
-            "trust_file", "str", data["trust_file"]):
+                fix=f"give {name} {what} in {source}, or null, or remove the key.",
+            )
+    if "trust_file" in data and data["trust_file"] is not None and not _fits("trust_file", "str", data["trust_file"]):
         raise ConfigError(
-            f"{source}: trust_file must be a path ({_WANT['str']}) or null, got "
-            f"{data['trust_file']!r}",
+            f"{source}: trust_file must be a path ({_WANT['str']}) or null, got {data['trust_file']!r}",
             fix=f"give trust_file the path of an onetrace-trust/0.1 file in {source}, or remove the "
-                f"key to check without one (a valid signature then reads \"Signed, key not "
-                f"trusted\").")
-    if "tsa_cert" in data and data["tsa_cert"] is not None and not _fits(
-            "tsa_cert", "str", data["tsa_cert"]):
+            f'key to check without one (a valid signature then reads "Signed, key not '
+            f'trusted").',
+        )
+    if "tsa_cert" in data and data["tsa_cert"] is not None and not _fits("tsa_cert", "str", data["tsa_cert"]):
         raise ConfigError(
             f"{source}: tsa_cert must be a path ({_WANT['str']}) or null, got {data['tsa_cert']!r}",
             fix=f"give tsa_cert the path of the time-stamp authority's certificate in {source}, or "
-                f"remove the key (an RFC 3161 anchor then reads \"Couldn't check\").")
+            f'remove the key (an RFC 3161 anchor then reads "Couldn\'t check").',
+        )
     if "tsa_roots" in data:
         roots = data["tsa_roots"]
         if not (isinstance(roots, list) and all(_fits("tsa_roots", "str", r) for r in roots)):
             raise ConfigError(
                 f"{source}: tsa_roots must be a list of paths ({_WANT['str']}), got {roots!r}",
                 fix=f"give tsa_roots a list of the root certificates' paths in {source}, for "
-                    f"example [\"tsa-root.pem\"], or remove the key.")
+                f'example ["tsa-root.pem"], or remove the key.',
+            )
         data = {**data, "tsa_roots": list(roots)}
     if bool(data.get("tsa_cert")) != bool(data.get("tsa_roots")):
         raise ConfigError(
             f"{source}: tsa_cert and tsa_roots go together: the verifier checks a time-stamp "
             f"authority's certificate against the root it chains to.",
-            fix=f"set both tsa_cert and tsa_roots in {source}, or neither.")
+            fix=f"set both tsa_cert and tsa_roots in {source}, or neither.",
+        )
     if "tracing" in data:
         data = {**data, "tracing": _validate_tracing(data["tracing"], source=source)}
     if "tokenizers" in data:
@@ -420,7 +703,17 @@ def _from_mapping(data: dict, *, source: str) -> Config:
         if "extensions" in data:
             data["extensions"] = _validate_extensions(data["extensions"], source=source)
         if "sign_in" in data:
-            data["sign_in"] = _validate_sign_in(data["sign_in"], source=source)
+            sign_in = data["sign_in"]
+            #: Said first, so a public console's file is told the reason that holds for it, not the
+            #: sign-in checks that would follow (`public.start_refusal` says the same at start).
+            if data.get("public") is True and isinstance(sign_in, dict) and sign_in.get("method") == "oidc":
+                raise ConfigError(
+                    f"{source}: public is true and sign_in.method is oidc. A public console serves the demo "
+                    f"to anyone, with no sign-in; Entra ID sign-in is for a team's own console.",
+                    fix=f"remove sign_in.method and sign_in.oidc from {source}, or remove public to run a "
+                    f"team's console with Entra ID sign-in.",
+                )
+            data["sign_in"] = _validate_sign_in(sign_in, source=source)
     try:
         return Config(**data)
     except TypeError as e:
@@ -430,36 +723,42 @@ def _from_mapping(data: dict, *, source: str) -> Config:
 def load(path: Path) -> Config:
     """Read one config file. Refuses -- never falls back -- on anything wrong with it."""
     if not path.is_file():
-        raise ConfigError(f"{ENV_VAR} names {path}, which is not a file",
-                          fix=f"point {ENV_VAR} at the configuration file, or unset it to run "
-                              f"in local mode.")
+        raise ConfigError(
+            f"{ENV_VAR} names {path}, which is not a file",
+            fix=f"point {ENV_VAR} at the configuration file, or unset it to run in local mode.",
+        )
     try:
         #: `utf-8-sig`: Notepad saves UTF-8 with a byte order mark, and the file is still the
-        #: operator's JSON (the confirmation review, note 8).
+        #: operator's JSON.
         raw = path.read_text(encoding="utf-8-sig")
     except OSError as e:
-        raise ConfigError(f"{path} cannot be read: {e.strerror or e}",
-                          fix=f"let this console's user read {path}, or point {ENV_VAR} at a "
-                              f"file it can read.") from None
+        raise ConfigError(
+            f"{path} cannot be read: {e.strerror or e}",
+            fix=f"let this console's user read {path}, or point {ENV_VAR} at a file it can read.",
+        ) from None
     except UnicodeDecodeError as e:
         raise ConfigError(f"{path}: not valid UTF-8: {e}") from None
     try:
         data = load_json_bounded(raw, str(path))
     except TooDeep:
-        raise ConfigError(f"{path}: nested too deeply to read",
-                          fix="write the configuration as one flat JSON object, "
-                              "{\"key\": value, ...}.") from None
+        raise ConfigError(
+            f"{path}: nested too deeply to read",
+            fix='write the configuration as one flat JSON object, {"key": value, ...}.',
+        ) from None
     except json.JSONDecodeError as e:
-        raise ConfigError(f"{path}: not valid JSON: {e}",
-                          fix="correct the JSON at the line and column named above.") from None
+        raise ConfigError(
+            f"{path}: not valid JSON: {e}", fix="correct the JSON at the line and column named above."
+        ) from None
     except RecursionError:
-        raise ConfigError(f"{path}: nested too deeply to read",
-                          fix="write the configuration as one flat JSON object, "
-                              "{\"key\": value, ...}.") from None
+        raise ConfigError(
+            f"{path}: nested too deeply to read",
+            fix='write the configuration as one flat JSON object, {"key": value, ...}.',
+        ) from None
     if not isinstance(data, dict):
-        raise ConfigError(f"{path}: the top level must be a JSON object, got "
-                          f"{type(data).__name__}",
-                          fix='write the configuration as one JSON object, {"key": value, ...}.')
+        raise ConfigError(
+            f"{path}: the top level must be a JSON object, got {type(data).__name__}",
+            fix='write the configuration as one JSON object, {"key": value, ...}.',
+        )
     config = _from_mapping(data, source=str(path))
     #: A relative path in the file is read from the file's own folder, as a reader of the file
     #: expects -- never from wherever the console happened to be started.
@@ -487,10 +786,14 @@ def resolve_paths(config: Config, base: Path) -> Config:
 
     def absolute(value):
         return value if value is None else from_folder(value, base)
-    return replace(config, trust_file=absolute(config.trust_file),
-                   tsa_cert=absolute(config.tsa_cert),
-                   tsa_roots=[absolute(r) for r in config.tsa_roots],
-                   tokenizers=[{**t, "folder": absolute(t["folder"])} for t in config.tokenizers])
+
+    return replace(
+        config,
+        trust_file=absolute(config.trust_file),
+        tsa_cert=absolute(config.tsa_cert),
+        tsa_roots=[absolute(r) for r in config.tsa_roots],
+        tokenizers=[{**t, "folder": absolute(t["folder"])} for t in config.tokenizers],
+    )
 
 
 def load_from_env() -> Config:

@@ -1,0 +1,35 @@
+# The capture store's own app on Fly.io: the demo's image, built with the capture store in place of the demo
+# (P10's runs whose model calls are captured at L3 and L2, example data: `onetrace-console demo --public --build
+# ... --captures`), served read-only as the demo is, its build record checked at start.
+#
+# No app name, region, organisation, token or domain is committed here: the operator names the app on their own
+# machine when deploying (deploy/fly/README.md, "The capture store's app"). The image is deploy/fly/Dockerfile,
+# built from the repository root; the argument below picks the store it builds.
+
+[build.args]
+  ONETRACE_DEMO_STORE = "captures"
+
+# The address of the demo's, for the Overview's one line back to it: the environment variable ONETRACE_CONSOLE_DEMO_URL, set by the operator at deploy
+# (deploy/fly/README.md, "The capture store's app"), never committed here. Unset, no line is drawn.
+
+[http_service]
+  # The port deploy/fly/public.json listens on, inside the machine.
+  internal_port = 8080
+  force_https = true
+
+  # Cost: an idle machine stops, and the next request starts it again, as the demo's do.
+  auto_stop_machines = "stop"
+  auto_start_machines = true
+  min_machines_running = 0
+
+  [http_service.concurrency]
+    type = "requests"
+    soft_limit = 20
+    hard_limit = 50
+
+  [[http_service.checks]]
+    method = "GET"
+    path = "/health"
+    interval = "30s"
+    timeout = "5s"
+    grace_period = "10s"

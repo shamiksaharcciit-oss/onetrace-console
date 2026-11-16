@@ -1,15 +1,16 @@
 """The preview format's two limits, pinned by one test file.
 
-    The store accepts a format **only while the pinned verifier checks it**. When the verifier
-    drops preview, the store stops ingesting it: runs already stored stay, and new preview
-    deliveries get a 422 in the verifier's own words.
+The store accepts a format **only while the pinned verifier checks it**. When the verifier
+drops preview, the store stops ingesting it: runs already stored stay, and new preview
+deliveries get a 422 in the verifier's own words.
 
-    Every page that shows a preview run labels it **preview format**, in words, next to the
-    verdicts.
+Every page that shows a preview run labels it **preview format**, in words, next to the
+verdicts.
 
-    **Check:** a test pins both halves: the label is present on the page, and the store
-    follows the verifier.
+**Check:** a test pins both halves: the label is present on the page, and the store
+follows the verifier.
 """
+
 from __future__ import annotations
 
 import json
@@ -18,16 +19,23 @@ import pytest
 
 from onetrace_console.checks import run_and_record
 from onetrace_console.compare import compare
-from onetrace_console.ingest import MANIFEST_FORMATS, Accepted, Rejection, accept
+from onetrace_console.ingest import MANIFEST_FORMATS, Rejection, accept
 from onetrace_console.pages import ANSWER, CASE, render_execution, render_executions
-from onetrace_console.preview import (LABEL, PREVIEW_FORMAT, is_format_refusal, is_preview,
-                                      implemented_formats_the_verifier_accepts, label,
-                                      preview_runs, sentence)
+from onetrace_console.preview import (
+    LABEL,
+    PREVIEW_FORMAT,
+    implemented_formats_the_verifier_accepts,
+    is_format_refusal,
+    is_preview,
+    label,
+    preview_runs,
+    sentence,
+)
 from onetrace_console.render import render_diff, render_home
 from onetrace_console.staging import VerifierSaid
 from tests.conftest import make_tar
 from tests.test_checks import FIXED_RAN_AT, _require_installed
-from tests.test_compare import (EXAM, RUN_C, RUN_C_POPPLER24, _deliver, _require_exam)
+from tests.test_compare import EXAM, RUN_C, RUN_C_POPPLER24, _deliver, _require_exam
 
 GENERATED_AT = "2026-09-26T12:00:00+02:00"
 
@@ -36,6 +44,7 @@ DAG_RUN = EXAM / "dag-r37" / "run_R"
 
 
 # ------------------------------------------- half one: the store follows the verifier
+
 
 def test_the_verifier_accepts_every_format_this_store_declares(examined):
     """The two lists in step, measured by asking the verifier about each format.
@@ -51,7 +60,8 @@ def test_the_verifier_accepts_every_format_this_store_declares(examined):
     assert not refused, (
         f"this store declares {refused} but the pinned verifier refuses them. The store must "
         f"accept a format only while the verifier checks it, so either the verifier dropped "
-        f"one or the list is wrong.")
+        f"one or the list is wrong."
+    )
 
 
 def test_the_verifier_refuses_a_format_outside_the_declared_set(examined):
@@ -64,20 +74,24 @@ def test_the_verifier_refuses_a_format_outside_the_declared_set(examined):
     assert not accepted, (
         f"the verifier accepts {accepted}, which this store does not declare. The probe "
         f"cannot distinguish a store that follows the verifier from one that does not if the "
-        f"verifier accepts everything.")
+        f"verifier accepts everything."
+    )
 
 
 def test_a_format_refusal_is_recognised_from_the_verifiers_own_row(examined):
-    rows = ("[REFUSED] manifest: format -- 'stage-receipt-chain/9.9': major version 9 is "
-            "not implemented (this verifier implements major 0)",)
+    rows = (
+        "[REFUSED] manifest: format -- 'stage-receipt-chain/9.9': major version 9 is "
+        "not implemented (this verifier implements major 0)",
+    )
     cases = (
         (VerifierSaid(text="\n".join(rows), exit_status="2", rows=rows), True),
         (VerifierSaid(text="ok", exit_status="0", rows=("[PASS   ] x: y",)), False),
         #: A refusal for a different reason is a VERDICT about the record, not a format
         #: refusal. This must not blur that line.
-        (VerifierSaid(text="f", exit_status="1",
-                      rows=("[FAIL   ] manifest: chain head matches the last receipt",)),
-         False),
+        (
+            VerifierSaid(text="f", exit_status="1", rows=("[FAIL   ] manifest: chain head matches the last receipt",)),
+            False,
+        ),
         (None, False),
     )
     examined(len(cases), "verifier outcomes classified")
@@ -85,8 +99,7 @@ def test_a_format_refusal_is_recognised_from_the_verifiers_own_row(examined):
         assert is_format_refusal(said) is expected, said
 
 
-def test_when_the_verifier_drops_preview_the_store_stops_ingesting_it(files, store,
-                                                                     monkeypatch, examined):
+def test_when_the_verifier_drops_preview_the_store_stops_ingesting_it(files, store, monkeypatch, examined):
     """The future state, simulated at the one place that decides it.
 
     The pinned verifier accepts preview today — asserted above — so this cannot be produced
@@ -102,10 +115,11 @@ def test_when_the_verifier_drops_preview_the_store_stops_ingesting_it(files, sto
     assert is_preview(kept), "the fixture run is not preview format, so this proves nothing"
     before = {r.key for r in store.runs()}
 
-    refusal_rows = ("[REFUSED] manifest: format -- 'stage-receipt-chain/0.0-preview': this "
-                    "verifier no longer implements the preview format",)
-    refusal = VerifierSaid(text="\n".join(refusal_rows) + "\n", exit_status="2",
-                           rows=refusal_rows)
+    refusal_rows = (
+        "[REFUSED] manifest: format -- 'stage-receipt-chain/0.0-preview': this "
+        "verifier no longer implements the preview format",
+    )
+    refusal = VerifierSaid(text="\n".join(refusal_rows) + "\n", exit_status="2", rows=refusal_rows)
     monkeypatch.setattr("onetrace_console.ingest.ask_the_verifier", lambda *a, **k: refusal)
 
     #: A different preview delivery, so this is a new ingest rather than an idempotent repeat.
@@ -117,21 +131,23 @@ def test_when_the_verifier_drops_preview_the_store_stops_ingesting_it(files, sto
     assert result.body == refusal.text, "the body is not the verifier's message"
     assert {r.key for r in store.runs()} == before, (
         "runs already stored did not stay. A record that was checkable when it arrived does "
-        "not become uncheckable retroactively")
+        "not become uncheckable retroactively"
+    )
 
 
 def _files_of(folder):
     import hashlib
+
     manifest = json.loads((folder / "MANIFEST.json").read_bytes().decode("utf-8"))
     out = {"MANIFEST.json": (folder / "MANIFEST.json").read_bytes()}
     for entry in manifest["chain"]:
         out[entry["file"]] = (folder / entry["file"]).read_bytes()
-    out["SHA256SUMS"] = ("\n".join(
-        f"{hashlib.sha256(b).hexdigest()}  {p}" for p, b in out.items()) + "\n").encode()
+    out["SHA256SUMS"] = ("\n".join(f"{hashlib.sha256(b).hexdigest()}  {p}" for p, b in out.items()) + "\n").encode()
     return out
 
 
 # --------------------------------------------------- half two: the label on every page
+
 
 @pytest.fixture
 def preview_pages(store):
@@ -144,15 +160,13 @@ def preview_pages(store):
     comparison = compare(checked, b, store, ran_at=FIXED_RAN_AT)
 
     pages = dict(render_execution(checked, store, generated_at=GENERATED_AT).pages)
-    pages["executions.html"] = render_executions([checked, b], store,
-                                                 generated_at=GENERATED_AT)
+    pages["executions.html"] = render_executions([checked, b], store, generated_at=GENERATED_AT)
     pages["home.html"] = render_home(store, generated_at=GENERATED_AT)
     pages["diff.html"] = render_diff(comparison, store, generated_at=GENERATED_AT)
     return pages
 
 
-def test_every_page_showing_a_preview_run_carries_the_label_in_words(preview_pages,
-                                                                    examined):
+def test_every_page_showing_a_preview_run_carries_the_label_in_words(preview_pages, examined):
     examined(len(preview_pages), "pages rendered over a store holding a preview run")
     assert len(preview_pages) >= 4, "fewer pages than expected; this would check little"
     for name, page in preview_pages.items():
@@ -162,16 +176,17 @@ def test_every_page_showing_a_preview_run_carries_the_label_in_words(preview_pag
 
 
 def test_the_label_sits_above_the_body_a_reader_is_about_to_read(preview_pages, examined):
-    """"next to the verdicts" — directly after the page's own `<main>`, before its content."""
+    """ "next to the verdicts" — directly after the page's own `<main>`, before its content."""
     import re
+
     examined(len(preview_pages), "pages whose label position is checked")
     for name, page in preview_pages.items():
         main = re.search(r"<main\b[^>]*>", page)
         assert main, f"{name} has no <main>"
         marker = page.index(f'data-preview="{LABEL}"')
         assert main.end() <= marker <= main.end() + 400, (
-            f"{name}: the label is {marker - main.end()} characters after <main>, not "
-            f"immediately after it")
+            f"{name}: the label is {marker - main.end()} characters after <main>, not immediately after it"
+        )
 
 
 def test_a_page_with_no_preview_run_does_not_carry_the_label(store, examined):
@@ -217,8 +232,7 @@ def test_labelling_is_idempotent(preview_pages, store, examined):
         assert once == twice == 1, f"{name}: {once} labels, {twice} after relabelling"
 
 
-def test_a_page_that_cannot_be_labelled_raises_rather_than_going_unlabelled(store,
-                                                                           examined):
+def test_a_page_that_cannot_be_labelled_raises_rather_than_going_unlabelled(store, examined):
     """The anchor is asserted. A page this cannot label would be silently non-compliant."""
     _require_installed()
     _require_exam()
@@ -229,7 +243,7 @@ def test_a_page_that_cannot_be_labelled_raises_rather_than_going_unlabelled(stor
 
 
 def test_the_sentence_says_what_the_format_is_and_what_the_verifier_does(examined):
-    """"preview" alone tells a reader to be uneasy without telling them what about."""
+    """ "preview" alone tells a reader to be uneasy without telling them what about."""
     examined(2, "sentences generated")
     one, many = sentence(1), sentence(4)
     assert one.startswith(LABEL) and many.startswith(LABEL)

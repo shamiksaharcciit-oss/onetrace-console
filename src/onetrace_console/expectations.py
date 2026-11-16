@@ -8,6 +8,7 @@ manual's own words for what a held expectation shows; and how many held, on a li
 from the comparison's verdicts. Nothing here reads an output or decides a row: the rows are the
 verifier's, read from the run's stored check (`--json`).
 """
+
 from __future__ import annotations
 
 from onetrace_console.bounded_json import load_json_bounded
@@ -16,8 +17,10 @@ from onetrace_console.words import escape
 HEADING = "Expectations"
 #: The manual's own words (16.22, "What it shows").
 NON_CLAIM = "An expectation that holds shows the declared rule held, not that the output was right."
-LEAD = ("Each step's declared expectations, as onetrace-verify read them on this run: PASS, FAIL naming "
-        "the value and the rule, or NOT-RUN with its reason.")
+LEAD = (
+    "Each step's declared expectations, as onetrace-verify read them on this run: PASS, FAIL naming "
+    "the value and the rule, or NOT-RUN with its reason."
+)
 COUNT = "{held} of {n} expectations held."
 COUNT_ONE = "{held} of 1 expectation held."
 NO_ROW = "the check holds no row for it"
@@ -35,14 +38,17 @@ def declared(receipts: list[dict]) -> list[dict]:
     """Each expectation the receipts declare with the run, in the chain's order: its step, name, kind."""
     out = []
     for r in receipts:
-        stage = r.get("stage") if isinstance(r.get("stage"), dict) else {}
-        step = stage.get("name") if isinstance(stage.get("name"), str) else ""
+        stage = _stage if isinstance(_stage := r.get("stage"), dict) else {}
+        step = _name if isinstance(_name := stage.get("name"), str) else ""
         if stage.get("instance") not in (None, "", "1"):
             step = f"{step}#{stage['instance']}"
         for e in r.get("expectations") or [] if isinstance(r.get("expectations"), list) else []:
             if isinstance(e, dict) and e.get("declared") == WITH_THE_RUN:
-                name = e.get("name") if isinstance(e.get("name"), str) and e.get("name") else \
-                    f'{e.get("target", "")} {e.get("kind", "")}'
+                name = (
+                    e.get("name")
+                    if isinstance(e.get("name"), str) and e.get("name")
+                    else f"{e.get('target', '')} {e.get('kind', '')}"
+                )
                 out.append({"step": step, "name": name, "kind": str(e.get("kind", ""))})
     return out
 
@@ -69,7 +75,7 @@ def with_rows(declared_: list[dict], rows: list[dict]) -> list[dict]:
     by_name = {str(r.get("name", "")): r for r in rows}
     out, used = [], set()
     for d in declared_:
-        name = f'{ROW_PREFIX}{d["step"]}.{d["name"]}'
+        name = f"{ROW_PREFIX}{d['step']}.{d['name']}"
         if name in by_name:
             out.append(by_name[name])
             used.add(name)
@@ -84,9 +90,11 @@ _TONE = {"PASS": "ok", "FAIL": "bad", "NOT-RUN": "cc"}
 
 def _row(r: dict) -> str:
     result = str(r.get("result", ""))
-    return (f'<li data-expectation="{escape(result)}"><span class="pill {_TONE.get(result, "neu")}">{escape(result)}</span>'
-            f' <span data-words="check">{escape(str(r.get("name", "")))}</span>'
-            f' <span class="reason">— <span data-words="check">{escape(str(r.get("detail", "")))}</span></span></li>')
+    return (
+        f'<li data-expectation="{escape(result)}"><span class="pill {_TONE.get(result, "neu")}">{escape(result)}</span>'
+        f' <span data-words="check">{escape(str(r.get("name", "")))}</span>'
+        f' <span class="reason">— <span data-words="check">{escape(str(r.get("detail", "")))}</span></span></li>'
+    )
 
 
 def count_line(rows: list[dict]) -> str:
@@ -102,11 +110,16 @@ def run_section(receipts: list[dict], envelope: dict | None) -> str:
         return ""
     steps: dict[str, list[dict]] = {}
     for r in rows:
-        step = str(r.get("name", ""))[len(ROW_PREFIX):].split(".", 1)[0]
+        step = str(r.get("name", ""))[len(ROW_PREFIX) :].split(".", 1)[0]
         steps.setdefault(step, []).append(r)
-    groups = "".join(f'<h3>{escape(STEP.format(step=step))}</h3><ul class="plain" data-expectations-step="{escape(step)}">'
-                     f'{"".join(_row(r) for r in group)}</ul>' for step, group in steps.items())
-    return (f'<section data-section="expectations" class="expectations"><h2>{escape(HEADING)}</h2>'
-            f'<p data-expectations="count">{escape(count_line(rows))}</p>'
-            f'<p class="reported">{escape(LEAD)}</p><p data-expectations="non-claim">{escape(NON_CLAIM)}</p>'
-            f"{groups}</section>")
+    groups = "".join(
+        f'<h3>{escape(STEP.format(step=step))}</h3><ul class="plain" data-expectations-step="{escape(step)}">'
+        f"{''.join(_row(r) for r in group)}</ul>"
+        for step, group in steps.items()
+    )
+    return (
+        f'<section data-section="expectations" class="expectations"><h2>{escape(HEADING)}</h2>'
+        f'<p data-expectations="count">{escape(count_line(rows))}</p>'
+        f'<p class="reported">{escape(LEAD)}</p><p data-expectations="non-claim">{escape(NON_CLAIM)}</p>'
+        f"{groups}</section>"
+    )

@@ -1,0 +1,62 @@
+```json
+{
+  "claims": [
+    {
+      "text": "The first difference is located at the `split` node, which is the only node flagged as diverged; all upstream nodes (`load_docs`) are identical.",
+      "kind": "lead",
+      "cites": ["comparison/verdict", "node/split", "node/load_docs"]
+    },
+    {
+      "text": "The `chunk_size` constant differs between runs: baseline uses `1024` and candidate uses `512`, and the two instruments have different config digests (`sha256:aaa2d6fad5864b8cba214fa5faa00631cb0095a469199a7082748a2a98eaea7e` vs `sha256:a034738a4cba13157b75e97e84345b2eef08cb70ed9bf6464ee524c044d22df4`), confirming a configuration change in the splitter.",
+      "kind": "lead",
+      "cites": ["node/split/constant/chunk_size", "node/split/instrument"]
+    },
+    {
+      "text": "The input to `split` (`documents.json`) is identical in both runs, so the difference in `chunks.json` output originates solely from the changed `chunk_size` setting.",
+      "kind": "lead",
+      "cites": ["node/split/input/documents.json", "node/split/output/chunks.json"]
+    },
+    {
+      "text": "All nodes downstream of `split` (`embed`, `retrieve`, `answer`) are marked as `downstream` and show differing inputs and outputs, consistent with propagation of the split change.",
+      "kind": "note",
+      "cites": ["node/embed", "node/retrieve", "node/answer"]
+    },
+    {
+      "text": "The `questions` input to `retrieve` is identical in both runs, so query-side differences can be ruled out.",
+      "kind": "ruled out",
+      "cites": ["node/retrieve/input/questions"]
+    },
+    {
+      "text": "The `load_docs` node, its instrument, inputs, and outputs are all identical, ruling out any document-loading difference.",
+      "kind": "ruled out",
+      "cites": ["node/load_docs", "node/load_docs/instrument", "node/load_docs/input/documents", "node/load_docs/output/documents.json"]
+    }
+  ],
+  "checks": [
+    {
+      "check": "for",
+      "node": "split",
+      "setting": "chunk_size",
+      "run": "candidate"
+    },
+    {
+      "check": "match",
+      "node": "split",
+      "setting": "config_digest",
+      "run": "baseline"
+    },
+    {
+      "check": "text",
+      "node": "split",
+      "setting": "chunks.json",
+      "run": "candidate"
+    },
+    {
+      "check": "reproduce",
+      "node": "split",
+      "setting": "chunk_size",
+      "run": "baseline"
+    }
+  ]
+}
+```

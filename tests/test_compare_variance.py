@@ -17,6 +17,7 @@ graph-shaped pair with a later change and with none, and the two pairs where the
 no later step though a later change is recorded: on another branch of a graph, and a later step's
 own input. A localize report without the field shows no sentence.
 """
+
 from __future__ import annotations
 
 import re
@@ -27,24 +28,44 @@ from tests.test_compare_page import _page, demo  # noqa: F401
 from tests.test_times_and_words import _console
 
 DEMO_PAIR = ("p4-29-reply-30-days", "p4-30-reply-14-days")
+
+
+def _sdk_prefix() -> str:
+    """What the installed SDK writes before its sentence: `no recorded cause: ` up to onetrace 0.7, nothing from 0.8
+    (its CHANGELOG, "Printed words say what they say"). A comparison keeps the words of the SDK that wrote it."""
+    import importlib.metadata
+
+    major, minor = (int(x) for x in importlib.metadata.version("onetrace").split(".")[:2])
+    return "no recorded cause: " if (major, minor) < (0, 8) else ""
+
+
 #: The SDK's sentence, as its localize report writes it (onetrace.localize.no_recorded_cause).
-HEAD = "no recorded cause: nothing recorded differs at {first!r} (same instrument, version and settings)"
+PREFIX = _sdk_prefix()
+HEAD = PREFIX + "nothing recorded differs at {first!r} (same instrument, version and settings)"
 VARIES = ", and its instrument declares itself not rederivable, so its output can vary on its own"
 LATER = "; the next recorded change is at {later!r}: {what}"
 NONE = "; nothing recorded changes after it"
 #: The console's own sentence, which it no longer says.
-OWN_WORDS = ("No recorded cause at", "nothing recorded about it differs", "Nothing recorded changes after it.",
-             "The next recorded change is at")
+OWN_WORDS = (
+    "No recorded cause at",
+    "nothing recorded about it differs",
+    "Nothing recorded changes after it.",
+    "The next recorded change is at",
+)
 
 
 def sentence(first: str, later: str = "", what: str = "", varies: bool = True) -> str:
-    return (HEAD.format(first=first) + (VARIES if varies else "")
-            + (LATER.format(later=later, what=what) if later else NONE))
+    return (
+        HEAD.format(first=first)
+        + (VARIES if varies else "")
+        + (LATER.format(later=later, what=what) if later else NONE)
+    )
 
 
 def sdk_sentences(store, comparison) -> list[str]:
     """Every `no_recorded_cause` the comparison's stored localize report carries, as written."""
     import json
+
     run = comparison.verb("localize")
     report = json.loads(store.get(dict(run.reports)["localize.json"]))
     causes = [report.get("cause") or {}] + list(report.get("frontier_causes") or [])
@@ -55,9 +76,17 @@ def _text(html: str) -> str:
     return " ".join(unescape(re.sub(r"<[^>]+>", " ", html)).split())
 
 
-def _pair(root: Path, *, rederivable: str = "false", own_change: bool = False,
-          later_change: bool = True, graph: bool = False, side_change: bool = False,
-          check_input: bool = False, stub_input: bool = False) -> Path:
+def _pair(
+    root: Path,
+    *,
+    rederivable: str = "false",
+    own_change: bool = False,
+    later_change: bool = True,
+    graph: bool = False,
+    side_change: bool = False,
+    check_input: bool = False,
+    stub_input: bool = False,
+) -> Path:
     """Two runs: `stub` varies its output per run; `check` records `days`, changed between the
     runs where `later_change`; `stub` also records a changed `temperature` where `own_change`.
     Where `graph`, a `side` stage also reads `ask`, and `check` reads both `stub` and `side`, so the
@@ -65,22 +94,41 @@ def _pair(root: Path, *, rederivable: str = "false", own_change: bool = False,
     another branch). `check` reads a policy file whose text differs where `check_input`, and
     `stub` reads a style file whose text differs where `stub_input` (an own input, not a setting)."""
     from onetrace.emit import Instrument, Recorder
+
     runs = root / "runs"
     stages = ["ask", "stub", "side", "check", "send"] if graph else ["ask", "stub", "check", "send"]
-    for name, days, temp in (("a", "30", "0.7"), ("b", "14" if later_change else "30",
-                                                   "0.9" if own_change else "0.7")):
+    for name, days, temp in (("a", "30", "0.7"), ("b", "14" if later_change else "30", "0.9" if own_change else "0.7")):
         out = runs / name
         out.mkdir(parents=True)
         (out / "q.json").write_text('{"q": "Can I return it?"}', encoding="utf-8")
-        edges = ({"declared_edges": [{"from": x, "to": y} for x, y in (
-            ("ask", "stub"), ("ask", "side"), ("stub", "check"), ("side", "check"), ("check", "send"))]}
-                 if graph else {})
-        rec = Recorder(str(out), run_id=f"v-{name}", declared_stages=stages,
-                       manifest=Path(__file__), policy="fail-closed", anchor_reason="a test record", **edges)
+        edges = (
+            {
+                "declared_edges": [
+                    {"from": x, "to": y}
+                    for x, y in (
+                        ("ask", "stub"),
+                        ("ask", "side"),
+                        ("stub", "check"),
+                        ("side", "check"),
+                        ("check", "send"),
+                    )
+                ]
+            }
+            if graph
+            else {}
+        )
+        rec = Recorder(
+            str(out),
+            run_id=f"v-{name}",
+            declared_stages=stages,
+            manifest=Path(__file__),
+            policy="fail-closed",
+            anchor_reason="a test record",
+            **edges,
+        )
 
         def ask(ctx, out=out):
-            ctx.read_external(out / "q.json", "application/json", name="question",
-                              trust_class="operator-authored")
+            ctx.read_external(out / "q.json", "application/json", name="question", trust_class="operator-authored")
             return ctx.write("q.txt", b"Can I return it?", "text/plain")
 
         def stub(ctx, asked, name=name, temp=temp, out=out):
@@ -88,8 +136,7 @@ def _pair(root: Path, *, rederivable: str = "false", own_change: bool = False,
             ctx.read(asked)
             if stub_input:
                 (out / "style.txt").write_text(f"style {name}", encoding="utf-8")
-                ctx.read_external(out / "style.txt", "text/plain", name="style",
-                                  trust_class="operator-authored")
+                ctx.read_external(out / "style.txt", "text/plain", name="style", trust_class="operator-authored")
             ctx.constant("temperature", temp)
             return ctx.write("draft.txt", f"Reply {name}: within {{days}} days.".encode(), "text/plain")
 
@@ -103,8 +150,7 @@ def _pair(root: Path, *, rederivable: str = "false", own_change: bool = False,
             ctx.read_receipt("stub")
             if check_input:
                 (out / "policy.txt").write_text(f"policy {name}", encoding="utf-8")
-                ctx.read_external(out / "policy.txt", "text/plain", name="policy",
-                                  trust_class="operator-authored")
+                ctx.read_external(out / "policy.txt", "text/plain", name="policy", trust_class="operator-authored")
             if more:
                 ctx.read_receipt("side")
                 ctx.read(more[0])
@@ -117,15 +163,26 @@ def _pair(root: Path, *, rederivable: str = "false", own_change: bool = False,
             return ctx.write("sent.txt", ctx.read(checked), "text/plain")
 
         asked = rec.run_node("ask", None, Instrument("asker", "reader", "1.0.0", {"k": "v"}), ask)
-        drafted = rec.run_node("stub", None, Instrument("reply-stub", "model-stub", "1.0.0", {"k": "v"},
-                                                        rederivable=rederivable,
-                                                        rederivable_note="a stub that varies per run"
-                                                        if rederivable == "false" else None),
-                               stub, asked)
-        more = ([rec.run_node("side", None, Instrument("copier", "tool", "1.0.0", {"k": "v"}), side, asked)]
-                if graph else [])
-        checked = rec.run_node("check", None, Instrument("checker", "tool", "1.0.0", {"k": "v"}),
-                               check, drafted, *more)
+        drafted = rec.run_node(
+            "stub",
+            None,
+            Instrument(
+                "reply-stub",
+                "model-stub",
+                "1.0.0",
+                {"k": "v"},
+                rederivable=rederivable,
+                rederivable_note="a stub that varies per run" if rederivable == "false" else None,
+            ),
+            stub,
+            asked,
+        )
+        more = (
+            [rec.run_node("side", None, Instrument("copier", "tool", "1.0.0", {"k": "v"}), side, asked)]
+            if graph
+            else []
+        )
+        checked = rec.run_node("check", None, Instrument("checker", "tool", "1.0.0", {"k": "v"}), check, drafted, *more)
         rec.run_node("send", None, Instrument("outbox", "writer", "1.0.0", {"k": "v"}), send, checked)
         rec.close()
     return runs
@@ -133,12 +190,14 @@ def _pair(root: Path, *, rederivable: str = "false", own_change: bool = False,
 
 def _card(page: str) -> str:
     """Every first-difference section's words: the straight-line card, or a graph's."""
-    return " ".join(_text(m) for m in re.findall(r'<section data-section="first-difference"[^>]*>.*?</section>',
-                                                  page, re.S))
+    return " ".join(
+        _text(m) for m in re.findall(r'<section data-section="first-difference"[^>]*>.*?</section>', page, re.S)
+    )
 
 
-def variance_problems(page: str, state: str, first: str = "", later: str = "", what: str = "",
-                      varies: bool = True, graph: bool = False) -> list[str]:
+def variance_problems(
+    page: str, state: str, first: str = "", later: str = "", what: str = "", varies: bool = True, graph: bool = False
+) -> list[str]:
     """`state`: "later" (a later stage named), "none" (nothing after it) or "absent" (the stage has
     a recorded change of its own: no sentence, and no "not established")."""
     out = []
@@ -157,8 +216,10 @@ def variance_problems(page: str, state: str, first: str = "", later: str = "", w
     chips = re.findall(r'data-mark="recorded-change"', page)
     if state == "later" and not graph:
         graph_svg = re.search(r'<svg class="graph".*?</svg>', page, re.S)
-        marked = re.findall(r'<a href="[^"]*"[^>]*data-mark="recorded-change"[^>]*><rect[^>]*/><title>([^<]*)</title>',
-                            graph_svg.group(0) if graph_svg else "")
+        marked = re.findall(
+            r'<a href="[^"]*"[^>]*data-mark="recorded-change"[^>]*><rect[^>]*/><title>([^<]*)</title>',
+            graph_svg.group(0) if graph_svg else "",
+        )
         if len(marked) != 1 or not marked[0].startswith(f"{later} · ") or "First recorded change" not in marked[0]:
             out.append(f"the chip on {later}: {marked}")
         elif "Changed after it" not in marked[0]:
@@ -282,6 +343,7 @@ def _with_stored_cause(tmp_path, change, **kw) -> str:
     from dataclasses import replace
 
     from onetrace_console.render import render_diff
+
     store, _pages, loaded = _console(tmp_path, _pair(tmp_path, **kw), compare=("a", "b"))
     comparison = loaded.comparison
     run = comparison.verb("localize")
@@ -289,17 +351,22 @@ def _with_stored_cause(tmp_path, change, **kw) -> str:
     change(report)
     key = store.put(json.dumps(report).encode("utf-8"))
     changed = replace(run, reports=tuple((n, key if n == "localize.json" else k) for n, k in run.reports))
-    return render_diff(replace(comparison, verbs=tuple(changed if v.verb == "localize" else v
-                                                       for v in comparison.verbs)),
-                       store, generated_at="2026-01-01T00:00:00+00:00")
+    return render_diff(
+        replace(comparison, verbs=tuple(changed if v.verb == "localize" else v for v in comparison.verbs)),
+        store,
+        generated_at="2026-01-01T00:00:00+00:00",
+    )
 
 
 def test_a_localize_report_without_the_sentence_shows_none(tmp_path, examined):
     """The same pair, its stored localize report without `no_recorded_cause` (as an SDK before it
     wrote): no sentence, no chip, and the card says why the output differs is not established."""
-    pages = {"straight line": _with_stored_cause(tmp_path / "l", lambda r: r["cause"].pop("no_recorded_cause")),
-             "graph": _with_stored_cause(tmp_path / "g", lambda r: r["frontier_causes"][0].pop("no_recorded_cause"),
-                                         graph=True)}
+    pages = {
+        "straight line": _with_stored_cause(tmp_path / "l", lambda r: r["cause"].pop("no_recorded_cause")),
+        "graph": _with_stored_cause(
+            tmp_path / "g", lambda r: r["frontier_causes"][0].pop("no_recorded_cause"), graph=True
+        ),
+    }
     examined(len(pages), "comparison pages")
     for name, page in pages.items():
         card = _card(page)
@@ -314,6 +381,7 @@ def test_the_sdk_s_sentence_is_escaped_as_record_words(tmp_path, examined):
 
     def plant(report):
         report["cause"]["no_recorded_cause"] = planted
+
     page = _with_stored_cause(tmp_path, plant)
     section = re.search(r'<section data-section="first-difference".*?</section>', page, re.S).group(0)
     examined(1, "comparison page")
@@ -325,6 +393,7 @@ def test_the_sdk_s_sentence_is_escaped_as_record_words(tmp_path, examined):
 def test_the_console_composes_no_sentence_of_its_own(examined):
     """One sentence, one source: the console's own composition is gone."""
     import onetrace_console.render as render
+
     gone = ("no_cause_sentence", "variance_sentence", "NO_CAUSE", "NO_CAUSE_LATER", "NO_CAUSE_NONE")
     examined(len(gone), "names")
     assert [n for n in gone if hasattr(render, n)] == []
@@ -332,32 +401,61 @@ def test_the_console_composes_no_sentence_of_its_own(examined):
 
 # ------------------------------------------------------------------ sabotages
 
+
 def test_sabotage_each_state_s_wrong_page_is_named(tmp_path, examined):
     later = _diff(tmp_path / "l")
     none = _diff(tmp_path / "n", later_change=False)
     absent = _diff(tmp_path / "x", own_change=True)
     planted = {
-        "no sentence": (later.replace("the next recorded change is at", "the next change is at", 1),
-                        "later", ("stub", "check", DAYS)),
+        "no sentence": (
+            later.replace("the next recorded change is at", "the next change is at", 1),
+            "later",
+            ("stub", "check", DAYS),
+        ),
         "no chip": (later.replace('data-mark="recorded-change"', "", 1), "later", ("stub", "check", DAYS)),
-        "a cause": (later.replace("nothing recorded differs at", "nothing recorded differs (which follow from) at", 1),
-                    "later", ("stub", "check", DAYS)),
-        "the console's own words": (later.replace("no recorded cause: nothing recorded differs at",
-                                                  "No recorded cause at stub: nothing recorded about it differs. "
-                                                  "no recorded cause: nothing recorded differs at", 1),
-                                    "later", ("stub", "check", DAYS)),
+        "a cause": (
+            later.replace("nothing recorded differs at", "nothing recorded differs (which follow from) at", 1),
+            "later",
+            ("stub", "check", DAYS),
+        ),
+        "the console's own words": (
+            later.replace(
+                PREFIX + "nothing recorded differs at",
+                "No recorded cause at stub: nothing recorded about it differs. "
+                + PREFIX
+                + "nothing recorded differs at",
+                1,
+            ),
+            "later",
+            ("stub", "check", DAYS),
+        ),
         "the none sentence missing": (none.replace("; nothing recorded changes after it", "", 1), "none", ("stub",)),
-        "not established beside it": (none.replace("; nothing recorded changes after it",
-                                                   "; nothing recorded changes after it. Why it is not established.", 1),
-                                      "none", ("stub",)),
-        "a chip where none is named": (none.replace('#step-3" data-tone=', '#step-3" data-mark="recorded-change" data-tone=', 1),
-                                       "none", ("stub",)),
-        "said where it shouldn't be": (absent.replace('<div data-part="what">',
-                                                      '<div data-part="what"><p>nothing recorded changes after it</p>', 1),
-                                       "absent", ()),
-        "not established with a change": (absent.replace('<div data-part="what">',
-                                                         '<div data-part="what"><p>not established</p>', 1),
-                                          "absent", ()),
+        "not established beside it": (
+            none.replace(
+                "; nothing recorded changes after it",
+                "; nothing recorded changes after it. Why it is not established.",
+                1,
+            ),
+            "none",
+            ("stub",),
+        ),
+        "a chip where none is named": (
+            none.replace('#step-3" data-tone=', '#step-3" data-mark="recorded-change" data-tone=', 1),
+            "none",
+            ("stub",),
+        ),
+        "said where it shouldn't be": (
+            absent.replace(
+                '<div data-part="what">', '<div data-part="what"><p>nothing recorded changes after it</p>', 1
+            ),
+            "absent",
+            (),
+        ),
+        "not established with a change": (
+            absent.replace('<div data-part="what">', '<div data-part="what"><p>not established</p>', 1),
+            "absent",
+            (),
+        ),
     }
     examined(len(planted), "planted pages")
     for name, (bad, state, args) in planted.items():
@@ -368,6 +466,7 @@ def test_the_chip_s_outline_is_amber_and_wins_over_the_box_s_tone(examined):
     """The same outline as "First difference", amber (a comparison's marker, not a check's result),
     and more specific than the tone rule that would otherwise draw the box's own stroke."""
     from onetrace_console.frame import stylesheet
+
     css = stylesheet().decode("utf-8")
     examined(1, "stylesheet")
     rule = ".cp svg.graph [data-mark=recorded-change][data-tone] .node{stroke:var(--cc-ink);stroke-width:2}"

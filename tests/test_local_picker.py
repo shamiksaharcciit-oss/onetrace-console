@@ -6,6 +6,7 @@ it answers with; no GET makes a comparison. Both lists are in arrival order, eac
 time. The same run twice is refused as today. The two-step pages stay, and are the only way for a
 pipeline over `LIST_CAP`. A public console keeps its own picker, and a static export has none.
 """
+
 from __future__ import annotations
 
 import json
@@ -28,8 +29,12 @@ PICKER = re.compile(r'<section id="local-compare" data-section="local-compare".*
 def _pipeline_page(pages: dict[str, str]) -> str:
     """The pipeline's own page (its "all" filter): the other filters draw the same picker."""
     from onetrace_console.pipeline_pages import page_href
-    (label,) = {re.search(r"<title>Pipeline · (.*?)</title>", p).group(1) for p in pages.values()
-                if 'data-section="first-differences"' in p}
+
+    (label,) = {
+        re.search(r"<title>Pipeline · (.*?)</title>", p).group(1)
+        for p in pages.values()
+        if 'data-section="first-differences"' in p
+    }
     return pages[page_href(unescape(label), "all")]
 
 
@@ -37,6 +42,7 @@ def test_the_picker_lists_the_runs_in_arrival_order_by_name_and_time(three):
     from onetrace_console.frame import CSRF_SLOT
     from onetrace_console.overview import pipelines
     from onetrace_console.store import arrival_order
+
     comparison, store, hostile = three
     page = _pipeline_page(_pages(store))
     (picker,) = PICKER.findall(page)
@@ -56,6 +62,7 @@ def test_the_picker_lists_the_runs_in_arrival_order_by_name_and_time(three):
 
 def test_a_public_console_keeps_its_own_picker_and_a_static_export_has_none(three):
     from onetrace_console.explain import no_presses
+
     comparison, store, _ = three
     assert not PICKER.findall(_pipeline_page(_pages(store, public=True)))
     with no_presses():
@@ -64,6 +71,7 @@ def test_a_public_console_keeps_its_own_picker_and_a_static_export_has_none(thre
 
 def test_over_the_list_cap_only_the_two_step_pages_stay(three, monkeypatch):
     from onetrace_console.viewer import model
+
     comparison, store, _ = three
     monkeypatch.setattr(model, "LIST_CAP", 2)
     page = _pipeline_page(_pages(store))
@@ -72,19 +80,29 @@ def test_over_the_list_cap_only_the_two_step_pages_stay(three, monkeypatch):
 
 def test_the_csrf_slot_is_filled_as_the_page_is_served():
     from onetrace_console.frame import CSRF_SLOT, fill_csrf
+
     page = f"<form>{CSRF_SLOT}</form>".encode()
     assert fill_csrf(page, None) == page
-    assert fill_csrf(page, 'tok"en') == b'<form><input type="hidden" name="csrf_token" value="tok&quot;en" data-csrf-slot></form>'
+    assert (
+        fill_csrf(page, 'tok"en')
+        == b'<form><input type="hidden" name="csrf_token" value="tok&quot;en" data-csrf-slot></form>'
+    )
 
 
 # ------------------------------------------------------------------ over HTTP
+
 
 def _post_form(base: str, fields: dict) -> tuple[int, dict, bytes]:
     class NoRedirect(urllib.request.HTTPRedirectHandler):
         def redirect_request(self, *a, **k):
             return None
-    req = urllib.request.Request(base + "/compare", data=urllib.parse.urlencode(fields).encode(), method="POST",
-                                 headers={"Content-Type": "application/x-www-form-urlencoded"})
+
+    req = urllib.request.Request(
+        base + "/compare",
+        data=urllib.parse.urlencode(fields).encode(),
+        method="POST",
+        headers={"Content-Type": "application/x-www-form-urlencoded"},
+    )
     try:
         with urllib.request.build_opener(NoRedirect).open(req, timeout=limit(60)) as r:
             return r.status, dict(r.headers), r.read()
@@ -93,8 +111,8 @@ def _post_form(base: str, fields: dict) -> tuple[int, dict, bytes]:
 
 
 def _two_runs(base):
-    from tests.test_serve import _post
-    from tests.test_serve import _real_delivery
+    from tests.test_serve import _post, _real_delivery
+
     exam = Path(__file__).resolve().parent.parent / ".sdk-fixtures" / "exam" / "fixtures" / "ingest-r1"
     run_c, run_c_poppler24 = exam / "run_C", exam / "run_C_poppler24"
     if not (run_c.is_dir() and run_c_poppler24.is_dir()):
@@ -112,6 +130,7 @@ def test_the_form_posts_compare_and_opens_the_comparison(server):
     from onetrace_console.serve import SAME_RUN
     from onetrace_console.store import Store
     from tests.test_serve import _get
+
     base, store_root = server
     a, b = _two_runs(base)
     drawn = [p.read_text(encoding="utf-8") for p in sorted((store_root / "pages").glob("pipeline-*.html"))]
@@ -130,6 +149,7 @@ def test_the_form_posts_compare_and_opens_the_comparison(server):
     assert (c.run_a, c.run_b) == (a, b)
     #: The Compare buttons' own request is answered as before: JSON.
     from tests.test_serve import _post
+
     status, body = _post(base, f"/compare?a={a}&b={b}")
     assert status == 200 and json.loads(body)["pages"]["diff"]
 

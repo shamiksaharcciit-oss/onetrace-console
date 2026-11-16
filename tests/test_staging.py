@@ -16,6 +16,7 @@ Each of those is a test below, named after it. The word-for-word check is made b
 separate process running the verifier by hand, because a body-equals-message claim made by
 the code that produced the body is not a check.
 """
+
 from __future__ import annotations
 
 import hashlib
@@ -28,16 +29,14 @@ import pytest
 
 from onetrace_console import staging as staging_mod
 from onetrace_console.checks import run_and_record, shipped_verifier
-from onetrace_console.ingest import (CHAIN_HEAD_ROW, MANIFEST_NAME, SUMS_NAME,
-                                     Accepted, Rejection, accept)
-from onetrace_console.staging import ask_the_verifier, staging, write_delivery
+from onetrace_console.ingest import CHAIN_HEAD_ROW, MANIFEST_NAME, SUMS_NAME, Accepted, Rejection, accept
+from onetrace_console.staging import staging, write_delivery
 from tests.conftest import make_tar
 from tests.test_checks import FIXED_RAN_AT, _require_installed
 
 
 def _resum(files: dict[str, bytes]) -> None:
-    lines = [f"{hashlib.sha256(b).hexdigest()}  {p}"
-             for p, b in files.items() if p != SUMS_NAME]
+    lines = [f"{hashlib.sha256(b).hexdigest()}  {p}" for p, b in files.items() if p != SUMS_NAME]
     files[SUMS_NAME] = ("\n".join(lines) + "\n").encode("utf-8")
 
 
@@ -46,14 +45,14 @@ def _snapshot(store) -> dict[str, str]:
     out = {}
     for path in sorted(store.root.rglob("*")):
         if path.is_file():
-            out[path.relative_to(store.root).as_posix()] = \
-                hashlib.sha256(path.read_bytes()).hexdigest()
+            out[path.relative_to(store.root).as_posix()] = hashlib.sha256(path.read_bytes()).hexdigest()
     return out
 
 
 def _staging_dirs() -> list[Path]:
     """Every staging directory anywhere the module would put one."""
     import tempfile
+
     roots = [Path(tempfile.gettempdir())]
     if staging_mod.DEFAULT_STAGING_ROOT:
         roots.append(Path(staging_mod.DEFAULT_STAGING_ROOT))
@@ -75,6 +74,7 @@ def _own_temp_root(tmp_path, monkeypatch):
     and the test still looks exactly there; it is only no longer shared.
     """
     import tempfile
+
     root = tmp_path / "os-temp"
     root.mkdir()
     monkeypatch.setattr(tempfile, "tempdir", str(root))
@@ -82,6 +82,7 @@ def _own_temp_root(tmp_path, monkeypatch):
 
 
 # ------------------------------------------------- staging is outside the store, and gone
+
 
 def test_the_staging_area_is_outside_the_store(store, files):
     _require_installed()
@@ -98,7 +99,7 @@ def test_the_staging_area_is_outside_the_store(store, files):
 
 
 def test_nothing_staged_is_reachable_through_the_stores_api(store, files):
-    """"never reachable by any GET". Asserted against the store's own read path.
+    """ "never reachable by any GET". Asserted against the store's own read path.
 
     A staged file's digest is a perfectly good-looking object key. The point is that it was
     never `put`, so the store does not have it -- and `get` says so rather than reading from
@@ -106,6 +107,7 @@ def test_nothing_staged_is_reachable_through_the_stores_api(store, files):
     """
     _require_installed()
     from onetrace_console.store import StoreError
+
     with staging() as scratch:
         write_delivery(files, scratch / "run")
         for path, blob in files.items():
@@ -116,7 +118,8 @@ def test_nothing_staged_is_reachable_through_the_stores_api(store, files):
 
 
 def test_staging_is_deleted_even_when_the_body_raises():
-    """"Delete it after every upload" means every exit, including the unplanned one."""
+    """ "Delete it after every upload" means every exit, including the unplanned one."""
+
     class Boom(RuntimeError):
         pass
 
@@ -136,7 +139,7 @@ def test_no_staging_directory_survives_an_upload(files, store, outcome):
     if outcome == "rejected":
         raw = bytearray(files["receipts/01-zeta.json"])
         raw[30] = (raw[30] + 1) % 256
-        files["receipts/01-zeta.json"] = bytes(raw)          # sums NOT recomputed: damaged
+        files["receipts/01-zeta.json"] = bytes(raw)  # sums NOT recomputed: damaged
 
     before = set(_staging_dirs())
     result = accept(make_tar(files), store)
@@ -145,6 +148,7 @@ def test_no_staging_directory_survives_an_upload(files, store, outcome):
 
 
 # ----------------------------------- a rejected upload leaves the store byte-identical
+
 
 def test_a_rejected_upload_leaves_the_store_byte_identical_and_staging_empty(files, store):
     """The rule's first check, both clauses, on a store that already holds a run.
@@ -162,7 +166,7 @@ def test_a_rejected_upload_leaves_the_store_byte_identical_and_staging_empty(fil
     damaged = dict(files)
     raw = bytearray(damaged["receipts/02-alpha.json"])
     raw[25] = (raw[25] + 1) % 256
-    damaged["receipts/02-alpha.json"] = bytes(raw)            # sums NOT recomputed
+    damaged["receipts/02-alpha.json"] = bytes(raw)  # sums NOT recomputed
 
     staging_before = set(_staging_dirs())
     result = accept(make_tar(damaged), store)
@@ -175,14 +179,16 @@ def test_a_rejected_upload_leaves_the_store_byte_identical_and_staging_empty(fil
 
 # ------------------------------ the 422 body IS the verifier's message, word for word
 
+
 def _verifier_by_hand(files: dict[str, bytes], tmp_path: Path) -> tuple[str, str]:
     """Run the verifier by hand over the same files. Returns (stdout, exit status)."""
     folder = tmp_path / "byhand"
     for path, blob in files.items():
         (folder / path).parent.mkdir(parents=True, exist_ok=True)
         (folder / path).write_bytes(blob)
-    proc = subprocess.run([sys.executable, str(shipped_verifier()), "MANIFEST.json"],
-                          cwd=str(folder), capture_output=True)
+    proc = subprocess.run(
+        [sys.executable, str(shipped_verifier()), "MANIFEST.json"], cwd=str(folder), capture_output=True
+    )
     return proc.stdout.decode("utf-8"), str(proc.returncode)
 
 
@@ -196,7 +202,7 @@ def test_the_422_body_equals_the_verifiers_message_when_run_by_hand(files, store
     _require_installed()
     raw = bytearray(files["receipts/01-zeta.json"])
     raw[40] = (raw[40] + 1) % 256
-    files["receipts/01-zeta.json"] = bytes(raw)               # sums NOT recomputed
+    files["receipts/01-zeta.json"] = bytes(raw)  # sums NOT recomputed
 
     result = accept(make_tar(files), store)
     assert isinstance(result, Rejection), f"expected a refusal, got {result}"
@@ -207,7 +213,8 @@ def test_the_422_body_equals_the_verifiers_message_when_run_by_hand(files, store
     assert exit_status != "0", "the verifier did not refuse by hand, so this proves nothing"
     assert result.body == by_hand, (
         "the 422 body is not the verifier's message word for word.\n"
-        f"--- body ---\n{result.body[-400:]}\n--- by hand ---\n{by_hand[-400:]}")
+        f"--- body ---\n{result.body[-400:]}\n--- by hand ---\n{by_hand[-400:]}"
+    )
     assert "digest matches the manifest" in result.body
 
 
@@ -223,12 +230,12 @@ def test_a_wrong_chain_head_with_honest_sums_is_stored_as_contradicting(files, s
     manifest = json.loads(files[MANIFEST_NAME].decode("utf-8"))
     manifest["chain_head"] = "sha256:" + "0" * 64
     files[MANIFEST_NAME] = json.dumps(manifest, separators=(",", ":")).encode("utf-8")
-    _resum(files)                                # honest sums: the delivery is not damaged
+    _resum(files)  # honest sums: the delivery is not damaged
 
     result = accept(make_tar(files), store)
     assert isinstance(result, Accepted), (
-        f"a chain_head mismatch was refused with a 422: "
-        f"{getattr(result, 'body', '')[-300:]}")
+        f"a chain_head mismatch was refused with a 422: {getattr(result, 'body', '')[-300:]}"
+    )
 
     run = run_and_record(result.run, store, ran_at=FIXED_RAN_AT)
     assert run.check_verdict == "contradicts", run.check_verdict
@@ -259,7 +266,8 @@ def test_an_unknown_format_is_refused_in_the_verifiers_own_words(files, store, t
     by_hand, exit_status = _verifier_by_hand(payload, tmp_path)
     assert exit_status != "0", (
         "the verifier no longer refuses an unknown manifest format, so this test is not "
-        "exercising the switch it was written for")
+        "exercising the switch it was written for"
+    )
     assert "is not implemented" in by_hand, by_hand[-300:]
 
     result = accept(make_tar(files), store)
@@ -267,12 +275,12 @@ def test_an_unknown_format_is_refused_in_the_verifiers_own_words(files, store, t
     assert result.from_verifier, "the body is not attributed to the verifier"
     assert result.body == by_hand, (
         "the 422 body is not the verifier's message word for word.\n"
-        f"--- body ---\n{result.body[-300:]}\n--- by hand ---\n{by_hand[-300:]}")
+        f"--- body ---\n{result.body[-300:]}\n--- by hand ---\n{by_hand[-300:]}"
+    )
     assert store.runs() == (), "an unknown format was stored"
 
 
-def test_a_refusal_the_verifier_has_no_words_for_stays_in_the_stores_own_words(files, store,
-                                                                              tmp_path):
+def test_a_refusal_the_verifier_has_no_words_for_stays_in_the_stores_own_words(files, store, tmp_path):
     """The other branch, still reachable, and still honestly attributed.
 
     An unlisted extra file is damage the verifier cannot see: the manifest does not name it,
@@ -289,17 +297,18 @@ def test_a_refusal_the_verifier_has_no_words_for_stays_in_the_stores_own_words(f
     by_hand, exit_status = _verifier_by_hand(payload, tmp_path)
     assert exit_status == "0", (
         f"the verifier now objects to an unlisted extra file, so this branch is no longer "
-        f"the one with no verifier words: {by_hand[-300:]}")
+        f"the one with no verifier words: {by_hand[-300:]}"
+    )
 
     result = accept(make_tar(files), store)
     assert isinstance(result, Rejection), f"expected a refusal, got {result}"
-    assert not result.from_verifier, (
-        "the body claims to be the verifier's, but the verifier said nothing about it")
+    assert not result.from_verifier, "the body claims to be the verifier's, but the verifier said nothing about it"
     assert "present but unlisted" in result.body, result.body
     assert store.runs() == ()
 
 
 # ------------------------------- a 422 is for damage only, never for a verdict
+
 
 def test_a_contradicting_run_is_stored_and_never_a_422(files, store):
     """The rule's sharpest line, asserted directly.
@@ -321,8 +330,8 @@ def test_a_contradicting_run_is_stored_and_never_a_422(files, store):
 
     result = accept(make_tar(files), store)
     assert isinstance(result, Accepted), (
-        f"a contradicting run was refused with a 422: "
-        f"{getattr(result, 'body', '')[-300:]}")
+        f"a contradicting run was refused with a 422: {getattr(result, 'body', '')[-300:]}"
+    )
 
     run = run_and_record(result.run, store, ran_at=FIXED_RAN_AT)
     assert run.check_verdict == "contradicts", run.check_verdict
@@ -352,12 +361,12 @@ def test_an_honest_delivery_of_a_contradicting_record_is_stored(files, store, ta
     raw = bytearray(files[target])
     raw[40] = (raw[40] + 1) % 256
     files[target] = bytes(raw)
-    _resum(files)                                # honest sums: not damage, whichever moved
+    _resum(files)  # honest sums: not damage, whichever moved
 
     result = accept(make_tar(files), store)
     assert isinstance(result, Accepted), (
-        f"changing {target} with honest sums was refused with a 422: "
-        f"{getattr(result, 'body', '')[-300:]}")
+        f"changing {target} with honest sums was refused with a 422: {getattr(result, 'body', '')[-300:]}"
+    )
     run = run_and_record(result.run, store, ran_at=FIXED_RAN_AT)
     assert run.check_verdict == "contradicts", run.check_verdict
     assert store.get_run(run.key) is not None, "the contradicting run was not kept"
@@ -384,6 +393,7 @@ def test_a_damaged_delivery_is_refused_whichever_receipt_moved(files, store, tar
 
 # ------------------------------------------------------ the verifier is asked in staging
 
+
 def test_the_verifier_is_actually_run_in_the_staging_area(files, monkeypatch, tmp_path):
     """The premise of everything above: the pre-store checks really do consult it.
 
@@ -401,6 +411,7 @@ def test_the_verifier_is_actually_run_in_the_staging_area(files, monkeypatch, tm
 
     monkeypatch.setattr("onetrace_console.ingest.ask_the_verifier", watched)
     from onetrace_console.store import Store
+
     #: The test's own folder, never `tempfile.mkdtemp()`, which left it in $TMPDIR.
     store = Store(tmp_path / "store")
     accept(make_tar(files), store)
@@ -408,5 +419,6 @@ def test_the_verifier_is_actually_run_in_the_staging_area(files, monkeypatch, tm
     assert "folder" in seen, "the verifier was never asked"
     assert seen["manifest_there"], "the delivery was not written into staging before asking"
     assert staging_mod.PREFIX in str(seen["folder"]), (
-        f"the verifier was run somewhere other than a staging area: {seen['folder']}")
+        f"the verifier was run somewhere other than a staging area: {seen['folder']}"
+    )
     assert not seen["folder"].exists(), "the staging area was not deleted afterwards"

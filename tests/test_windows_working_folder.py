@@ -8,6 +8,7 @@ folder from ten characters under it to ten over. The folders are made through th
 long paths off does not stop their making; the starts are given them as the console gives them,
 with no prefix.
 """
+
 from __future__ import annotations
 
 import os
@@ -23,6 +24,7 @@ TRIED = range(WORKING_FOLDER_MOST - 10, WORKING_FOLDER_MOST + 11)
 
 def _long_paths() -> str:
     import winreg
+
     try:
         with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, r"SYSTEM\CurrentControlSet\Control\FileSystem") as k:
             return str(winreg.QueryValueEx(k, "LongPathsEnabled")[0])
@@ -34,8 +36,9 @@ def _long_paths() -> str:
 def test_a_process_starts_in_a_working_folder_up_to_the_limit_and_not_past_it(tmp_path, examined):
     base = str(tmp_path)
     if TRIED[-1] - len(base) - 1 > 255:
-        pytest.fail(f"the test's temporary folder is {len(base)} characters, too short for one folder name "
-                    f"to reach {TRIED[-1]}")
+        pytest.fail(
+            f"the test's temporary folder is {len(base)} characters, too short for one folder name to reach {TRIED[-1]}"
+        )
     if TRIED[0] - len(base) - 1 < 1:
         pytest.fail(f"the test's temporary folder is {len(base)} characters, too long to try {TRIED[0]}")
     started, refused = [], {}
@@ -47,8 +50,7 @@ def test_a_process_starts_in_a_working_folder_up_to_the_limit_and_not_past_it(tm
             os.mkdir("\\\\?\\" + folder)
             made.append(folder)
             try:
-                subprocess.run([sys.executable, "-c", "pass"], cwd=folder, check=True, timeout=120,
-                               capture_output=True)
+                subprocess.run([sys.executable, "-c", "pass"], cwd=folder, check=True, timeout=120, capture_output=True)
                 started.append(n)
             except OSError as e:
                 refused[n] = f"{type(e).__name__}, winerror {getattr(e, 'winerror', None)}"
@@ -56,8 +58,10 @@ def test_a_process_starts_in_a_working_folder_up_to_the_limit_and_not_past_it(tm
         for folder in made:
             os.rmdir("\\\\?\\" + folder)
     longest = max(started) if started else None
-    said = (f"LongPathsEnabled {_long_paths()}: started in {started}; refused {refused}; the longest "
-            f"working folder a process started in, {longest} characters")
+    said = (
+        f"LongPathsEnabled {_long_paths()}: started in {started}; refused {refused}; the longest "
+        f"working folder a process started in, {longest} characters"
+    )
     print(said)
     examined(len(TRIED), f"working folder lengths tried, LongPathsEnabled {_long_paths()}")
     assert started == [n for n in TRIED if n <= WORKING_FOLDER_MOST], said

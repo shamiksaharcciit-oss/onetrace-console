@@ -1,13 +1,14 @@
 """The changes table breaks only its annotation and digest cells.
 
     The changes table breaks node names mid-word: "reques t", "contex t", "propos al",
-    "config applie d". The rule that breaks digest cells (`841f004`) is applied to every cell.
+    "config applie d". The rule that breaks digest cells is applied to every cell.
     Break only the annotation and digest cells. Node names wrap only at spaces.
 
 The break-anywhere rule had named `td.mono`, and a graph comparison's node column is `td.mono`
 too. Digest cells now say what they are (`data-cell="digest"`), and the rule names them, the
 settings cell and the annotations cell, and nothing else.
 """
+
 from __future__ import annotations
 
 import re
@@ -23,8 +24,12 @@ BREAKABLE = {"td[data-cell=digest]", "td[data-section=settings]", "td[data-secti
 def _break_rules() -> list[str]:
     """The selector of every rule, in the console's page skin, that breaks a word anywhere."""
     from onetrace_console.frame import PAGE_CSS
-    return [sel.strip() for sel, body in re.findall(r"([^{}]+)\{([^{}]*)\}", PAGE_CSS)
-            if re.search(r"overflow-wrap:\s*anywhere|word-break:\s*break-(all|word)", body)]
+
+    return [
+        sel.strip()
+        for sel, body in re.findall(r"([^{}]+)\{([^{}]*)\}", PAGE_CSS)
+        if re.search(r"overflow-wrap:\s*anywhere|word-break:\s*break-(all|word)", body)
+    ]
 
 
 def _parts(selector: str) -> set[str]:
@@ -37,8 +42,8 @@ def test_break_anywhere_reaches_only_the_digest_and_annotation_cells(examined):
     examined(len(rules), "break-anywhere rules on the changes table")
     for selector in rules:
         assert _parts(selector) <= BREAKABLE, (
-            f"a changes-table cell that is not a digest or an annotation breaks anywhere: "
-            f"{selector}")
+            f"a changes-table cell that is not a digest or an annotation breaks anywhere: {selector}"
+        )
     assert set().union(*map(_parts, rules)) == BREAKABLE
 
 
@@ -51,9 +56,10 @@ def _rows(page: str) -> list[list[str]]:
 
 def _breaks(cell: str) -> bool:
     """Whether the cell's opening tag carries an attribute one of the BREAKABLE selectors names."""
-    return any(f'{attr}="{value}"' in cell
-               for attr, value in (re.match(r"td\[([\w-]+)=([\w-]+)\]", s).groups()
-                                   for s in BREAKABLE))
+    return any(
+        f'{attr}="{value}"' in cell
+        for attr, value in (re.match(r"td\[([\w-]+)=([\w-]+)\]", s).groups() for s in BREAKABLE)
+    )
 
 
 def test_a_graph_comparisons_node_names_are_not_cells_the_rule_breaks(dag_pages, examined):

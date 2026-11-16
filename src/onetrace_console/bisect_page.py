@@ -29,11 +29,11 @@ comparison or command is run by the window form, on either console.
 Times. Each run's start is shown in the console's one form, in UTC, to the millisecond where the
 receipts give one; the time as written is the `<time>`'s `datetime`.
 """
+
 from __future__ import annotations
 
 import re
-
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from onetrace_console.store import Store, StoreError
 from onetrace_console.words import NO_REFERENCE_YET, escape
@@ -45,22 +45,30 @@ LEAVING = ("output differs", "setting differs", "input differs")
 STEP_GAP = "could not check"
 RUN_GAPS = ("refused", "could not check")
 TITLE = "First run to leave the reference"
-WHAT = ("This pipeline's runs in recorded order, each placed by the recorder's clock: the earliest step "
-        "start its receipts state. Each run is read as onetrace's own verdict against the pipeline's "
-        "current reference reads it.")
+WHAT = (
+    "This pipeline's runs in recorded order, each placed by the recorder's clock: the earliest step "
+    "start its receipts state. Each run is read as onetrace's own verdict against the pipeline's "
+    "current reference reads it."
+)
 AGAINST = "The reference: {seal}, made from {run}."
-LEAVES = ("A step leaves the reference where its word is output differs, setting differs or input differs, "
-          "the words onetrace's verdict diverges on; same output, and slower than its range, read as the "
-          "reference. A run leaves it where its word is diverged.")
+LEAVES = (
+    "A step leaves the reference where its word is output differs, setting differs or input differs, "
+    "the words onetrace's verdict diverges on; same output, and slower than its range, read as the "
+    "reference. A run leaves it where its word is diverged."
+)
 #: The answer, first on the page, from the by-step walk.
-ANSWER = ("The first run to leave the reference is {run}, at step {step} ({word}). The run before it, {before}, "
-          "reads as the reference.")
+ANSWER = (
+    "The first run to leave the reference is {run}, at step {step} ({word}). The run before it, {before}, "
+    "reads as the reference."
+)
 ANSWER_MORE = "And {n} more {steps}: below."
 ANSWER_NONE = "No run has left the reference."
 #: How to read the page, in plain words; the exact rule (WHAT, LEAVES) is kept, word for word, in RULE_HEAD's fold.
-HOW = ("Runs are listed in the order they were recorded, by the recorder's clock. Each is compared with the reference "
-       "run, {run}. A run leaves the reference at the first step whose output, setting or input differs; the same "
-       "output, only slower, reads as the reference.")
+HOW = (
+    "Runs are listed in the order they were recorded, by the recorder's clock. Each is compared with the reference "
+    "run, {run}. A run leaves the reference at the first step whose output, setting or input differs; the same "
+    "output, only slower, reads as the reference."
+)
 HOW_NO_REFERENCE = "Runs are listed in the order they were recorded, by the recorder's clock."
 RULE_HEAD = "The exact rule"
 NO_REFERENCE = NO_REFERENCE_YET
@@ -69,14 +77,18 @@ MAKE_COMMAND = "python -m onetrace reference make"
 NO_REFERENCE_REASON = "No reference: {reason}."
 NON_CLAIMS = (
     "The first run that differed is the first recorded run that differed.",
-    "Runs not recorded, or recorded without a verdict, are not seen: each one this console holds is "
-    "shown as a gap.",
+    "Runs not recorded, or recorded without a verdict, are not seen: each one this console holds is shown as a gap.",
     "Time is the recorder's clock, as each run's receipts state it.",
 )
 NON_CLAIMS_HEAD = "What this page does not say"
 STEP_HEAD = "By step"
-STEP_COLUMNS = ("Step", "First run to leave the reference there", "Its word", "The run before it, read as the reference",
-                "Side by side")
+STEP_COLUMNS = (
+    "Step",
+    "First run to leave the reference there",
+    "Its word",
+    "The run before it, read as the reference",
+    "Side by side",
+)
 NONE_LEFT = "No run left the reference."
 NEVER_READ = "No run read as the reference here."
 ALREADY = "Before the first run to read as the reference, {n} already left it here: {runs}."
@@ -87,15 +99,18 @@ HELD = "Their comparison"
 RUNS_HEAD = "The runs, in recorded order"
 RUNS_COLUMNS = ("#", "Run", "Recorded start", "Its verdict")
 UNPLACED = "Not placed, their receipts stating no readable start time: {runs}."
-GAP_WORDS = {"unchecked": "a gap: its records could not be checked",
-             "none": "a gap: no verdict against this reference is held",
-             "refused": "a gap: onetrace's verdict is refused",
-             "could not check": "a gap: onetrace's verdict is could not check"}
+GAP_WORDS = {
+    "unchecked": "a gap: its records could not be checked",
+    "none": "a gap: no verdict against this reference is held",
+    "refused": "a gap: onetrace's verdict is refused",
+    "could not check": "a gap: onetrace's verdict is could not check",
+}
 STEP_GAP_WORD = "a gap: could not check"
 #: Beside each gap in the runs table: what the records hold of its reason, and what would include it.
 GAP_ROWS = "The check did not run: {rows}."
 GAP_ROWS_MORE = "And {n} more {rows}, on its Proof page."
 GAP_ROWS_INCLUDE = "It is included once a check of its records runs these."
+GAP_UNCHECKED_INCLUDE = "It is included once a check of its records runs."
 GAP_NONE_WHY = "No verdict against this reference is kept for it."
 GAP_NONE_INCLUDE = "It is included once one is made: a local console makes it when it draws this page."
 GAP_VERDICT_WHY = "onetrace's verdict gives its reason: {reason}."
@@ -125,6 +140,7 @@ def page_href(label: str) -> str:
 
 def _public() -> bool:
     from onetrace_console.frame import rendering_public
+
     return rendering_public()
 
 
@@ -142,6 +158,7 @@ def _instant(value) -> datetime | None:
 def recorded_start(run, store: Store) -> tuple[datetime, str] | None:
     """The earliest `time.started` the run's receipts state, read and as written; None where none reads."""
     from onetrace_console.stage_pages import _steps
+
     try:
         steps = _steps(run, store)
     except Exception:  # noqa: BLE001 - a record that can't be read is not placed
@@ -160,6 +177,7 @@ class Walk:
 
     def __init__(self, pipeline, store: Store, *, compute: bool):
         from onetrace_console import verdicts
+
         self.pipeline, self.store = pipeline, store
         self.ref = verdicts.reference_record(pipeline, store, compute=compute)
         self.doc = (self.ref or {}).get("reference") if isinstance((self.ref or {}).get("reference"), dict) else None
@@ -181,6 +199,7 @@ class Walk:
     def _read(self, run, compute: bool) -> tuple[str | None, dict | None]:
         """(a gap's reason, or None; the verdict as onetrace gives it, or None)."""
         from onetrace_console import verdicts
+
         if verdicts.unchecked(run, self.store):
             return "unchecked", None
         try:
@@ -202,7 +221,7 @@ class Walk:
         """The run's word at `step`, or None where it is a gap there."""
         if self.gaps.get(run.key):
             return None
-        rows = self.docs[run.key].get("steps") or []
+        rows = self.docs[run.key].get("steps") or []  # type: ignore[union-attr]  # a run with no gap has its document (_read)
         got = next((r.get("word") for r in rows if isinstance(r, dict) and r.get("step") == step), None)
         return None if not isinstance(got, str) or got == STEP_GAP else got
 
@@ -239,7 +258,7 @@ class Walk:
             if word is None:
                 gaps.append(run)
             elif word == "diverged":
-                return {"left": run, "at": str(doc.get("diverged_at", "")), "before": identical, "gaps": gaps}
+                return {"left": run, "at": str(doc.get("diverged_at", "")), "before": identical, "gaps": gaps}  # type: ignore[union-attr]  # its word was read from it
             elif word == "identical":
                 identical = run
         return {"left": None, "at": "", "before": identical, "gaps": gaps}
@@ -253,13 +272,14 @@ def read_time(said: str) -> tuple[datetime | None, bool]:
     except ValueError:
         return None, False
     if got.tzinfo is None:
-        return got.replace(tzinfo=timezone.utc), True
+        return got.replace(tzinfo=UTC), True
     return got, False
 
 
 def _run_link(run, store: Store) -> str:
     from onetrace_console.render import _tag
     from onetrace_console.words import run_named
+
     return f'<a href="runs/{_tag(run.key)}/case.html">{run_named(store, run.key)}</a>'
 
 
@@ -278,9 +298,10 @@ def _said(template: str, store: Store, **parts) -> str:
     """`template` with each part: a run or runs as links, a `Drawn` part as drawn, anything else
     escaped as text."""
     import re
+
     out, at = [], 0
     for m in re.finditer(r"\{(\w+)\}", template):
-        out.append(escape(template[at:m.start()]))
+        out.append(escape(template[at : m.start()]))
         v = parts[m.group(1)]
         if isinstance(v, (list, tuple)):
             out.append(_runs(v, store))
@@ -299,10 +320,13 @@ def _pair(a, b, step: str | None, store: Store, held: dict, label: str) -> str:
     from onetrace_console import first_kind
     from onetrace_console.choose_pages import b_anchor, pair_href
     from onetrace_console.render import _tag
+
     found = held.get((a.key, b.key))
     if found is None:
-        return (f'<a href="{_tag(pair_href(label, a.key))}#{_tag(b_anchor(b.key))}" data-pair="compare">'
-                f"{escape(COMPARE)}</a>")
+        return (
+            f'<a href="{_tag(pair_href(label, a.key))}#{_tag(b_anchor(b.key))}" data-pair="compare">'
+            f"{escape(COMPARE)}</a>"
+        )
     line = ""
     if step is not None:
         try:
@@ -314,6 +338,7 @@ def _pair(a, b, step: str | None, store: Store, held: dict, label: str) -> str:
 
 def _pipelines(store: Store):
     from onetrace_console.overview import pipelines
+
     return pipelines(store)
 
 
@@ -326,8 +351,14 @@ def answer_html(walk: Walk, held: dict) -> str:
     if not left:
         return f'<p data-section="bisect-answer">{escape(ANSWER_NONE)}</p>'
     step, got = min(left, key=lambda sg: order[sg[1]["left"].key])
-    said = _said(ANSWER, store, run=got["left"], step=Drawn(f"<code>{escape(step)}</code>"), word=got["word"],
-                 before=got["before"])
+    said = _said(
+        ANSWER,
+        store,
+        run=got["left"],
+        step=Drawn(f"<code>{escape(step)}</code>"),
+        word=got["word"],
+        before=got["before"],
+    )
     more = len(left) - 1
     if more:
         said += " " + escape(ANSWER_MORE.format(n=more, steps="step" if more == 1 else "steps"))
@@ -337,6 +368,7 @@ def answer_html(walk: Walk, held: dict) -> str:
 
 def _step_rows(walk: Walk, held: dict) -> str:
     from onetrace_console.render import _tag
+
     store, rows = walk.store, []
     for step in walk.steps():
         got = walk.at_step(step)
@@ -356,21 +388,25 @@ def _step_rows(walk: Walk, held: dict) -> str:
             if got["gaps"] and got["before"] is not None:
                 notes.append(_said(GAPS_AFTER, store, run=got["before"], n=len(got["gaps"]), runs=got["gaps"]))
         said = "".join(f"<p data-bisect-note>{n}</p>" for n in notes)
-        rows.append(f'<tr data-step="{_tag(step)}" data-left="{_tag(got["left"].key if got["left"] else "")}">'
-                    f'<td><code>{escape(step)}</code></td><td data-first>{first}{said}</td><td data-word>{word}</td>'
-                    f"<td data-before>{before}</td><td data-side>{pair}</td></tr>")
+        rows.append(
+            f'<tr data-step="{_tag(step)}" data-left="{_tag(got["left"].key if got["left"] else "")}">'
+            f"<td><code>{escape(step)}</code></td><td data-first>{first}{said}</td><td data-word>{word}</td>"
+            f"<td data-before>{before}</td><td data-side>{pair}</td></tr>"
+        )
     return "".join(rows)
 
 
 def start_html(said: str) -> str:
     """A recorded start as the page shows it: the one form, to the millisecond where it has them."""
     from onetrace_console.words import clock, short_time, time_html
+
     has_ms = "." in said.split("T", 1)[-1]
     return time_html(said, text=f"{short_time(said)[:10]} {clock(said)}" if has_ms else None)
 
 
 def ask_href(label: str, after: str) -> str:
     from urllib.parse import quote
+
     return f"{PATH}?p={quote(label)}&amp;after={quote(after, safe='')}"
 
 
@@ -380,11 +416,13 @@ def unsettled_rows(run, store: Store) -> list[str]:
     step rather than the run as a whole. Empty where none is read."""
     import tempfile
     from pathlib import Path
+
     from onetrace_console.bounded_json import load_json_bounded
     from onetrace_console.checks import materialise
     from onetrace_console.viewer.model import _whole_run
     from onetrace_console.viewer.record import read_record
     from onetrace_console.viewer.report import parse
+
     if not run.check_report:
         return []
     try:
@@ -394,23 +432,26 @@ def unsettled_rows(run, store: Store) -> list[str]:
         whole = _whole_run(record, report)
     except Exception:  # noqa: BLE001 - a report or record not read gives no rows, and says so
         return []
-    return [f.line for f in report.findings
-            if f.outcome == "not_run" and f.property != "originality" and f.subject not in whole]
+    return [
+        f.line
+        for f in report.findings
+        if f.outcome == "not_run" and f.property != "originality" and f.subject not in whole
+    ]
 
 
 def gap_why(walk: Walk, run, gap: str) -> str:
     """What the records hold of a gap's reason, and what would include it; never a guess."""
     from onetrace_console.render import _tag
+
     if gap == "unchecked":
         rows = unsettled_rows(run, walk.store)
         if not rows:
-            return escape(GAP_NOT_RECORDED)
+            return f"{escape(GAP_NOT_RECORDED)} {escape(GAP_UNCHECKED_INCLUDE)}"
         said = escape(GAP_ROWS.format(rows=rows[0]))
         if len(rows) > 1:
             more = GAP_ROWS_MORE.format(n=len(rows) - 1, rows="row" if len(rows) == 2 else "rows")
             head, tail = more.split("on its Proof page")
-            said += (f' {escape(head)}<a href="runs/{_tag(run.key)}/proof.html">on its Proof page</a>'
-                     f"{escape(tail)}")
+            said += f' {escape(head)}<a href="runs/{_tag(run.key)}/proof.html">on its Proof page</a>{escape(tail)}'
         return f"{said} {escape(GAP_ROWS_INCLUDE)}"
     if gap == "none":
         return f"{escape(GAP_NONE_WHY)} {escape(GAP_NONE_INCLUDE)}"
@@ -422,19 +463,24 @@ def gap_why(walk: Walk, run, gap: str) -> str:
 
 def _runs_table(walk: Walk) -> str:
     from onetrace_console.render import _tag
+
     rows = []
     for i, (run, (_start, said)) in enumerate(walk.placed, start=1):
         gap = walk.gaps.get(run.key)
         doc = walk.docs.get(run.key) or {}
         if gap:
-            verdict = (f'<span data-gap="{_tag(gap)}">{escape(GAP_WORDS[gap])}</span>'
-                       f'<p data-gap-why>{gap_why(walk, run, gap)}</p>')
+            verdict = (
+                f'<span data-gap="{_tag(gap)}">{escape(GAP_WORDS[gap])}</span>'
+                f"<p data-gap-why>{gap_why(walk, run, gap)}</p>"
+            )
         else:
             verdict = escape(doc["verdict"] + (f" at {doc['diverged_at']}" if doc.get("diverged_at") else ""))
         #: The row's time is a link into the one form: the first run to leave after it.
-        rows.append(f'<tr data-run="{_tag(run.key)}"><td>{i}</td><td>{_run_link(run, walk.store)}</td>'
-                    f'<td class="mono"><a href="{ask_href(walk.pipeline.label, said)}" data-bisect-ask '
-                    f'title="{escape(WINDOW_AFTER_RUN)}">{start_html(said)}</a></td><td data-verdict>{verdict}</td></tr>')
+        rows.append(
+            f'<tr data-run="{_tag(run.key)}"><td>{i}</td><td>{_run_link(run, walk.store)}</td>'
+            f'<td class="mono"><a href="{ask_href(walk.pipeline.label, said)}" data-bisect-ask '
+            f'title="{escape(WINDOW_AFTER_RUN)}">{start_html(said)}</a></td><td data-verdict>{verdict}</td></tr>'
+        )
     return "".join(rows)
 
 
@@ -446,34 +492,51 @@ def _window(walk: Walk, said: str | None, label: str, held: dict, *, form: bool)
     shown = escape(said or "")
     #: One plain GET form, on the built page and the page the console answers alike: it reads what is
     #: kept, and runs nothing.
-    form = (f'<form method="get" action="{PATH}" data-bisect-window><input type="hidden" name="p" '
-            f'value="{escape(label)}"><label>{escape(WINDOW_LABEL)} <input type="text" name="after" '
-            f'value="{shown}" maxlength="{MOST_CHARS}"></label> <button type="submit">{escape(WINDOW_BUTTON)}'
-            f"</button></form><p>{escape(WINDOW_HINT)}</p>")
+    drawn = (
+        f'<form method="get" action="{PATH}" data-bisect-window><input type="hidden" name="p" '
+        f'value="{escape(label)}"><label>{escape(WINDOW_LABEL)} <input type="text" name="after" '
+        f'value="{shown}" maxlength="{MOST_CHARS}"></label> <button class="btn-primary" data-busy="Finding…" type="submit">{escape(WINDOW_BUTTON)}'
+        f"</button></form><p>{escape(WINDOW_HINT)}</p>"
+    )
     if not form_result(said):
-        return form
-    when, utc = read_time(said)
+        return drawn
+    when, utc = read_time(said)  # type: ignore[arg-type]  # form_result(said): said is a string
     if when is None:
-        return form + f'<p data-bisect-window-result="unread">{escape(WINDOW_UNREAD.format(said=said))}</p>'
+        return drawn + f'<p data-bisect-window-result="unread">{escape(WINDOW_UNREAD.format(said=said))}</p>'
     got = walk.after(when)
     from onetrace_console.words import time_html
+
     asked = Drawn(time_html(when.isoformat()))
     out = [f"<p data-bisect-utc>{escape(WINDOW_UTC)}</p>"] if utc else []
     if got["left"] is not None:
-        out.append(f'<p data-bisect-window-result="left">'
-                   + _said(WINDOW_FOUND, store, when=asked, run=got["left"], step=got["at"]) + "</p>")
+        out.append(
+            '<p data-bisect-window-result="left">'
+            + _said(WINDOW_FOUND, store, when=asked, run=got["left"], step=got["at"])
+            + "</p>"
+        )
         if got["before"] is not None:
-            out.append("<div>" + _said(WINDOW_BEFORE, store, run=got["before"]) + " "
-                       + _pair(got["before"], got["left"], got["at"] or None, store, held, label) + "</div>")
+            out.append(
+                "<div>"
+                + _said(WINDOW_BEFORE, store, run=got["before"])
+                + " "
+                + _pair(got["before"], got["left"], got["at"] or None, store, held, label)
+                + "</div>"
+            )
         if got["gaps"]:
-            out.append("<p data-bisect-note>" + _said(WINDOW_GAPS, store, when=asked, n=len(got["gaps"]),
-                                                      runs=got["gaps"]) + "</p>")
+            out.append(
+                "<p data-bisect-note>"
+                + _said(WINDOW_GAPS, store, when=asked, n=len(got["gaps"]), runs=got["gaps"])
+                + "</p>"
+            )
     else:
         out.append(f'<p data-bisect-window-result="none">{_said(WINDOW_NONE, store, when=asked)}</p>')
         if got["gaps"]:
-            out.append("<p data-bisect-note>" + _said(WINDOW_GAPS_NONE, store, when=asked, n=len(got["gaps"]),
-                                                      runs=got["gaps"]) + "</p>")
-    return form + "".join(out)
+            out.append(
+                "<p data-bisect-note>"
+                + _said(WINDOW_GAPS_NONE, store, when=asked, n=len(got["gaps"]), runs=got["gaps"])
+                + "</p>"
+            )
+    return drawn + "".join(out)
 
 
 def form_result(said: str | None) -> bool:
@@ -481,20 +544,32 @@ def form_result(said: str | None) -> bool:
     return said is not None and bool(said.strip())
 
 
-def render_bisect(pipeline, store: Store, *, generated_at: str, after: str | None = None,
-                  held: dict | None = None, compute: bool | None = None, form: bool = False) -> str:
+def render_bisect(
+    pipeline,
+    store: Store,
+    *,
+    generated_at: str,
+    after: str | None = None,
+    held: dict | None = None,
+    compute: bool | None = None,
+    form: bool = False,
+) -> str:
     """The pipeline's page; `after`, the window form's time as asked. `compute`: make the reference
     and verdicts where none is kept; by default a local console does and a public one never does."""
     from onetrace_console.choose_pages import held_comparisons
-    from onetrace_console.pipeline_pages import named, page_href as pipeline_href
+    from onetrace_console.pipeline_pages import named
+    from onetrace_console.pipeline_pages import page_href as pipeline_href
     from onetrace_console.render import _document, _tag
     from onetrace_console.viewer.page import shortened_in_text
     from onetrace_console.words import generated_footer, scroll_region
+
     compute = (not _public()) if compute is None else (compute and not _public())
     label = pipeline.label
-    body = ['<p class="crumbs" data-section="crumbs"><a href="home.html">Overview</a> / '
-            f'<a href="{_tag(pipeline_href(label))}">{escape(label)}</a> / {escape(TITLE)}</p>',
-            f"<h1>{escape(TITLE)} · {named(pipeline)}</h1>"]
+    body = [
+        '<p class="crumbs" data-section="crumbs"><a href="home.html">Overview</a> / '
+        f'<a href="{_tag(pipeline_href(label))}">{escape(label)}</a> / {escape(TITLE)}</p>',
+        f"<h1>{escape(TITLE)} · {named(pipeline)}</h1>",
+    ]
     try:
         walk = Walk(pipeline, store, compute=compute)
     except (StoreError, ValueError) as e:
@@ -504,12 +579,14 @@ def render_bisect(pipeline, store: Store, *, generated_at: str, after: str | Non
         body.append(answer_html(walk, held))
     bench = None
     if walk is not None and walk.doc is not None:
-        made = walk.ref.get("runs") or []
+        made = walk.ref.get("runs") or []  # type: ignore[union-attr]  # a reference document comes from a record
         bench = store.get_run(made[0]) if made else None
     how = _said(HOW, store, run=bench) if bench is not None else escape(HOW_NO_REFERENCE)
-    body.append(f'<div data-section="bisect-how"><p>{how}</p></div>'
-                f'<details data-section="bisect-rule"><summary>{escape(RULE_HEAD)}</summary>'
-                f'<p data-section="what">{escape(WHAT)}</p><p data-section="bisect-leaves">{escape(LEAVES)}</p></details>')
+    body.append(
+        f'<div data-section="bisect-how"><p>{how}</p></div>'
+        f'<details data-section="bisect-rule"><summary>{escape(RULE_HEAD)}</summary>'
+        f'<p data-section="what">{escape(WHAT)}</p><p data-section="bisect-leaves">{escape(LEAVES)}</p></details>'
+    )
     if walk is None:
         body.append(f'<p data-section="bisect-unreadable">{escape(unreadable)}</p>')
     if walk is not None and walk.doc is None:
@@ -524,24 +601,43 @@ def render_bisect(pipeline, store: Store, *, generated_at: str, after: str | Non
         h1, h2 = head.split("{seal}")
         #: One line of text: the seal shown short in it, and the whole value in a fold after it (a closed
         #: Details is a box of its own, so text after one starts a line).
-        short, whole = shortened_in_text(str(walk.doc.get("seal", "")))
-        body.append(f'<div data-section="bisect-reference"><p data-reference-line>{escape(h1)}{short}'
-                    f'{escape(h2)}{_run_link(bench, store) if bench is not None else ""}{escape(tail)}</p>'
-                    f"{whole}</div>")
+        short, whole = shortened_in_text(str(walk.doc.get("seal", "")))  # type: ignore[union-attr]  # the branch where walk.doc is not None
+        body.append(
+            f'<div data-section="bisect-reference"><p data-reference-line>{escape(h1)}{short}'
+            f"{escape(h2)}{_run_link(bench, store) if bench is not None else ''}{escape(tail)}</p>"
+            f"{whole}</div>"
+        )
         head = "".join(f"<th>{escape(c)}</th>" for c in STEP_COLUMNS)
-        body.append(f"<h2>{escape(STEP_HEAD)}</h2>" + scroll_region(
-            f'<table data-section="bisect-steps"><thead><tr>{head}</tr></thead><tbody>{_step_rows(walk, held)}'
-            "</tbody></table>", STEP_HEAD, "bisect-steps"))
-        body.append(f'<h2>{escape(WINDOW_HEAD)}</h2><div data-section="bisect-window">'
-                    f"{_window(walk, after, label, held, form=form)}</div>")
+        body.append(
+            f"<h2>{escape(STEP_HEAD)}</h2>"
+            + scroll_region(
+                f'<table data-section="bisect-steps"><thead><tr>{head}</tr></thead><tbody>{_step_rows(walk, held)}'  # type: ignore[arg-type]  # held is read above wherever walk.doc is not None
+                "</tbody></table>",
+                STEP_HEAD,
+                "bisect-steps",
+            )
+        )
+        body.append(
+            f'<h2>{escape(WINDOW_HEAD)}</h2><div data-section="bisect-window">'
+            f"{_window(walk, after, label, held, form=form)}</div>"  # type: ignore[arg-type]  # as _step_rows's
+        )
         head = "".join(f"<th>{escape(c)}</th>" for c in RUNS_COLUMNS)
-        body.append(f"<h2>{escape(RUNS_HEAD)}</h2>" + scroll_region(
-            f'<table data-section="bisect-runs"><thead><tr>{head}</tr></thead><tbody>{_runs_table(walk)}'
-            "</tbody></table>", RUNS_HEAD, "bisect-runs"))
+        body.append(
+            f"<h2>{escape(RUNS_HEAD)}</h2>"
+            + scroll_region(
+                f'<table data-section="bisect-runs"><thead><tr>{head}</tr></thead><tbody>{_runs_table(walk)}'
+                "</tbody></table>",
+                RUNS_HEAD,
+                "bisect-runs",
+            )
+        )
         if walk.unplaced:
             body.append(f'<p data-section="bisect-unplaced">{_said(UNPLACED, store, runs=walk.unplaced)}</p>')
-    body.append(f'<section data-section="bisect-non-claims"><h2>{escape(NON_CLAIMS_HEAD)}</h2><ul class="plain">'
-                + "".join(f"<li>{escape(n)}</li>" for n in NON_CLAIMS) + "</ul></section>")
+    body.append(
+        f'<section data-section="bisect-non-claims"><h2>{escape(NON_CLAIMS_HEAD)}</h2><ul class="plain">'
+        + "".join(f"<li>{escape(n)}</li>" for n in NON_CLAIMS)
+        + "</ul></section>"
+    )
     body.append(generated_footer(generated_at))
     return _document(f"{TITLE} · {label}", "\n".join(['<div class="cp">', *body, "</div>"]))
 
@@ -552,8 +648,7 @@ def page_for(store: Store, label: str, after: str, *, generated_at: str) -> str 
     p = next((p for p in _pipelines(store) if p.label == label), None)
     if p is None:
         return None
-    return render_bisect(p, store, generated_at=generated_at, after=after[:MOST_CHARS], compute=False,
-                         form=True)
+    return render_bisect(p, store, generated_at=generated_at, after=after[:MOST_CHARS], compute=False, form=True)
 
 
 _WINDOW_FORM = re.compile(r'<form method="get" action="[^"]*" data-bisect-window>.*?</form><p>[^<]*</p>', re.S)
@@ -563,7 +658,9 @@ def exported(page: str) -> str:
     """A first-run-to-leave page as a static export carries it: the window form, a GET to a console that
     isn't there, shown disabled (no form, nothing to submit), with one line, NEEDS_CONSOLE, in place of
     the form's hint."""
-    disabled = (f'<p data-bisect-window data-needs-console><label>{escape(WINDOW_LABEL)} <input type="text" '
-                f'name="after" value="" maxlength="{MOST_CHARS}" disabled></label> <button type="button" '
-                f'disabled>{escape(WINDOW_BUTTON)}</button></p><p data-needs-console>{escape(NEEDS_CONSOLE)}</p>')
+    disabled = (
+        f'<p data-bisect-window data-needs-console><label>{escape(WINDOW_LABEL)} <input type="text" '
+        f'name="after" value="" maxlength="{MOST_CHARS}" disabled></label> <button class="btn-primary" type="button" '
+        f"disabled>{escape(WINDOW_BUTTON)}</button></p><p data-needs-console>{escape(NEEDS_CONSOLE)}</p>"
+    )
     return _WINDOW_FORM.sub(lambda m: disabled, page, count=1)

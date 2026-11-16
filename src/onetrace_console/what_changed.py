@@ -1,4 +1,4 @@
-""""What changed?" from one run: the comparison to open first, chosen by a stated rule.
+""" "What changed?" from one run: the comparison to open first, chosen by a stated rule.
 
 From a run's page the console picks the run to compare it with, trying in order, and names the rule
 it used (rules 2 to 4; a rule 1, the pipeline's reference run, waits for references). At each rule a
@@ -19,18 +19,26 @@ own order of runs (arrival). The rule is deterministic and stated: no score, no 
 comparison is made only when a person asks on a local console; a public console offers only the
 pairs it holds. The choice never changes a verdict.
 """
+
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 from onetrace_console.words import escape
+
+if TYPE_CHECKING:
+    from onetrace_console.store import StoredRun
 
 BUTTON = "What changed?"
 #: The two benchmark rules, by name: each comes before the rule it narrows.
 BENCHMARK_INPUTS, BENCHMARK_EARLIER = "benchmark-inputs", "benchmark-earlier"
-RULES = {BENCHMARK_INPUTS: "the nearest earlier benchmark with the same inputs",
-         2: "the nearest earlier run with the same inputs",
-         BENCHMARK_EARLIER: "the nearest earlier benchmark of this pipeline",
-         3: "the most recent earlier run whose final output differs",
-         4: "the most recent earlier run of this pipeline"}
+RULES = {
+    BENCHMARK_INPUTS: "the nearest earlier benchmark with the same inputs",
+    2: "the nearest earlier run with the same inputs",
+    BENCHMARK_EARLIER: "the nearest earlier benchmark of this pipeline",
+    3: "the most recent earlier run whose final output differs",
+    4: "the most recent earlier run of this pipeline",
+}
 #: "What changed?"'s line opening the index on the runs whose first-step inputs are this run's.
 SAME_INPUTS = "Other runs with the same inputs: {n}"
 NO_EARLIER = "No earlier run of this pipeline, so there is nothing to compare it with."
@@ -44,6 +52,7 @@ PUBLIC_ONLY = "This demo compares nothing; it offers the comparisons it holds."
 def _receipts(run, store) -> list[dict]:
     """The run's receipts in order, read once per reading of the store (`Store.reading`)."""
     from onetrace_console.render import _receipts_in_order
+
     read = store._read()
     if read is None:
         return _receipts_in_order(run.key, store)
@@ -58,8 +67,13 @@ def first_inputs(receipts: list[dict]) -> tuple:
     if not receipts:
         return ()
     ins = receipts[0].get("inputs") or []
-    return tuple(sorted((str(i.get("name")), str(i.get("digest"))) for i in ins
-                        if isinstance(i, dict) and not str(i.get("name", "")).startswith("receipt:")))
+    return tuple(
+        sorted(
+            (str(i.get("name")), str(i.get("digest")))
+            for i in ins
+            if isinstance(i, dict) and not str(i.get("name", "")).startswith("receipt:")
+        )
+    )
 
 
 def final_output(receipts: list[dict]) -> tuple:
@@ -69,17 +83,18 @@ def final_output(receipts: list[dict]) -> tuple:
     return tuple(str(o.get("digest")) for o in receipts[-1].get("outputs") or [] if isinstance(o, dict))
 
 
-def candidates(run, store, *, with_benchmarks: bool = True) -> list:
+def candidates(run, store, *, with_benchmarks: bool = True) -> list | None:
     """[(an earlier run, the rule)], in the order the rules take them: the benchmarks with the same
     inputs, rule 2's (those whose final output differs first, nearest first), the other earlier
     benchmarks, then rule 3's, then rule 4's; each run once."""
     from onetrace_console.overview import declared_list
     from onetrace_console.store import arrival_order
+
     ordered = [r for r in arrival_order(store.runs(), newest_first=False) if declared_list(r) == declared_list(run)]
     keys = [r.key for r in ordered]
     if run.key not in keys:
         return None
-    earlier = ordered[:keys.index(run.key)][::-1]          # nearest first
+    earlier = ordered[: keys.index(run.key)][::-1]  # nearest first
     if not earlier:
         return []
     mine = _receipts(run, store)
@@ -87,8 +102,9 @@ def candidates(run, store, *, with_benchmarks: bool = True) -> list:
     facts = [(r, _receipts(r, store)) for r in earlier]
     same_in = [(r, rs) for r, rs in facts if my_in and first_inputs(rs) == my_in]
     from onetrace_console.benchmarks import marks
+
     marked = marks(store) if with_benchmarks else {}
-    out = [(r, BENCHMARK_INPUTS) for r, _rs in same_in if r.key in marked]
+    out: list[tuple[StoredRun, str | int]] = [(r, BENCHMARK_INPUTS) for r, _rs in same_in if r.key in marked]
     out += [(r, 2) for r, rs in same_in if final_output(rs) != my_out]
     out += [(r, 2) for r, rs in same_in if final_output(rs) == my_out]
     out += [(r, BENCHMARK_EARLIER) for r in earlier if r.key in marked]
@@ -106,6 +122,7 @@ def _public(public) -> bool:
     if public is not None:
         return public
     from onetrace_console.frame import rendering_public
+
     return rendering_public()
 
 
@@ -141,16 +158,19 @@ def run_ref(store, run) -> str:
 
 
 def same_inputs_line(run, store, *, up: str) -> str:
-    """"Other runs with the same inputs: N", opening the index with `inputs:same-as:` filled; "" for a
+    """ "Other runs with the same inputs: N", opening the index with `inputs:same-as:` filled; "" for a
     run whose first step records no input of its own."""
     from urllib.parse import quote
+
     mine = first_inputs(_receipts(run, store))
     if not mine:
         return ""
     n = sum(1 for r in store.runs() if r.key != run.key and first_inputs(_receipts(r, store)) == mine)
     q = quote(f"inputs:same-as:{run_ref(store, run)}", safe=":")
-    return (f'<p data-what-changed="same-inputs"><a href="{up}search?q={q}&amp;run={escape(run.key)}">'
-            f"{escape(SAME_INPUTS.format(n=n))}</a></p>")
+    return (
+        f'<p data-what-changed="same-inputs"><a href="{up}search?q={q}&amp;run={escape(run.key)}">'
+        f"{escape(SAME_INPUTS.format(n=n))}</a></p>"
+    )
 
 
 def held(store, a_key: str, b_key: str):
@@ -161,11 +181,14 @@ def section(run, store, *, public: bool, up: str = "../../") -> str:
     """The run page's "What changed?": the comparison the rule picks, opened at its top (its short
     answer), the rule named, and the other comparisons of this run to pick instead."""
     from onetrace_console.words import run_named
+
     got = choose(run, store, public=public)
     head = f'<section data-section="what-changed" class="what-changed"><h2>{escape(BUTTON)}</h2>'
     if got is None:
-        return (head + f'<p data-what-changed="none">{escape(NO_EARLIER)}</p>'
-                f'{same_inputs_line(run, store, up=up)}</section>')
+        return (
+            head + f'<p data-what-changed="none">{escape(NO_EARLIER)}</p>'
+            f"{same_inputs_line(run, store, up=up)}</section>"
+        )
     other, rule, held_only = got
     words = f"Compared with {other.run_id}, {rule_words(rule, held_only)}."
     if rule in (BENCHMARK_INPUTS, BENCHMARK_EARLIER):
@@ -179,23 +202,49 @@ def section(run, store, *, public: bool, up: str = "../../") -> str:
         act = f'<span data-what-changed="not-held">{escape(NOT_COMPARED)}.</span> {escape(PUBLIC_ONLY)}'
     else:
         from onetrace_console.compare_script import COMPARE_SCRIPT
-        act = (f'<button type="button" hidden data-compare-post="/compare?a={escape(other.key)}&amp;b={escape(run.key)}">'
-               f'{escape(BUTTON)}</button><span data-compare-said></span>{COMPARE_SCRIPT}')
+
+        act = (
+            f'<button class="btn-secondary" data-busy="Comparing…" data-busy-wait="the comparison" type="button" hidden data-compare-post="/compare?a={escape(other.key)}&amp;b={escape(run.key)}">'
+            f"{escape(BUTTON)}</button><span data-compare-said></span>{COMPARE_SCRIPT}"
+        )
     others = [x for x in store.comparisons() if x.run_b == run.key and x.run_a != other.key]
     from onetrace_console.benchmarks import badge
-    pick = ("".join(f'<li><a href="{up}diff/{escape(x.key)}.html">against {run_named(store, x.run_a)}</a>'
-                    f"{badge(store, x.run_a)}</li>" for x in others))
-    listing = (f'<details data-what-changed="others"><summary>Pick another comparison ({len(others)})</summary>'
-               f'<ul class="plain">{pick}</ul></details>' if others else "")
+
+    pick = "".join(
+        f'<li><a href="{up}diff/{escape(x.key)}.html">against {run_named(store, x.run_a)}</a>'
+        f"{badge(store, x.run_a)}</li>"
+        for x in others
+    )
+    listing = (
+        f'<details data-what-changed="others"><summary>Pick another comparison ({len(others)})</summary>'
+        f'<ul class="plain">{pick}</ul></details>'
+        if others
+        else ""
+    )
     mark = " data-held-only" if held_only else ""
     from onetrace_console.benchmarks import badge
-    return (head + f'<p data-what-changed="rule" data-rule="{rule}"{mark}>{escape(words)}{badge(store, other.key)}</p>'
-            f'<p>{act}</p>{listing}{same_inputs_line(run, store, up=up)}</section>')
+
+    return (
+        head + f'<p data-what-changed="rule" data-rule="{rule}"{mark}>{escape(words)}{badge(store, other.key)}</p>'
+        f"<p>{act}</p>{listing}{same_inputs_line(run, store, up=up)}</section>"
+    )
 
 
 def runs_line(run, store, *, public: bool | None = None) -> str:
     """The Runs page's one line: the short answer's headline against the run the rule chooses, where
-    that comparison is held; "not compared" otherwise."""
+    that comparison is held; "not compared" otherwise. Drawn once per run in a reading (`Store.reading`),
+    as every runs table draws it."""
+    read = store._read()
+    if read is None:
+        return _runs_line(run, store, public=public)
+    held = read.setdefault("runs lines", {})
+    k = (run.key, _public(public))
+    if k not in held:
+        held[k] = _runs_line(run, store, public=public)
+    return held[k]
+
+
+def _runs_line(run, store, *, public: bool | None = None) -> str:
     got = choose(run, store, public=public)
     if got is None:
         return NOT_COMPARED
@@ -203,6 +252,7 @@ def runs_line(run, store, *, public: bool | None = None) -> str:
     if c is None:
         return NOT_COMPARED
     from onetrace_console.render import short_headline
+
     return short_headline(c, store) or NOT_COMPARED
 
 
@@ -212,5 +262,7 @@ def chosen_line(comparison, store) -> str:
     got = choose(run_b, store) if run_b is not None else None
     if got is None or got[0].key != comparison.run_a:
         return ""
-    return (f'<p data-section="chosen" data-rule="{got[1]}">{escape(BUTTON)} chose this comparison: '
-            f'compared with <code>{escape(got[0].run_id)}</code>, {escape(rule_words(got[1], got[2]))}.</p>')
+    return (
+        f'<p data-section="chosen" data-rule="{got[1]}">{escape(BUTTON)} chose this comparison: '
+        f"compared with <code>{escape(got[0].run_id)}</code>, {escape(rule_words(got[1], got[2]))}.</p>"
+    )

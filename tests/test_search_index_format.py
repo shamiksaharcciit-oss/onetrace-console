@@ -5,6 +5,7 @@ console, which reads its build's index and never writes one, to build it again w
 local console, that the console writes it again itself. A later format is named as one it does not read.
 Each rule has its own sabotage below.
 """
+
 from __future__ import annotations
 
 import html
@@ -29,8 +30,9 @@ def _root(tmp_path, fmt):
 
 def _page(root, public: bool) -> str:
     index = run_index.read(root)
-    return search_page.body(index, "verdict:PASS", "", None, public=public,
-                            found=None if index is not None else run_index.format_of(root))
+    return search_page.body(
+        index, "verdict:PASS", "", None, public=public, found=None if index is not None else run_index.format_of(root)
+    )
 
 
 @pytest.mark.parametrize("public", [True, False], ids=["public", "local"])
@@ -44,7 +46,8 @@ def test_an_earlier_format_on_a_public_console_says_to_build_it_again_with_this_
     examined(1, "public build with an earlier index")
     assert _said(_page(_root(tmp_path, earlier), True)) == (
         f"This build's index of its runs is in an earlier format, {earlier}; build it again with "
-        f"onetrace-console {__version__}.")
+        f"onetrace-console {__version__}."
+    )
 
 
 def test_an_earlier_format_on_a_local_console_says_it_writes_it_again(tmp_path, examined):

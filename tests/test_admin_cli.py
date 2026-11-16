@@ -1,6 +1,7 @@
 """The first admin, created inside the container. The password is
 read from stdin, never argv or an environment variable; the web never creates accounts.
 """
+
 from __future__ import annotations
 
 import io
@@ -16,8 +17,9 @@ from onetrace_console.serve import ACCOUNTS_DIRNAME
 REPO = Path(__file__).resolve().parent.parent
 
 
-def _run_admin_create(monkeypatch, tmp_path, username: str, password: str,
-                      store_root: Path | None = None) -> tuple[int, str]:
+def _run_admin_create(
+    monkeypatch, tmp_path, username: str, password: str, store_root: Path | None = None
+) -> tuple[int, str]:
     store_root = store_root or (tmp_path / "store")
     config_path = tmp_path / "config.json"
     config_path.write_text(f'{{"store_root": "{store_root.as_posix()}"}}', encoding="utf-8")
@@ -48,8 +50,7 @@ def test_admin_create_never_accepts_the_password_as_an_argument(tmp_path, monkey
     assert rc == 2
 
 
-def test_admin_create_ignores_any_password_looking_environment_variable(
-        tmp_path, monkeypatch, examined):
+def test_admin_create_ignores_any_password_looking_environment_variable(tmp_path, monkeypatch, examined):
     """There is no environment variable this CLI reads a password from at all --
     checked by setting one with a plausible name and confirming stdin is still what
     is read, not the environment.
@@ -88,22 +89,28 @@ def test_sabotage_a_signup_route_added_to_a_copy_makes_the_no_route_test_fail(tm
 
     serve_py = copy_root / "src" / "onetrace_console" / "serve.py"
     text = serve_py.read_text(encoding="utf-8")
-    needle = 'elif split.path == "/signin" and self.config.sign_in.get("enabled"):'
+    needle = 'elif split.path == "/signin" and self.config.sign_in.get("enabled") and not self._oidc():'
     assert needle in text, "the anchor this sabotage inserts beside has moved or been reworded"
     sabotaged = text.replace(
         needle,
         'elif split.path == "/signup":\n'
-        '                self._handle_signup(body)  # sabotage: a web route that creates a user\n'
-        '            ' + needle,
-        1)
+        "                self._handle_signup(body)  # sabotage: a web route that creates a user\n"
+        "            " + needle,
+        1,
+    )
     serve_py.write_text(sabotaged, encoding="utf-8")
 
     examined(1, "a copy of serve.py with a signup route inserted, run through the real test")
     env = dict(__import__("os").environ, PYTHONPATH=str(copy_root / "src"))
     result = subprocess.run(
-        [sys.executable, "-m", "pytest",
-         "tests/test_admin_cli.py::test_no_route_in_serve_py_creates_an_account", "-q"],
-        cwd=str(copy_root), env=env, capture_output=True, text=True, timeout=60)
+        [sys.executable, "-m", "pytest", "tests/test_admin_cli.py::test_no_route_in_serve_py_creates_an_account", "-q"],
+        cwd=str(copy_root),
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=60,
+    )
     assert result.returncode != 0, (
         "the no-signup-route test PASSED against a tree with a signup route added -- "
-        "the sabotage did not fire:\n" + result.stdout[-2000:] + result.stderr[-2000:])
+        "the sabotage did not fire:\n" + result.stdout[-2000:] + result.stderr[-2000:]
+    )

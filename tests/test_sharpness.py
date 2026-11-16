@@ -3,6 +3,7 @@ image. Every drawing is SVG or CSS -- no `<img>` of a PNG, JPEG, GIF or WebP, no
 image, no `url(...)` to one, no `<canvas>`. Held to every page of the public demo and the console's
 stylesheet, with a sabotage.
 """
+
 from __future__ import annotations
 
 import re
@@ -26,6 +27,7 @@ def raster_problems(text: str) -> list[str]:
 
 def test_no_page_or_stylesheet_draws_with_a_raster_image(built, examined):  # noqa: F811
     from onetrace_console.frame import stylesheet
+
     root = built / "store" / "pages"
     pages = {p.relative_to(root).as_posix(): p.read_text(encoding="utf-8") for p in root.rglob("*.html")}
     pages["static/console.css"] = stylesheet().decode("utf-8")
@@ -34,8 +36,15 @@ def test_no_page_or_stylesheet_draws_with_a_raster_image(built, examined):  # no
     assert sum(p.count('<svg class="graph"') for p in pages.values()) > 0, "no graph drawn as SVG"
 
 
-@pytest.mark.parametrize("planted", ['<img src="graph.png">', "background:url(/static/x.webp)",
-                                     '<img src="data:image/png;base64,AAAA">', "<canvas width=2></canvas>"])
+@pytest.mark.parametrize(
+    "planted",
+    [
+        '<img src="graph.png">',
+        "background:url(/static/x.webp)",
+        '<img src="data:image/png;base64,AAAA">',
+        "<canvas width=2></canvas>",
+    ],
+)
 def test_sabotage_a_raster_drawing_is_named(planted, examined):
     examined(1, "planted page")
     assert raster_problems("<p>a page</p>" + planted), planted

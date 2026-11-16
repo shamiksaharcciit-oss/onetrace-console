@@ -2,10 +2,12 @@
 times, and tabs to the run's views (Graph and Table on the run page). The answer page also carries
 the four answers, as the run page's ladder states them. The authorization page does not: it must
 never read as a pass, and "Ran as approved: Yes" there would read as the action approved. It keeps
-its own heading and its "No records" state.
+its own heading, and its state: "No records" for a run with no gated step, its Gated steps where
+the record declares one (the demo's gated invoice runs).
 
 Held over every run of the public demo. Each check has its sabotage.
 """
+
 from __future__ import annotations
 
 import re
@@ -50,7 +52,11 @@ def head_problems(page: str, case: str, *, answers: bool, proof: str = "") -> li
 def test_the_answer_and_authorization_pages_carry_the_head(demo, examined):  # noqa: F811
     store, pages = demo
     runs = store.runs()
+    from onetrace_console.authorization import gated_rows
+    from onetrace_console.pages import _authorization_inputs
+
     examined(2 * len(runs), "answer and authorization pages")
+    states = set()
     for run in runs:
         folder = pages / "runs" / run.key
         case = (folder / "case.html").read_text(encoding="utf-8")
@@ -59,7 +65,16 @@ def test_the_answer_and_authorization_pages_carry_the_head(demo, examined):  # n
         auth = (folder / "authorization.html").read_text(encoding="utf-8")
         assert head_problems(answer, case, answers=True, proof=proof) == [], (run.run_id, "answer")
         assert head_problems(auth, case, answers=False, proof=proof) == [], (run.run_id, "authorization")
-        assert "<h1>Authorization</h1>" in auth and '<p data-state="no-records">No records</p>' in auth
+        assert "<h1>Authorization</h1>" in auth
+        inputs = _authorization_inputs(run, store)
+        if gated_rows(inputs["manifest"], inputs["steps"]):
+            states.add("gated")
+            assert '<p data-state="gated">' in auth and 'data-state="no-records"' not in auth, run.run_id
+        else:
+            states.add("no-records")
+            assert '<p data-state="no-records">No records</p>' in auth and 'data-state="gated"' not in auth, run.run_id
+    #: The demo holds runs of both kinds, so each branch is read.
+    assert states == {"gated", "no-records"}
 
 
 def test_sabotage_a_head_missing_misplaced_or_pointing_nowhere_is_named(demo, examined):  # noqa: F811
@@ -74,7 +89,10 @@ def test_sabotage_a_head_missing_misplaced_or_pointing_nowhere_is_named(demo, ex
         "no head": (answer.replace('data-section="run-head"', 'data-section="gone"', 1), True),
         "answers on the authorization page": (auth.replace('<nav class="tabs"', strip + '<nav class="tabs"', 1), False),
         #: The run's graph tab opens whichever view holds the graph (Proof, for a red run).
-        "a tab to nowhere": (re.sub(r'href="(case|proof)\.html#graph"', r'href="\1.html#nowhere"', answer, count=1), True),
+        "a tab to nowhere": (
+            re.sub(r'href="(case|proof)\.html#graph"', r'href="\1.html#nowhere"', answer, count=1),
+            True,
+        ),
     }
     examined(len(planted), "planted pages")
     for name, (bad, answers) in planted.items():

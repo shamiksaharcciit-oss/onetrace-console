@@ -9,6 +9,7 @@ project's own machine, whose venv already held the viewer, passed. The report pa
 The last test runs the script's own lookup in a venv created here with nothing in it -- not even
 pip -- exactly as a fresh runner meets it.
 """
+
 from __future__ import annotations
 
 import ast
@@ -40,21 +41,26 @@ def test_the_report_path_module_imports_only_the_standard_library():
 
 def test_the_installer_never_imports_the_package_it_installs():
     assert "onetrace_console" not in _imported(SCRIPT), (
-        "tools/install_pinned.py imports onetrace_console, whose modules import the pins it installs")
+        "tools/install_pinned.py imports onetrace_console, whose modules import the pins it installs"
+    )
 
 
 def test_the_installers_lookup_works_in_a_venv_with_nothing_installed(tmp_path):
     venv = tmp_path / "fresh"
     subprocess.run([sys.executable, "-m", "venv", "--without-pip", str(venv)], check=True)
     python = venv / ("Scripts/python.exe" if os.name == "nt" else "bin/python")
-    probe = ("import runpy, sys; m = runpy.run_path(sys.argv[1]); print(m['report_path']())")
+    probe = "import runpy, sys; m = runpy.run_path(sys.argv[1]); print(m['report_path']())"
     env = dict(os.environ, PYTHONPATH=str(REPO / "src"))
     env.pop("ONETRACE_CONSOLE_INSTALL_REPORT", None)
-    done = subprocess.run([str(python), "-c", probe, str(SCRIPT)], cwd=REPO, env=env,
-                          capture_output=True, text=True)
+    done = subprocess.run([str(python), "-c", probe, str(SCRIPT)], cwd=REPO, env=env, capture_output=True, text=True)
     assert done.returncode == 0, f"the lookup failed with nothing installed:\n{done.stderr[-2000:]}"
     said = Path(done.stdout.strip())
     assert said.name == "onetrace-console-install-report.json"
-    assert said.parent.resolve() == Path(subprocess.run(
-        [str(python), "-c", "import sys; print(sys.prefix)"], capture_output=True, text=True,
-        check=True).stdout.strip()).resolve(), f"the report goes to {said}, not the fresh venv's prefix"
+    assert (
+        said.parent.resolve()
+        == Path(
+            subprocess.run(
+                [str(python), "-c", "import sys; print(sys.prefix)"], capture_output=True, text=True, check=True
+            ).stdout.strip()
+        ).resolve()
+    ), f"the report goes to {said}, not the fresh venv's prefix"

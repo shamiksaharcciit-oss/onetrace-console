@@ -19,6 +19,7 @@ Every run here is written by the installed SDK (0.2.2); the three readings that 
 removed, changed or added are made by changing the folder after it was written, as an operator or
 an attacker would.
 """
+
 from __future__ import annotations
 
 import hashlib
@@ -45,17 +46,23 @@ def _text(html: str) -> str:
     return re.sub(r"\s+", " ", unescape(re.sub(r"<[^>]+>", " ", html))).strip()
 
 
-def _emit(folder: Path, *, question: str = QUESTION, ask: str = "From outside the run",
-          cap: int = 4096, draft_trust: str = "operator-authored") -> Path:
+def _emit(
+    folder: Path,
+    *,
+    question: str = QUESTION,
+    ask: str = "From outside the run",
+    cap: int = 4096,
+    draft_trust: str = "operator-authored",
+) -> Path:
     """A run the SDK writes: its intake keeps `q` (the run's own argument, externally sourced, as
     the SDK records a run's arguments by default); `draft` keeps `question`, can't keep `blob`
     (bytes) or `big` (over the cap), and lists `other` in neither constant."""
     import onetrace as ot
     from onetrace.emit import Instrument
+
     tool = Instrument("tool", "tool", "1.0.0", {"x": "1"})
 
-    @ot.stage("draft", instrument=tool, keep_inputs=["question", "blob", "big"], trust=draft_trust,
-              keep_inputs_cap=cap)
+    @ot.stage("draft", instrument=tool, keep_inputs=["question", "blob", "big"], trust=draft_trust, keep_inputs_cap=cap)
     def draft(question, blob, big, other):
         #: An output that never quotes the input: outputs are shown, by their own rule.
         return f"an answer to a question of {len(question)} characters"
@@ -76,11 +83,14 @@ def _emit_older(folder: Path, monkeypatch, question: str = QUESTION) -> Path:
     import onetrace.decorators as decorators
     import onetrace.kept as kept
     from onetrace.emit import Instrument
+
     real = decorators._intake_instrument
 
     def older(*a, **k):
         from dataclasses import replace
+
         return replace(real(*a, **k), version="0.2.1")
+
     monkeypatch.setattr(decorators, "_intake_instrument", older)
     monkeypatch.setattr(kept, "PREFIX", "\x00only-the-sdk.")
     tool = Instrument("tool", "tool", "1.0.0", {"x": "1"})
@@ -103,12 +113,14 @@ def _emit_older(folder: Path, monkeypatch, question: str = QUESTION) -> Path:
 
 def _stem(folder: Path, stage: str) -> str:
     import json
+
     chain = json.loads((folder / "MANIFEST.json").read_text(encoding="utf-8"))["chain"]
     return next(Path(e["file"]).stem for e in chain if e["stage"] == stage)
 
 
 def _pages(run, store, *, public: bool = False) -> dict[str, str]:
     from onetrace_console.pages import render_execution
+
     with rendering(onedoor=False, sign_in=False, public=public):
         return render_execution(run, store, generated_at=GENERATED_AT).pages
 
@@ -133,6 +145,7 @@ def _draft(folder: Path, store, **kw) -> str:
 
 # ------------------------------------------------------------------ 1. kept and matching
 
+
 def test_a_listed_input_whose_file_matches_shows_its_text_beside_its_digest(written, store, examined):
     page = _draft(written, store)
     examined(1, "kept and matching input")
@@ -141,23 +154,28 @@ def test_a_listed_input_whose_file_matches_shows_its_text_beside_its_digest(writ
     pre = re.findall(r"<pre data-kept-text>(.*?)</pre>", raw, re.S)
     assert [unescape(p) for p in pre] == [QUESTION], pre
     import onetrace as ot
+
     digest = "sha256:" + hashlib.sha256(ot.encode_v1(QUESTION, "draft", "question")).hexdigest()
-    assert digest[len("sha256:"):] in raw, "the digest beside the text"
+    assert digest[len("sha256:") :] in raw, "the digest beside the text"
 
 
 def test_the_banner_says_kept_text_is_shown_only_where_it_matches(written, store, examined):
     from onetrace_console.kept_inputs import BANNER_KEPT
+
     page = _draft(written, store)
     examined(1, "banner")
     from onetrace_console.kept_inputs import INPUTS_NOTE_KEPT
+
     assert BANNER_KEPT in _text(page) and INPUTS_NOTE_KEPT in _text(page)
     assert "inputs from outside the run are fingerprinted, not stored" not in _text(page)
 
 
 # ------------------------------------------------------------------ 2. the three "not shown"
 
+
 def test_an_input_not_kept_says_so_with_the_recorded_reason(written, store, examined):
     from onetrace_console.kept_inputs import NOT_KEPT
+
     page = _draft(written, store)
     examined(3, "inputs not kept")
     for name, why in (("blob", "not text (bytes)"), ("big", "over 4096 bytes"), ("other", None)):
@@ -172,9 +190,9 @@ def test_a_matching_file_for_an_input_not_listed_is_never_shown(written, store, 
     """`other` is listed in neither constant. A file at its place, holding exactly its digested
     bytes, still isn't shown: the listing is half the rule."""
     import onetrace as ot
+
     plain = "an input listed in neither constant"
-    (written / "inputs" / _stem(written, "draft") / "other.json").write_bytes(
-        ot.encode_v1(plain, "draft", "other"))
+    (written / "inputs" / _stem(written, "draft") / "other.json").write_bytes(ot.encode_v1(plain, "draft", "other"))
     page = _draft(written, store)
     examined(1, "unlisted matching file")
     state, raw = _kept(page, "other")
@@ -183,6 +201,7 @@ def test_a_matching_file_for_an_input_not_listed_is_never_shown(written, store, 
 
 def test_a_listed_input_whose_file_was_removed_says_so_and_that_removing_is_supported(written, store, examined):
     from onetrace_console.kept_inputs import ERASED, MISSING
+
     (written / "inputs" / _stem(written, "draft") / "question.json").unlink()
     page = _draft(written, store)
     examined(1, "kept file removed")
@@ -194,7 +213,9 @@ def test_a_listed_input_whose_file_was_removed_says_so_and_that_removing_is_supp
 
 def test_a_listed_input_whose_file_differs_shows_both_digests_never_the_text(written, store, examined):
     import onetrace as ot
+
     from onetrace_console.kept_inputs import MISMATCH
+
     path = written / "inputs" / _stem(written, "draft") / "question.json"
     recorded = "sha256:" + hashlib.sha256(path.read_bytes()).hexdigest()
     changed = ot.encode_v1("Changed after the run", "draft", "question")
@@ -206,7 +227,7 @@ def test_a_listed_input_whose_file_differs_shows_both_digests_never_the_text(wri
     assert MISMATCH in _text(raw) and "<pre" not in raw
     assert "Changed after the run" not in _text(page) and QUESTION not in _text(raw)
     for digest in (recorded, "sha256:" + hashlib.sha256(changed).hexdigest()):
-        assert digest[len("sha256:"):] in raw, f"{digest} not shown"
+        assert digest[len("sha256:") :] in raw, f"{digest} not shown"
 
 
 def test_a_file_that_matches_but_is_not_text_is_not_shown(written, store, examined):
@@ -214,6 +235,7 @@ def test_a_file_that_matches_but_is_not_text_is_not_shown(written, store, examin
     (planted with its digest recomputed into nothing -- the receipt holds the digest) reads as not
     matching. Here: the stored file replaced by a number, which can't match the recorded digest."""
     from onetrace_console.kept_inputs import MISMATCH
+
     (written / "inputs" / _stem(written, "draft") / "question.json").write_bytes(b"42")
     page = _draft(written, store)
     examined(1, "kept file not text")
@@ -223,8 +245,10 @@ def test_a_file_that_matches_but_is_not_text_is_not_shown(written, store, examin
 
 # ------------------------------------------------------------------ 3. unlisted files
 
+
 def test_files_in_inputs_no_step_lists_are_counted_and_never_shown(written, store, examined):
     from onetrace_console.kept_inputs import unlisted_note
+
     (written / "inputs" / _stem(written, "draft") / "stray.json").write_bytes(b'"a stray secret"')
     (written / "inputs" / "elsewhere").mkdir()
     (written / "inputs" / "elsewhere" / "x.json").write_bytes(b'"another stray secret"')
@@ -246,6 +270,7 @@ def test_a_run_with_no_unlisted_file_has_no_note(written, store, examined):
 
 # ------------------------------------------------------------------ 4. escaping and size
 
+
 def test_kept_text_is_escaped_like_every_value_from_a_record(tmp_path, store, examined):
     _require_installed()
     folder = _emit(tmp_path / "run", question=HOSTILE)
@@ -255,6 +280,7 @@ def test_kept_text_is_escaped_like_every_value_from_a_record(tmp_path, store, ex
     assert state == "shown"
     assert ESC not in page and RLO not in page
     from tests.test_theme_switch import without_the_console_s_own
+
     assert "<script>" not in without_the_console_s_own(page) and "&lt;script&gt;" in raw
     assert "\\u001b" in raw and "\\u202e" in raw
     #: The line break is kept as a line break: the text is shown as written, one line per line.
@@ -263,6 +289,7 @@ def test_kept_text_is_escaped_like_every_value_from_a_record(tmp_path, store, ex
 
 def test_long_kept_text_is_cut_and_its_full_size_said(tmp_path, store, examined):
     from onetrace_console.kept_inputs import SHOWN_CAP, size_said
+
     _require_installed()
     long = "a" * (SHOWN_CAP + 1000)
     folder = _emit(tmp_path / "run", question=long, cap=20000)
@@ -278,10 +305,12 @@ def test_long_kept_text_is_cut_and_its_full_size_said(tmp_path, store, examined)
 
 # ------------------------------------------------------------------ 5. an older SDK's constant
 
+
 def test_a_reserved_prefix_constant_from_an_older_sdk_is_the_runs_own(tmp_path, store, monkeypatch, examined):
     """Before 0.2.2 a user could name a constant `onetrace.kept_inputs`. Such a run's constant is
     its own, not the SDK's listing: nothing is shown as kept, even with a matching file."""
     from onetrace_console.kept_inputs import older_sdk
+
     _require_installed()
     folder = _emit_older(tmp_path / "run", monkeypatch)
     monkeypatch.undo()
@@ -295,6 +324,7 @@ def test_a_reserved_prefix_constant_from_an_older_sdk_is_the_runs_own(tmp_path, 
 
 def test_the_sdk_versions_that_list_kept_inputs():
     from onetrace_console.kept_inputs import honoured
+
     assert honoured("0.2.2") and honoured("0.2.10") and honoured("0.3.0") and honoured("1.0")
     assert not honoured("0.2.1") and not honoured("0.1.2") and not honoured("0.2.2.dev0")
     #: A record that doesn't say which SDK made it: the listing is read; the digest still decides.
@@ -304,8 +334,10 @@ def test_the_sdk_versions_that_list_kept_inputs():
 
 # ------------------------------------------------------------------ 6. the public console
 
+
 def test_a_public_console_never_shows_an_externally_sourced_inputs_kept_text(written, store, examined):
     from onetrace_console.kept_inputs import EXTERNAL
+
     run = _stored(written, store)
     public, local = _pages(run, store, public=True), _pages(run, store)
     examined(2, "renderings of the intake step")
@@ -323,6 +355,7 @@ def test_the_demo_check_names_a_run_that_keeps_an_externally_sourced_input(writt
     `q`, kept and externally sourced; the step's own operator-authored input is not named."""
     from onetrace_console.kept_inputs import external_kept
     from onetrace_console.stage_pages import _steps
+
     run = _stored(written, store)
     examined(1, "run keeping an externally sourced input")
     assert external_kept(_steps(run, store)) == [("intake", "q")]
@@ -330,13 +363,30 @@ def test_the_demo_check_names_a_run_that_keeps_an_externally_sourced_input(writt
 
 def _diff(a: Path, b: Path, out: Path) -> bytes:
     from onetrace_console.compare import utf8_env
-    return subprocess.run([sys.executable, "-m", "onetrace", "diff", str(a), str(b), "--text", "--json",
-                           "--no-follow", "--out", str(out)], capture_output=True, env=utf8_env(),
-                          check=False).stdout
+
+    return subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "onetrace",
+            "diff",
+            str(a),
+            str(b),
+            "--text",
+            "--json",
+            "--no-follow",
+            "--out",
+            str(out),
+        ],
+        capture_output=True,
+        env=utf8_env(),
+        check=False,
+    ).stdout
 
 
-def _compared(tmp_path: Path, store, *, older: bool = False, monkeypatch=None, change=None,
-              trust: str = "externally-sourced"):
+def _compared(
+    tmp_path: Path, store, *, older: bool = False, monkeypatch=None, change=None, trust: str = "externally-sourced"
+):
     """Two runs whose `draft` kept `question` differently, the SDK's text diff of them as written,
     and the pair as the console stores it. `change(folder)`, where given, alters run B's folder
     after the diff was made and before the console stores it: the console's own reading must
@@ -344,6 +394,7 @@ def _compared(tmp_path: Path, store, *, older: bool = False, monkeypatch=None, c
     from types import SimpleNamespace
 
     from onetrace_console.textdiff_view import read_textdiff
+
     _require_installed()
     if older:
         a = _emit_older(tmp_path / "a", monkeypatch, question="own first")
@@ -362,6 +413,7 @@ def _compared(tmp_path: Path, store, *, older: bool = False, monkeypatch=None, c
 def _drawn(doc, pair, store, *, public: bool) -> str:
     from onetrace_console.kept_inputs import for_this_console
     from onetrace_console.textdiff_view import render_textdiff
+
     with rendering(onedoor=False, sign_in=False, public=public):
         return _text(render_textdiff(for_this_console(doc, pair, store)))
 
@@ -378,6 +430,7 @@ def test_a_public_text_diff_never_shows_an_externally_sourced_inputs_kept_text(t
     """The SDK's text diff prints both kept texts under a changed input's line. On a public
     console, an externally sourced input's are left out, and its line says why."""
     from onetrace_console.kept_inputs import EXTERNAL
+
     doc, pair = _compared(tmp_path, store)
     examined(2, "renderings of the text diff")
     local, public = _drawn(doc, pair, store, public=False), _drawn(doc, pair, store, public=True)
@@ -388,14 +441,17 @@ def test_a_public_text_diff_never_shows_an_externally_sourced_inputs_kept_text(t
 
 def _changed(folder: Path) -> None:
     import onetrace as ot
+
     (folder / "inputs" / _stem(folder, "draft") / "question.json").write_bytes(
-        ot.encode_v1("Changed after the run", "draft", "question"))
+        ot.encode_v1("Changed after the run", "draft", "question")
+    )
 
 
 def test_a_text_diff_never_shows_kept_text_the_console_does_not_read_as_matching(tmp_path, store, examined):
     """The console's own reading of each side decides, not the SDK's: a side whose stored file
     does not match its digest shows that side's reading, and neither side's text."""
     from onetrace_console.kept_inputs import MISMATCH
+
     doc, pair = _compared(tmp_path, store, trust="operator-authored", change=_changed)
     examined(1, "text diff with one side not matching")
     drawn = _drawn(doc, pair, store, public=False)
@@ -405,8 +461,13 @@ def test_a_text_diff_never_shows_kept_text_the_console_does_not_read_as_matching
 
 def test_a_text_diff_side_whose_file_was_removed_reads_file_missing(tmp_path, store, examined):
     from onetrace_console.kept_inputs import MISSING
-    doc, pair = _compared(tmp_path, store, trust="operator-authored",
-                          change=lambda b: (b / "inputs" / _stem(b, "draft") / "question.json").unlink())
+
+    doc, pair = _compared(
+        tmp_path,
+        store,
+        trust="operator-authored",
+        change=lambda b: (b / "inputs" / _stem(b, "draft") / "question.json").unlink(),
+    )
     examined(1, "text diff with one side's file removed")
     drawn = _drawn(doc, pair, store, public=False)
     assert "own first" not in drawn and "own second" not in drawn, drawn
@@ -417,6 +478,7 @@ def test_a_text_diff_of_older_sdk_runs_shows_no_kept_text(tmp_path, store, monke
     """The SDK's own reader takes an older run's `onetrace.kept_inputs` setting as a listing and
     prints the text; the console reads it as the run's own setting, and shows none."""
     from onetrace_console.kept_inputs import older_sdk
+
     doc, pair = _compared(tmp_path, store, older=True, monkeypatch=monkeypatch)
     assert any("own first" in line for n in doc["nodes"] for line in n["inputs"]), "the SDK printed it"
     examined(1, "text diff of older-SDK runs")
@@ -429,10 +491,12 @@ def test_a_text_diff_line_the_console_cannot_tie_to_a_record_shows_no_kept_text(
     """Without the stored pair (or a node or input the records don't name), the console can't read
     either side: the kept text is left out, and the line says so."""
     from onetrace_console.kept_inputs import UNTIED
+
     doc, pair = _compared(tmp_path, store, trust="operator-authored")
     examined(2, "untied text diffs")
     from onetrace_console.kept_inputs import for_this_console
     from onetrace_console.textdiff_view import render_textdiff
+
     with rendering(onedoor=False, sign_in=False, public=False):
         alone = _text(render_textdiff(for_this_console(doc, None, store)))
     assert "own first" not in alone and UNTIED in alone, alone
@@ -448,6 +512,7 @@ def test_both_text_diff_drawings_read_the_diff_through_the_public_rule():
 
     import onetrace_console.render as render
     import onetrace_console.textdiff_page as textdiff_page
+
     for module, function in ((render, "_text_diff_section"), (textdiff_page, "shown_document")):
         tree = ast.parse(Path(module.__file__).read_text(encoding="utf-8"))
         fn = next((n for n in ast.walk(tree) if isinstance(n, ast.FunctionDef) and n.name == function), None)
@@ -458,12 +523,14 @@ def test_both_text_diff_drawings_read_the_diff_through_the_public_rule():
 
 # ------------------------------------------------------------------ 7. reading only
 
+
 def test_the_console_only_reads_inputs(written, store, examined):
     """Nothing the console does to a run touches `inputs/`: the folder delivered is unchanged, and
     the module that reads kept text calls nothing that writes, moves or removes a file."""
     import ast
 
     import onetrace_console.kept_inputs as kept_inputs
+
     before = {p: p.read_bytes() for p in written.rglob("*") if p.is_file()}
     run = _stored(written, store)
     _pages(run, store)
@@ -472,24 +539,45 @@ def test_the_console_only_reads_inputs(written, store, examined):
     examined(len(before), "files of the delivered run folder")
     assert before == after
     tree = ast.parse(Path(kept_inputs.__file__).read_text(encoding="utf-8"))
-    names = {n.attr if isinstance(n, ast.Attribute) else n.id
-             for n in ast.walk(tree) if isinstance(n, (ast.Attribute, ast.Name))}
-    writes = names & {"open", "write_bytes", "write_text", "unlink", "rename", "replace", "rmtree",
-                      "remove", "mkdir", "rmdir", "put", "move", "copy", "touch"}
+    names = {
+        n.attr if isinstance(n, ast.Attribute) else n.id
+        for n in ast.walk(tree)
+        if isinstance(n, (ast.Attribute, ast.Name))
+    }
+    writes = names & {
+        "open",
+        "write_bytes",
+        "write_text",
+        "unlink",
+        "rename",
+        "replace",
+        "rmtree",
+        "remove",
+        "mkdir",
+        "rmdir",
+        "put",
+        "move",
+        "copy",
+        "touch",
+    }
     assert not writes, writes
 
 
 # ------------------------------------------------------------------ sabotages, each caught
 
+
 def _sabotaged(monkeypatch, attr, broken):
     import onetrace_console.kept_inputs as kept_inputs
+
     monkeypatch.setattr(kept_inputs, attr, broken)
 
 
 def test_sabotage_the_digest_check_taken_away_shows_changed_text(written, store, monkeypatch, examined):
     import onetrace as ot
+
     (written / "inputs" / _stem(written, "draft") / "question.json").write_bytes(
-        ot.encode_v1("Changed after the run", "draft", "question"))
+        ot.encode_v1("Changed after the run", "draft", "question")
+    )
     _sabotaged(monkeypatch, "_matches", lambda data, digest: True)
     examined(1, "sabotaged digest check")
     state, raw = _kept(_draft(written, store), "question")
@@ -498,8 +586,10 @@ def test_sabotage_the_digest_check_taken_away_shows_changed_text(written, store,
 
 def test_sabotage_the_listing_taken_away_shows_an_unlisted_file(written, store, monkeypatch, examined):
     import onetrace as ot
+
     (written / "inputs" / _stem(written, "draft") / "other.json").write_bytes(
-        ot.encode_v1("an input listed in neither constant", "draft", "other"))
+        ot.encode_v1("an input listed in neither constant", "draft", "other")
+    )
     _sabotaged(monkeypatch, "listed", lambda receipt: [str(i.get("name")) for i in receipt.get("inputs") or []])
     examined(1, "sabotaged listing")
     assert _kept(_draft(written, store), "other")[0] == "shown"
@@ -536,6 +626,7 @@ def test_sabotage_the_older_sdk_rule_taken_away_from_the_text_diff(tmp_path, sto
 
 def test_sabotage_the_escaping_taken_away_puts_raw_controls_on_the_page(tmp_path, store, monkeypatch, examined):
     from html import escape as html_escape
+
     _require_installed()
     folder = _emit(tmp_path / "run", question=HOSTILE)
     _sabotaged(monkeypatch, "verbatim", lambda text: html_escape(text, quote=False))
@@ -572,9 +663,11 @@ def test_sabotage_a_missing_file_read_as_not_kept_is_caught(written, store, monk
 
 # ------------------------------------------------------------------ the run's record, downloaded
 
+
 def _members(tar_bytes: bytes) -> dict[str, bytes]:
     import io
     import tarfile
+
     with tarfile.open(fileobj=io.BytesIO(tar_bytes)) as tar:
         return {m.name: tar.extractfile(m).read() for m in tar.getmembers() if m.isfile()}
 
@@ -585,6 +678,7 @@ def _record(server, written, monkeypatch, *, public: bool) -> bytes:
 
     from onetrace_console.serve import Handler
     from tests.test_serve import _get
+
     base, _ = server
     run = _stored(written, Handler.store)
     if public:
@@ -600,23 +694,33 @@ def _verifies(members: dict[str, bytes], folder: Path) -> int:
         (folder / name).parent.mkdir(parents=True, exist_ok=True)
         (folder / name).write_bytes(blob)
     from onetrace_console.compare import utf8_env
-    return subprocess.run([sys.executable, "-m", "onetrace_verify.cli", "--require-artifacts",
-                           "MANIFEST.json"], cwd=folder, capture_output=True, env=utf8_env()).returncode
+
+    return subprocess.run(
+        [sys.executable, "-m", "onetrace_verify.cli", "--require-artifacts", "MANIFEST.json"],
+        cwd=folder,
+        capture_output=True,
+        env=utf8_env(),
+    ).returncode
 
 
 def test_a_private_consoles_record_holds_the_kept_inputs(server, written, monkeypatch, examined):
     members = _members(_record(server, written, monkeypatch, public=False))
     examined(len(members), "files in the private record")
     kept = sorted(n for n in members if n.startswith("inputs/"))
-    assert kept == sorted(p.relative_to(written).as_posix() for p in (written / "inputs").rglob("*")
-                          if p.is_file()) and kept, kept
-    assert any(line.endswith("inputs/" + kept[0][len("inputs/"):]) for line in
-               members["SHA256SUMS"].decode().splitlines())
+    assert (
+        kept == sorted(p.relative_to(written).as_posix() for p in (written / "inputs").rglob("*") if p.is_file())
+        and kept
+    ), kept
+    assert any(
+        line.endswith("inputs/" + kept[0][len("inputs/") :]) for line in members["SHA256SUMS"].decode().splitlines()
+    )
 
 
-def test_a_public_consoles_record_leaves_out_the_kept_inputs_and_still_verifies(server, written, monkeypatch,
-                                                                              tmp_path, store, examined):
+def test_a_public_consoles_record_leaves_out_the_kept_inputs_and_still_verifies(
+    server, written, monkeypatch, tmp_path, store, examined
+):
     from onetrace_console.ingest import accept
+
     members = _members(_record(server, written, monkeypatch, public=True))
     examined(len(members), "files in the public record")
     assert not [n for n in members if n.startswith("inputs/") or n == "inputs"], sorted(members)
@@ -626,6 +730,7 @@ def test_a_public_consoles_record_leaves_out_the_kept_inputs_and_still_verifies(
     #: And a console takes it in again: its sums name exactly the files it holds.
     import io
     import tarfile
+
     buf = io.BytesIO()
     with tarfile.open(fileobj=buf, mode="w") as tar:
         for name, blob in members.items():
@@ -637,6 +742,7 @@ def test_a_public_consoles_record_leaves_out_the_kept_inputs_and_still_verifies(
 
 def test_the_download_page_says_public_records_leave_out_kept_inputs(written, store, examined):
     from onetrace_console.kept_inputs import PUBLIC_RECORD
+
     run = _stored(written, store)
     public, local = _pages(run, store, public=True), _pages(run, store)
     examined(2, "receipt pages")
@@ -647,6 +753,7 @@ def test_the_download_page_says_public_records_leave_out_kept_inputs(written, st
 
 def test_sabotage_a_public_record_with_its_inputs_is_caught(server, written, monkeypatch, examined):
     import onetrace_console.ingest as ingest
+
     real = ingest.bundle
     monkeypatch.setattr(ingest, "bundle", lambda run, store, **kw: real(run, store))
     members = _members(_record(server, written, monkeypatch, public=True))
@@ -656,6 +763,7 @@ def test_sabotage_a_public_record_with_its_inputs_is_caught(server, written, mon
 
 def test_sabotage_a_private_record_without_its_inputs_is_caught(server, written, monkeypatch, examined):
     import onetrace_console.ingest as ingest
+
     real = ingest.bundle
     monkeypatch.setattr(ingest, "bundle", lambda run, store, **kw: real(run, store, public=True))
     members = _members(_record(server, written, monkeypatch, public=False))

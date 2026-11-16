@@ -18,6 +18,7 @@ Its limit: a folder made under a name built at run time from data the code doesn
 string -- none exists today -- is seen only by the running-console check, and only if those runs
 reach it.
 """
+
 from __future__ import annotations
 
 import json
@@ -45,7 +46,7 @@ def _section() -> str:
     text = README.read_text(encoding="utf-8").replace("\r\n", "\n")
     start = text.index("## Where the data lives")
     end = text.find("\n## ", start + 5)
-    return text[start:end if end != -1 else len(text)]
+    return text[start : end if end != -1 else len(text)]
 
 
 def _named(folder: str) -> bool:
@@ -63,16 +64,24 @@ def _folders_in_source() -> set[str]:
     found = set()
     for literal, constant in _UNDER_ROOT.findall(serve):
         found.add(literal or constants[constant])
-    found |= {f"store/{name}" for name in _UNDER_STORE.findall(
-        (SRC / "store.py").read_text(encoding="utf-8"))}
+    found |= {f"store/{name}" for name in _UNDER_STORE.findall((SRC / "store.py").read_text(encoding="utf-8"))}
     return found
 
 
 def test_every_folder_the_source_creates_is_named_in_the_readme(examined):
     folders = _folders_in_source()
     examined(len(folders), "folders the source creates")
-    assert {"store", "pages", "access_log", "accounts", "tokens", "store/objects", "store/runs",
-            "store/comparisons", "store/decision_exports"} <= folders, folders
+    assert {
+        "store",
+        "pages",
+        "access_log",
+        "accounts",
+        "tokens",
+        "store/objects",
+        "store/runs",
+        "store/comparisons",
+        "store/decision_exports",
+    } <= folders, folders
     missing = sorted(f for f in folders if not _named(f))
     assert not missing, f"the README's storage section does not name: {missing}"
 
@@ -80,8 +89,7 @@ def test_every_folder_the_source_creates_is_named_in_the_readme(examined):
 _KEYLIKE = re.compile(r"^[0-9a-f]{2}$|^[0-9a-f]{64}(\.[a-z]+)?$")
 
 
-def test_every_folder_a_running_console_creates_is_named_in_the_readme(server, files, tmp_path,
-                                                                        examined):
+def test_every_folder_a_running_console_creates_is_named_in_the_readme(server, files, tmp_path, examined):
     base, root = server
     assert _post(base, "/v1/runs", make_tar(files))[0] == 200
     (tmp_path / "pair").mkdir()
@@ -108,8 +116,14 @@ def test_every_folder_a_running_console_creates_is_named_in_the_readme(server, f
 def test_what_is_not_stored_and_how_to_back_up_restore_and_reset_are_stated(examined):
     section = " ".join(_section().split())
     examined(1, "storage section read")
-    for needed in ("Sign-in sessions are held in memory", "onetrace-staging-", "onetrace-compare-",
-                   "### Backing up", "### Restoring", "### Resetting to empty"):
+    for needed in (
+        "Sign-in sessions are held in memory",
+        "onetrace-staging-",
+        "onetrace-compare-",
+        "### Backing up",
+        "### Restoring",
+        "### Resetting to empty",
+    ):
         assert needed in section, f"the storage section does not state {needed!r}"
 
 
@@ -131,7 +145,7 @@ def _bash_candidates() -> list[list[str]]:
     found = [r"C:\Program Files\Git\bin\bash.exe", r"C:\Program Files\Git\usr\bin\bash.exe"]
     git = shutil.which("git")
     if git:
-        root = Path(git).resolve().parent.parent      # <Git>\cmd\git.exe or <Git>\bin\git.exe
+        root = Path(git).resolve().parent.parent  # <Git>\cmd\git.exe or <Git>\bin\git.exe
         found += [str(root / "bin" / "bash.exe"), str(root / "usr" / "bin" / "bash.exe")]
     return [[p] for p in dict.fromkeys(found)]
 
@@ -150,8 +164,7 @@ def _bash_that_runs_the_readme(probe: Path, candidates: list[list[str]]):
     tried = []
     for cand in candidates:
         try:
-            r = subprocess.run([*cand, str(control)], cwd=probe, capture_output=True, text=True,
-                               timeout=60)
+            r = subprocess.run([*cand, str(control)], cwd=probe, capture_output=True, text=True, timeout=60)
             said = f"exit {r.returncode}, printed {r.stdout.strip()!r}"
             if r.returncode == 0 and r.stdout.strip() == "known-file":
                 tried.append(f"{' '.join(cand)}: {said} -- used")
@@ -165,24 +178,21 @@ def _bash_that_runs_the_readme(probe: Path, candidates: list[list[str]]):
 def _require_bash(probe: Path, candidates: list[list[str]] | None = None) -> list[str]:
     """A bash that passed the control, or a FAILURE naming every candidate -- never a skip: a
     skipped check of the README's command is one whose examined population is zero."""
-    chosen, tried = _bash_that_runs_the_readme(probe, _bash_candidates() if candidates is None
-                                               else candidates)
+    chosen, tried = _bash_that_runs_the_readme(probe, _bash_candidates() if candidates is None else candidates)
     if chosen is None:
-        pytest.fail("no bash that can run the README's command was found; tried:\n"
-                    + "\n".join(tried))
+        pytest.fail("no bash that can run the README's command was found; tried:\n" + "\n".join(tried))
     return chosen
 
 
-def test_the_readme_s_delivery_command_makes_a_delivery_the_console_stores(tmp_path, store,
-                                                                         examined):
+def test_the_readme_s_delivery_command_makes_a_delivery_the_console_stores(tmp_path, store, examined):
     from onetrace_console.ingest import accept
+
     bash = _require_bash(tmp_path / "bash-probe")
     folder = tmp_path / "run_folder"
     shutil.copytree(RUN, folder)
     script = tmp_path / "make_delivery.sh"
     script.write_text(_delivery_command(), encoding="utf-8", newline="\n")
-    proc = subprocess.run([*bash, str(script)], cwd=folder, capture_output=True, text=True,
-                          timeout=120)
+    proc = subprocess.run([*bash, str(script)], cwd=folder, capture_output=True, text=True, timeout=120)
     examined(1, "README command run")
     assert proc.returncode == 0, proc.stderr
     tar = tmp_path / "run.tar"
@@ -196,13 +206,14 @@ def test_the_readme_s_delivery_command_makes_a_delivery_the_console_stores(tmp_p
 def test_the_readme_says_dot_slash_paths_are_refused(examined):
     text = " ".join(README.read_text(encoding="utf-8").split())
     examined(1, "README read")
-    assert "`./`" in text and "refused" in text[text.index("### Making a delivery"):][:2500]
+    assert "`./`" in text and "refused" in text[text.index("### Making a delivery") :][:2500]
 
 
 # ---------------------------------------------------------------------------------------------
 # Which bash runs the README's command. On Windows, `bash` on PATH is the WSL launcher (finding
 # F17): it answers, then cannot open a Windows path. So the bash is chosen from explicit
 # candidates and qualified by a control that runs a script the way the real test does.
+
 
 def _fake_bash(tmp_path, name: str, body: str) -> list[str]:
     """A stand-in bash, as a Python script, so these tests run on every host."""
@@ -230,7 +241,7 @@ def test_no_bash_that_can_run_the_script_is_a_failure_naming_what_was_tried(tmp_
     try:
         _require_bash(tmp_path / "probe", [wsl_like, missing])
         outcome = "returned"
-    except pytest.skip.Exception as e:   # a skip would hide that the README's command never ran
+    except pytest.skip.Exception as e:  # a skip would hide that the README's command never ran
         outcome = f"skipped: {e}"
     except pytest.fail.Exception as e:
         outcome = f"failed: {e}"
@@ -244,6 +255,7 @@ def test_the_bash_on_path_is_never_consulted(tmp_path, monkeypatch):
     def which(name, *a, **kw):
         assert name != "bash", "shutil.which('bash') was consulted"
         return real_which(name, *a, **kw)
+
     monkeypatch.setattr(shutil, "which", which)
     candidates = _bash_candidates()
     assert candidates and all(c and c[0] != "bash" for c in candidates), candidates
@@ -253,8 +265,9 @@ def test_the_delivery_test_takes_its_bash_from_the_control():
     """On Linux PATH's bash works, so a revert to `shutil.which("bash")` in the delivery test
     would pass here and fail only on Windows. This catches it on every host."""
     source = Path(__file__).read_text(encoding="utf-8")
-    body = source.split("def test_the_readme_s_delivery_command_makes_a_delivery_the_console_stores(",
-                        1)[1].split("\ndef ", 1)[0]
+    body = source.split("def test_the_readme_s_delivery_command_makes_a_delivery_the_console_stores(", 1)[1].split(
+        "\ndef ", 1
+    )[0]
     assert "_require_bash(" in body and 'which("bash")' not in body
 
 
@@ -263,10 +276,16 @@ def explanation_limit_problems(section: str) -> list[str]:
     their store-folder limits as the console derives them: `explain.LIMIT` with long paths off, and
     `explain.LIMIT_LONG_PATHS` with them on, from Windows' working-folder limit."""
     from onetrace_console import explain
+
     text = " ".join(section.split())
     out = []
-    if f"`store/{explain.FOLDER}/`" not in text or f"`{explain.FOLDER}/<first {explain.KEY_HEX} hex of its key>/`" not in text:
-        out.append(f"the explanations' folder is not named as {explain.FOLDER}/<first {explain.KEY_HEX} hex of its key>/")
+    if (
+        f"`store/{explain.FOLDER}/`" not in text
+        or f"`{explain.FOLDER}/<first {explain.KEY_HEX} hex of its key>/`" not in text
+    ):
+        out.append(
+            f"the explanations' folder is not named as {explain.FOLDER}/<first {explain.KEY_HEX} hex of its key>/"
+        )
     if f"An explanation fits a `store_root` of up to {explain.LIMIT} characters" not in text:
         out.append(f"the explanations' limit is not stated as {explain.LIMIT}")
     if "neither limit applies" in text:
@@ -276,9 +295,11 @@ def explanation_limit_problems(section: str) -> list[str]:
     if on is None or most is None:
         out.append("the console derives no limit for long paths on")
         return out
-    for said in (f"an explanation still needs a `store_root` of {on} characters or fewer",
-                 f"Windows starts no program in a working folder of more than {most} characters",
-                 f"in a folder {most - on} characters below `store_root`"):
+    for said in (
+        f"an explanation still needs a `store_root` of {on} characters or fewer",
+        f"Windows starts no program in a working folder of more than {most} characters",
+        f"in a folder {most - on} characters below `store_root`",
+    ):
         if said not in text:
             out.append(f"it does not say: {said}")
     return out
@@ -291,6 +312,7 @@ def test_the_readme_states_the_explanations_folder_and_its_limit(examined):
 
 def test_sabotage_another_long_paths_limit_in_the_readme_is_named(examined):
     from onetrace_console import explain
+
     examined(1, "storage section, its long-paths limit changed")
     on = explain.LIMIT_LONG_PATHS
     planted = _section().replace(f"of {on} characters or fewer", f"of {on + 1} characters or fewer", 1)
@@ -299,6 +321,7 @@ def test_sabotage_another_long_paths_limit_in_the_readme_is_named(examined):
 
 def test_sabotage_another_limit_in_the_readme_is_named(examined):
     from onetrace_console import explain
+
     examined(1, "storage section, its limit changed")
     planted = _section().replace(f"up to {explain.LIMIT}\n", f"up to {explain.LIMIT + 1}\n", 1)
     assert planted != _section() and explanation_limit_problems(planted) != []

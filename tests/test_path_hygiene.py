@@ -8,6 +8,7 @@ Every GET row of the role table gets its own near misses here, sent as raw bytes
 client normalises them first. All of them are refused with 400 before any file is read, in
 config-file mode (the shared test server) -- the path rule is not local mode's guard.
 """
+
 from __future__ import annotations
 
 import pytest
@@ -17,19 +18,38 @@ from tests.test_local_mode import _raw
 KEY = "0123456789abcdef" * 4
 
 #: One real path per GET row of the role table.
-ROWS = ["home.html", "executions-all.html", "incidents.html", "incidents-r-c010.html",
-        f"runs/{KEY}/answer.html", f"runs/{KEY}/case.html", f"runs/{KEY}/authorization.html",
-        f"diff/{KEY}.html", "policy.html", "policy/req-1.html", "policy-verdict-denied.html",
-        "policy-issuer-onedoor.html"]
+ROWS = [
+    "home.html",
+    "executions-all.html",
+    "incidents.html",
+    "incidents-r-c010.html",
+    f"runs/{KEY}/answer.html",
+    f"runs/{KEY}/case.html",
+    f"runs/{KEY}/authorization.html",
+    f"diff/{KEY}.html",
+    "policy.html",
+    "policy/req-1.html",
+    "policy-verdict-denied.html",
+    "policy-issuer-onedoor.html",
+]
 
 
 def _near_misses(rel: str) -> list[str]:
     """Ways of spelling a path that are not that path."""
     head, _, tail = rel.rpartition("/")
     here = f"{head}/" if head else ""
-    return [f"{here}../{tail}", f"{here}x/../{tail}", f"{here}..\\{tail}", rel.replace("/", "\\"),
-            f"{here}%2e%2e/{tail}", f"{here}%2E%2E/{tail}", f"{here}%5c{tail}",
-            f"{here}.%2e/{tail}", f"{here}./{tail}", f"{here}/{tail}" if head else f"./{tail}"]
+    return [
+        f"{here}../{tail}",
+        f"{here}x/../{tail}",
+        f"{here}..\\{tail}",
+        rel.replace("/", "\\"),
+        f"{here}%2e%2e/{tail}",
+        f"{here}%2E%2E/{tail}",
+        f"{here}%5c{tail}",
+        f"{here}.%2e/{tail}",
+        f"{here}./{tail}",
+        f"{here}/{tail}" if head else f"./{tail}",
+    ]
 
 
 @pytest.mark.parametrize("rel", ROWS)
@@ -59,6 +79,7 @@ def test_a_spelling_that_resolves_to_another_file_is_never_served(server, miss):
     path then differs from the requested one, and that is refused. On a file system where no
     such file exists it is simply not found. Never served either way."""
     import os
+
     base, _ = server
     port = base.rsplit(":", 1)[1]
     status, _ = _raw(base, [f"GET /{miss} HTTP/1.1", f"Host: 127.0.0.1:{port}"])

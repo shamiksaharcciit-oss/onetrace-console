@@ -12,12 +12,12 @@ console, say), a count line is redrawn with `\\r` and padded with spaces, and no
 The phases are said by the code that does them (`phase`), through the one `Progress` the command set up
 (`using`); with none set up -- a library caller, a test, `serve` -- they say nothing.
 """
+
 from __future__ import annotations
 
 import contextlib
 import sys
 import time
-
 
 #: SetConsoleMode's flag for escape codes (`ESC[K`), as Windows names it.
 ENABLE_VIRTUAL_TERMINAL_PROCESSING = 0x0004
@@ -30,8 +30,9 @@ def windows_vt(stream) -> bool:
     try:
         import ctypes
         import msvcrt
-        handle = msvcrt.get_osfhandle(stream.fileno())
-        kernel32 = ctypes.windll.kernel32
+
+        handle = msvcrt.get_osfhandle(stream.fileno())  # type: ignore[attr-defined]  # Windows's name, read only on Windows
+        kernel32 = ctypes.windll.kernel32  # type: ignore[attr-defined]  # Windows's name, read only on Windows
         mode = ctypes.c_uint32()
         if not kernel32.GetConsoleMode(handle, ctypes.byref(mode)):
             return False
@@ -60,19 +61,19 @@ class Progress:
                 try:
                     self.stream.fileno()
                 except (AttributeError, ValueError, OSError):
-                    pass               # no file behind it: a caller's stream, taken at its word
+                    pass  # no file behind it: a caller's stream, taken at its word
                 else:
                     vt = windows_vt(self.stream)
         self.tty, self.vt, self.clock = tty, bool(vt), clock
-        self._open = False             # a count line is on the terminal, not yet ended
-        self._width = 0                # the count line's length on the terminal, where no escape erases it
+        self._open = False  # a count line is on the terminal, not yet ended
+        self._width = 0  # the count line's length on the terminal, where no escape erases it
 
     def _write(self, text: str) -> None:
         try:
             self.stream.write(text)
             self.stream.flush()
         except (OSError, ValueError):
-            pass                       # a closed or broken stderr never stops the console starting
+            pass  # a closed or broken stderr never stops the console starting
 
     def say(self, line: str) -> None:
         """One line of its own, ending any count line on the terminal first."""
@@ -112,6 +113,7 @@ class Progress:
         def step(n: int = 1) -> None:
             count[0] += n
             self._count(f"{name}: {count[0]} of {total}")
+
         try:
             yield step
         finally:
@@ -166,7 +168,8 @@ def say(line: str) -> None:
     current().say(line)
 
 
-FIRST_DEMO = ("starting: the first start records and checks the demo's runs; this takes a few minutes. "
-              "Later starts reuse them.")
+FIRST_DEMO = (
+    "starting: the first start records and checks the demo's runs; this takes a few minutes. Later starts reuse them."
+)
 LATER_DEMO = "starting: reusing the demo's runs in {folder}/; this is quicker than the first start."
 FOLDER = "starting: loading the runs in {folder}"

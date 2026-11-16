@@ -17,6 +17,7 @@ billing rule: the demo's "rule edit", which routes a ticket that names both diff
 `fault="lookup-once"` makes the account lookup's first attempt raise, and the error it records
 says so; the pipeline retries it once, and the failed attempt is kept in the record.
 """
+
 from __future__ import annotations
 
 import json
@@ -30,46 +31,58 @@ from onetrace_console.bounded_json import load_json_bounded
 
 STAGES = ["intake", "classify", "lookup_account", "draft_reply", "route"]
 
-APPROVED = [{"from": a, "to": b} for a, b in (
-    ("intake", "classify"), ("intake", "lookup_account"), ("classify", "draft_reply"),
-    ("lookup_account", "draft_reply"), ("draft_reply", "route"))]
+APPROVED = [
+    {"from": a, "to": b}
+    for a, b in (
+        ("intake", "classify"),
+        ("intake", "lookup_account"),
+        ("classify", "draft_reply"),
+        ("lookup_account", "draft_reply"),
+        ("draft_reply", "route"),
+    )
+]
 
 #: The tickets, made up for this demo.
 TICKETS = {
-    "T-1": {"account": "acct-01", "text": "I was charged twice for one order, and then the app "
-                                         "crashed at checkout."},
+    "T-1": {"account": "acct-01", "text": "I was charged twice for one order, and then the app crashed at checkout."},
     "T-2": {"account": "acct-02", "text": "My invoice shows the wrong billing address."},
     "T-3": {"account": "acct-03", "text": "The app shows an error every time I log in."},
-    "T-4": {"account": "acct-01", "text": "The login page keeps reloading and I cannot reach my "
-                                         "orders."},
+    "T-4": {"account": "acct-01", "text": "The login page keeps reloading and I cannot reach my orders."},
 }
 
 #: The accounts the lookup reads, made up for this demo.
-ACCOUNTS = {"acct-01": {"plan": "standard", "region": "north"},
-            "acct-02": {"plan": "business", "region": "south"},
-            "acct-03": {"plan": "standard", "region": "south"}}
+ACCOUNTS = {
+    "acct-01": {"plan": "standard", "region": "north"},
+    "acct-02": {"plan": "business", "region": "south"},
+    "acct-03": {"plan": "standard", "region": "south"},
+}
 
 #: The classifier's rules, by version: (class, keywords), checked in order.
 RULES = {
-    "1": [("billing", ["charged", "invoice", "refund", "payment", "billing"]),
-          ("technical", ["app", "error", "crash", "crashed", "login", "log"])],
-    "2": [("technical", ["app", "error", "crash", "crashed", "login", "log"]),
-          ("billing", ["charged", "invoice", "refund", "payment", "billing"])],
+    "1": [
+        ("billing", ["charged", "invoice", "refund", "payment", "billing"]),
+        ("technical", ["app", "error", "crash", "crashed", "login", "log"]),
+    ],
+    "2": [
+        ("technical", ["app", "error", "crash", "crashed", "login", "log"]),
+        ("billing", ["charged", "invoice", "refund", "payment", "billing"]),
+    ],
 }
 
 #: The wait before the lookup's retry, in seconds: two of the record's milliseconds.
 RETRY_WAIT_S = 0.002
 
-LOOKUP_FAULT = ("set by the demo to show a retry: the first attempt raises this instead of "
-                "running; nothing else went wrong")
+LOOKUP_FAULT = (
+    "set by the demo to show a retry: the first attempt raises this instead of running; nothing else went wrong"
+)
 
 QUEUES = {"billing": "billing-desk", "technical": "tech-support", "other": "front-desk"}
 
 REPLIES = {
     "billing": "Thanks for telling us about a billing problem. Our billing desk will check your "
-               "account and reply within one working day.",
+    "account and reply within one working day.",
     "technical": "Thanks for reporting a technical problem. Our support team will look into it "
-                 "and reply within one working day.",
+    "and reply within one working day.",
     "other": "Thanks for your message. We will reply within two working days.",
 }
 
@@ -84,20 +97,25 @@ def classify_text(text: str, version: str) -> tuple[str, str]:
     return "other", ""
 
 
-def main(out_dir, run_id: str, ticket: str, rules: str, *, fault: str = "",
-         sign_with=None) -> None:
+def main(out_dir, run_id: str, ticket: str, rules: str, *, fault: str = "", sign_with=None) -> None:
     """Record one run into `out_dir`: `ticket` triaged with the classifier's rules version `rules`."""
     out = Path(out_dir)
     out.mkdir(parents=True, exist_ok=True)
     ticket_path = out / "ticket.json"
-    ticket_path.write_text(json.dumps({"id": ticket, **TICKETS[ticket]}, sort_keys=True),
-                           encoding="utf-8")
+    ticket_path.write_text(json.dumps({"id": ticket, **TICKETS[ticket]}, sort_keys=True), encoding="utf-8")
     accounts_path = out / "accounts.json"
     accounts_path.write_text(json.dumps(ACCOUNTS, sort_keys=True), encoding="utf-8")
 
-    rec = Recorder(out_dir, run_id=run_id, declared_stages=STAGES, manifest=Path(__file__),
-                   policy="fail-closed", declared_edges=APPROVED, sign_with=sign_with,
-                   anchor_reason="a demo record; anchoring is not part of this demo")
+    rec = Recorder(
+        out_dir,
+        run_id=run_id,
+        declared_stages=STAGES,
+        manifest=Path(__file__),
+        policy="fail-closed",
+        declared_edges=APPROVED,
+        sign_with=sign_with,
+        anchor_reason="a demo record; anchoring is not part of this demo",
+    )
 
     def intake(ctx):
         data = kept_text(ticket_path)
@@ -133,18 +151,21 @@ def main(out_dir, run_id: str, ticket: str, rules: str, *, fault: str = "",
         ctx.read_receipt(looked_up)
         c = ctx.read_json(classed)
         a = ctx.read_json(account)
-        return ctx.write_json("reply.json", {"ticket": c["ticket"], "class": c["class"],
-                                             "plan": a["plan"], "reply": REPLIES[c["class"]]})
+        return ctx.write_json(
+            "reply.json", {"ticket": c["ticket"], "class": c["class"], "plan": a["plan"], "reply": REPLIES[c["class"]]}
+        )
 
     def route(ctx, drafted):
         ctx.read_receipt("draft_reply")
         d = ctx.read_json(drafted)
         return ctx.write_json("route.json", {"ticket": d["ticket"], "queue": QUEUES[d["class"]]})
 
-    taken = rec.run_node("intake", None, Instrument("ticket-intake", "reader", "1.0.0",
-                                                    {"source": "ticket.json"}), intake)
-    classed = rec.run_node("classify", None, Instrument("keyword-rules", "classifier", "1.0.0",
-                                                        {"rules": rules}), classify, taken)
+    taken = rec.run_node(
+        "intake", None, Instrument("ticket-intake", "reader", "1.0.0", {"source": "ticket.json"}), intake
+    )
+    classed = rec.run_node(
+        "classify", None, Instrument("keyword-rules", "classifier", "1.0.0", {"rules": rules}), classify, taken
+    )
     lookup = Instrument("account-lookup", "reader", "1.0.0", {"source": "accounts.json"})
     if fault == "lookup-once":
         try:
@@ -162,19 +183,27 @@ def main(out_dir, run_id: str, ticket: str, rules: str, *, fault: str = "",
     else:
         account = rec.run_node("lookup_account", None, lookup, lookup_account, taken, "")
         looked_up = "lookup_account"
-    drafted = rec.run_node("draft_reply", None, Instrument("reply-templates", "writer", "1.0.0",
-                                                           {"templates": "v1"}),
-                           draft_reply, classed, account, looked_up)
-    rec.run_node("route", None, Instrument("queue-router", "tool", "1.0.0", {"queues": "v1"}),
-                 route, drafted)
+    drafted = rec.run_node(
+        "draft_reply",
+        None,
+        Instrument("reply-templates", "writer", "1.0.0", {"templates": "v1"}),
+        draft_reply,
+        classed,
+        account,
+        looked_up,
+    )
+    rec.run_node("route", None, Instrument("queue-router", "tool", "1.0.0", {"queues": "v1"}), route, drafted)
     rec.close()
 
 
 def kept_inputs(args: dict) -> list[bytes]:
     """The bytes of every input a run with `args` keeps: its ticket and the accounts, as `main` writes
     them (invented example data)."""
-    return [json.dumps(json.dumps({"id": args["ticket"], **TICKETS[args["ticket"]]}, sort_keys=True)).encode("utf-8"),
-            json.dumps(json.dumps(ACCOUNTS, sort_keys=True)).encode("utf-8")]
+    return [
+        json.dumps(json.dumps({"id": args["ticket"], **TICKETS[args["ticket"]]}, sort_keys=True)).encode("utf-8"),
+        json.dumps(json.dumps(ACCOUNTS, sort_keys=True)).encode("utf-8"),
+    ]
+
 
 def kept_text(path) -> bytes:
     """A file this pipeline reads from outside the run, as its step reads it and keeps it: a JSON string

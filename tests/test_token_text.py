@@ -11,6 +11,7 @@
 The tokenizer is a word-level one built here with the `tokenizers` package and saved as
 tokenizer.json: test data, written for these tests; no model is called and nothing is downloaded.
 """
+
 from __future__ import annotations
 
 import hashlib
@@ -35,6 +36,7 @@ def _tokenizer_json() -> bytes:
     tokenizers = pytest.importorskip("tokenizers")
     from tokenizers.models import WordLevel
     from tokenizers.pre_tokenizers import Whitespace
+
     tok = tokenizers.Tokenizer(WordLevel(VOCAB, unk_token="[UNK]"))
     tok.pre_tokenizer = Whitespace()
     return tok.to_str().encode("utf-8")
@@ -42,6 +44,7 @@ def _tokenizer_json() -> bytes:
 
 def _digest(files: dict[str, bytes]) -> str:
     from onetrace.model_call import manifest_digest
+
     return manifest_digest({n: hashlib.sha256(b).hexdigest() for n, b in files.items()})
 
 
@@ -57,8 +60,10 @@ def step_page(tokenizer_digest: str | None, named=(), *, public: bool = False, i
     """A step's model-call section, drawn under a console's settings, its record naming
     `tokenizer_digest` (observed) and a steps file of `ids`."""
     from onetrace import model_call as m
+
     from onetrace_console.frame import rendering
     from tests.test_model_call import raw, record
+
     steps = json.dumps({"level": "L1", "token_ids": ids}).encode()
     over = {"steps": m.observed("sha256:" + hashlib.sha256(steps).hexdigest(), "model_call.steps.json")}
     if tokenizer_digest is not None:
@@ -80,8 +85,9 @@ def test_a_matching_tokenizer_decodes_each_step_with_the_label(tmp_path, examine
     folder = _folder(tmp_path, files)
     page = step_page(digest, ((folder, tuple(files)),))
     examined(len(IDS), "decoded steps")
-    assert f"decoded with tokenizer {digest}, from {folder}: tokenizer.json, vocab-note.txt, on this machine" in _text(page), \
-        "the label names the folder and each file used, as named"
+    assert f"decoded with tokenizer {digest}, from {folder}: tokenizer.json, vocab-note.txt, on this machine" in _text(
+        page
+    ), "the label names the folder and each file used, as named"
     assert _words(page) == WORDS
     rows = re.findall(r'data-decode-step="(\d+)"><td[^>]*>\d+</td><td[^>]*><code>(\d+)</code>', page)
     assert rows == [(str(i), t) for i, t in enumerate(IDS)], "the step and its id stay beside the word"
@@ -96,8 +102,10 @@ def test_files_that_hash_to_another_digest_are_refused_and_nothing_is_decoded(tm
     examined(1, "tokenizer whose files hash to another digest")
     said = _text(page)
     assert f"refused: {folder}: its named files hash to {_digest(files)}, not {want}" in said
-    assert (f"The word at each step cannot be shown: no tokenizer this console names hashes to the record's "
-            f"tokenizer.digest {want}. The step and its token id are shown.") in said
+    assert (
+        f"The word at each step cannot be shown: no tokenizer this console names hashes to the record's "
+        f"tokenizer.digest {want}. The step and its token id are shown."
+    ) in said
     assert "data-decoded" not in page and 'class="token-text"' not in page
     assert len(re.findall(r"data-decode-step=", page)) == len(IDS)
 
@@ -121,6 +129,7 @@ def test_a_named_file_that_is_not_there_is_refused(tmp_path, examined):
 
 def test_matching_files_with_no_tokenizers_package_are_said_and_not_decoded(tmp_path, monkeypatch, examined):
     import sys
+
     files = {"tokenizer.json": b'{"written for this test": true}'}
     folder = _folder(tmp_path, files)
     monkeypatch.setitem(sys.modules, "tokenizers", None)
@@ -130,10 +139,13 @@ def test_matching_files_with_no_tokenizers_package_are_said_and_not_decoded(tmp_
     assert 'class="token-text"' not in page
 
 
-@pytest.mark.parametrize("named, why", [
-    ((), "this console's local settings name no tokenizer"),
-    ((("/nowhere", ("tokenizer.json",)),), None),
-])
+@pytest.mark.parametrize(
+    "named, why",
+    [
+        ((), "this console's local settings name no tokenizer"),
+        ((("/nowhere", ("tokenizer.json",)),), None),
+    ],
+)
 def test_with_no_matching_tokenizer_the_page_shows_the_step_and_the_ids_only(named, why, examined):
     page = step_page("sha256:" + "a" * 64, named)
     examined(1, "page without a matching tokenizer")
@@ -161,11 +173,13 @@ def test_a_windows_folder_is_said_as_written_with_its_backslashes_single(monkeyp
     never with a backslash doubled. The folder is not there on any machine, so this runs, and reads
     the same, on every platform, with or without the tokenizers package."""
     from onetrace_console import token_text
+
     doubled = WIN.replace("\\", "\\\\")
     refused = _text(step_page("sha256:" + "a" * 64, ((WIN, ("tokenizer.json",)),)))
 
     class Ids:
         """Not a tokenizer: no file is read here, and only the label is checked."""
+
         def decode(self, nums, skip_special_tokens):
             return " ".join(map(str, nums))
 
@@ -174,5 +188,6 @@ def test_a_windows_folder_is_said_as_written_with_its_backslashes_single(monkeyp
     decoded = _text(step_page("sha256:" + "a" * 64, ((WIN, ("tokenizer.json",)),)))
     examined(2, "pages naming a Windows folder")
     assert f"refused: {WIN}: tokenizer.json is not a file in it" in refused and doubled not in refused
-    assert (f"decoded with tokenizer sha256:{'a' * 64}, from {WIN}: sub\\tokenizer.json, on this machine"
-            in decoded) and doubled not in decoded
+    assert (
+        f"decoded with tokenizer sha256:{'a' * 64}, from {WIN}: sub\\tokenizer.json, on this machine" in decoded
+    ) and doubled not in decoded

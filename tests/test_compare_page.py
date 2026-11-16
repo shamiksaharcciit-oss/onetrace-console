@@ -11,6 +11,7 @@
 
 Each check has its sabotage.
 """
+
 from __future__ import annotations
 
 import html
@@ -32,6 +33,7 @@ def demo(shared_demo, tmp_path_factory):
     from onetrace_console.store import Store
     from tests.conftest import demo_copy
     from tests.test_checks import _require_installed
+
     _require_installed()
     folder = demo_copy(shared_demo, tmp_path_factory.mktemp("compare") / "demo")
     return folder, Store(folder / "store" / "store")
@@ -40,13 +42,13 @@ def demo(shared_demo, tmp_path_factory):
 def _page(demo, base: str, cand: str) -> str:
     folder, store = demo
     ids = {r.run_id: r.key for r in store.runs()}
-    comparison = next(c for c in store.comparisons()
-                      if (c.run_a, c.run_b) == (ids[base], ids[cand]))
+    comparison = next(c for c in store.comparisons() if (c.run_a, c.run_b) == (ids[base], ids[cand]))
     return (folder / "store" / "pages" / "diff" / f"{comparison.key}.html").read_text(encoding="utf-8")
 
 
 def _annotations(demo, base: str, cand: str) -> list[dict]:
     import json
+
     folder, store = demo
     ids = {r.run_id: r.key for r in store.runs()}
     comparison = next(c for c in store.comparisons() if (c.run_a, c.run_b) == (ids[base], ids[cand]))
@@ -58,14 +60,21 @@ HEADLINE = ("p1-02-baseline-set2", "p1-08-candidate-set2")
 
 
 def headline_problems(page: str, command: str) -> list[str]:
-    card = re.search(r'<section data-section="first-difference"><div data-part="where">(.*?)</div>'
-                     r'<div data-part="what">(.*?)</div></section>', page, re.S)
+    card = re.search(
+        r'<section data-section="first-difference"><div data-part="where">(.*?)</div>'
+        r'<div data-part="what">(.*?)</div></section>',
+        page,
+        re.S,
+    )
     if not card:
         return ["no headline card"]
     out = []
     where = [html.unescape(p) for p in re.findall(r"<p>(.*?)</p>", card.group(1))]
-    if not (where and where[0].startswith("First difference: stage ")
-            and where[1].startswith("Stages identical before it: ")):
+    if not (
+        where
+        and where[0].startswith("First difference: stage ")
+        and where[1].startswith("Stages identical before it: ")
+    ):
         out.append(f"the card's where is {where}")
     what = card.group(2)
     said = html.unescape(re.sub(r"<[^>]+>", " ", what))
@@ -73,7 +82,7 @@ def headline_problems(page: str, command: str) -> list[str]:
     #: an input), or, with nothing recorded, the SDK's sentence that there is no recorded cause; and
     #: with a recorded change, never that why the output differs is not established.
     recorded = any(w in said for w in ("settings differ in", "recorded configuration differs", "input "))
-    if not recorded and "no recorded cause:" not in said:
+    if not recorded and "nothing recorded differs at" not in said:
         out.append("the card says neither what is recorded as differing nor that nothing is")
     if recorded and "is not established by this evidence." in said:
         out.append("the card says not established beside a recorded change")
@@ -93,12 +102,16 @@ def graph_problems(page: str, ladder: list[tuple[str, str]], reads: int = 0) -> 
     if int(svg.group(1)) > WIDTH_AT_1280:
         out.append(f"the graph is {svg.group(1)} wide, more than {WIDTH_AT_1280}")
     if svg.group(0).count('class="link"') != reads:
-        out.append(f"{svg.group(0).count('class=\"link\"')} links drawn for {reads} recorded reads")
+        out.append(f"{svg.group(0).count('class="link"')} links drawn for {reads} recorded reads")
     #: Each box opens its stage's row, on this page or on its "Proof" view, which holds the table.
-    boxes = re.findall(r'<a href="(?:[0-9a-f]{64}-proof\.html)?#step-(\d+)"[^>]*?data-tone="(\w+)"><rect[^>]*/>'
-                       r'<title>([^<]*)</title>', svg.group(0))
+    boxes = re.findall(
+        r'<a href="(?:[0-9a-f]{64}-proof\.html)?#step-(\d+)"[^>]*?data-tone="(\w+)"><rect[^>]*/>'
+        r"<title>([^<]*)</title>",
+        svg.group(0),
+    )
     drawn = {i: (tone, html.unescape(title)) for i, tone, title in boxes}
     from onetrace_console.render import _RESULT_WORDS
+
     for index, verdict in ladder:
         tone, title = drawn.get(index, ("", ""))
         if tone != tones.tone(tones.DIFF, verdict):
@@ -129,22 +142,22 @@ def test_the_headline_card_where_beside_what_with_its_command(demo, examined):
     comparison = next(c for c in store.comparisons() if (c.run_a, c.run_b) == tuple(ids[r] for r in HEADLINE))
     examined(1, "comparison page")
     from onetrace_console.render import typed_command
-    assert headline_problems(_page(demo, *HEADLINE),
-                             typed_command(comparison, store, "diff", text=True)) == []
+
+    assert headline_problems(_page(demo, *HEADLINE), typed_command(comparison, store, "diff", text=True)) == []
 
 
 def test_a_straight_line_pair_is_drawn_toned_and_fits_1280(demo, examined):
     page = _page(demo, *HEADLINE)
-    ladder = [("1", "same"), ("2", "FIRST DIFFERENCE"), ("3", "downstream"), ("4", "downstream"),
-              ("5", "downstream")]
+    ladder = [("1", "same"), ("2", "FIRST DIFFERENCE"), ("3", "downstream"), ("4", "downstream"), ("5", "downstream")]
     examined(len(ladder), "stages drawn")
     assert 'data-section="graph-linear"' in page
     folder, _store = demo
-    receipts = [json.loads(p.read_text(encoding="utf-8"))
-                for p in sorted((folder / "runs" / HEADLINE[1] / "receipts").glob("*.json"))]
+    receipts = [
+        json.loads(p.read_text(encoding="utf-8"))
+        for p in sorted((folder / "runs" / HEADLINE[1] / "receipts").glob("*.json"))
+    ]
     names = [r["stage"]["name"] for r in receipts]
-    reads = sum(f"receipt:{a}" in {i["name"] for i in r.get("inputs", [])}
-                for a, r in zip(names, receipts[1:]))
+    reads = sum(f"receipt:{a}" in {i["name"] for i in r.get("inputs", [])} for a, r in zip(names, receipts[1:]))
     assert reads, "the demo's candidate records its reads"
     assert graph_problems(page, ladder, reads) == []
     assert graph_problems(page, ladder, reads - 1), "a line the records don't hold is named"
@@ -173,6 +186,7 @@ def test_a_pair_from_one_pipeline_is_not_said_to_be_from_two(demo, examined):
 def _cross_pipeline_page(demo) -> str:
     from onetrace_console.compare import compare
     from onetrace_console.render import render_diff
+
     folder, store = demo
     ids = {r.run_id: r for r in store.runs()}
     comparison = compare(ids["p1-01-baseline-set1"], ids["p3-23-t-1-rules1"], store)
@@ -181,6 +195,7 @@ def _cross_pipeline_page(demo) -> str:
 
 def test_a_pair_from_two_pipelines_says_so_first(demo, examined):
     from onetrace_console.render import DIFFERENT_PIPELINES
+
     page = _cross_pipeline_page(demo)
     examined(1, "comparison page")
     line = f'<p data-section="different-pipelines">{html.escape(DIFFERENT_PIPELINES)}</p>'
@@ -190,16 +205,19 @@ def test_a_pair_from_two_pipelines_says_so_first(demo, examined):
 
 # ------------------------------------------------------------------ the sabotages
 
+
 def test_sabotage_the_condition_inverted_is_caught(demo, monkeypatch, examined):
     """With the condition inverted, the same-pipeline pair carries the line and the two-pipeline
     pair loses it: both of the tests above would fail."""
     from onetrace_console import overview, render
+
     examined(2, "comparison pages")
     real = overview.declared_list
     monkeypatch.setattr(overview, "declared_list", lambda run: (real(run), id(run)))
     folder, store = demo
     ids = {r.run_id: r for r in store.runs()}
     from onetrace_console.compare import compare
+
     same = compare(ids[HEADLINE[0]], ids[HEADLINE[1]], store)
     assert 'data-section="different-pipelines"' in render.render_diff(same, store, generated_at="x")
 
@@ -214,13 +232,14 @@ def test_sabotage_a_box_toned_off_the_rule_is_named(demo, examined):
     examined(1, "planted page")
     assert 'data-mark="first" data-tone="fd"' in _page(demo, *HEADLINE)
     page = _page(demo, *HEADLINE).replace('data-mark="first" data-tone="fd"', 'data-mark="first" data-tone="ok"', 1)
-    assert any(p.startswith("stage 2 is toned 'ok'") for p in graph_problems(
-        page, [("2", "FIRST DIFFERENCE")]))
+    assert any(p.startswith("stage 2 is toned 'ok'") for p in graph_problems(page, [("2", "FIRST DIFFERENCE")]))
 
 
 def test_sabotage_an_invented_setting_row_is_named(demo, examined):
     examined(1, "planted page")
-    page = _page(demo, *HEADLINE).replace('<tr data-setting="', '<tr data-setting="9:invented"></tr><tr data-setting="', 1)
+    page = _page(demo, *HEADLINE).replace(
+        '<tr data-setting="', '<tr data-setting="9:invented"></tr><tr data-setting="', 1
+    )
     assert any("the table's rows are" in p for p in settings_problems(page, _annotations(demo, *HEADLINE)))
 
 
@@ -257,13 +276,16 @@ def graph_settings_problems(page: str, ladder: list[dict], receipt_a, receipt_b)
             m = re.fullmatch(r"instrument (\S+) differs: .*", note)
             if m:
                 field, key = f"instrument.{m[1]}", ("instrument", m[1])
-            elif (m := re.fullmatch(r"constant (.+) differs", note)):
+            elif m := re.fullmatch(r"constant (.+) differs", note):
                 field, key = f"assertions.constants.{m[1]}", ("constants", m[1])
             else:
                 continue
             ra, rb = receipt_a(row["index_baseline"]), receipt_b(row["index_candidate"])
-            value = (lambda r: r["instrument"][key[1]]) if key[0] == "instrument" else \
-                    (lambda r: r["assertions"]["constants"][key[1]])
+            value = (
+                (lambda r, k=key[1]: r["instrument"][k])
+                if key[0] == "instrument"
+                else (lambda r, k=key[1]: r["assertions"]["constants"][k])
+            )
             want[f"{n}:{field}"] = (str(value(ra)), str(value(rb)))
     if set(rows) != set(want):
         out.append(f"the table's rows are {sorted(rows)}, the notes name {sorted(want)}")
@@ -276,8 +298,9 @@ def graph_settings_problems(page: str, ladder: list[dict], receipt_a, receipt_b)
 def test_settings_that_changed_on_a_graph_pair_are_the_notes_settings_with_both_values(demo, examined):
     ladder = _ladder(demo, *GRAPH_PAIR)
     page = _page(demo, *GRAPH_PAIR)
-    problems = graph_settings_problems(page, ladder, lambda i: _receipt(demo, GRAPH_PAIR[0], i),
-                                       lambda i: _receipt(demo, GRAPH_PAIR[1], i))
+    problems = graph_settings_problems(
+        page, ladder, lambda i: _receipt(demo, GRAPH_PAIR[0], i), lambda i: _receipt(demo, GRAPH_PAIR[1], i)
+    )
     rows = re.findall(r'<tr data-setting="([^"]+)">', page)
     examined(len(rows), "settings rows on the graph pair")
     assert problems == []
@@ -287,19 +310,25 @@ def test_settings_that_changed_on_a_graph_pair_are_the_notes_settings_with_both_
 
 def test_sabotage_a_graph_pair_s_missing_setting_row_is_named(demo, examined):
     examined(1, "planted page")
-    page = re.sub(r'<tr data-setting="2:assertions\.constants\.rules">.*?</tr>', "", _page(demo, *GRAPH_PAIR),
-                  flags=re.S)
-    problems = graph_settings_problems(page, _ladder(demo, *GRAPH_PAIR),
-                                       lambda i: _receipt(demo, GRAPH_PAIR[0], i),
-                                       lambda i: _receipt(demo, GRAPH_PAIR[1], i))
+    page = re.sub(
+        r'<tr data-setting="2:assertions\.constants\.rules">.*?</tr>', "", _page(demo, *GRAPH_PAIR), flags=re.S
+    )
+    problems = graph_settings_problems(
+        page,
+        _ladder(demo, *GRAPH_PAIR),
+        lambda i: _receipt(demo, GRAPH_PAIR[0], i),
+        lambda i: _receipt(demo, GRAPH_PAIR[1], i),
+    )
     assert any("the notes name" in p for p in problems), problems
 
 
 def text_count_problems(page: str) -> list[str]:
     """Each step's "settings: N changed" in the text diff against the rows "Settings that changed"
     lists for that step, its fingerprints under Details included: N must be that count."""
+
     def words(s: str) -> str:
         return re.sub(r"\s+", " ", html.unescape(re.sub(r"<[^>]+>", " ", s))).strip()
+
     section = re.search(r'<section data-section="settings-changed">(.*?)</section>', page, re.S)
     listed: dict[str, int] = {}
     for row in re.findall(r'<tr data-setting="[^"]+">(.*?)</tr>', section.group(1) if section else "", re.S):
@@ -309,15 +338,20 @@ def text_count_problems(page: str) -> list[str]:
     for node, body in re.findall(r'<article data-node="([^"]*)">(.*?)</article>', page, re.S):
         m = re.search(r"settings: (\d+) changed", body)
         if m and int(m[1]) != listed.get(html.unescape(node), 0):
-            out.append(f"{html.unescape(node)}: the text diff says {m[1]} changed, the table lists "
-                       f"{listed.get(html.unescape(node), 0)}")
+            out.append(
+                f"{html.unescape(node)}: the text diff says {m[1]} changed, the table lists "
+                f"{listed.get(html.unescape(node), 0)}"
+            )
     return out
 
 
 def _every_diff_page(demo) -> dict[str, str]:
     folder, _ = demo
-    return {p.name: p.read_text(encoding="utf-8") for p in (folder / "store" / "pages" / "diff").glob("*.html")
-            if not p.name.endswith("-text.html")}
+    return {
+        p.name: p.read_text(encoding="utf-8")
+        for p in (folder / "store" / "pages" / "diff").glob("*.html")
+        if not p.name.endswith("-text.html")
+    }
 
 
 def test_the_text_diff_s_settings_count_is_what_the_settings_table_lists(demo, examined):

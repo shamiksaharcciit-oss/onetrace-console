@@ -5,6 +5,7 @@ zero or below (outputs nearer than inputs). Now a rung is marked only where its 
 negative drop reads "outputs nearer by 0.387", and a ladder with no drop says "No step's outputs are
 further apart than its inputs." Nothing else changes: no verdict, no number, no exact comparison.
 """
+
 from __future__ import annotations
 
 import re
@@ -27,11 +28,13 @@ def drawn(monkeypatch):
     """The ladder section as the comparison page draws it, for rungs given here."""
     from onetrace_console import neighbours
     from onetrace_console.neighbours import nearness, pages
+
     monkeypatch.setattr(neighbours, "here", lambda: True)
 
     def draw(rungs):
         monkeypatch.setattr(nearness, "ladder", lambda comparison, store: rungs)
         return pages.ladder_section(object(), object())
+
     return draw
 
 
@@ -43,7 +46,9 @@ def test_the_support_demo_pair_marks_nothing_and_says_so(drawn):
     assert largest_drop(SUPPORT_PAIR) is None
     html = drawn(SUPPORT_PAIR)
     assert _marked(html) == [] and "largest drop" not in html
-    assert '<p class="note" data-nearness="no-drop">No step&#x27;s outputs are further apart than its inputs.</p>' in html
+    assert (
+        '<p class="note" data-nearness="no-drop">No step&#x27;s outputs are further apart than its inputs.</p>' in html
+    )
     assert "outputs nearer by 0.387" in html and "outputs nearer by 0.438" in html
     #: Never a minus number under "Drop".
     assert not re.search(r'data-label="Drop" class="value">-', html) and "−" not in html

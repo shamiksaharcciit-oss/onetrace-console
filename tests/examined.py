@@ -27,7 +27,7 @@ HOW IT IS USED
 
 `examined` raises if the count is zero, and records it. `pytest_terminal_summary` prints
 every recorded count at the end of the run, which is where the report's per-check numbers
-come from -- generated, never transcribed (X-11).
+come from -- generated, never transcribed.
 
 WHAT COUNTS AS A POPULATION
 ---------------------------
@@ -36,6 +36,7 @@ exactly one thing and does not need telling; the rule exists for the case where 
 zero times and the test passes. Where that reading is wrong, the fix is to call `examined`
 in more places, not fewer -- it costs one line.
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -44,6 +45,7 @@ from dataclasses import dataclass
 @dataclass(frozen=True, slots=True)
 class Report:
     """One check's account of what it looked at."""
+
     nodeid: str
     what: str
     count: int
@@ -66,13 +68,15 @@ def record(nodeid: str, count: int, what: str) -> int:
         raise NothingExamined(
             f"{nodeid}: examined() was given {count!r} ({type(count).__name__}), not a "
             f"count. The rule is about a number of items, and a truthy object is how a "
-            f"zero gets past it.")
+            f"zero gets past it."
+        )
     if count <= 0:
         raise NothingExamined(
             f"{nodeid}: examined {count} {what}. A check that looks at nothing establishes "
             f"nothing, so this is a FAILURE of the check and not a pass with an empty "
             f"population. Either the fixture stopped producing items or the filter is "
-            f"wrong; both are worth knowing.")
+            f"wrong; both are worth knowing."
+        )
     RECORDS.append(Report(nodeid=nodeid, what=what, count=count))
     return count
 
@@ -80,8 +84,10 @@ def record(nodeid: str, count: int, what: str) -> int:
 def summary_lines() -> list[str]:
     """The per-check counts, and the totals, as the run's own account of its coverage."""
     if not RECORDS:
-        return ["items examined: NOTHING WAS RECORDED. Either no check reported what it "
-                "examined, or the recording is broken. Both are failures of the rule."]
+        return [
+            "items examined: NOTHING WAS RECORDED. Either no check reported what it "
+            "examined, or the recording is broken. Both are failures of the rule."
+        ]
     width = max(len(r.what) for r in RECORDS)
     lines = [f"items examined, by check ({len(RECORDS)} reports):"]
     for r in RECORDS:

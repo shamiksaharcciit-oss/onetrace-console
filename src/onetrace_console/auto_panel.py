@@ -12,15 +12,18 @@ and no gaps shows nothing new.
 What is checked is the verifier's: its `auto:` rows, PASS, FAIL or NOT-RUN with the row's own detail,
 read from the run's stored check (`--json`). Nothing here infers a call the record does not hold.
 """
+
 from __future__ import annotations
 
 from onetrace_console.bounded_json import load_json_bounded
 from onetrace_console.words import escape
 
 HEADING = "Recorded without configuration"
-LEAD = ("This run was recorded by onetrace-auto, which hooks libraries rather than steps the app "
-        "names. What it hooked, what it could not see and where a call was not recorded, in the "
-        "record's own words:")
+LEAD = (
+    "This run was recorded by onetrace-auto, which hooks libraries rather than steps the app "
+    "names. What it hooked, what it could not see and where a call was not recorded, in the "
+    "record's own words:"
+)
 HOOKS = "Libraries"
 BOUNDARY = "Boundary"
 BOUNDARIES = "Boundaries"
@@ -44,8 +47,9 @@ def gaps(manifest: dict, receipts: list[dict]) -> list[dict]:
     """The run's gaps, each once, in the order the record first holds it: the manifest's, then any
     a receipt's `emission.gaps` holds that the manifest does not."""
     out, seen = [], set()
-    sources = [manifest.get("gaps")] + [(r.get("emission") or {}).get("gaps") if isinstance(r.get("emission"), dict)
-                                        else None for r in receipts]
+    sources = [manifest.get("gaps")] + [
+        (r.get("emission") or {}).get("gaps") if isinstance(r.get("emission"), dict) else None for r in receipts
+    ]
     for src in sources:
         for g in _dicts(src):
             key = (_s(g.get("stage")), _s(g.get("index")), _s(g.get("reason")))
@@ -73,10 +77,12 @@ def _rows_block(found: list[dict]) -> str:
     if not found:
         return f'<p data-auto="rows-none">{escape(ROWS_NONE)}</p>'
     items = "".join(
-        f'<li data-auto-row="{escape(_s(r.get("result")))}"><span class="pill {_TONE.get(r.get("result"), "neu")}">'
-        f'{escape(_s(r.get("result")))}</span> {escape(_s(r.get("name")))}'
+        f'<li data-auto-row="{escape(_s(r.get("result")))}"><span class="pill {_TONE.get(r.get("result"), "neu")}">'  # type: ignore[arg-type]  # a key that is None reads as the default
+        f"{escape(_s(r.get('result')))}</span> {escape(_s(r.get('name')))}"
         + (f' <span class="reason">— {escape(_s(r.get("detail")))}</span>' if _s(r.get("detail")) else "")
-        + "</li>" for r in found)
+        + "</li>"
+        for r in found
+    )
     return f'<p>{escape(ROWS_LEAD)}</p><ul class="plain" data-auto="rows">{items}</ul>'
 
 
@@ -87,7 +93,7 @@ def _words(text: str) -> str:
 def run_section(manifest: dict, receipts: list[dict], envelope: dict | None) -> str:
     """The run page's zero-configuration section; empty for a run whose manifest has no `auto` block,
     no boundaries and no gaps. `receipts` is every receipt of the chain, the close receipt included."""
-    auto = manifest.get("auto") if isinstance(manifest.get("auto"), dict) else None
+    auto = _auto if isinstance(_auto := manifest.get("auto"), dict) else None
     bounds, found = _dicts(manifest.get("boundaries")), gaps(manifest, receipts)
     if auto is None and not bounds and not found:
         return ""
@@ -97,19 +103,30 @@ def run_section(manifest: dict, receipts: list[dict], envelope: dict | None) -> 
             parts.append(f'<p data-auto="boundary">{escape(BOUNDARY)}: {_words(_s(auto["boundary"]))}</p>')
         hooks = "".join(
             f'<li data-auto-hook="{escape(_s(h.get("status")))}"><code>{_words(_s(h.get("library")))}</code>'
-            + (f' {_words(_s(h["version"]))}' if _s(h.get("version")) else "")
-            + f' — {_words(_s(h.get("status")))}</li>' for h in _dicts(auto.get("hooks")))
+            + (f" {_words(_s(h['version']))}" if _s(h.get("version")) else "")
+            + f" — {_words(_s(h.get('status')))}</li>"
+            for h in _dicts(auto.get("hooks"))
+        )
         parts.append(f'<h3>{escape(HOOKS)}</h3><ul class="plain" data-auto="hooks">{hooks}</ul>')
     if bounds:
         items = "".join(
-            f'<li data-auto-boundary><code>{_words(_s(b.get("name")))}</code> — '
-            f'{_words(_s(b.get("kind")))}: {_words(_s(b.get("note")))}</li>' for b in bounds)
+            f"<li data-auto-boundary><code>{_words(_s(b.get('name')))}</code> — "
+            f"{_words(_s(b.get('kind')))}: {_words(_s(b.get('note')))}</li>"
+            for b in bounds
+        )
         parts.append(f'<h3>{escape(BOUNDARIES)}</h3><ul class="plain" data-auto="boundaries">{items}</ul>')
     items = "".join(
-        f'<li data-auto-gap><code>{_words(_s(g.get("stage")))}</code> #{_words(_s(g.get("index")))} — '
-        f'{_words(_s(g.get("reason")))}</li>' for g in found)
-    parts.append(f'<h3>{escape(GAPS)}</h3>'
-                 + (f'<ul class="plain" data-auto="gaps">{items}</ul>' if found
-                    else f'<p data-auto="gaps-none">{escape(NO_GAP)}</p>'))
+        f"<li data-auto-gap><code>{_words(_s(g.get('stage')))}</code> #{_words(_s(g.get('index')))} — "
+        f"{_words(_s(g.get('reason')))}</li>"
+        for g in found
+    )
+    parts.append(
+        f"<h3>{escape(GAPS)}</h3>"
+        + (
+            f'<ul class="plain" data-auto="gaps">{items}</ul>'
+            if found
+            else f'<p data-auto="gaps-none">{escape(NO_GAP)}</p>'
+        )
+    )
     parts.append(_rows_block(rows(envelope)))
     return f'<section data-section="auto" class="auto">{"".join(parts)}</section>'

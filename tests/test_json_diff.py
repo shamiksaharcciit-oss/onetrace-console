@@ -12,6 +12,7 @@
 5. On the demo as the public build draws it, the view is under outputs its text diff shows verified,
    and nowhere else.
 """
+
 from __future__ import annotations
 
 import html
@@ -34,8 +35,10 @@ def _v(text: str):
 
 def _found(a: str, b: str) -> list[tuple[str, str, str | None, str | None]]:
     """Each member, its values as JSON text, the side it is not on as None (a JSON null is `null`)."""
-    return [(op, path, None if op == "added" else jd.text(x), None if op == "removed" else jd.text(y))
-            for op, path, x, y in jd.members(_v(a), _v(b))]
+    return [
+        (op, path, None if op == "added" else jd.text(x), None if op == "removed" else jd.text(y))
+        for op, path, x, y in jd.members(_v(a), _v(b))
+    ]
 
 
 def test_members_by_path_in_a_stable_order(examined):
@@ -43,9 +46,14 @@ def test_members_by_path_in_a_stable_order(examined):
     b = '{"a": {"x": "2", "new": null}, "b": 1, "list": [1, 5], "t": {"0": 1}}'
     got = _found(a, b)
     examined(len(got), "members")
-    assert got == [("removed", "/a/gone", "true", None), ("added", "/a/new", None, "null"),
-                   ("changed", "/a/x", '"1"', '"2"'), ("changed", "/list/1", "2", "5"),
-                   ("removed", "/list/2", "3", None), ("changed", "/t", "[1]", '{"0":1}')]
+    assert got == [
+        ("removed", "/a/gone", "true", None),
+        ("added", "/a/new", None, "null"),
+        ("changed", "/a/x", '"1"', '"2"'),
+        ("changed", "/list/1", "2", "5"),
+        ("removed", "/list/2", "3", None),
+        ("changed", "/t", "[1]", '{"0":1}'),
+    ]
     assert _found(b, a) != got and _found(a, b) == got
 
 
@@ -72,8 +80,9 @@ def test_a_name_with_a_slash_or_tilde_is_escaped_and_the_whole_value_has_its_wor
     assert jd.ROOT in jd.render(jd.members(_v("1"), _v("2")))
 
 
-@pytest.mark.parametrize("data", [b'{"a": 1, "a": 2}', b'{"a": NaN}', b"{'a': 1}", b"plain text",
-                                  b'{"a": "\xff"}', b""])
+@pytest.mark.parametrize(
+    "data", [b'{"a": 1, "a": 2}', b'{"a": NaN}', b"{'a': 1}", b"plain text", b'{"a": "\xff"}', b""]
+)
 def test_only_json_read_strictly_is_read(data, examined):
     examined(1, "planted bytes")
     assert jd.parse(data) == (False, None)
@@ -98,17 +107,25 @@ def test_past_the_most_members_listed_it_says_how_many_more(examined):
 def test_sabotage_a_float_reader_reads_two_numbers_as_one(monkeypatch, examined):
     """Read as floats, `1.0` and `1.00` are one value and the change is gone: the reader is what holds it."""
     real = jd.load_json_bounded
-    monkeypatch.setattr(jd, "load_json_bounded",
-                        lambda text, *a, **k: real(text, *a, **{**k, "parse_float": None, "parse_int": None}))
+    monkeypatch.setattr(
+        jd, "load_json_bounded", lambda text, *a, **k: real(text, *a, **{**k, "parse_float": None, "parse_int": None})
+    )
     examined(1, "the planted pair")
     assert _found('{"n": 1.0}', '{"n": 1.00}') == []
 
 
 def _run(folder: Path, run_id: str, name: str, data: bytes, media: str) -> Path:
     from onetrace.emit import Instrument, Recorder
+
     out = folder / run_id
-    rec = Recorder(str(out), run_id=run_id, declared_stages=["make"], manifest=Path(__file__),
-                   policy="fail-closed", anchor_reason="a test")
+    rec = Recorder(
+        str(out),
+        run_id=run_id,
+        declared_stages=["make"],
+        manifest=Path(__file__),
+        policy="fail-closed",
+        anchor_reason="a test",
+    )
 
     def make(ctx):
         ctx.read_memory(b"the same question", "text/plain", name="question", trust_class="externally-sourced")
@@ -133,6 +150,7 @@ def built(tmp_path_factory):
     from onetrace_console.textdiff_page import render_text_diff_page
     from tests.test_checks import FIXED_RAN_AT
     from tests.test_compare import _deliver
+
     folder = tmp_path_factory.mktemp("json-diff")
     s = folder / "s"
     made = {
@@ -154,11 +172,17 @@ def built(tmp_path_factory):
 
 
 def _members(page: str) -> list[tuple[str, str]]:
-    return [(op, html.unescape(re.sub(r"<[^>]+>", "", body)).strip())
-            for op, body in re.findall(r'<li data-json-op="([^"]+)">(.*?)</li>', page, re.S)]
+    return [
+        (op, html.unescape(re.sub(r"<[^>]+>", "", body)).strip())
+        for op, body in re.findall(r'<li data-json-op="([^"]+)">(.*?)</li>', page, re.S)
+    ]
 
 
-WANT = [("removed", '/note removed: "first"'), ("added", "/flag added: true"), ("changed", "/lines/0/qty changed: 2 → 3")]
+WANT = [
+    ("removed", '/note removed: "first"'),
+    ("added", "/flag added: true"),
+    ("changed", "/lines/0/qty changed: 2 → 3"),
+]
 
 
 def test_a_json_output_s_members_are_under_its_text_diff(built, examined):
@@ -168,7 +192,7 @@ def test_a_json_output_s_members_are_under_its_text_diff(built, examined):
         assert sorted(_members(p)) == sorted(WANT)
         assert [m[1].split(" ", 1)[0] for m in _members(p)] == ["/flag", "/lines/0/qty", "/note"]
         assert "1 added · 1 removed · 1 changed" in html.unescape(p)
-    text = page[page.index('data-section="text-diff"'):]
+    text = page[page.index('data-section="text-diff"') :]
     assert text.index("data-hunk") < text.index("data-json-diff")
 
 

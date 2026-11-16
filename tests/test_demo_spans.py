@@ -13,6 +13,7 @@
    error first; no span view on the public demo links to a tracing tool.
 5. A build from that build writes each export once.
 """
+
 from __future__ import annotations
 
 import html
@@ -31,14 +32,18 @@ def _text(page: str) -> str:
 @pytest.fixture(scope="module")
 def demo(shared_demo):
     from onetrace_console.store import Store
+
     folder = shared_demo["folder"]
     store = Store(folder / "store" / "store")
     return folder, store, {r.run_id: r for r in store.runs()}
 
 
 def _app(doc: dict) -> list[dict]:
-    return [rs for rs in doc["resourceSpans"]
-            if {"key": "service.name", "value": {"stringValue": app_traces.SERVICE}} in rs["resource"]["attributes"]]
+    return [
+        rs
+        for rs in doc["resourceSpans"]
+        if {"key": "service.name", "value": {"stringValue": app_traces.SERVICE}} in rs["resource"]["attributes"]
+    ]
 
 
 def test_the_build_bundles_labelled_app_traces_for_p10_and_p3(demo, examined):
@@ -57,15 +62,21 @@ def test_the_build_bundles_labelled_app_traces_for_p10_and_p3(demo, examined):
 
 
 def _step_page(folder, run, stage: str, nth: int = 1) -> str:
-    pages = sorted((folder / "store" / "pages" / "runs" / run.key).glob("stage-*.html"),
-                   key=lambda p: int(re.search(r"\d+", p.name).group(0)))
-    found = [p.read_text(encoding="utf-8") for p in pages
-             if re.search(rf'<span class="mono">{re.escape(stage)}</span>', p.read_text(encoding="utf-8"))]
+    pages = sorted(
+        (folder / "store" / "pages" / "runs" / run.key).glob("stage-*.html"),
+        key=lambda p: int(re.search(r"\d+", p.name).group(0)),
+    )
+    found = [
+        p.read_text(encoding="utf-8")
+        for p in pages
+        if re.search(rf'<span class="mono">{re.escape(stage)}</span>', p.read_text(encoding="utf-8"))
+    ]
     return found[nth - 1]
 
 
 def test_p10_s_candidate_step_shows_its_spans_and_the_checks(demo, examined):
     from onetrace_console import span_tree
+
     folder, _store, runs = demo
     page = _step_page(folder, runs["pz-53-agent-amount-changed"], "agent_step")
     examined(1, "step page")
@@ -94,22 +105,30 @@ def _recorded_on_a_clock_that_stands_still(tmp_path, monkeypatch) -> tuple[list[
     (`time.sleep`, by what it waits), so every step that does not wait is stamped in one millisecond, as
     on a fast enough machine. The two lookups' receipts, and their step trees from the demo's calls."""
     import datetime
+
     from onetrace import emit
+
     from onetrace_console.demo_store import ticket_triage
     from onetrace_console.span_tree import read_export, step_tree
-    now = [datetime.datetime(2030, 1, 1, tzinfo=datetime.timezone.utc)]
+
+    now = [datetime.datetime(2030, 1, 1, tzinfo=datetime.UTC)]
     monkeypatch.setattr(emit, "_now", lambda: now[0].isoformat(timespec="milliseconds"))
     import time
+
     monkeypatch.setattr(time, "sleep", lambda s: now.__setitem__(0, now[0] + datetime.timedelta(seconds=s)))
     from onetrace_console.demo_store import traceparent_for
+
     run = tmp_path / "p3-28-t-3-rules1-lookup-retried"
     monkeypatch.setenv("TRACEPARENT", traceparent_for(run.name))  # as the demo records it, inside a span
     ticket_triage.main(run, run.name, "T-3", "1", fault="lookup-once")
     manifest = json.loads((run / "MANIFEST.json").read_text(encoding="utf-8"))
     receipts = [json.loads((run / e["file"]).read_text(encoding="utf-8")) for e in manifest["chain"]]
     lookups = [r for r in receipts if r["stage"]["name"] == "lookup_account"]
-    spans = read_export(json.dumps({"resourceSpans": [{"resource": {"attributes": []}, "scopeSpans": [
-        {"spans": app_traces.spans_for(run)}]}]}).encode())
+    spans = read_export(
+        json.dumps(
+            {"resourceSpans": [{"resource": {"attributes": []}, "scopeSpans": [{"spans": app_traces.spans_for(run)}]}]}
+        ).encode()
+    )
     return lookups, [step_tree(spans, r) for r in lookups]
 
 
@@ -117,6 +136,7 @@ def test_the_retry_is_recorded_after_the_failed_lookup_however_fast_the_machine(
     """The retry starts in a later recorded millisecond than the failed lookup ended, so each lookup's
     step page holds its own call: the failed one's HTTP call reads status error, the retry's does not."""
     from onetrace_console.span_tree import _ns
+
     (failed, retry), (first, second) = _recorded_on_a_clock_that_stands_still(tmp_path, monkeypatch)
     examined(2, "lookups recorded on a clock only the pipeline's wait moves")
     assert _ns(retry["time"]["started"]) > _ns(failed["time"]["ended"]), (failed["time"], retry["time"])
@@ -138,12 +158,15 @@ def test_a_held_p10_comparison_ranks_the_retries_and_the_status_error_first(demo
     for section in found:
         first = re.search(r'<li data-rank="([a-z]+)">([^<]*)</li>', section)
         assert first.group(1) == "status"
-        assert re.match(r"(candidate|baseline): 2 retries on price_lookup, status error, ", html.unescape(first.group(2)))
+        assert re.match(
+            r"(candidate|baseline): 2 retries on price_lookup, status error, ", html.unescape(first.group(2))
+        )
         assert "data-trace-link" not in section and "<a " not in section
 
 
 def test_a_build_from_that_build_writes_each_export_once(demo, tmp_path, examined):
     import shutil
+
     folder, _store, _runs = demo
     runs = tmp_path / "runs"
     shutil.copytree(folder / "runs", runs)

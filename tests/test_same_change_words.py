@@ -1,4 +1,4 @@
-""""Other runs with the same change" never says a graph comparison found
+""" "Other runs with the same change" never says a graph comparison found
 no first difference.
 
     "Other runs with the same change" says "This comparison found no first difference, so
@@ -12,6 +12,7 @@ graph comparison's diff report names a frontier of nodes (`first_difference_fron
 graph comparison's first differences; a report it can't read a first difference from is said as
 that; and "no first difference" is left to the one case that found none, two identical runs.
 """
+
 from __future__ import annotations
 
 import re
@@ -29,12 +30,16 @@ def _holds_for_a_graph_comparison(page: str) -> None:
     """A graph pair draws no panel: why it does not look for other runs is said in the page's one
     closed "Not shown for graph-shaped runs" line, and nowhere says it found no first difference."""
     from onetrace_console.render import NOT_SHOWN_WHY
+
     assert 'data-section="first-difference"' in page, "the page shows no first difference"
     assert 'data-section="same-change"' not in page, "a graph pair draws the panel"
     #: The suggested explanation's own frame may come between it and the SDK's line (`explain`).
-    folded = re.search(r'<details data-section="not-shown">(.*?)</details>\s*'
-                       r'(?:<section data-section="explain"[^>]*>.*?</section>\s*)?(<p data-section="sdk"|$)',
-                       page, re.S)
+    folded = re.search(
+        r'<details data-section="not-shown">(.*?)</details>\s*'
+        r'(?:<section data-section="explain"[^>]*>.*?</section>\s*)?(<p data-section="sdk"|$)',
+        page,
+        re.S,
+    )
     assert folded, "no closed line for what is not shown"
     said = unescape(folded.group(1))
     assert NOT_SHOWN_WHY["same-change"] in said
@@ -50,7 +55,7 @@ def test_the_demos_compare_page(loaded, examined):  # noqa: F811
 
 def test_the_exams_graph_compare_pages(dag_pages, examined):  # noqa: F811
     examined(len(dag_pages), "exam graph compare pages (dag-r37 P/R, P/Q)")
-    for name, page in dag_pages.items():
+    for _name, page in dag_pages.items():
         _holds_for_a_graph_comparison(page)
 
 

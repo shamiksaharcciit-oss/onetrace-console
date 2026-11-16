@@ -14,6 +14,7 @@ test asks otherwise (`code_note`). Everything else a test plants comes in throug
 
 `record_run(folder, run_id, **spec)` returns the run's folder.
 """
+
 from __future__ import annotations
 
 import json
@@ -24,7 +25,7 @@ from pathlib import Path
 
 SOURCE = "written for this test; no model was called"
 
-_SCRIPT = r'''
+_SCRIPT = r"""
 import json, sys
 import onetrace as ot
 from onetrace import model_call as m
@@ -86,20 +87,41 @@ def run():
 
 
 run()
-'''
+"""
 
 
-def record_run(folder: Path, run_id: str, *, x: str = "1", config: dict | None = None,
-               constants: dict | None = None, skip_prep: bool = False, records: dict | None = None,
-               decisions: list | None = None, code_note: str = "") -> Path:
+def record_run(
+    folder: Path,
+    run_id: str,
+    *,
+    x: str = "1",
+    config: dict | None = None,
+    constants: dict | None = None,
+    skip_prep: bool = False,
+    records: dict | None = None,
+    decisions: list | None = None,
+    code_note: str = "",
+) -> Path:
     folder.mkdir(parents=True, exist_ok=True)
     code = folder / f"pipeline{'-' + code_note if code_note else ''}.py"
-    code.write_text(_SCRIPT.replace("#: CODE_NOTE", f"#: {code_note}" if code_note else "#: CODE_NOTE"),
-                    encoding="utf-8")
-    spec = {"source": SOURCE, "x": x, "config": config or {}, "constants": constants or {},
-            "skip_prep": skip_prep, "records": {"model_call.json": {}} if records is None else records,
-            "decisions": decisions or []}
+    code.write_text(
+        _SCRIPT.replace("#: CODE_NOTE", f"#: {code_note}" if code_note else "#: CODE_NOTE"), encoding="utf-8"
+    )
+    spec = {
+        "source": SOURCE,
+        "x": x,
+        "config": config or {},
+        "constants": constants or {},
+        "skip_prep": skip_prep,
+        "records": {"model_call.json": {}} if records is None else records,
+        "decisions": decisions or [],
+    }
     env = {**os.environ, "ONETRACE_RUN_ID": run_id}
-    subprocess.run([sys.executable, str(code), str(folder / "runs"), json.dumps(spec)], check=True,
-                   capture_output=True, env=env, cwd=folder)
+    subprocess.run(
+        [sys.executable, str(code), str(folder / "runs"), json.dumps(spec)],
+        check=True,
+        capture_output=True,
+        env=env,
+        cwd=folder,
+    )
     return folder / "runs" / run_id

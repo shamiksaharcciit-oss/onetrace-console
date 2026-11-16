@@ -14,6 +14,7 @@ levels down. Comparing the two agent runs, onetrace descends into the sub-agent'
 in `model-call-record/1.0`), the same in both runs. Everything here is invented
 example data; nothing is paid or settled anywhere, and no model is called.
 """
+
 from __future__ import annotations
 
 import os
@@ -25,11 +26,14 @@ INNER_STAGES = ["settle"]
 EXAMPLE = "invented example data"
 
 
-def main(runs_dir, run_id: str, inner_id: str, amount: str) -> None:
+def main(runs_dir, run_id: str, inner_id: str, amount: str, capture: str | None = None) -> None:
     """Record one agent run, `run_id`, whose step calls the sub-agent run `inner_id`; both folders in
-    `runs_dir`. `amount`: the setting the sub-agent's `settle` step records."""
+    `runs_dir`. `amount`: the setting the sub-agent's `settle` step records. `capture`: one of
+    `model_call_example.CAPTURES`, for the capture store's runs (`captures`), where the self-hosted call's record is
+    written in model-call-record/1.1 with its L3 steps file; None for the demo's 1.0 records."""
     import onetrace as ot
     from onetrace.emit import Instrument
+
     tool = Instrument("settlement-tool", "tool", "1.0.0", {"currency": "EUR"})
     planner = Instrument("agent-planner", "agent", "1.0.0", {"steps": "1"})
     runs = Path(runs_dir)
@@ -40,8 +44,13 @@ def main(runs_dir, run_id: str, inner_id: str, amount: str) -> None:
         ot.constant("data", EXAMPLE)
         return {"settled": str(int(total) + int(amount))}
 
-    @ot.run(run_dir=str(runs) + "/{run_id}", stages=INNER_STAGES, manifest=__file__, keep_inputs=["total"],
-            anchor_reason="a demo record; anchoring is not part of this demo")
+    @ot.run(
+        run_dir=str(runs) + "/{run_id}",
+        stages=INNER_STAGES,
+        manifest=__file__,
+        keep_inputs=["total"],
+        anchor_reason="a demo record; anchoring is not part of this demo",
+    )
     def sub_agent(total):
         return settle(total)
 
@@ -50,9 +59,19 @@ def main(runs_dir, run_id: str, inner_id: str, amount: str) -> None:
         #: The planner's two model calls, as model-call records: invented example data in
         #: `model-call-record/1.0` (`model_call_example`); no model is called.
         from onetrace.emit import current_stage
+
         from onetrace_console.demo_store import model_call_example as mc
+
         step = current_stage()
         for name, make in zip(mc.NAMES, (mc.self_hosted, mc.hosted)):
+            if capture is not None and make is mc.self_hosted:
+                #: The capture store's runs: the steps file through onetrace's own writer, then the record naming it.
+                from onetrace import model_call as sdk
+
+                digest, steps_name = sdk.write_steps(step, name, mc.capture_steps(capture))
+                record = mc.self_hosted_captured(capture, sdk.observed(digest, steps_name))
+                step.write(name, mc.record_bytes(record), "application/json")
+                continue
             step.write(name, mc.record_bytes(make()), "application/json")
         #: The sub-agent's run id, read by its decorator as it starts.
         os.environ["ONETRACE_RUN_ID"] = inner_id
@@ -61,13 +80,18 @@ def main(runs_dir, run_id: str, inner_id: str, amount: str) -> None:
         finally:
             os.environ["ONETRACE_RUN_ID"] = run_id
 
-    @ot.run(run_dir=str(runs) + "/{run_id}", stages=STAGES, manifest=__file__,
-            anchor_reason="a demo record; anchoring is not part of this demo")
+    @ot.run(
+        run_dir=str(runs) + "/{run_id}",
+        stages=STAGES,
+        manifest=__file__,
+        anchor_reason="a demo record; anchoring is not part of this demo",
+    )
     def agent():
         return agent_step(TOTAL)
 
     import contextlib
     import io
+
     before = os.environ.get("ONETRACE_RUN_ID")
     os.environ["ONETRACE_RUN_ID"] = run_id
     try:
@@ -90,6 +114,17 @@ def kept_inputs(args: dict) -> list[bytes]:
     """The bytes of every input a run with `args` keeps, as the SDK's `keep_inputs` encodes them: the
     total, given to the agent's `agent_step` (P10), or to the sub-agent's run and its `settle` (P11)."""
     from onetrace.decorators import INTAKE, encode_v1
+
     if "of" in args:
         return [encode_v1(TOTAL, INTAKE, "total"), encode_v1(TOTAL, "settle", "total")]
     return [encode_v1(TOTAL, "agent_step", "total")]
+
+
+def example_outputs(args: dict) -> list[bytes]:
+    """The bytes of every output a run with `args` writes that a public console may show as its builder's own example
+    data: a capture run's steps file (its ids, labelled so)."""
+    if args.get("capture"):
+        from onetrace_console.demo_store.model_call_example import capture_bytes
+
+        return [capture_bytes(args["capture"])]
+    return []

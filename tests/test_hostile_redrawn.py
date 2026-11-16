@@ -5,12 +5,12 @@ bidirectional characters are shown as escapes, never drawn raw. (The graph's own
 names, states and quoted lines in tests/test_graph_redraw.py.)
 
 The SDK refuses such a run id, so the record is one another tool could write: a delivered run's
-manifest given the hostile id, as tests/test_round4_fixes.py stores one. Each check has its sabotage.
+manifest given the hostile id, as tests/test_fourth_review_fixes.py stores one. Each check has its sabotage.
 """
+
 from __future__ import annotations
 
 import json
-import re
 from dataclasses import replace
 
 from onetrace_console.pages import CASE, render_execution
@@ -38,8 +38,11 @@ def _hostile_stopped_run(files, store):
     out["MANIFEST.json"] = json.dumps(manifest).encode("utf-8")
     run = _stored(_resummed(out), store)
     #: Its stored reading says it stopped at a step, so its chip and the Overview's count are drawn.
-    store.put_run(replace(run, declined=json.dumps({"stage": f"a{RLO}<i>step</i>", "reason": f"no{BELL}",
-                                                    "left": ["<u>pay</u>"]})))
+    store.put_run(
+        replace(
+            run, declined=json.dumps({"stage": f"a{RLO}<i>step</i>", "reason": f"no{BELL}", "left": ["<u>pay</u>"]})
+        )
+    )
     return store.get_run(run.key)
 
 
@@ -62,8 +65,11 @@ def test_a_hostile_baseline_name_in_a_candidate_s_comparison_chip(examined):
     from types import SimpleNamespace
 
     from onetrace_console.run_head import comparison_chip
-    model = SimpleNamespace(graph_source=(HOSTILE, "diff/x.html", "2026-10-14", True),
-                            graph_nodes=[SimpleNamespace(mark="first", name=f"s{RLO}<i>x</i>")])
+
+    model = SimpleNamespace(
+        graph_source=(HOSTILE, "diff/x.html", "2026-10-14", True),
+        graph_nodes=[SimpleNamespace(mark="first", name=f"s{RLO}<i>x</i>")],
+    )
     chip = comparison_chip(model)
     examined(1, "comparison chip")
     assert page_problems("chip", chip) == [] and "&lt;b&gt;run&lt;/b&gt;" in chip, chip

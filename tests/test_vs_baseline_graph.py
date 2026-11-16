@@ -10,6 +10,7 @@ not, in the changed-vs-baseline count, the needs-attention panel and the recent 
   Not a string sort with ties to the higher key.
 On real SDK comparisons of the exam's dag-r37 runs.
 """
+
 from __future__ import annotations
 
 import json
@@ -49,8 +50,7 @@ def test_a_graph_report_that_fails_the_strict_reader_decides_nothing(runs):
     report["counts"]["same"] = "99"  # the frontier itself is untouched, and still not trusted
     bad = store.put(json.dumps(report).encode("utf-8"))
     reports = tuple((n, bad if n == "diff.json" else k) for n, k in run.reports)
-    store.put_comparison(replace(c, verbs=tuple(replace(v, reports=reports) if v.verb == DIFF
-                                                else v for v in c.verbs)))
+    store.put_comparison(replace(c, verbs=tuple(replace(v, reports=reports) if v.verb == DIFF else v for v in c.verbs)))
     assert vs_baseline(found["R"], store) == ("couldnt-check", "Couldn't check")
 
 

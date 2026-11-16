@@ -6,6 +6,7 @@ the EXAM reference pair and its comparison, a review's digest pair and the contr
 pair -- with the escaping as it was and as it is, and holds that the only difference anywhere is a
 backslash drawn doubled, and that the Diff page's folder labels are unchanged.
 """
+
 from __future__ import annotations
 
 import re
@@ -25,9 +26,10 @@ BACKSLASH = chr(92)
 def _as_it_was(text, *, lines=False):
     """`viewer.page.display` before one-to-one escaping: a backslash in a word shown as it is."""
     import onetrace_console.viewer.page as page
+
     return page._UNSHOWN.sub(
-        lambda m: m.group(0) if lines and m.group(0) in "\n\r\t" else f"\\u{ord(m.group(0)):04x}",
-        str(text))
+        lambda m: m.group(0) if lines and m.group(0) in "\n\r\t" else f"\\u{ord(m.group(0)):04x}", str(text)
+    )
 
 
 def _pages(store, comparisons) -> dict[str, str]:
@@ -36,7 +38,7 @@ def _pages(store, comparisons) -> dict[str, str]:
         try:
             drawn = render_execution(run, store, generated_at=GENERATED_AT).pages
         except PageError:
-            continue                                   # delivered unchecked: no run page
+            continue  # delivered unchecked: no run page
         out.update({f"runs/{run.key[:8]}/{n}": p for n, p in drawn.items()})
     for c in comparisons:
         out[f"diff/{c.key[:8]}"] = render_diff(c, store, generated_at=GENERATED_AT)
@@ -47,25 +49,23 @@ def _pages(store, comparisons) -> dict[str, str]:
 def corpus(tmp_path, store, files):
     from tests.test_compare import RUN_C, RUN_C_POPPLER24, _deliver, _require_exam
     from tests.test_diff_sdk_text_layer import _forged_pair
-    from tests.test_round4_recheck_fixes import _sdk_delivery
+    from tests.test_fourth_review_recheck_fixes import _sdk_delivery
+
     _require_exam()
     _stored(_resummed(dict(files)), store)
-    comparisons = [compare(_deliver(RUN_C, store), _deliver(RUN_C_POPPLER24, store), store,
-                           ran_at=FIXED_RAN_AT)]
+    comparisons = [compare(_deliver(RUN_C, store), _deliver(RUN_C_POPPLER24, store), store, ran_at=FIXED_RAN_AT)]
     (tmp_path / "forged").mkdir()
     a, b = _forged_pair(tmp_path / "forged")
     comparisons.append(compare(_stored(a, store), _stored(b, store), store, ran_at=FIXED_RAN_AT))
     (tmp_path / "nasty").mkdir()
-    na, nb = (_sdk_delivery(tmp_path / "nasty", "a", "1"),
-              _sdk_delivery(tmp_path / "nasty", "b", "2"))
-    comparisons.append(compare(_stored(na, store), _stored(nb, store), store,
-                               ran_at=FIXED_RAN_AT))
+    na, nb = (_sdk_delivery(tmp_path / "nasty", "a", "1"), _sdk_delivery(tmp_path / "nasty", "b", "2"))
+    comparisons.append(compare(_stored(na, store), _stored(nb, store), store, ran_at=FIXED_RAN_AT))
     return store, comparisons
 
 
-def test_the_measured_pages_change_only_where_a_word_holds_a_backslash(corpus, monkeypatch,
-                                                                       examined):
+def test_the_measured_pages_change_only_where_a_word_holds_a_backslash(corpus, monkeypatch, examined):
     import onetrace_console.viewer.page as page
+
     store, comparisons = corpus
     now = _pages(store, comparisons)
     monkeypatch.setattr(page, "display", _as_it_was)
@@ -86,20 +86,23 @@ def test_the_measured_pages_change_only_where_a_word_holds_a_backslash(corpus, m
         lines_was = fingerprint.sub("", was[name]).split("\n")
         assert len(lines_now) == len(lines_was), name
         from difflib import SequenceMatcher
+
         for line_now, line_was in zip(lines_now, lines_was):
             if line_now == line_was:
                 continue
             #: Within a changed line, character by character: every difference is a backslash
             #: inserted beside one that was there, and nothing is replaced or taken away.
-            for tag, i1, i2, j1, j2 in SequenceMatcher(None, line_was, line_now,
-                                                       autojunk=False).get_opcodes():
+            for tag, i1, i2, j1, j2 in SequenceMatcher(None, line_was, line_now, autojunk=False).get_opcodes():
                 if tag == "equal":
                     continue
-                assert tag == "insert" and set(line_now[j1:j2]) == {BACKSLASH} \
-                    and (line_was[i1 - 1:i1] == BACKSLASH or line_was[i1:i1 + 1] == BACKSLASH), \
-                    (name, tag, line_was[max(0, i1 - 30):i2 + 30], line_now[max(0, j1 - 30):j2 + 30])
+                assert (
+                    tag == "insert"
+                    and set(line_now[j1:j2]) == {BACKSLASH}
+                    and (line_was[i1 - 1 : i1] == BACKSLASH or line_was[i1 : i1 + 1] == BACKSLASH)
+                ), (name, tag, line_was[max(0, i1 - 30) : i2 + 30], line_now[max(0, j1 - 30) : j2 + 30])
     #: The folders the SDK names: given relative to where it runs since console 0.4.0, as written.
     from html import unescape
+
     diffs = [p for n, p in now.items() if n.startswith("diff/")]
     assert diffs and all(re.search(r"baseline +a +", unescape(p)) for p in diffs), "the folders are not named as given"
 
@@ -107,7 +110,9 @@ def test_the_measured_pages_change_only_where_a_word_holds_a_backslash(corpus, m
 def test_a_record_word_with_a_backslash_is_drawn_doubled_on_home(files, store):
     """The measurement's corpus holds no record word with a backslash; this one does."""
     import json
+
     from tests.test_unreadable import _renamed
+
     out = _renamed(files)
     manifest = json.loads(out["MANIFEST.json"].decode("utf-8"))
     manifest["run_id"] = "run" + BACKSLASH + "u000d"

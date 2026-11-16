@@ -8,6 +8,7 @@ compared when the panel is drawn. The candidate is listed first, marked "this co
 are as before. Held with the demo's P1 pair (settings matched), three P7 runs recorded here (an
 input matched), one of them named with characters that need escaping, and a static export.
 """
+
 from __future__ import annotations
 
 import re
@@ -33,6 +34,7 @@ def link_problems(page: str, store, base_key: str, cand_key: str) -> list[str]:
     """Every listed run linked to its page; each but the candidate with a compare link naming the
     pair (baseline, that run); the candidate marked and with none."""
     from onetrace_console.choose_pages import b_anchor
+
     held = {c.key: (c.run_a, c.run_b) for c in store.comparisons()}
     out = []
     items = re.findall(r'<li data-run="([0-9a-f]{64})"([^>]*)>(.*?)</li>', _panel(page), re.S)
@@ -75,6 +77,7 @@ def test_the_p1_pair_links_each_run_and_its_pair(demo, examined):  # noqa: F811
 
 def test_an_input_match_links_each_run_and_a_name_is_escaped(tmp_path, examined):
     from onetrace_console.demo_store import cold_chain
+
     runs = _three_p7_runs(tmp_path)
     cold_chain.main(runs / "d", ODD, True)
     store, pages, loaded = _console(tmp_path, runs, compare=("a", "b"))
@@ -85,12 +88,13 @@ def test_an_input_match_links_each_run_and_a_name_is_escaped(tmp_path, examined)
     panel = _panel(page)
     assert escape(ODD) in panel and ODD not in panel
     assert all(ODD not in unescape(h) for h in re.findall(r'href="([^"]*)"', panel))
-    assert f'/runs/{ids[ODD]}/case.html' in panel
+    assert f"/runs/{ids[ODD]}/case.html" in panel
 
 
 def test_the_links_resolve_in_a_static_export(demo, tmp_path, examined):  # noqa: F811
     from onetrace_console.export_static import export, external_requests
     from onetrace_console.overview import pipelines
+
     folder, store = demo
     ids = {r.run_id: r.key for r in store.runs()}
     p1 = next(p for p in pipelines(store) if ids[P1[0]] in {r.key for r in p.runs})
@@ -119,8 +123,9 @@ def test_sabotage_each_fault_is_named(demo, examined):  # noqa: F811
         "a plain name": re.sub(r'<a href="/runs/[0-9a-f]{64}/case.html">', "<a>", page, count=2),
         "no compare": page.replace('data-link="compare">compare</a>', "></a>", 1),
         "the candidate unmarked": page.replace(" data-this-comparison", "", 1),
-        "another pair": re.sub(r'(data-link="compare")', r'\1', page.replace(f"-{base}.html#", "-x.html#", 1))
-        if f"-{base}.html#" in page else page.replace('<a href="/diff/', '<a href="/diff/0', 1),
+        "another pair": re.sub(r'(data-link="compare")', r"\1", page.replace(f"-{base}.html#", "-x.html#", 1))
+        if f"-{base}.html#" in page
+        else page.replace('<a href="/diff/', '<a href="/diff/0', 1),
     }
     examined(len(planted), "planted pages")
     for name, bad in planted.items():
@@ -129,15 +134,19 @@ def test_sabotage_each_fault_is_named(demo, examined):  # noqa: F811
 
 # ------------------------------------------------------------------ the rule line reads as one sentence
 
+
 def rule_period_problems(page: str) -> list[str]:
     """The matching rule's line, where its value is a digest: the closing period in the same text
     node as the value shown (the fold's summary), and nothing drawn after the fold. A closed fold
     is a box of its own in the browser, so a period after it starts a line of its own."""
-    rule = re.search(r'<div>Matching rule:(.*?)</div>', _panel(page), re.S)
+    rule = re.search(r"<div>Matching rule:(.*?)</div>", _panel(page), re.S)
     if rule is None:
         return ["no rule line"]
-    fold = re.search(r'<details class="fingerprint"[^>]*><summary class="mono">([^<]*)</summary>.*?</details>(.*)$',
-                     rule.group(1), re.S)
+    fold = re.search(
+        r'<details class="fingerprint"[^>]*><summary class="mono">([^<]*)</summary>.*?</details>(.*)$',
+        rule.group(1),
+        re.S,
+    )
     if fold is None:
         return ["the value is not a digest"]
     out = []
@@ -154,15 +163,18 @@ def test_an_input_match_s_rule_line_keeps_its_period_with_the_value(tmp_path, ex
     page = (pages / "diff" / f"{loaded.comparison.key}.html").read_text(encoding="utf-8")
     examined(1, "comparison page")
     assert rule_period_problems(page) == []
-    assert re.search(r"Matching rule: the same input \S+ digest at .+, by exact equality: sha256:[0-9a-f]+…\.",
-                     _text(_panel(page))), "the rule's words changed"
+    assert re.search(
+        r"Matching rule: the same input \S+ digest at .+, by exact equality: sha256:[0-9a-f]+…\.", _text(_panel(page))
+    ), "the rule's words changed"
 
 
 def test_sabotage_the_period_after_the_fold_is_named(tmp_path, examined):
     runs = _three_p7_runs(tmp_path)
     _store, pages, loaded = _console(tmp_path, runs, compare=("a", "b"))
     page = (pages / "diff" / f"{loaded.comparison.key}.html").read_text(encoding="utf-8")
-    old = re.sub(r"(<summary class=\"mono\">sha256:[0-9a-f]+…)\.(</summary>.*?</details>)", r"\1\2.", page, count=1, flags=re.S)
+    old = re.sub(
+        r"(<summary class=\"mono\">sha256:[0-9a-f]+…)\.(</summary>.*?</details>)", r"\1\2.", page, count=1, flags=re.S
+    )
     examined(1, "planted page")
     assert old != page
     assert rule_period_problems(old)

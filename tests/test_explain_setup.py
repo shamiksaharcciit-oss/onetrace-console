@@ -13,6 +13,7 @@ Held here:
   (tests/test_explain_key_env.py);
 - a public console has no setup page, and none of its pages links to one.
 """
+
 from __future__ import annotations
 
 import dataclasses
@@ -23,8 +24,8 @@ import urllib.request
 from html import unescape
 
 import pytest
-from tests.http_limits import limit
 
+from tests.http_limits import limit
 from tests.test_explain_config_read import MARKS, leaks
 from tests.test_explain_panel import REPLIES, pair, toml_string  # noqa: F401  (pair: a fixture)
 
@@ -35,10 +36,11 @@ KEY_VALUE = "never-shown-key-value-0123456789"
 def _planted(config) -> None:
     """A configuration naming a model, with a value in each key the console must not take."""
     config.write_text(
-        f"[model]\nprovider = \"fake\"\nname = {toml_string(str(REPLIES / 'mixed.json'))}\n"
-        f"base_url = \"{MARKS['base_url']}\"\nkey_env = \"{MARKS['key_env']}\"\nother = \"{MARKS['other']}\"\n\n"
-        f"[model.params]\ntemperature = \"{MARKS['temperature']}\"\n\n[elsewhere]\nvalue = \"{MARKS['table']}\"\n",
-        encoding="utf-8")
+        f'[model]\nprovider = "fake"\nname = {toml_string(str(REPLIES / "mixed.json"))}\n'
+        f'base_url = "{MARKS["base_url"]}"\nkey_env = "{MARKS["key_env"]}"\nother = "{MARKS["other"]}"\n\n'
+        f'[model.params]\ntemperature = "{MARKS["temperature"]}"\n\n[elsewhere]\nvalue = "{MARKS["table"]}"\n',
+        encoding="utf-8",
+    )
 
 
 def _get(url: str) -> tuple[int, str]:
@@ -73,6 +75,7 @@ def _tree(*roots) -> dict[str, str]:
 @pytest.fixture
 def local(pair, server, monkeypatch):
     from onetrace_console.serve import Handler, _render_all_pages, _render_diff_page
+
     store, comparison, config = pair
     base, root = server
     monkeypatch.setattr(Handler, "store", store)
@@ -83,8 +86,10 @@ def local(pair, server, monkeypatch):
 
 # ------------------------------------------------------------------ what it says
 
+
 def content_problems(main: str, *, named: str | None, path: str) -> list[str]:
     from onetrace_console import explain_setup as S
+
     said = _text(main)
     out = []
     heads = re.findall(r'<section class="step" id="step-(\d)" data-step="\d"><h2>(.*?)</h2>', main, re.S)
@@ -94,8 +99,18 @@ def content_problems(main: str, *, named: str | None, path: str) -> list[str]:
         out.append("the model is not named")
     if named is None and f"No model is named in {path}. {S.SET_HERE}" not in said:
         out.append("no model, and the path and 'Set your model here.' are not said")
-    for words in (*S.ALWAYS_SENT, *S.STAYS, *S.PROMISES, S.BUTTON_USES, "--include-text", "--redact NAME",
-                  'pip install "onetrace-explain[keyring]>=0.3"', "On this machine", "Your model provider", "Show the packet"):
+    for words in (
+        *S.ALWAYS_SENT,
+        *S.STAYS,
+        *S.PROMISES,
+        S.BUTTON_USES,
+        "--include-text",
+        "--redact NAME",
+        'pip install "onetrace-explain[keyring]>=0.3"',
+        "On this machine",
+        "Your model provider",
+        "Show the packet",
+    ):
         if words not in said:
             out.append(f"missing: {words[:50]!r}")
     if f"Set [model] in {path}" not in said:
@@ -131,11 +146,12 @@ def _windows_shaped(config, tmp_path, monkeypatch, named: bool):
     """The configuration moved to a folder whose path holds backslashes, the model (where `named`)
     a path in it too, as a Windows run writes both; (the model as the page must name it, the path)."""
     import os
+
     folder = (tmp_path / "config") if os.name == "nt" else (tmp_path / WINDOWS_SHAPED / "config")
     folder.mkdir(parents=True, exist_ok=True)
     moved = folder / "explain.toml"
     model = str(folder / "mixed.json")
-    moved.write_text(f"[model]\nprovider = \"fake\"\nname = {toml_string(model)}\n" if named else "", encoding="utf-8")
+    moved.write_text(f'[model]\nprovider = "fake"\nname = {toml_string(model)}\n' if named else "", encoding="utf-8")
     monkeypatch.setenv("ONETRACE_EXPLAIN_CONFIG", str(moved))
     assert "\\" in str(moved)
     return (f"fake:{model}" if named else None), str(moved)
@@ -156,17 +172,21 @@ def test_a_windows_path_is_shown_as_written(local, tmp_path, monkeypatch, named,
 def test_sabotage_the_path_shown_as_a_record_s_word_is_named(local, tmp_path, monkeypatch, examined):
     from onetrace_console import explain_setup
     from onetrace_console.words import escape
+
     base, _, _, _, config = local
     model, path = _windows_shaped(config, tmp_path, monkeypatch, True)
     monkeypatch.setattr(explain_setup, "_as_written", escape)
     _, page = _get(f"{base}/explain/setup")
     examined(1, "setup page, the path drawn as a record's word")
     assert content_problems(_main(page), named=model, path=path) == [
-        "the model is not named", "the file's path is not given in the steps"]
+        "the model is not named",
+        "the file's path is not given in the steps",
+    ]
 
 
 def test_the_panel_and_the_sidebar_link_to_it_on_a_local_console(local, examined):
     from onetrace_console.frame import SETUP_LINK
+
     base, _, _, comparison, _ = local
     _, page = _get(f"{base}/diff/{comparison.key}.html")
     examined(2, "links: the panel's and the sidebar's")
@@ -182,6 +202,7 @@ def examples_problems(main: str) -> list[str]:
     """The three `[model]` examples and the install line, each a `<pre>` whose lines are lines, and no
     escape sequence shown anywhere on the page: it is copied from."""
     from tests.test_no_escape_shown import escapes_shown
+
     blocks = [unescape(b) for b in re.findall(r"<pre><code>(.*?)</code></pre>", main, re.S)]
     out = []
     models = [b for b in blocks if b.startswith("[model]")]
@@ -206,6 +227,7 @@ def test_sabotage_an_escaped_line_break_in_an_example_is_named(local, monkeypatc
     """The examples drawn as a record's words are (`escape`): each line break shows as an escape."""
     from onetrace_console import explain_setup
     from onetrace_console.words import escape
+
     base, _, _, _, _ = local
     monkeypatch.setattr(explain_setup, "_code_block", lambda text: f"<pre><code>{escape(text)}</code></pre>")
     _, page = _get(f"{base}/explain/setup")
@@ -217,9 +239,13 @@ def test_sabotage_an_escaped_line_break_in_an_example_is_named(local, monkeypatc
 # ------------------------------------------------------------------ it writes nothing, and offers nothing
 
 #: The Set up Explain forms (console 0.7.0), by their exact opening tags: the model's, and the key's Replace
-#: and Remove where a key is stored; the only forms the page may hold.
-SETUP_FORM = re.compile(r'<form method="post" action="/explain/setup" data-setup-form="(?:model|key|remove)">.*?</form>',
-                        re.S)
+#: and Remove where a key is stored; and "Always stop before sending". The only forms the
+#: page may hold; those that update in place post to their section's anchor and name it.
+SETUP_FORM = re.compile(
+    r'<form method="post" action="/explain/setup(?:#(?P<at>setup-form|always-stop))?" '
+    r'data-setup-form="(?:model|key|remove|always-stop)"(?: data-in-place="(?P=at)")?>.*?</form>',
+    re.S,
+)
 
 
 def control_problems(main: str) -> list[str]:
@@ -239,30 +265,37 @@ def test_a_get_writes_nothing_and_the_page_s_only_control_is_the_setup_form(loca
     base, root, store, _, config = local
     _planted(config)
     from pathlib import Path
+
     before = _tree(root, Path(store.root), config.parent)
     status, page = _get(f"{base}/explain/setup")
     after = _tree(root, Path(store.root), config.parent)
     examined(len(before), "files under the store and the configuration's folder")
     assert status == 200
     #: The access log is the console's own record of the request, written for every page.
-    changed = sorted(k for k in before.keys() | after.keys()
-                     if before.get(k) != after.get(k) and "access_log" not in k)
+    changed = sorted(k for k in before.keys() | after.keys() if before.get(k) != after.get(k) and "access_log" not in k)
     assert changed == []
     assert control_problems(_main(page)) == []
 
 
 def test_sabotage_a_turn_on_button_planted_is_named(local, monkeypatch, examined):
     from onetrace_console import explain_setup
+
     base, _, _, _, _ = local
     real = explain_setup.body
-    monkeypatch.setattr(explain_setup, "body", lambda store, **kw: real(store, **kw).replace(
-        "</div>", '<form method="post" action="/explain/setup"><button>Turn on Explain</button></form></div>', 1))
+    monkeypatch.setattr(
+        explain_setup,
+        "body",
+        lambda store, **kw: real(store, **kw).replace(
+            "</div>", '<form method="post" action="/explain/setup"><button>Turn on Explain</button></form></div>', 1
+        ),
+    )
     _, page = _get(f"{base}/explain/setup")
     examined(1, "planted page")
     assert control_problems(_main(page)) == ["a <form>", "a <button>", "a press: method="]
 
 
 # ------------------------------------------------------------------ the key and its neighbours, never
+
 
 def test_no_value_of_key_env_base_url_or_params_nor_the_key_is_on_the_page(local, monkeypatch, examined):
     base, _, _, _, config = local
@@ -284,6 +317,7 @@ def test_sabotage_the_model_read_with_its_endpoint_and_key_is_named(local, monke
     from pathlib import Path
 
     from onetrace_console import explain
+
     base, _, _, _, config = local
     _planted(config)
     monkeypatch.setenv(MARKS["key_env"], KEY_VALUE)
@@ -291,19 +325,24 @@ def test_sabotage_the_model_read_with_its_endpoint_and_key_is_named(local, monke
     def wider():
         m = tomllib.loads(Path(config).read_text(encoding="utf-8"))["model"]
         return f"{m['provider']}:{m['name']} at {m['base_url']} with {os.environ.get(m['key_env'], '')}"
+
     monkeypatch.setattr(explain, "configured_model", wider)
     _, page = _get(f"{base}/explain/setup")
     examined(1, "planted reading")
-    assert leaks({"the setup page": page}) == ["the setup page shows base_url's value",
-                                               "the setup page shows key_env's value"]
+    assert leaks({"the setup page": page}) == [
+        "the setup page shows base_url's value",
+        "the setup page shows key_env's value",
+    ]
     assert KEY_VALUE in page
 
 
 # ------------------------------------------------------------------ a public console
 
+
 @pytest.fixture
 def public(local, monkeypatch):
     from onetrace_console.serve import Handler, _render_all_pages, _render_diff_page
+
     _, root, store, comparison, _ = local
     monkeypatch.setattr(Handler, "config", dataclasses.replace(Handler.config, public=True))
     _render_all_pages(store, root, Handler.config)
@@ -331,21 +370,26 @@ def test_a_public_console_has_no_setup_page_and_no_link_to_one(public, examined)
 
 def test_sabotage_the_link_drawn_on_a_public_console_is_named(public, monkeypatch, examined):
     from onetrace_console import frame
+
     base, _, _, comparison, _ = public
     from onetrace_console.settings_menu import menu
+
     real = frame.nav
     #: The settings menu drawn on a public console's pages (console 0.6.1 item 13: the link to the setup
     #: page is the menu's row now, not the footer's).
     monkeypatch.setattr(frame, "nav", lambda rel, **kw: real(rel, **{**kw, "settings": menu(None)}))
     examined(4, "a request for the page, and three pages")
-    assert public_problems(base, comparison) == [f"{rel} links to the setup page"
-                                                 for rel in ("/", "/comparisons.html", f"/diff/{comparison.key}.html")]
+    assert public_problems(base, comparison) == [
+        f"{rel} links to the setup page" for rel in ("/", "/comparisons.html", f"/diff/{comparison.key}.html")
+    ]
 
 
 def test_an_export_s_pages_have_no_link_to_the_setup_page(local, tmp_path, examined):
     """An export's pages are files: nothing on them links to a page only a local console serves."""
-    from onetrace_console.export_static import export
     from pathlib import Path
+
+    from onetrace_console.export_static import export
+
     _, _, store, comparison, _ = local
     dest = tmp_path / "export"
     export(Path(store.root).parent, [comparison.run_a, comparison.run_b], dest)

@@ -7,26 +7,26 @@
     limit it shows; nothing earlier changes.
 5.3 `--no-follow`: the corpus trace is board 7's.
 """
+
 from __future__ import annotations
 
 import json
-from html import escape
 import subprocess
 import sys
 from dataclasses import replace
+from html import escape
 
 import pytest
 
-from onetrace_console.compare import (DIFF, LOCALIZE, TEXT_DIFF, TEXT_DIFF_MORE_LINES, compare,
-                                      show_more, text_diff_raw)
+#: The SDK run as the console runs it (compare.py): UTF-8 forced on the child's output, so the bytes
+#: compared are the console's, on a machine whose default encoding is not UTF-8 too.
+from onetrace_console.child import utf8_env  # noqa: E402
+from onetrace_console.compare import DIFF, LOCALIZE, TEXT_DIFF, TEXT_DIFF_MORE_LINES, compare, show_more, text_diff_raw
 from onetrace_console.render import render_diff
 from onetrace_console.textdiff_view import read_textdiff
 from tests.test_checks import FIXED_RAN_AT, _require_installed
 from tests.test_compare import EXAM, _deliver, _require_exam
 from tests.test_pages import GENERATED_AT
-#: The SDK run as the console runs it (compare.py): UTF-8 forced on the child's output, so the bytes
-#: compared are the console's, on a machine whose default encoding is not UTF-8 too.
-from onetrace_console.child import utf8_env  # noqa: E402
 
 MORE = f"{TEXT_DIFF} --max-lines {TEXT_DIFF_MORE_LINES}"
 
@@ -44,8 +44,7 @@ def test_the_text_diff_is_a_run_of_its_own_and_its_json_is_the_sdks_bytes(pq, ex
     comparison, store, tmp_path = pq
     run = comparison.verb(TEXT_DIFF)
     examined(1, "text-diff run")
-    assert run is not None and run.shown_command == (
-        "python -m onetrace diff RUN_A RUN_B --text --json --no-follow")
+    assert run is not None and run.shown_command == ("python -m onetrace diff RUN_A RUN_B --text --json --no-follow")
     assert "--no-follow" in run.command and "--max-lines" not in run.command
     #: The recorded command, run by hand over the same two folders, prints the same bytes.
     #: Run from the work folder its names are relative to, `python` this interpreter.
@@ -54,8 +53,9 @@ def test_the_text_diff_is_a_run_of_its_own_and_its_json_is_the_sdks_bytes(pq, ex
     again = subprocess.run(argv, capture_output=True, env=utf8_env(), cwd=tmp_path / "work").stdout
     assert store.get(run.stdout_key) == again
     doc = read_textdiff(again)
-    assert doc.get("corpus_traces") in (None, []) or all(
-        t["status"] == "not followed" for t in doc["corpus_traces"]), "5.3: never followed here"
+    assert doc.get("corpus_traces") in (None, []) or all(t["status"] == "not followed" for t in doc["corpus_traces"]), (
+        "5.3: never followed here"
+    )
     #: diff and localize are the verbs they were.
     assert [v.verb for v in comparison.verbs][:2] == [DIFF, LOCALIZE]
 
@@ -75,7 +75,7 @@ def test_show_more_is_a_run_of_its_own_and_changes_nothing_earlier(pq, examined)
     before = store.get_comparison(comparison.key)
     after = show_more(comparison, store)
     examined(len(before.verbs), "earlier runs compared")
-    assert after.verbs[:len(before.verbs)] == before.verbs, "an earlier run changed"
+    assert after.verbs[: len(before.verbs)] == before.verbs, "an earlier run changed"
     more = after.verb(MORE)
     assert more is not None and f"--max-lines {TEXT_DIFF_MORE_LINES}" in more.shown_command
     assert store.get_comparison(comparison.key) == after
@@ -92,8 +92,10 @@ def test_the_page_names_the_limit_it_shows(pq):
     assert "Shown with at most 200 lines per output (the SDK&#x27;s default)." in page
     after = show_more(comparison, store)
     page = render_diff(after, store, generated_at=GENERATED_AT)
-    assert (f"Shown with at most {TEXT_DIFF_MORE_LINES} lines per output (this console&#x27;s "
-            f"larger limit, ten times the SDK&#x27;s default).") in page
+    assert (
+        f"Shown with at most {TEXT_DIFF_MORE_LINES} lines per output (this console&#x27;s "
+        f"larger limit, ten times the SDK&#x27;s default)."
+    ) in page
     assert f"--max-lines {TEXT_DIFF_MORE_LINES}" in page
     assert text_diff_raw(after, store)[1] == MORE
 
@@ -102,6 +104,7 @@ def test_the_page_names_the_limit_it_shows(pq):
 def warranty(store, tmp_path):
     """The SDK's own warranty pair, stored and compared: its text diff has outputs with lines."""
     from tools.fetch_sdk_fixtures import WARRANTY
+
     _require_installed()
     _require_exam()
     from onetrace_console.ingest import accept
@@ -114,6 +117,7 @@ def warranty(store, tmp_path):
         got = accept(make_tar(_files(folder)), store)
         assert got.run is not None, getattr(got, "body", got)
         return got.run
+
     a, b = whole(WARRANTY / "runs" / "query-v1"), whole(WARRANTY / "runs" / "query-v2")
     return compare(a, b, store, ran_at=FIXED_RAN_AT), store
 
@@ -123,10 +127,10 @@ def test_a_stored_comparison_of_the_golden_pair_shows_twelve_to_six_on_its_diff_
     the Diff page."""
     comparison, store = warranty
     page = render_diff(comparison, store, generated_at=GENERATED_AT)
-    section = page[page.index('<section data-section="text-diff">'):]
-    section = section[:section.index("</section>")]
+    section = page[page.index('<section data-section="text-diff">') :]
+    section = section[: section.index("</section>")]
     assert '<mark class="del">twelve</mark>' in section and '<mark class="ins">six</mark>' in section
-    assert section.count('data-badge="verified"') == 6     # one chip per side, since 0.1.1
+    assert section.count('data-badge="verified"') == 6  # one chip per side, since 0.1.1
 
 
 def test_the_page_asks_for_more_only_where_an_output_was_cut(warranty):
@@ -150,17 +154,19 @@ def test_the_page_asks_for_more_only_where_an_output_was_cut(warranty):
     page = render_diff(cut_cmp, store, generated_at=GENERATED_AT)
     #: A command the reader can type, the SDK's own line cap; no route of this console is named.
     from onetrace_console.render import typed_command
+
     assert f"Some outputs are cut at 200 lines. To see up to {TEXT_DIFF_MORE_LINES} lines per output: " in page
-    assert escape(typed_command(comparison, store, "diff", text=True)
-                  + f" --max-lines {TEXT_DIFF_MORE_LINES}") in page
+    assert escape(typed_command(comparison, store, "diff", text=True) + f" --max-lines {TEXT_DIFF_MORE_LINES}") in page
     assert "/text-diff/more" not in page
     assert "… 7 more lines" in page
 
 
 # ------------------------------------------------------------------ over HTTP: the guard
 
+
 def _stored_pair(base):
     from tests.test_serve import _post, _real_delivery
+
     keys = []
     for name in ("run_P", "run_Q"):
         status, body = _post(base, "/v1/runs", _real_delivery(EXAM / "dag-r37" / name))
@@ -173,6 +179,7 @@ def _stored_pair(base):
 
 def test_a_limit_other_than_the_consoles_is_refused(server, examined):
     from tests.test_serve import _post
+
     _require_installed()
     _require_exam()
     base, _root = server
@@ -191,6 +198,7 @@ def test_a_cross_site_show_more_is_refused_and_stores_nothing(server, examined):
     from onetrace_console.serve import Handler
     from onetrace_console.store import Store
     from tests.test_local_mode import _call
+
     _require_installed()
     _require_exam()
     base, root = server
@@ -200,8 +208,7 @@ def test_a_cross_site_show_more_is_refused_and_stores_nothing(server, examined):
     try:
         examined(2, "cross-site show-more requests")
         for headers in ({"Origin": "https://evil.example"}, {"Sec-Fetch-Site": "cross-site"}):
-            status, _, _ = _call(base, f"/text-diff/more?c={key}", method="POST", body=b"",
-                                 headers=headers)
+            status, _, _ = _call(base, f"/text-diff/more?c={key}", method="POST", body=b"", headers=headers)
             assert status == 403, headers
     finally:
         Handler.local_port = saved

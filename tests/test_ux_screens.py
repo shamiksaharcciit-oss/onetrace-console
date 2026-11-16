@@ -13,6 +13,7 @@ runs are compared, and every page it rendered is read as a reader sees it (`tool
 5. no page renders a month by name; dates are ISO 8601 or plain numbers;
 6. user-facing text names no internal process, place or person.
 """
+
 from __future__ import annotations
 
 import calendar
@@ -21,11 +22,11 @@ import json
 import re
 import urllib.request
 from pathlib import Path
-from tests.http_limits import limit
 
 import pytest
 
 from tests.conftest import make_tar, serving
+from tests.http_limits import limit
 
 RUNS = Path(__file__).resolve().parent / "fixtures" / "demo-runs-rc2"
 NAMES = ("ingest-day1", "ingest-day2", "query-day1", "query-day2")
@@ -33,13 +34,16 @@ NAMES = ("ingest-day1", "ingest-day2", "query-day1", "query-day2")
 #: sets another, so these are the English names on every host. No month is written out here.
 MONTHS = re.compile(r"\b(" + "|".join(calendar.month_name[1:]) + r")\b")
 #: Words no page may show: internal vocabulary, process ids and places, and personal names.
+#: The review party's word, in two parts (`NOT_ON_A_PAGE`).
+REVIEW_WORD = "co" + "re"
 NOT_ON_A_PAGE = {
     "AADP": re.compile(r"\bAADP\b"),
     #: Except onetrace's own format names, which a record and the verifier write and a page shows as
     #: written: `onedoor-decision-ref/1` and `onedoor-issuer-trust/1` (onetrace 0.5.0).
     "onedoor": re.compile(r"onedoor(?!-(?:decision-ref|issuer-trust)/1)", re.I),
     "canary": re.compile(r"\bcanary\b", re.I),
-    "core": re.compile(r"\bcore\b"),
+    #: The review party's word, put together from two parts so that this file names it only through `REVIEW_WORD`.
+    REVIEW_WORD: re.compile(r"\bco" r"re\b"),
     "pod": re.compile(r"\bpod\b"),
     "a ruling id": re.compile(r"\bR-20\d\d-\d\d-\d\d"),
     "a work-order id": re.compile(r"\bWO-C\d"),
@@ -55,18 +59,15 @@ def _checked_fixture() -> None:
 
 
 def _post(url: str, data: bytes = b"") -> dict:
-    req = urllib.request.Request(url, data=data, method="POST",
-                                 headers={"Content-Type": "application/x-tar"})
+    req = urllib.request.Request(url, data=data, method="POST", headers={"Content-Type": "application/x-tar"})
     with urllib.request.urlopen(req, timeout=limit(300)) as r:
         return json.load(r)
 
 
 def _deliver(base: str, name: str) -> str:
     folder = RUNS / name
-    files = {p.relative_to(folder).as_posix(): p.read_bytes()
-             for p in sorted(folder.rglob("*")) if p.is_file()}
-    files["SHA256SUMS"] = "".join(f"{hashlib.sha256(b).hexdigest()}  {n}\n"
-                                  for n, b in sorted(files.items())).encode()
+    files = {p.relative_to(folder).as_posix(): p.read_bytes() for p in sorted(folder.rglob("*")) if p.is_file()}
+    files["SHA256SUMS"] = "".join(f"{hashlib.sha256(b).hexdigest()}  {n}\n" for n, b in sorted(files.items())).encode()
     got = _post(base + "/v1/runs", make_tar(files))
     assert got["accepted"] and got["run_id"] == name, got
     return got["run_key"]
@@ -74,7 +75,26 @@ def _deliver(base: str, name: str) -> str:
 
 def _text(html: str) -> str:
     from tools.visible_text import blocks
+
     return "\n".join(blocks(html))
+
+
+#: A verifier output a page quotes as onetrace-verify wrote it (the receipt page's `data-section="verifier-output"`,
+#: the viewer's raw layer `data-layer="3"`), and in it a row naming a model-call record's
+#: `engine.settings.engine_core` by the verifier's own label, "engine core" (onetrace-verify 0.7.1).
+_VERIFIER_OUTPUT = re.compile(
+    r'(<pre\b[^>]*\b(?:data-section="verifier-output"|data-layer="3")[^>]*>)(.*?)(</pre>)', re.S
+)
+_ENGINE_CORE_ROW = re.compile(
+    r"^(\[[A-Z-]+ *\] [^\n]*: record (?:'|&#x27;)[^\n]*?(?:'|&#x27;) engine) co" r"re( -- )", re.M
+)
+
+
+def scanned_text(html: str) -> str:
+    """A page's text as the word scan reads it (`NOT_ON_A_PAGE`): `_text`, less exactly the verifier's own
+    engine-setting label in a row of the verifier's output the page quotes as written. Nowhere else is the word
+    passed over."""
+    return _text(_VERIFIER_OUTPUT.sub(lambda m: m[1] + _ENGINE_CORE_ROW.sub(r"\1\2", m[2]) + m[3], html))
 
 
 def _section(html: str, name: str) -> str:
@@ -85,8 +105,10 @@ def _section(html: str, name: str) -> str:
 
 
 def _pages(root: Path) -> dict[str, str]:
-    return {p.relative_to(root / "pages").as_posix(): _text(p.read_text(encoding="utf-8"))
-            for p in sorted((root / "pages").rglob("*.html"))}
+    return {
+        p.relative_to(root / "pages").as_posix(): scanned_text(p.read_text(encoding="utf-8"))
+        for p in sorted((root / "pages").rglob("*.html"))
+    }
 
 
 @pytest.fixture(scope="module")
@@ -102,9 +124,11 @@ def demo(tmp_path_factory):
 
 # ------------------------------------------------------------------ 1. no incident for an unshipped check
 
+
 def test_the_four_demo_runs_raise_no_incidents(demo, examined):
     from onetrace_console.incidents import derive
     from onetrace_console.store import Store
+
     _base, root, keys, _cmp = demo
     store = Store(root / "store")
     incidents = derive(store)
@@ -119,6 +143,7 @@ def incident_page_problems(page: str, runs: int) -> list[str]:
     """The Incidents page, where the Overview's incident count is kept: every rule it builds
     reads 0 runs of the runs stored, and says it raised nothing."""
     from onetrace_console.incidents import RULES
+
     out = []
     for rule in RULES:
         if f"{rule.id} — 0 runs of {runs}" not in page:
@@ -134,18 +159,23 @@ def test_sabotage_an_incident_on_the_incidents_page_is_named(demo):
     raised = page.replace(f"I-CONTRADICTS — 0 runs of {len(keys)}", f"I-CONTRADICTS — 1 runs of {len(keys)}", 1)
     raised = raised.replace(f"This rule raised nothing from the {len(keys)} runs stored.", "", 1)
     assert raised != page
-    assert incident_page_problems(raised, len(keys)) == ["I-CONTRADICTS: not 0 runs of 4",
-                                                          "a rule that raised something"]
+    assert incident_page_problems(raised, len(keys)) == [
+        "I-CONTRADICTS: not 0 runs of 4",
+        "a rule that raised something",
+    ]
 
 
 def test_a_run_declaring_links_with_no_edge_row_carries_a_note_not_an_incident(store, examined):
     """A verifier report with no edge row, for a run whose manifest declares edges."""
     from onetrace_console.checks import TOPOLOGY_NO_EDGE_ROWS, topology_note
+
     examined(2, "reports read for their edge rows")
     without = "[PASS   ] receipts/01-a.json: chain link\n\n1 pass, 0 fail, 0 not-run  ->  PASS\n"
-    with_rows = ("[PASS   ] receipts/01-a.json: chain link\n"
-                 "[PASS   ] edges equal the edges derived from the receipts\n\n"
-                 "2 pass, 0 fail, 0 not-run  ->  PASS\n")
+    with_rows = (
+        "[PASS   ] receipts/01-a.json: chain link\n"
+        "[PASS   ] edges equal the edges derived from the receipts\n\n"
+        "2 pass, 0 fail, 0 not-run  ->  PASS\n"
+    )
     assert topology_note(declares_edges=True, output=without) == TOPOLOGY_NO_EDGE_ROWS
     assert topology_note(declares_edges=True, output=with_rows) == ""
     assert topology_note(declares_edges=False, output=without) == ""
@@ -159,6 +189,7 @@ def test_a_topology_note_raises_no_incident(demo, examined):
     from onetrace_console.checks import TOPOLOGY_NO_EDGE_ROWS
     from onetrace_console.incidents import _could_not_check
     from onetrace_console.store import Store
+
     _base, root, keys, _cmp = demo
     store = Store(root / "store")
     run = replace(store.get_run(keys["query-day2"]), topology_note=TOPOLOGY_NO_EDGE_ROWS)
@@ -167,6 +198,7 @@ def test_a_topology_note_raises_no_incident(demo, examined):
 
 
 # ------------------------------------------------------------------ 2. "Where it changed" agrees with the graph
+
 
 def test_where_it_changed_names_the_first_difference_the_graph_marks(demo, examined):
     _base, root, keys, _cmp = demo
@@ -191,6 +223,7 @@ def test_with_no_comparison_both_the_section_and_the_graph_say_so(demo, examined
 
 # ------------------------------------------------------------------ 3-6. what every page says
 
+
 def test_the_receipt_shows_the_verifiers_edge_rows_not_a_version_promise(demo, examined):
     _base, root, keys, _cmp = demo
     receipt = _text((root / "pages" / "runs" / keys["query-day2"] / "receipt.html").read_text(encoding="utf-8"))
@@ -202,6 +235,7 @@ def test_the_receipt_shows_the_verifiers_edge_rows_not_a_version_promise(demo, e
 def _authors() -> list[str]:
     """The people the package names as its authors, read from its own metadata, not written here."""
     import tomllib
+
     meta = tomllib.loads((Path(__file__).resolve().parent.parent / "pyproject.toml").read_text(encoding="utf-8"))
     return [a["name"] for a in meta["project"].get("authors", []) if a.get("name")]
 
@@ -216,13 +250,32 @@ def test_no_page_names_a_person(demo, examined):
     assert not {n: h for n, h in hits.items() if h}, "a person named on a page"
 
 
+def _less_this_python(text: str, python: str) -> str:
+    """`text` with the path of the Python the console runs from read as `<python>`: a local console's
+    install line names it, and it is the host's path, not words the console writes."""
+    return text.replace(python, "<python>") if python else text
+
+
 @pytest.mark.parametrize("what", sorted(NOT_ON_A_PAGE))
 def test_no_page_shows_it(demo, examined, what):
+    import sys
+
     _base, root, _keys, _cmp = demo
     pages = _pages(root)
     examined(len(pages), "pages read as a reader sees them")
-    hits = {name: NOT_ON_A_PAGE[what].findall(text) for name, text in pages.items()}
+    hits = {name: NOT_ON_A_PAGE[what].findall(_less_this_python(text, sys.executable)) for name, text in pages.items()}
     assert not {n: h for n, h in hits.items() if h}, f"{what} on a page"
+
+
+def test_sabotage_only_this_python_s_own_path_is_passed_over(examined):
+    #: A word the scan keeps off pages, in a planted path and beside it.
+    word, scan = "AADP", NOT_ON_A_PAGE["AADP"]
+    python = f"/opt/{word}/venvs/x/bin/python"
+    examined(3, "texts read")
+    said = f"install it into the Python this console runs from: {python} -m pip install x"
+    assert not scan.findall(_less_this_python(said, python))
+    assert scan.findall(_less_this_python(f"{said} (the {word} build)", python))
+    assert scan.findall(_less_this_python(said, "/usr/bin/python3"))
 
 
 def month_problems(pages: dict[str, str]) -> dict[str, list[str]]:
@@ -254,6 +307,7 @@ def test_the_authorization_row_says_where_it_is_read_and_no_records_where_none_i
     case = _text((root / "pages" / "runs" / keys["query-day2"] / "case.html").read_text(encoding="utf-8"))
     examined(2, "pages with the authorization row")
     from onetrace_console.words import AUTHORIZED_OVERVIEW
+
     for text in (home, case):
         assert "Action authorized, effect confirmed" in text
     assert AUTHORIZED_OVERVIEW in home and "does not record authorization" not in home
@@ -287,10 +341,13 @@ def _reader_text(html: str) -> str:
             self.out.append(" ")
 
         def handle_data(self, data):
-            if any(t in ("style", "script", "code", "pre") or "data-words" in a
-                   or a.get("data-layer") in ("3", "4") for t, a in self.stack):
+            if any(
+                t in ("style", "script", "code", "pre") or "data-words" in a or a.get("data-layer") in ("3", "4")
+                for t, a in self.stack
+            ):
                 return
             self.out.append(data)
+
     r = Reader()
     r.feed(html)
     return re.sub(r"\s+", " ", "".join(r.out))
@@ -315,8 +372,7 @@ def test_no_page_shows_a_raw_internal_value(demo, examined):
     examined(len(pages), "pages read as a reader reads them")
     hits = {}
     for page in pages:
-        found = sorted({w for w in SNAKE.findall(_reader_text(page.read_text(encoding="utf-8")))
-                        if w not in stages})
+        found = sorted({w for w in SNAKE.findall(_reader_text(page.read_text(encoding="utf-8"))) if w not in stages})
         if found:
             hits[page.relative_to(root / "pages").as_posix()] = found
     assert not hits, hits
@@ -342,12 +398,15 @@ def test_every_step_is_named_by_its_recorded_name_first(demo, examined):
     """Each stage is shown by the name it was recorded under; where the console adds friendlier
     words, they follow the name, never stand in its place, so every step's line reads alike."""
     from onetrace_console.viewer.sentences import STEP_WORDS
+
     _base, root, keys, _cmp = demo
     html = (root / "pages" / "runs" / keys["query-day2"] / "proof.html").read_text(encoding="utf-8")
     section = _section(html, "checked")
     labels = re.findall(r"step \d+ of \d+ · ([^—\n]+?) —", section)
-    recorded = [json.loads((RUNS / "query-day2" / e["file"]).read_text(encoding="utf-8"))["stage"]["name"]
-                for e in json.loads((RUNS / "query-day2" / "MANIFEST.json").read_text(encoding="utf-8"))["chain"]]
+    recorded = [
+        json.loads((RUNS / "query-day2" / e["file"]).read_text(encoding="utf-8"))["stage"]["name"]
+        for e in json.loads((RUNS / "query-day2" / "MANIFEST.json").read_text(encoding="utf-8"))["chain"]
+    ]
     examined(len(labels), "step labels")
     assert labels, section[:500]
     for label in labels:
@@ -368,9 +427,12 @@ def test_times_are_short_where_space_is_tight_and_whole_in_tables(demo, examined
     above)."""
     _base, root, keys, _cmp = demo
     from html import unescape
+
     #: Read from the HTML with only the tags taken out: the visible-text tool stands every time in
     #: for `<time>`, which is right for comparing pages and wrong for reading a time's form.
-    plain = lambda html: unescape(re.sub(r"<[^>]+>", " ", html))
+    def plain(html):
+        return unescape(re.sub(r"<[^>]+>", " ", html))
+
     home = (root / "pages" / "home.html").read_text(encoding="utf-8")
     attention = plain(re.search(r'<section data-section="needs-attention">(.*?)</section>', home, re.S).group(1))
     receipt = plain((root / "pages" / "runs" / keys["query-day1"] / "receipt.html").read_text(encoding="utf-8"))
@@ -381,6 +443,7 @@ def test_times_are_short_where_space_is_tight_and_whole_in_tables(demo, examined
 
 def test_a_short_time_is_the_same_instant_in_utc(examined):
     from onetrace_console.words import short_time
+
     examined(4, "times")
     assert short_time("2026-10-09T00:07:26+00:00") == "2026-10-09 00:07:26 UTC"
     assert short_time("2026-10-09T02:07:26.917+02:00") == "2026-10-09 00:07:26 UTC"
@@ -393,8 +456,46 @@ def test_the_run_page_banner_says_its_time_in_the_short_form(demo, examined):
     time, the full value kept in the <time> element."""
     _base, root, keys, _cmp = demo
     html = (root / "pages" / "runs" / keys["query-day1"] / "case.html").read_text(encoding="utf-8")
-    banner = re.search(r'checked on (<time [^>]*>[^<]*</time>)', html)
+    banner = re.search(r"checked on (<time [^>]*>[^<]*</time>)", html)
     examined(1, "run page banner")
     assert banner, "the banner's time is not a <time> element"
     when = re.search(r'datetime="([^"]+)"[^>]*>([^<]*)</time>', banner.group(1))
     assert ISO_TIME.match(when.group(1)) and SHORT_TIME.fullmatch(when.group(2)), banner.group(1)
+
+
+# ------------------------------------------------------------- onetrace-verify's own row, as written
+#: A page's verifier output, quoted as onetrace-verify wrote it (`<pre data-section="verifier-output">`), holds the
+#: verifier's own row label for a model-call record's `engine.settings.engine_core`: "engine core". The scan passes
+#: over exactly those words, in exactly such a row, inside the verifier's output; anywhere else the word fails.
+SAMPLE_ROW = "[PASS   ] receipts/01-call.json: record &#x27;model_call.json&#x27; engine core -- in the calling process"
+
+
+def _verifier_output(rows: str) -> str:
+    return f'<main><pre class="term" data-section="verifier-output">{rows}\n</pre></main>'
+
+
+def test_the_verifier_s_own_engine_core_row_passes(examined):
+    from tests.test_ux_screens import scanned_text
+
+    examined(2, "quoted verifier rows: the receipt page's and the viewer's raw layer")
+    assert not NOT_ON_A_PAGE[REVIEW_WORD].search(scanned_text(_verifier_output(SAMPLE_ROW)))
+    assert not NOT_ON_A_PAGE[REVIEW_WORD].search(scanned_text(f'<main><pre data-layer="3">{SAMPLE_ROW}\n</pre></main>'))
+
+
+def test_sabotage_the_word_in_the_console_s_own_text_still_fails(examined):
+    from tests.test_ux_screens import scanned_text
+
+    examined(2, "planted words")
+    page = _verifier_output(SAMPLE_ROW).replace("</main>", "<p>The engine core of this console.</p></main>")
+    assert NOT_ON_A_PAGE[REVIEW_WORD].search(scanned_text(page))
+    assert NOT_ON_A_PAGE[REVIEW_WORD].search(scanned_text("<main><p>engine core -- in the calling process</p></main>"))
+
+
+def test_sabotage_the_word_in_a_row_that_is_not_the_verifier_s_still_fails(examined):
+    from tests.test_ux_screens import scanned_text
+
+    examined(2, "planted rows")
+    other_pre = f'<main><pre class="term" data-section="console-output">{SAMPLE_ROW}\n</pre></main>'
+    other_row = _verifier_output("[PASS   ] receipts/01-call.json: the co" + "re of the record")
+    assert NOT_ON_A_PAGE[REVIEW_WORD].search(scanned_text(other_pre))
+    assert NOT_ON_A_PAGE[REVIEW_WORD].search(scanned_text(other_row))

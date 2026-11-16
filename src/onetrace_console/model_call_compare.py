@@ -16,6 +16,7 @@ decode-step row on the candidate's step page (on the baseline's, where only the 
 reaches that step). A record or a steps file that cannot be read is named with its reason and
 nothing is compared for it. The console adds no verdict and changes no word of the comparator's.
 """
+
 from __future__ import annotations
 
 import re
@@ -24,9 +25,11 @@ from onetrace_console import model_call as mc
 from onetrace_console.words import escape
 
 HEADING = "Model-call records, compared by onetrace"
-LABEL = ("Each step where both runs hold a model-call record of the same name, in the words of the "
-         "installed onetrace's comparator: its result, the mode it applied, what it rested on, and the "
-         "rest of its report. It reads the two records; it runs no model.")
+LABEL = (
+    "Each step where both runs hold a model-call record of the same name, in the words of the "
+    "installed onetrace's comparator: its result, the mode it applied, what it rested on, and the "
+    "rest of its report. It reads the two records; it runs no model."
+)
 DEFAULTS = "Compared with the comparator's defaults: mode {mode}, fingerprint form {form}."
 ONE_SIDE = "{name} at {step}: only the {side} holds it; nothing compared."
 NOT_READ = "{name} at {step}, {side}: not read ({why}); nothing compared."
@@ -37,13 +40,16 @@ _STEP_LINE = re.compile(r"first differing token at step (\d+)")
 def defaults() -> str:
     """The comparator's own defaults for its mode and fingerprint form, read from the installed onetrace."""
     import inspect
+
     from onetrace import model_call as sdk
+
     p = inspect.signature(sdk.compare).parameters
     return DEFAULTS.format(mode=p["mode"].default, form=p["form"].default)
 
 
 def _steps_by_name(run, store) -> list[dict]:
     from onetrace_console.stage_pages import _files, _read, _stage_name, _steps
+
     files = _files(run, store)
     out, seen = [], set()
     for s in _steps(run, store):
@@ -57,19 +63,24 @@ def _steps_by_name(run, store) -> list[dict]:
 
 def _receipt_state(run, store) -> str:
     from onetrace_console import records
+
     return "verified" if records.state(run, store) == records.YES else "not verified"
 
 
 def _href(run, step: dict, fragment: str) -> str:
     from onetrace_console.stage_pages import stage_page
+
     return f"../runs/{run.key}/{stage_page(step['index'])}#{fragment}"
 
 
 def _pair(name: str, sa: dict, sb: dict, run_a, run_b, states) -> str:
     from onetrace import model_call as sdk
-    head = (f'<h3><code>{escape(sa["name"])}</code> · <code>{escape(name)}</code> '
-            f'(<a href="{escape(_href(run_a, sa, mc.anchor(name)))}">baseline</a>, '
-            f'<a href="{escape(_href(run_b, sb, mc.anchor(name)))}">candidate</a>)</h3>')
+
+    head = (
+        f"<h3><code>{escape(sa['name'])}</code> · <code>{escape(name)}</code> "
+        f'(<a href="{escape(_href(run_a, sa, mc.anchor(name)))}">baseline</a>, '
+        f'<a href="{escape(_href(run_b, sb, mc.anchor(name)))}">candidate</a>)</h3>'
+    )
     got = []
     for side, s in (("baseline", sa), ("candidate", sb)):
         out = next(o for o in mc.outputs(s["receipt"]) if o["name"] == name)
@@ -81,11 +92,15 @@ def _pair(name: str, sa: dict, sb: dict, run_a, run_b, states) -> str:
     steps, note = None, ""
     if "steps" in got[0] and "steps" in got[1]:
         try:
-            ids = [mc.read_steps(s["receipt"], s["file"], name, r, s["read"])["token_ids"]
-                   for s, r in ((sa, got[0]), (sb, got[1]))]
+            ids = [
+                mc.read_steps(s["receipt"], s["file"], name, r, s["read"])["token_ids"]
+                for s, r in ((sa, got[0]), (sb, got[1]))
+            ]
+            if None in ids:
+                raise mc.Refused(mc.HOSTED_STEPS)
             steps = (ids[0], ids[1])
         except mc.Refused as e:
-            note = f'<p data-steps-not-read>{escape(STEPS_NOT_READ.format(why=e))}</p>'
+            note = f"<p data-steps-not-read>{escape(STEPS_NOT_READ.format(why=e))}</p>"
     result = sdk.compare(got[0], got[1], receipts=states, steps=steps)
     lines = []
     for n, line in enumerate(result.lines()):
@@ -93,26 +108,38 @@ def _pair(name: str, sa: dict, sb: dict, run_a, run_b, states) -> str:
         if m is not None and steps is not None:
             at = int(m.group(1))
             side_run, side_step = (run_b, sb) if at < len(steps[1]) else (run_a, sa)
-            shown = (f'<a href="{escape(_href(side_run, side_step, mc.decode_anchor(name, at)))}" '
-                     f'data-decode-link="{at}">{escape(line)}</a>')
+            shown = (
+                f'<a href="{escape(_href(side_run, side_step, mc.decode_anchor(name, at)))}" '
+                f'data-decode-link="{at}">{escape(line)}</a>'
+            )
         else:
             #: The comparator's words, each fingerprint in them short and its whole one fold away,
             #: the fold a space after the words.
             from onetrace_console.viewer.page import shortened_in_text
+
             inline, folded = shortened_in_text(line)
             shown = inline + (" " + folded if folded else "")
-        tag = ' data-comparator="result"' if n == 0 else ' data-comparator="mode"' if n == 1 else (
-            ' data-comparator="rests-on"' if n == 2 else "")
+        tag = (
+            ' data-comparator="result"'
+            if n == 0
+            else ' data-comparator="mode"'
+            if n == 1
+            else (' data-comparator="rests-on"' if n == 2 else "")
+        )
         lines.append(f"<li{tag}>{shown}</li>")
-    return (f'<div class="model-call-pair" data-model-call-pair="{escape(name)}" data-result="{escape(result.result)}">'
-            f'{head}<ul class="plain comparator">{"".join(lines)}</ul>{note}</div>')
+    return (
+        f'<div class="model-call-pair" data-model-call-pair="{escape(name)}" data-result="{escape(result.result)}">'
+        f'{head}<ul class="plain comparator">{"".join(lines)}</ul>{note}</div>'
+    )
 
 
 def compared(comparison, store, stage: str) -> list:
     """The comparator's result for each record name both runs hold at `stage`, in the baseline's
     order, as `section` compares them; a pair either record of which cannot be read is left out."""
     from onetrace import model_call as sdk
+
     from onetrace_console.render import _held
+
     run_a, run_b = _held(store, comparison.run_a), _held(store, comparison.run_b)
     if run_a is None or run_b is None:
         return []
@@ -130,8 +157,10 @@ def compared(comparison, store, stage: str) -> list:
         if name not in names_b:
             continue
         try:
-            got = [mc.read_output(s["file"], next(o for o in mc.outputs(s["receipt"]) if o["name"] == name),
-                                  s["read"]) for s in (sa, sb)]
+            got = [
+                mc.read_output(s["file"], next(o for o in mc.outputs(s["receipt"]) if o["name"] == name), s["read"])
+                for s in (sa, sb)
+            ]
         except mc.Refused:
             continue
         out.append(sdk.compare(got[0], got[1], receipts=states))
@@ -141,6 +170,7 @@ def compared(comparison, store, stage: str) -> list:
 def section(comparison, store) -> str:
     """The section, or "" where no step both runs hold has a record on either side."""
     from onetrace_console.render import _held
+
     run_a, run_b = _held(store, comparison.run_a), _held(store, comparison.run_b)
     if run_a is None or run_b is None:
         return ""
@@ -163,10 +193,14 @@ def section(comparison, store) -> str:
             else:
                 side = "baseline" if name in names_a else "candidate"
                 said = ONE_SIDE.format(name=name, step=sa["name"], side=side)
-                blocks.append(f'<div class="model-call-pair" data-model-call-pair="{escape(name)}" data-one-side>'
-                              f"<p>{escape(said)}</p></div>")
+                blocks.append(
+                    f'<div class="model-call-pair" data-model-call-pair="{escape(name)}" data-one-side>'
+                    f"<p>{escape(said)}</p></div>"
+                )
     if not blocks:
         return ""
-    return (f'<section data-section="model-call-compare" class="model-call"><h2>{escape(HEADING)}</h2>'
-            f'<p class="label">{escape(LABEL)}</p><p data-comparator-defaults>{escape(defaults())}</p>'
-            f'{"".join(blocks)}</section>')
+    return (
+        f'<section data-section="model-call-compare" class="model-call"><h2>{escape(HEADING)}</h2>'
+        f'<p class="label">{escape(LABEL)}</p><p data-comparator-defaults>{escape(defaults())}</p>'
+        f"{''.join(blocks)}</section>"
+    )

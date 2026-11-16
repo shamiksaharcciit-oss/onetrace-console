@@ -12,6 +12,7 @@ there.
 
 Each check is a function returning the problems it finds; each has its sabotage.
 """
+
 from __future__ import annotations
 
 import hashlib
@@ -28,11 +29,14 @@ def total_problems(page: str, store) -> list[str]:
     """The page's first sentence, against the store's incidents counted here."""
     from onetrace_console.incident_pages import incident_total
     from onetrace_console.incidents import derive
+
     every = derive(store)
     runs = len(store.runs())
     raised_from = len({i.subject for i in every if i.subject_kind == "run"})
-    want = (f"{len(every)} {'incident' if len(every) == 1 else 'incidents'} raised from "
-            f"{raised_from} of {runs} {'run' if runs == 1 else 'runs'}.")
+    want = (
+        f"{len(every)} {'incident' if len(every) == 1 else 'incidents'} raised from "
+        f"{raised_from} of {runs} {'run' if runs == 1 else 'runs'}."
+    )
     found = re.search(r'<h1>Incidents</h1>\s*<p data-section="total">([^<]*)</p>', page)
     if not found:
         return ["the page does not open with its total"]
@@ -52,6 +56,7 @@ def two_rules(files, store):
     from onetrace_console.ingest import MANIFEST_NAME, SUMS_NAME, accept
     from tests.conftest import make_tar
     from tests.test_checks import _require_installed
+
     _require_installed()
     accept(make_tar(dict(files)), store)
     manifest = json.loads(files[MANIFEST_NAME].decode("utf-8"))
@@ -59,8 +64,9 @@ def two_rules(files, store):
     del files[dropped["file"]]
     manifest["chain_head"] = manifest["chain"][-1]["digest"]
     files[MANIFEST_NAME] = json.dumps(manifest, separators=(",", ":")).encode()
-    files[SUMS_NAME] = ("\n".join(f"{hashlib.sha256(b).hexdigest()}  {p}"
-                                  for p, b in files.items() if p != SUMS_NAME) + "\n").encode()
+    files[SUMS_NAME] = (
+        "\n".join(f"{hashlib.sha256(b).hexdigest()}  {p}" for p, b in files.items() if p != SUMS_NAME) + "\n"
+    ).encode()
     both = accept(make_tar(files), store, headers={"chain_head": "sha256:deadbeef"}).run
     rules = {i.rule for i in derive(store) if i.subject == both.key}
     assert rules == {"I-RUNID-REUSED", "I-HEADER-DISAGREES"}, rules
@@ -69,6 +75,7 @@ def two_rules(files, store):
 
 def test_one_run_tripping_two_rules_is_counted_once(two_rules, examined):
     from onetrace_console.incident_pages import render_incidents
+
     page = render_incidents(two_rules, generated_at=GENERATED_AT)
     assert total_problems(page, two_rules) == []
     assert "2 incidents raised from 1 of 2 runs." in page
@@ -79,6 +86,7 @@ def test_one_run_tripping_two_rules_is_counted_once(two_rules, examined):
 def demo(shared_demo):
     from onetrace_console.store import Store
     from tests.test_checks import _require_installed
+
     _require_installed()
     folder = shared_demo["folder"]
     pages = folder / "store" / "pages"
@@ -93,17 +101,22 @@ def test_the_demo_s_incidents_page_opens_with_its_total(demo, examined):
 
 # ------------------------------------------------------------------------------- sabotages
 
+
 def _per_rule_sum(store) -> str:
     """The total drawn from the per-rule counts, which count a run under two rules twice."""
     from onetrace_console.home import incident_tallies
     from onetrace_console.incidents import derive
+
     every, runs = derive(store), len(store.runs())
-    return (f"{len(every)} {'incident' if len(every) == 1 else 'incidents'} raised from "
-            f"{sum(len(t.runs) for t in incident_tallies(store))} of {runs} {'run' if runs == 1 else 'runs'}.")
+    return (
+        f"{len(every)} {'incident' if len(every) == 1 else 'incidents'} raised from "
+        f"{sum(len(t.runs) for t in incident_tallies(store))} of {runs} {'run' if runs == 1 else 'runs'}."
+    )
 
 
 def test_sabotage_the_total_from_the_per_rule_sum_is_named(two_rules, monkeypatch):
     from onetrace_console import incident_pages
+
     monkeypatch.setattr(incident_pages, "incident_total", _per_rule_sum)
     page = incident_pages.render_incidents(two_rules, generated_at=GENERATED_AT)
     assert "2 incidents raised from 2 of 2 runs." in page
@@ -112,6 +125,6 @@ def test_sabotage_the_total_from_the_per_rule_sum_is_named(two_rules, monkeypatc
 
 def test_sabotage_the_total_dropped_is_named(two_rules):
     from onetrace_console.incident_pages import render_incidents
-    page = re.sub(r'<p data-section="total">[^<]*</p>', "",
-                  render_incidents(two_rules, generated_at=GENERATED_AT))
+
+    page = re.sub(r'<p data-section="total">[^<]*</p>', "", render_incidents(two_rules, generated_at=GENERATED_AT))
     assert total_problems(page, two_rules) == ["the page does not open with its total"]

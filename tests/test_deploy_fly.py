@@ -7,9 +7,9 @@
 3. nothing in the folder names an app, a region, an organisation, a token, an address or a domain:
    those are set by whoever deploys. The scan's own sabotage plants one of each kind.
 """
+
 from __future__ import annotations
 
-import json
 import re
 import shutil
 import tomllib
@@ -27,8 +27,7 @@ NAMES = {
     "an organisation": re.compile(r"(?:--org|\borg(?:anization)?\s*=)\s*[\"']?\w", re.I),
     "a token": re.compile(r"FlyV1 |\bf[mo]\d_[A-Za-z0-9_-]{8,}|FLY_API_TOKEN\s*=\s*\S"),
     "an email address": re.compile(r"\b[\w.+-]+@[\w-]+\.[\w.-]+\b"),
-    "a domain": re.compile(r"\b(?:[a-z0-9-]+\.)+(?:com|dev|io|app|net|org|ai|co|sh|me|xyz)\b",
-                           re.I),
+    "a domain": re.compile(r"\b(?:[a-z0-9-]+\.)+(?:com|dev|io|app|net|org|ai|co|sh|me|xyz)\b", re.I),
 }
 ALLOWED_DOMAINS = {"fly.io", "fly.dev"}
 
@@ -54,11 +53,23 @@ def test_the_folder_holds_the_four_files_and_the_kept_inputs(examined):
     into the demo the kept build answers (the same file holds its rule)."""
     names = sorted(p.name for p in DEPLOY.iterdir())
     examined(len(names), "files in deploy/fly")
-    assert names == ["Dockerfile", "README.md", "fly.toml", "kept", "public.json", "site_links.txt"], names
+    #: captures/: the capture store's own app (round fb, part 4).
+    #: postdeploy_080.ps1: the demo's checks after its deploy (round fb, part 4).
+    assert names == [
+        "Dockerfile",
+        "README.md",
+        "captures",
+        "fly.toml",
+        "kept",
+        "postdeploy_080.ps1",
+        "public.json",
+        "site_links.txt",
+    ], names
 
 
 def test_public_json_is_a_public_configuration_on_the_port_fly_toml_names(examined):
     from onetrace_console.config import load
+
     config = load(DEPLOY / "public.json")
     fly = tomllib.loads((DEPLOY / "fly.toml").read_text(encoding="utf-8"))
     examined(2, "files read")
@@ -80,8 +91,9 @@ def test_fly_toml_checks_health_forces_https_and_stops_idle_machines(examined):
     assert service["force_https"] is True
     assert service["auto_stop_machines"] == "stop" and service["min_machines_running"] == 0
     assert [c["path"] for c in service["checks"]] == ["/health"]
-    assert "min_machines_running = 1" in (DEPLOY / "fly.toml").read_text(encoding="utf-8"), \
+    assert "min_machines_running = 1" in (DEPLOY / "fly.toml").read_text(encoding="utf-8"), (
         "the comment on keeping one machine on"
+    )
 
 
 def test_nothing_in_the_folder_names_an_app_region_account_token_or_domain(examined):
@@ -90,14 +102,17 @@ def test_nothing_in_the_folder_names_an_app_region_account_token_or_domain(exami
     assert scan(DEPLOY) == []
 
 
-@pytest.mark.parametrize("kind,planted", [
-    ("an app name", ("fly.toml", '\napp = "onetrace-demo"\n')),
-    ("a region", ("fly.toml", '\nprimary_region = "lhr"\n')),
-    ("an organisation", ("README.md", "\nfly apps create demo --org personal\n")),
-    ("a token", ("README.md", "\nexport FLY_API_TOKEN=abc123\n")),
-    ("an email address", ("README.md", "\nmail someone@example.com\n")),
-    ("a domain", ("README.md", "\nopen demo.example.dev\n")),
-])
+@pytest.mark.parametrize(
+    "kind,planted",
+    [
+        ("an app name", ("fly.toml", '\napp = "onetrace-demo"\n')),
+        ("a region", ("fly.toml", '\nprimary_region = "lhr"\n')),
+        ("an organisation", ("README.md", "\nfly apps create demo --org personal\n")),
+        ("a token", ("README.md", "\nexport FLY_API_TOKEN=abc123\n")),
+        ("an email address", ("README.md", "\nmail someone@example.com\n")),
+        ("a domain", ("README.md", "\nopen demo.example.dev\n")),
+    ],
+)
 def test_the_scan_finds_each_kind_planted(tmp_path, kind, planted, examined):
     copy = tmp_path / "fly"
     shutil.copytree(DEPLOY, copy)

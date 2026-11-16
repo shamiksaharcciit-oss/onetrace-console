@@ -9,17 +9,20 @@ The expected verdicts are not the console's: each test runs the same command its
 runs laid out the same way, and reads its own `drift.json`. The page must equal that report cell for
 cell, and its exit the command's.
 """
+
 from __future__ import annotations
 
 import json
 import re
 import subprocess
 import sys
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from html import unescape
 from pathlib import Path
 
 import pytest
+
+from tests.conftest import only
 
 GENERATED_AT = "2026-10-04T12:00:00+00:00"
 RAN_AT = "2026-09-26T12:00:00+02:00"
@@ -36,7 +39,7 @@ class _Clock:
     slower, and the report listed no slower line."""
 
     def __init__(self) -> None:
-        self.t = datetime(2026, 9, 26, 10, 0, tzinfo=timezone.utc)
+        self.t = datetime(2026, 9, 26, 10, 0, tzinfo=UTC)
 
     def now(self) -> str:
         self.t += timedelta(milliseconds=1)
@@ -49,15 +52,22 @@ class _Clock:
 def _make(root: Path) -> list[Path]:
     from onetrace import emit
     from onetrace.emit import Instrument, Recorder
+
     tool = Instrument("tool", "tool", "1.0.0", {"x": "1"})
     clock = _Clock()
     out = []
     with pytest.MonkeyPatch.context() as mp:
         mp.setattr(emit, "_now", clock.now)
         for i, (b_value, b_wait) in enumerate((("1", 0), ("2", 0), ("1", SLOWER_MS), ("1", 0)), start=1):
-            rec = Recorder(str(root / f"r{i}"), run_id=f"drift-{i}", declared_stages=["a", "b", "c"],
-                           manifest=Path(__file__), policy="fail-closed", topology=True,
-                           anchor_reason="a test record")
+            rec = Recorder(
+                str(root / f"r{i}"),
+                run_id=f"drift-{i}",
+                declared_stages=["a", "b", "c"],
+                manifest=Path(__file__),
+                policy="fail-closed",
+                topology=True,
+                anchor_reason="a test record",
+            )
 
             def body(stage, value="1", wait=0, reads=()):
                 def f(ctx):
@@ -66,14 +76,16 @@ def _make(root: Path) -> list[Path]:
                     if wait:
                         clock.wait(wait)
                     return ctx.write_json(f"{stage}.json", {stage: value})
+
                 return f
+
             rec.run_node("a", "1", tool, body("a"))
             rec.run_node("b", "1", tool, body("b", b_value, b_wait, ["a"]))
             rec.run_node("c", "1", tool, body("c", "1", 0, ["b"]))
             rec.close()
             out.append(root / f"r{i}")
     #: The fourth: one byte of its first receipt changed after the run closed.
-    first = next((out[3] / "receipts").glob("01-*.json"))
+    first = only((out[3] / "receipts").glob("01-*.json"))
     raw = first.read_bytes()
     assert raw.count(b'"1.0.0"') == 1
     first.write_bytes(raw.replace(b'"1.0.0"', b'"1.0.1"'))
@@ -88,11 +100,11 @@ def drift_store(tmp_path_factory):
     from onetrace_console.store import Store
     from tests.test_checks import _require_installed
     from tests.test_compare import _deliver
+
     _require_installed()
     root = tmp_path_factory.mktemp("drift")
     store = Store(root / "store")
-    runs = [run_and_record(_deliver(f, store, outputs=True), store, ran_at=RAN_AT)
-            for f in _make(root / "made")]
+    runs = [run_and_record(_deliver(f, store, outputs=True), store, ran_at=RAN_AT) for f in _make(root / "made")]
     compare(runs[0], runs[1], store)
     (pipeline,) = pipelines(store)
     assert [r.key for r in pipeline.runs] == [r.key for r in runs], "received order"
@@ -101,6 +113,7 @@ def drift_store(tmp_path_factory):
 
 def _page(drift_store, against: str = "first") -> str:
     from onetrace_console.drift import render_drift
+
     store, pipeline, _root = drift_store
     return render_drift(pipeline, store, generated_at=GENERATED_AT, against=against)
 
@@ -108,15 +121,34 @@ def _page(drift_store, against: str = "first") -> str:
 def own_report(drift_store, against: str, tmp: Path) -> tuple[dict, str, int]:
     """The command run here, independently: its drift.json, its drift.txt and its exit."""
     from onetrace_console.checks import materialise
+
     store, pipeline, _root = drift_store
     tmp.mkdir()
     names = [f"run-{i}" for i in range(1, len(pipeline.runs) + 1)]
     for run, name in zip(pipeline.runs, names):
         materialise(run, store, tmp / name)
-    proc = subprocess.run([sys.executable, "-m", "onetrace", "drift", *names, "--against", against,
-                           "--durations", "--quiet", "--out", "out"], cwd=tmp, capture_output=True)
-    return (json.loads((tmp / "out" / "drift.json").read_text(encoding="utf-8")),
-            (tmp / "out" / "drift.txt").read_text(encoding="utf-8"), proc.returncode)
+    proc = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "onetrace",
+            "drift",
+            *names,
+            "--against",
+            against,
+            "--durations",
+            "--quiet",
+            "--out",
+            "out",
+        ],
+        cwd=tmp,
+        capture_output=True,
+    )
+    return (
+        json.loads((tmp / "out" / "drift.json").read_text(encoding="utf-8")),
+        (tmp / "out" / "drift.txt").read_text(encoding="utf-8"),
+        proc.returncode,
+    )
 
 
 def _text(fragment: str) -> str:
@@ -192,6 +224,7 @@ def test_no_path_of_this_machine_is_on_the_page(drift_store, examined):
 
 def test_the_toggle_links_the_two_reports(drift_store, examined):
     from onetrace_console.drift import page_href
+
     _store, pipeline, _root = drift_store
     first, previous = _page(drift_store, "first"), _page(drift_store, "previous")
     examined(2, "drift pages")
@@ -242,6 +275,7 @@ def test_the_slower_lines_are_the_command_s_and_apart_from_the_verdicts(drift_st
 
 def test_each_cell_links_to_its_pair_s_comparison(drift_store, examined):
     from onetrace_console.choose_pages import b_anchor, held_comparisons, pair_href
+
     store, pipeline, _root = drift_store
     page = _page(drift_store)
     held = held_comparisons(store)
@@ -260,6 +294,7 @@ def test_each_cell_links_to_its_pair_s_comparison(drift_store, examined):
 def test_the_pipeline_page_links_to_its_drift_page(drift_store, examined):
     from onetrace_console.drift import page_href
     from onetrace_console.pipeline_pages import render_pipeline
+
     store, pipeline, _root = drift_store
     examined(1, "pipeline page")
     page = render_pipeline(pipeline, store, generated_at=GENERATED_AT)
@@ -269,6 +304,7 @@ def test_the_pipeline_page_links_to_its_drift_page(drift_store, examined):
 def test_the_same_runs_read_the_kept_report(drift_store, monkeypatch, examined):
     """Kept by the runs and the SDK's build: drawn again, the command is not run again."""
     from onetrace_console import drift
+
     _page(drift_store)
     examined(1, "drift page drawn twice")
     monkeypatch.setattr(drift, "run_drift", lambda *a, **k: pytest.fail("the command ran again"))
@@ -279,6 +315,7 @@ def test_a_public_console_never_runs_the_command(drift_store, monkeypatch, exami
     """With no kept report, a public console says it holds none: it runs nothing."""
     from onetrace_console import drift
     from onetrace_console.frame import rendering_public  # noqa: F401  (the switch read below)
+
     store, pipeline, _root = drift_store
     monkeypatch.setattr(drift, "run_drift", lambda *a, **k: pytest.fail("a public console ran the command"))
     monkeypatch.setattr(drift, "_public", lambda: True)
@@ -290,6 +327,7 @@ def test_a_public_console_never_runs_the_command(drift_store, monkeypatch, exami
 
 def test_the_drift_pages_are_pages_a_reader_may_open(examined):
     from onetrace_console import roles
+
     examined(3, "paths")
     for rel in ("drift-p1.html", "drift-p12-previous.html"):
         assert roles.required_role("GET", "/" + rel, rel_for_get=rel) == roles.VIEWER
@@ -298,6 +336,7 @@ def test_the_drift_pages_are_pages_a_reader_may_open(examined):
 
 
 # ------------------------------------------------------------------ the sabotage
+
 
 def test_sabotage_a_cell_changed_on_the_page_is_named(drift_store, tmp_path, examined):
     report, _txt, _code = own_report(drift_store, "first", tmp_path / "own")

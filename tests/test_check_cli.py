@@ -6,6 +6,7 @@
    "Records agree". A run without `artifacts/` is never checked with the
    flag, which would FAIL it for files it was never sent with.
 """
+
 from __future__ import annotations
 
 import hashlib
@@ -18,8 +19,7 @@ from tests.conftest import make_tar
 from tests.test_checks import FIXED_RAN_AT, _require_installed
 from tests.test_compare import EXAM, _deliver, _require_exam
 
-EDGES_ROWS = ("[PASS   ] edges conform to declared_edges",
-              "[PASS   ] edges equal the edges derived from the receipts")
+EDGES_ROWS = ("[PASS   ] edges conform to declared_edges", "[PASS   ] edges equal the edges derived from the receipts")
 
 
 def _envelope(run, store) -> dict:
@@ -29,16 +29,19 @@ def _envelope(run, store) -> dict:
 def _emitted(tmp_path, *, change_an_output: bool = False) -> dict[str, bytes]:
     """A real 0.2 run, recorded here by the pinned SDK, with its `artifacts/` (its output files)."""
     from tests.test_last_attempt_failed import _emit
+
     out = tmp_path / "run"
     _emit(out, "with-outputs", [("a", "1", "ok"), ("b", "1", "ok")])
-    files = {p.relative_to(out).as_posix(): p.read_bytes() for p in sorted(out.rglob("*"))
-             if p.is_file() and p.name != ".lock"}
+    files = {
+        p.relative_to(out).as_posix(): p.read_bytes()
+        for p in sorted(out.rglob("*"))
+        if p.is_file() and p.name != ".lock"
+    }
     assert any(n.startswith("artifacts/") for n in files), "the SDK wrote no artifacts/"
     if change_an_output:
         name = next(n for n in files if n.startswith("artifacts/"))
         files[name] = files[name] + b" "
-    files["SHA256SUMS"] = ("\n".join(f"{hashlib.sha256(b).hexdigest()}  {n}"
-                                     for n, b in files.items()) + "\n").encode()
+    files["SHA256SUMS"] = ("\n".join(f"{hashlib.sha256(b).hexdigest()}  {n}" for n, b in files.items()) + "\n").encode()
     return files
 
 
@@ -65,16 +68,13 @@ def test_the_graph_edge_rows_are_in_the_stored_words(store, examined):
         assert row in _envelope(run, store)["stdout"], row
 
 
-def test_a_run_with_artifacts_gets_the_third_check_and_the_rung_reads_from_it(store, tmp_path,
-                                                                            examined):
+def test_a_run_with_artifacts_gets_the_third_check_and_the_rung_reads_from_it(store, tmp_path, examined):
     _require_installed()
-    run = run_and_record(accept(make_tar(_emitted(tmp_path)), store).run, store,
-                         ran_at=FIXED_RAN_AT)
+    run = run_and_record(accept(make_tar(_emitted(tmp_path)), store).run, store, ran_at=FIXED_RAN_AT)
     env = _envelope(run, store)
     examined(1, "run with outputs checked")
     assert run.check_verdict == HOLDS, (run.check_verdict, run.check_note)
-    assert env["outputs_required"]["command"] == [
-        "onetrace-verify", "--json", "--require-artifacts", "MANIFEST.json"]
+    assert env["outputs_required"]["command"] == ["onetrace-verify", "--json", "--require-artifacts", "MANIFEST.json"]
     assert env["outputs_required"]["exit_status"] == "0"
     assert _agree(run, store) == "Records agree: yes"
 
@@ -95,8 +95,9 @@ def test_a_run_carrying_anchors_gets_its_anchor_rows(store, tmp_path, examined):
     _require_installed()
     files = _emitted(tmp_path)
     files["anchors/1.json"] = b'{"not": "an anchor record"}'
-    files["SHA256SUMS"] = ("\n".join(f"{hashlib.sha256(b).hexdigest()}  {n}"
-                                     for n, b in files.items() if n != "SHA256SUMS") + "\n").encode()
+    files["SHA256SUMS"] = (
+        "\n".join(f"{hashlib.sha256(b).hexdigest()}  {n}" for n, b in files.items() if n != "SHA256SUMS") + "\n"
+    ).encode()
     got = accept(make_tar(files), store)
     examined(1, "run with anchors/ checked")
     if got.run is None:
@@ -109,6 +110,7 @@ def test_a_run_carrying_anchors_gets_its_anchor_rows(store, tmp_path, examined):
 def test_a_text_and_json_run_that_disagree_is_a_could_not_check(store, monkeypatch, examined):
     """The summaries must agree; if they don't, could not check, with that reason."""
     import onetrace_console.viewer.report as vr
+
     _require_installed()
     _require_exam()
     real = vr.capture_cli

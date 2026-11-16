@@ -11,6 +11,7 @@ upstream stage's receipt AND the stored bytes of that output match it; the label
 checked -- "matches the stored output of <stage>" -- never where it came from. In the console's
 frame a graph node links to its sibling `stage-<n>.html`; the free file keeps `#step-N`.
 """
+
 from __future__ import annotations
 
 import hashlib
@@ -34,10 +35,9 @@ GENERATED_AT = "2026-10-04T12:00:00+00:00"
 def _delivery(folder: Path) -> bytes:
     """The whole run folder as a sender delivers it, artifacts and the files beside them too."""
     from onetrace_console.ingest import SUMS_NAME
-    files = {p.relative_to(folder).as_posix(): p.read_bytes()
-             for p in sorted(folder.rglob("*")) if p.is_file()}
-    files[SUMS_NAME] = ("\n".join(f"{hashlib.sha256(b).hexdigest()}  {p}"
-                                  for p, b in files.items()) + "\n").encode()
+
+    files = {p.relative_to(folder).as_posix(): p.read_bytes() for p in sorted(folder.rglob("*")) if p.is_file()}
+    files[SUMS_NAME] = ("\n".join(f"{hashlib.sha256(b).hexdigest()}  {p}" for p, b in files.items()) + "\n").encode()
     buf = io.BytesIO()
     with tarfile.open(fileobj=buf, mode="w") as tar:
         for path, blob in files.items():
@@ -50,6 +50,7 @@ def _delivery(folder: Path) -> bytes:
 def _stored(folder: Path, store):
     from onetrace_console.checks import run_and_record
     from onetrace_console.ingest import accept
+
     accepted = accept(_delivery(folder), store)
     assert accepted.run is not None, getattr(accepted, "rows", accepted)
     return run_and_record(accepted.run, store, ran_at=FIXED_RAN_AT)
@@ -57,6 +58,7 @@ def _stored(folder: Path, store):
 
 def _pages(run, store, framed: bool = True) -> dict[str, str]:
     from onetrace_console.pages import render_execution
+
     if framed:
         with rendering(onedoor=False, sign_in=False):
             return render_execution(run, store, generated_at=GENERATED_AT).pages
@@ -93,6 +95,7 @@ def tampered(tmp_path, store):
 
 # ------------------------------------------------------------------ outputs
 
+
 def test_a_stored_output_that_matches_its_receipt_is_shown_verified(demo):
     run, store = demo
     page = _pages(run, store)["stage-1.html"]
@@ -114,6 +117,7 @@ def test_a_tampered_output_is_never_shown(tampered):
 
 
 # ------------------------------------------------------------------ inputs
+
 
 def test_an_input_matching_an_upstream_stored_output_is_shown_with_what_was_checked(demo):
     run, store = demo
@@ -148,11 +152,13 @@ def test_an_external_input_never_shows_content_even_when_the_file_is_on_disk(dem
 def test_the_banner_says_what_is_stored_and_what_is_fingerprinted(demo):
     run, store = demo
     page = _pages(run, store)["stage-2.html"]
-    assert ("Outputs are stored and shown after checking; inputs from outside the run are "
-            "fingerprinted, not stored.") in _text(page)
+    assert (
+        "Outputs are stored and shown after checking; inputs from outside the run are fingerprinted, not stored."
+    ) in _text(page)
 
 
 # ------------------------------------------------------------------ links
+
 
 def _graph_links(page: str) -> list[str]:
     """The links on the graph's node boxes -- not its "Recorded order" link, which goes to the
@@ -183,10 +189,12 @@ def test_a_free_file_node_still_links_in_page(demo):
 
 # ------------------------------------------------------------------ against a compared run
 
+
 def test_against_a_compared_run_the_stage_says_same_in_or_differs_from(store):
     """The demo compared day 1 -> day 2: model is the first difference; request is the same."""
     _require_installed()
     from onetrace_console.compare import compare
+
     a, b = _stored(DEMO / "day-1", store), _stored(DEMO / "day-2", store)
     compare(a, b, store, ran_at=FIXED_RAN_AT)
     pages = _pages(b, store)
@@ -197,6 +205,7 @@ def test_against_a_compared_run_the_stage_says_same_in_or_differs_from(store):
 
 
 # ------------------------------------------------------------------ receipt-link inputs
+
 
 def test_an_input_that_is_an_upstream_stored_receipt_links_to_that_stage_s_page(demo):
     """`receipt:request` on stage 2 is the digest of stage 1's stored receipt: what was checked is
@@ -216,6 +225,7 @@ def test_an_input_that_is_an_upstream_stored_receipt_links_to_that_stage_s_page(
 
 def test_a_receipt_input_whose_stored_receipt_does_not_match_stays_fingerprint_only():
     from onetrace_console.stage_pages import _input
+
     stored = b'{"stage": {"name": "request"}}'
     digest = "sha256:" + hashlib.sha256(stored).hexdigest()
     item = {"name": "receipt:request", "digest": digest, "trust_class": "operator-authored"}

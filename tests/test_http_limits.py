@@ -2,6 +2,7 @@
 
 Each rule here has its own sabotage below.
 """
+
 from __future__ import annotations
 
 import re
@@ -31,8 +32,11 @@ def test_the_limit_never_goes_below_the_floor_or_above_the_ceiling(fixed, examin
     assert got[4] == fixed * hl.CEILING_TIMES
 
 
-@pytest.mark.parametrize("args", [(0, 1.0), (10, 0.0), (10, -1.0), (-5, 1.0)], ids=["no limit", "no time",
-                                                                               "a negative time", "a negative limit"])
+@pytest.mark.parametrize(
+    "args",
+    [(0, 1.0), (10, 0.0), (10, -1.0), (-5, 1.0)],
+    ids=["no limit", "no time", "a negative time", "a negative limit"],
+)
 def test_the_helper_refuses_a_limit_or_time_not_above_zero(args, examined):
     examined(1, "refused input")
     with pytest.raises(ValueError):
@@ -41,8 +45,10 @@ def test_the_helper_refuses_a_limit_or_time_not_above_zero(args, examined):
 
 def test_the_calibration_runs_none_of_the_console_s_code(examined):
     """Run in a process of its own: after it, no module of the console or the SDK is loaded."""
-    code = ("import sys; sys.path.insert(0, sys.argv[1]); from tests import http_limits as h; h.calibration(); "
-            "print(sorted(m for m in sys.modules if m.split('.')[0] in ('onetrace_console', 'onetrace', 'onetrace_verify')))")
+    code = (
+        "import sys; sys.path.insert(0, sys.argv[1]); from tests import http_limits as h; h.calibration(); "
+        "print(sorted(m for m in sys.modules if m.split('.')[0] in ('onetrace_console', 'onetrace', 'onetrace_verify')))"
+    )
     done = subprocess.run([sys.executable, "-I", "-c", code, str(REPO)], capture_output=True, text=True, timeout=600)
     examined(1, "calibration run in its own process")
     assert done.returncode == 0, done.stderr[-1500:]
@@ -54,7 +60,7 @@ def test_every_request_to_a_started_console_takes_its_limit_from_the_helper(exam
     sites = []
     for p in sorted(REPO.glob("tests/test_*.py")):
         if p.name == Path(__file__).name:
-            continue                       # its own planted line, below
+            continue  # its own planted line, below
         for n, line in enumerate(p.read_text(encoding="utf-8").splitlines(), 1):
             m = _SITE.search(line)
             if m:
@@ -62,8 +68,13 @@ def test_every_request_to_a_started_console_takes_its_limit_from_the_helper(exam
     examined(len(sites), "requests with a limit")
     #: 34 at console 0.6.0; console 0.6.1's items' own tests add 9, each with its limit; the expectations
     #: file declared after the run adds 2 (`test_expectations_after`) and the tokenizer picker 2
-    #: (`test_token_upload`); the Set up Explain form 1 (`test_explain_setup_form`).
-    assert len(sites) == 48
+    #: (`test_token_upload`); the Set up Explain form 1 (`test_explain_setup_form`). Console 0.8.0's sign-in
+    #: limits add 3 (`test_signin_lockout`), and a run folder's `.lock` 2 (`test_run_lock`); the press counted
+    #: once 1 (`test_press_once`) and the setup page's cards 1 (`test_explain_setup_wraps`); the capture store's app
+    #: 5 (`test_deploy_fly_captures`, `test_app_links`), joined with the press's. Sign-in through Entra ID adds 1:
+    #: the proxy in `test_entra_issuer` forwards to the fake within its limit; and its pages for the layout check
+    #: 2 (`test_entra_pages`). Sign out in the settings menu adds 2 (`test_signout_button`).
+    assert len(sites) == 71
     assert [s for s in sites if not re.fullmatch(r"\{?limit\([0-9.]+\)\}?", s[2])] == []
 
 
@@ -80,14 +91,17 @@ def test_the_summary_says_the_calibration_and_each_limit_used(monkeypatch, exami
 
 def test_sabotage_a_limit_without_its_floor_and_ceiling_is_caught(monkeypatch, examined):
     """The bare proportion, unclamped: a fast machine gives less than the floor, a stalled one more than the ceiling."""
-    monkeypatch.setattr(hl, "scaled", lambda fixed, measured, reference=hl.REFERENCE_SECONDS, ceiling_times=6:
-                        fixed * measured / reference)
+    monkeypatch.setattr(
+        hl,
+        "scaled",
+        lambda fixed, measured, reference=hl.REFERENCE_SECONDS, ceiling_times=6: fixed * measured / reference,
+    )
     examined(2, "planted limits")
     assert hl.scaled(10, 1e-9) < 10 and hl.scaled(10, 1e9) > 10 * hl.CEILING_TIMES
 
 
 def test_sabotage_a_fixed_limit_back_in_a_test_is_caught(examined):
-    planted = '        with urllib.request.urlopen(base + path, timeout=10) as resp:'
+    planted = "        with urllib.request.urlopen(base + path, timeout=10) as resp:"
     m = _SITE.search(planted)
     examined(1, "planted request")
     assert m and not re.fullmatch(r"\{?limit\([0-9.]+\)\}?", m.group(1))

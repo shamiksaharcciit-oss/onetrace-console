@@ -16,6 +16,7 @@ The prohibitions are asserted over the rendered HTML of THIS console's pages. Th
 repository has its own versions over its own pages; a rule kept in one repository is not
 kept in the other, and the console is the thing a customer looks at.
 """
+
 from __future__ import annotations
 
 import json
@@ -25,8 +26,16 @@ import pytest
 
 from onetrace_console.checks import REPEAT_COMMAND, run_and_record
 from onetrace_console.ingest import accept
-from onetrace_console.pages import (ANSWER, AUTHORIZATION, CASE, EXECUTIONS, RUN_PROOF, PageError,
-                                    render_execution, render_executions)
+from onetrace_console.pages import (
+    ANSWER,
+    AUTHORIZATION,
+    CASE,
+    EXECUTIONS,
+    RUN_PROOF,
+    PageError,
+    render_execution,
+    render_executions,
+)
 from tests.test_checks import FIXED_RAN_AT, _require_installed
 
 GENERATED_AT = "2026-09-26T12:00:00+02:00"
@@ -54,12 +63,14 @@ def every_page(execution, checked, store) -> dict[str, str]:
 
 # ------------------------------------------------------------- the pages render at all
 
+
 def test_both_pages_render(execution):
     """The viewer's two pages, and the console's authorization page."""
     #: And one stage page per step (board 4).
     stages = {n for n in execution.pages if re.fullmatch(r"stage-\d+\.html", n)}
     #: And the run receipt (board 5).
     from onetrace_console.receipt_page import RECEIPT
+
     assert stages and set(execution.pages) == {ANSWER, CASE, RUN_PROOF, AUTHORIZATION, RECEIPT} | stages
     for name, html in execution.pages.items():
         assert html.startswith("<!doctype html>") or html.lstrip().startswith("<!"), name
@@ -73,12 +84,16 @@ def test_both_pages_render(execution):
             continue
         if name == RECEIPT:
             #: Its size is its record's: held to the sections it must carry instead.
-            for part in ('data-section="pills"', 'data-section="receipt"',
-                         'data-section="check-yourself"', 'data-section="does-not-say"'):
+            for part in (
+                'data-section="pills"',
+                'data-section="receipt"',
+                'data-section="check-yourself"',
+                'data-section="does-not-say"',
+            ):
                 assert part in html, f"{name} lacks {part}"
             continue
         if name == AUTHORIZATION:
-            main = html[html.index("<main>"):html.index("</main>")]
+            main = html[html.index("<main>") : html.index("</main>")]
             assert len(main) > 500, f"{name}'s content is suspiciously small ({len(main)} chars)"
             continue
         assert len(html) > 2000, f"{name} is suspiciously small ({len(html)} chars)"
@@ -99,6 +114,7 @@ def test_a_run_with_no_stored_report_refuses_rather_than_rendering_a_blank(deliv
 
 # ---------------------------------------- the Execution page's verdicts are the report's
 
+
 def test_the_pages_verdicts_equal_the_stored_reports(execution, checked, store):
     """Step 4's second check. The page's counts are compared with the report's own rows.
 
@@ -111,7 +127,7 @@ def test_the_pages_verdicts_equal_the_stored_reports(execution, checked, store):
     summary = lines[-1]
     m = re.match(r"^(\d+) pass, (\d+) fail, (\d+) not-run  ->  (PASS|FAIL)$", summary)
     assert m, f"the stored report's summary is not the verifier's grammar: {summary!r}"
-    n_pass, n_fail, n_not_run, overall = int(m[1]), int(m[2]), int(m[3]), m[4]
+    n_pass, _, n_not_run, overall = int(m[1]), int(m[2]), int(m[3]), m[4]
 
     assert checked.check_verdict == ("holds" if overall == "PASS" else "contradicts")
     assert checked.check_exit == ("0" if overall == "PASS" else checked.check_exit)
@@ -124,9 +140,8 @@ def test_the_pages_verdicts_equal_the_stored_reports(execution, checked, store):
     #: so the verifier's `->  PASS` is `-&gt;  PASS` in the HTML. The first version of this
     #: test compared the raw line and failed, which was the escaping working correctly.
     from html import escape
-    assert escape(summary) in case, (
-        f"the stored report's summary line is not on the page. Expected "
-        f"{escape(summary)!r}")
+
+    assert escape(summary) in case, f"the stored report's summary line is not on the page. Expected {escape(summary)!r}"
     assert str(n_pass) in case
     if n_not_run:
         assert str(n_not_run) in case
@@ -143,12 +158,30 @@ def test_the_command_to_repeat_the_check_is_on_the_page(execution):
 
 #: Words that would make a page a grade rather than a record. `score` and `grade` are the
 #: two the specification names; the rest are the ways the same thing arrives wearing a hat.
-FORBIDDEN_WORDS = ("trust score", "trustscore", "grade", "rating", "out of 10",
-                   "confidence score", "risk score", "health score", "reliability score")
+FORBIDDEN_WORDS = (
+    "trust score",
+    "trustscore",
+    "grade",
+    "rating",
+    "out of 10",
+    "confidence score",
+    "risk score",
+    "health score",
+    "reliability score",
+)
 
 #: Words that would make a page a recommendation rather than a count.
-INFERENCE_WORDS = ("recommend", "we suggest", "likely cause", "probably", "similarity",
-                   "similar runs", "insight:", "predicted", "anomaly score")
+INFERENCE_WORDS = (
+    "recommend",
+    "we suggest",
+    "likely cause",
+    "probably",
+    "similarity",
+    "similar runs",
+    "insight:",
+    "predicted",
+    "anomaly score",
+)
 
 
 @pytest.mark.parametrize("name", [ANSWER, CASE, EXECUTIONS, AUTHORIZATION])
@@ -178,8 +211,9 @@ def test_no_percentage_without_its_counts(every_page, name):
     """
     percentages = re.findall(r"\d+(?:\.\d+)?\s*%", _body(every_page[name]))
     assert not percentages, (
-        f"{name} carries percentages {percentages}. C034 §4 allows one only beside its "
-        f"counts; if that is what this is, this test needs to learn the shape you used")
+        f"{name} carries percentages {percentages}. A page shows one only beside its "
+        f"counts; if that is what this is, this test needs to learn the shape you used"
+    )
 
 
 @pytest.mark.parametrize("name", [ANSWER, CASE, EXECUTIONS, AUTHORIZATION])
@@ -197,16 +231,24 @@ def test_no_check_button(every_page, name):
     #: index's search box, which reads, and a local run's benchmark mark, which says which run to
     #: compare against; neither checks anything.
     from tests.run_tools import without_run_tools
+
     page = without_run_tools(every_page[name]).lower()
     for mechanism in ("<button", "<form", "<input", "onclick=", "onsubmit=", "onchange="):
         assert mechanism not in page, f"{name} carries {mechanism!r}"
 
     scripts = re.findall(r"<script[^>]*>(.*?)</script>", page, re.S)
     for body in scripts:
-        for reach in ("fetch(", "xmlhttprequest", "import(", "eval(", "websocket",
-                      "navigator.sendbeacon", "src=", "location="):
-            assert reach not in body, (
-                f"{name} has a script that can reach something: {reach!r} in {body[:120]!r}")
+        for reach in (
+            "fetch(",
+            "xmlhttprequest",
+            "import(",
+            "eval(",
+            "websocket",
+            "navigator.sendbeacon",
+            "src=",
+            "location=",
+        ):
+            assert reach not in body, f"{name} has a script that can reach something: {reach!r} in {body[:120]!r}"
     assert not re.search(r"<script[^>]+src=", page), f"{name} loads an external script"
 
 
@@ -225,27 +267,37 @@ def assert_the_prohibitions(name: str, page: str) -> None:
     for mechanism in ("<button", "<form", "<input", "onclick=", "onsubmit=", "onchange="):
         assert mechanism not in lower, f"{name} carries {mechanism!r}"
     for body in re.findall(r"<script[^>]*>(.*?)</script>", lower, re.S):
-        for reach in ("fetch(", "xmlhttprequest", "import(", "eval(", "websocket",
-                      "navigator.sendbeacon", "src=", "location="):
+        for reach in (
+            "fetch(",
+            "xmlhttprequest",
+            "import(",
+            "eval(",
+            "websocket",
+            "navigator.sendbeacon",
+            "src=",
+            "location=",
+        ):
             assert reach not in body, f"{name} has a script that can reach {reach!r}"
     assert not re.search(r"<script[^>]+src=", lower), f"{name} loads an external script"
     inline = re.findall(r'style="[^"]*(?:color|background)[^"]*"', page, re.I)
     assert not inline, f"{name}: inline colour {inline[:3]}"
 
 
-@pytest.mark.parametrize("planted,why", [
-    ("<p>3 of 4 decisions (75%)</p>", "percentage"),
-    ("<p>risk score: 7</p>", "score or grade"),
-    ("<p>we suggest a rollback</p>", "inference"),
-    ('<p><button>re-check</button></p>', "'<button'"),
-    ('<p style="color:#e25c6e">denied</p>', "inline colour"),
-    ("<script>fetch('/x')</script>", "reach"),
-])
+@pytest.mark.parametrize(
+    "planted,why",
+    [
+        ("<p>3 of 4 decisions (75%)</p>", "percentage"),
+        ("<p>risk score: 7</p>", "score or grade"),
+        ("<p>we suggest a rollback</p>", "inference"),
+        ("<p><button>re-check</button></p>", "'<button'"),
+        ('<p style="color:#e25c6e">denied</p>', "inline colour"),
+        ("<script>fetch('/x')</script>", "reach"),
+    ],
+)
 def test_the_shared_prohibition_check_catches_each_shape(planted, why, examined):
     """The pages it is applied to carry none of these, so it passes there. This is the
     proof that it can fail: each prohibited shape, planted in a clean page, is caught."""
-    clean = "<html><head><style>.x{width:100%}</style></head><body><main>" \
-            "<p>5 decisions of 5</p></main></body></html>"
+    clean = "<html><head><style>.x{width:100%}</style></head><body><main><p>5 decisions of 5</p></main></body></html>"
     assert_the_prohibitions("clean", clean)
     examined(1, f"planted shape: {why}")
     with pytest.raises(AssertionError, match=re.escape(why)):
@@ -273,16 +325,15 @@ def test_nothing_inferred_beyond_the_record(every_page, name):
 
 @pytest.mark.parametrize("name", [CASE, EXECUTIONS, AUTHORIZATION])
 def test_the_limit_sentence_is_on_the_pages_the_viewer_puts_it_on(every_page, name):
-    """"…what was verified and evaluated at the time — not what was ultimately true."
+    """ "…what was verified and evaluated at the time — not what was ultimately true."
 
     The design note §6 says it stays on every run page. The viewer renders `case.limit` on
     the **case** and **executions** pages and not on the answer page — measured, and it is
-    the viewer's fixed arrangement under 019 §2/§3, not something this console may change.
+    the viewer's fixed arrangement, not something this console may change.
     The answer page is also the frozen reader-session page, so changing it is forbidden
     outright right now. Raised as a question in DESIGN_GAPS.md rather than asserted here.
     """
-    assert "not what was ultimately true" in every_page[name], (
-        f"{name} has lost the limit sentence")
+    assert "not what was ultimately true" in every_page[name], f"{name} has lost the limit sentence"
 
 
 def test_the_answer_page_carries_no_limit_sentence_and_that_is_recorded(every_page):
@@ -293,10 +344,12 @@ def test_the_answer_page_carries_no_limit_sentence_and_that_is_recorded(every_pa
     """
     assert "not what was ultimately true" not in every_page[ANSWER], (
         "the answer page now carries the limit sentence, so the design-note discrepancy "
-        "recorded in DESIGN_GAPS.md is resolved and should be removed from it")
+        "recorded in DESIGN_GAPS.md is resolved and should be removed from it"
+    )
 
 
 # ------------------------------------------------------------------- offline, by structure
+
 
 @pytest.mark.parametrize("name", [ANSWER, CASE, EXECUTIONS, AUTHORIZATION])
 def test_no_page_references_a_remote_origin(every_page, name):
@@ -313,6 +366,5 @@ def test_no_page_references_a_remote_origin(every_page, name):
     assert not remote, f"{name} references {remote[:3]}"
     for scheme in ("http://", "https://"):
         for m in re.finditer(re.escape(scheme), page):
-            context = page[max(0, m.start() - 60):m.start() + 60]
-            assert not re.search(r'(?:src|href)\s*=\s*"[^"]*$',
-                                 page[max(0, m.start() - 60):m.start()]), context
+            context = page[max(0, m.start() - 60) : m.start() + 60]
+            assert not re.search(r'(?:src|href)\s*=\s*"[^"]*$', page[max(0, m.start() - 60) : m.start()]), context

@@ -17,10 +17,11 @@ The demo's runs of it: a baseline; a candidate whose calibration offset changed 
 difference is `calibrate`); a run whose sensor firmware version changed while its readings did
 not; and a run asking for a slot outside the window, declined by `work_order`.
 """
+
 from __future__ import annotations
 
-import math
 import json
+import math
 from pathlib import Path
 
 from onetrace.emit import Instrument, Recorder, Refusal
@@ -38,8 +39,7 @@ def readings_csv() -> str:
     """The pump's readings, invented: 48 samples of a vibration in milli-g, a whole number each,
     from a fixed pattern, so every build makes the same series."""
     pattern = [0, 210, 360, 420, 360, 210, 0, -210, -360, -420, -360, -210]
-    rows = ["sample,vibration_mg"] + [f"{i},{pattern[i % len(pattern)] + (i % 5) * 7}"
-                                      for i in range(48)]
+    rows = ["sample,vibration_mg"] + [f"{i},{pattern[i % len(pattern)] + (i % 5) * 7}" for i in range(48)]
     return "\n".join(rows) + "\n"
 
 
@@ -49,8 +49,14 @@ def main(out_dir, run_id: str, offset_mg: str, firmware: str, slot: str) -> None
     out.mkdir(parents=True, exist_ok=True)
     csv_path = out / "readings.csv"
     csv_path.write_bytes(readings_csv().encode("utf-8"))
-    rec = Recorder(out_dir, run_id=run_id, declared_stages=STAGES, manifest=Path(__file__),
-                   policy="fail-closed", anchor_reason="a demo record; anchoring is not part of this demo")
+    rec = Recorder(
+        out_dir,
+        run_id=run_id,
+        declared_stages=STAGES,
+        manifest=Path(__file__),
+        policy="fail-closed",
+        anchor_reason="a demo record; anchoring is not part of this demo",
+    )
 
     def readings(ctx):
         data = kept_text(csv_path)
@@ -65,54 +71,79 @@ def main(out_dir, run_id: str, offset_mg: str, firmware: str, slot: str) -> None
 
     def calibrate(ctx, got):
         ctx.read_receipt("readings")
-        return ctx.write_json("calibrated.json", {"vibration_mg": [
-            str(int(v) - int(offset_mg)) for v in ctx.read_json(got)["vibration_mg"]]})
+        return ctx.write_json(
+            "calibrated.json",
+            {"vibration_mg": [str(int(v) - int(offset_mg)) for v in ctx.read_json(got)["vibration_mg"]]},
+        )
 
     def features(ctx, calibrated):
         ctx.read_receipt("calibrate")
         values = [int(v) for v in ctx.read_json(calibrated)["vibration_mg"]]
         rms = math.isqrt(sum(v * v for v in values) // len(values))
-        return ctx.write_json("features.json", {"rms_mg": str(rms),
-                                                "peak_mg": str(max(abs(v) for v in values))})
+        return ctx.write_json("features.json", {"rms_mg": str(rms), "peak_mg": str(max(abs(v) for v in values))})
 
     def anomaly_check(ctx, found):
         ctx.read_receipt("features")
         f = ctx.read_json(found)
-        return ctx.write_json("anomaly.json", {"rms_mg": f["rms_mg"], "limit_mg": str(RMS_LIMIT_MG),
-                                               "anomaly": int(f["rms_mg"]) > RMS_LIMIT_MG})
+        return ctx.write_json(
+            "anomaly.json",
+            {"rms_mg": f["rms_mg"], "limit_mg": str(RMS_LIMIT_MG), "anomaly": int(f["rms_mg"]) > RMS_LIMIT_MG},
+        )
 
     def decision(ctx, checked):
         ctx.read_receipt("anomaly_check")
         a = ctx.read_json(checked)
         action = "inspect the pump" if a["anomaly"] else "no action"
-        return ctx.write_json("decision.json", {
-            "action": action, "slot": slot,
-            "reason": f"RMS {a['rms_mg']} mg against a limit of {a['limit_mg']} mg"})
+        return ctx.write_json(
+            "decision.json",
+            {"action": action, "slot": slot, "reason": f"RMS {a['rms_mg']} mg against a limit of {a['limit_mg']} mg"},
+        )
 
     def work_order(ctx, decided):
         ctx.read_receipt("decision")
         d = ctx.read_json(decided)
         if not WINDOW[0] <= d["slot"] <= WINDOW[1]:
-            raise Refusal(f"a work order at {d['slot']} is outside the maintenance window "
-                          f"{WINDOW[0]} to {WINDOW[1]}")
-        return ctx.write_json("work_order.json", {"order": d["action"], "slot": d["slot"],
-                                                  "reason": d["reason"]})
+            raise Refusal(f"a work order at {d['slot']} is outside the maintenance window {WINDOW[0]} to {WINDOW[1]}")
+        return ctx.write_json("work_order.json", {"order": d["action"], "slot": d["slot"], "reason": d["reason"]})
 
-    got = rec.run_node("readings", None, Instrument("vibration-sensor-reader", "reader", "1.0.0",
-                                                    {"source": "readings.csv"}), readings)
-    calibrated = rec.run_node("calibrate", None, Instrument("sensor-calibration", "transform", "1.0.0",
-                                                            {"offset_mg": offset_mg}), calibrate, got)
-    found = rec.run_node("features", None, Instrument("vibration-features", "transform", "1.0.0",
-                                                      {"features": "rms, peak"}), features, calibrated)
-    checked = rec.run_node("anomaly_check", None, Instrument("rms-threshold", "checker", "1.0.0",
-                                                             {"rms_limit_mg": str(RMS_LIMIT_MG)}),
-                           anomaly_check, found)
-    decided = rec.run_node("decision", None, Instrument("maintenance-decision", "rule", "1.0.0",
-                                                        {"rule": "inspect above the limit"}),
-                           decision, checked)
-    rec.run_node("work_order", None, Instrument("maintenance-window-policy", "policy", "1.0.0",
-                                                {"window": f"{WINDOW[0]} to {WINDOW[1]}"}),
-                 work_order, decided)
+    got = rec.run_node(
+        "readings", None, Instrument("vibration-sensor-reader", "reader", "1.0.0", {"source": "readings.csv"}), readings
+    )
+    calibrated = rec.run_node(
+        "calibrate",
+        None,
+        Instrument("sensor-calibration", "transform", "1.0.0", {"offset_mg": offset_mg}),
+        calibrate,
+        got,
+    )
+    found = rec.run_node(
+        "features",
+        None,
+        Instrument("vibration-features", "transform", "1.0.0", {"features": "rms, peak"}),
+        features,
+        calibrated,
+    )
+    checked = rec.run_node(
+        "anomaly_check",
+        None,
+        Instrument("rms-threshold", "checker", "1.0.0", {"rms_limit_mg": str(RMS_LIMIT_MG)}),
+        anomaly_check,
+        found,
+    )
+    decided = rec.run_node(
+        "decision",
+        None,
+        Instrument("maintenance-decision", "rule", "1.0.0", {"rule": "inspect above the limit"}),
+        decision,
+        checked,
+    )
+    rec.run_node(
+        "work_order",
+        None,
+        Instrument("maintenance-window-policy", "policy", "1.0.0", {"window": f"{WINDOW[0]} to {WINDOW[1]}"}),
+        work_order,
+        decided,
+    )
     rec.close()
 
 
@@ -120,6 +151,7 @@ def kept_inputs(args: dict) -> list[bytes]:
     """The bytes of every input a run with `args` keeps: the sensor's readings, the same in every run
     (invented example data)."""
     return [json.dumps(readings_csv()).encode("utf-8")]
+
 
 def kept_text(path) -> bytes:
     """A file this pipeline reads from outside the run, as its step reads it and keeps it: a JSON string

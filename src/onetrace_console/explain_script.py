@@ -9,6 +9,7 @@ is reloaded. A refusal (a press while one runs, or any other) is said in the pan
 words. "Copy the command" puts a check's command on this browser's clipboard, and sends nothing. Named by hash in the local console's Content-Security-Policy only
 (`public.content_security_policy`); no public page carries it.
 """
+
 EXPLAIN_SCRIPT = (
     "<script>(function(){var s=document.querySelector('section[data-section=explain]');if(!s)return;"
     "var c=s.getAttribute('data-c');"
@@ -38,4 +39,5 @@ EXPLAIN_SCRIPT = (
     "x.disabled=true;fetch(x.getAttribute('data-explain-text')+(x.checked?'yes':'no'),{method:'POST',"
     "credentials:'same-origin',headers:m?{'X-CSRF-Token':decodeURIComponent(m[1])}:{}})"
     ".then(function(){location.reload()},function(){x.disabled=false})})});"
-    "if(s.querySelector('[data-explain=running]'))poll()})()</script>")
+    "if(s.querySelector('[data-explain=running]'))poll()})()</script>"
+)
