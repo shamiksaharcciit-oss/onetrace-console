@@ -1,4 +1,4 @@
-"""A run's authorization page, in release 1's "no records" state (v6 board 3).
+"""A run's authorization page, in release 1's "no records" state, as its design draws it.
 
     Release 1 is onetrace, the console and onetrace-ci. The authorization board ships in its
     "no records" state.
@@ -10,7 +10,7 @@ section links to it (`authorization_link`).
 
 WHAT IT DOES NOT SAY
 --------------------
-Board 3 also says "Nothing in the record shows a policy decision, a permit or a confirmation
+The design also says "Nothing in the record shows a policy decision, a permit or a confirmation
 from the receiving system", "this pipeline does not yet send its actions through a policy
 engine", and names its drawing's own stages ("proposed an action (stage 5)"). The first is a
 claim about a run's receipts, which this console does not search for such things; the
@@ -19,15 +19,15 @@ third is the illustration's. None is made. The case page's Policy sentence made 
 over-claim, and no longer does. What the page can say is what
 release 1 has: no authorization records for this run, and that this is not a fault.
 
-Board 3's AADP sentence ("When a policy engine that speaks AADP is added, this page shows the
+The design's AADP sentence ("When a policy engine that speaks AADP is added, this page shows the
 whole chain for each action...") is left out too: it presupposes
 that no engine has been added -- the same claim about an unseen pipeline -- and promises a page
 nothing here backs yet.
 
-Board 3's "How to add authorization records" button is not rendered either: there is no page
+The design's "How to add authorization records" button is not rendered either: there is no page
 or document for it to open yet, and a link to nothing is worse than none.
 
-The words are v6 board 3's.
+The words are the design's.
 """
 
 from __future__ import annotations
@@ -62,6 +62,16 @@ NON_CLAIMS = (
 )
 #: The verifier's row that reads whether a step that acted cited a permitting decision.
 PERMITTING_ROW = "decisions: a step that acted cites a permitting decision"
+
+#: A pair's Authorization tab (Investigate): both runs' gated steps side by side.
+PAIR_HEADING = "Gated steps, side by side"
+NEITHER = "Neither run declares a gated step or cites a decision."
+NOT_IN_RUN = "Not a gated step in this run, and no decision cited."
+FIRST_DIFFERENCE = "first difference"
+PAIR_NON_CLAIMS = (
+    "This tab shows what each record holds, step by step. It does not say whether either decision was right, or "
+    "which run should have acted."
+)
 
 #: The link's own marker. NOT a name the viewer's page carries, because a guard keyed on
 #: someone else's section silently decides the work is already done.
@@ -194,11 +204,13 @@ def render_authorization(
     manifest: dict | None = None,
     steps: list[dict] | None = None,
     rows: list[dict] | None = None,
+    confirmations: str = "",
 ) -> str:
     """The page for one run. `case` is the relative link back to that run's case page; `head`,
     where the run's pages are drawn, the run's head (as on its run page), above the page's own.
     Where the run's `manifest` and `steps` show a gated step or a cited decision, the page lists them,
-    with the verifier's `rows`; elsewhere it reads "No records"."""
+    with the verifier's `rows`; elsewhere it reads "No records". `confirmations`: the recipient's confirmations, where
+    the run holds them (`confirmations.section`), in the room left for them after the page's own section."""
     from onetrace_console.preview import label
     from onetrace_console.render import _document, _limit_sentence
 
@@ -210,6 +222,7 @@ def render_authorization(
             f'<p data-section="run">Run <span class="mono" data-words="record">'
             f"{named(run.run_id, record_href(run))}</span></p>"
             + gated_section(entries, rows or [], case)
+            + confirmations
             + f'<p class="limit" data-section="limit">{escape(_limit_sentence())}</p>'
             + generated_footer(generated_at)
         )
@@ -225,10 +238,12 @@ def render_authorization(
         f"<p>{escape(NOT_A_FAULT)}</p>"
         f'<p><a href="{escape(case, quote=True)}">{escape(BACK)}</a></p>'
         f'<p data-section="authorization-note">{escape(NOTE)}</p></section>'
-        f'<p class="limit" data-section="limit">{escape(_limit_sentence())}</p>' + generated_footer(generated_at)
+        + confirmations
+        + f'<p class="limit" data-section="limit">{escape(_limit_sentence())}</p>'
+        + generated_footer(generated_at)
     )
     #: Titled with its run, as the viewer titles the two pages beside it. In the console's page
-    #: skin, board 3's look (item 12).
+    #: skin, the design's look.
     body = f'<div class="cp">{body}</div>'
     return label(_document(f"{TITLE} · {shown_name(run.run_id)}", body), [run])
 
@@ -251,3 +266,110 @@ def authorization_link(case_html: str, href: str = AUTHORIZATION) -> str:
     link = f'<p data-section="{LINK_MARKER}"><a href="{escape(href, quote=True)}">{escape(TITLE)}</a></p>'
     at = policy.start(1)
     return case_html[:at] + link + case_html[at:]
+
+
+def pair_order(a: list[str], b: list[str], first: list[str]) -> list[str]:
+    """Each step either run gates or cites a decision at, once: the first difference's steps first (those either run
+    has), then the baseline's in its order, then the candidate's own."""
+    either = list(dict.fromkeys([*a, *b]))
+    return [s for s in first if s in either] + [s for s in either if s not in first]
+
+
+def _side(entry: dict | None) -> str:
+    """One run's cell at a step: its decisions, its permit and its outcome, as recorded."""
+    from onetrace_console.onedoor_panel import NONE_RECORDED
+
+    if entry is None:
+        return f'<span class="absent">{escape(NOT_IN_RUN)}</span>'
+    got = entry["decisions"] or []
+    verdicts = [str((d.get("ref") or {}).get("verdict", "")) if isinstance(d.get("ref"), dict) else "" for d in got]
+    decision = (
+        escape(THEN).join(f'<code data-words="record">{escape(v)}</code>' for v in verdicts)
+        if verdicts
+        else f'<span class="absent">{escape(NONE_RECORDED)}</span>'
+    )
+    outcome = (
+        f'<code data-words="record">{escape(entry["outcome"])}</code>'
+        if entry["outcome"]
+        else f'<span class="absent">{escape(NO_OUTCOME)}</span>'
+    )
+    return (
+        f'<dl class="plain"><dt>{escape(COLUMNS[2])}</dt><dd>{decision}</dd>'
+        f"<dt>{escape(COLUMNS[3])}</dt><dd>{_permit_cell(got)}</dd>"
+        f"<dt>{escape(COLUMNS[4])}</dt><dd>{outcome}</dd></dl>"
+    )
+
+
+def render_pair_authorization(
+    comparison,
+    store,
+    *,
+    generated_at: str,
+    sides: tuple[list[dict], list[dict]] | None = None,
+    first: list[str] | None = None,
+    tabs: str = "",
+) -> str:
+    """A comparison's Authorization tab: each step either run gates or cites a decision at, one row, with each run's
+    decisions, permit and outcome as its record holds them, the first difference's step first. Where neither run has
+    one, one sentence says so, never a pass. Read from each record's own rows (`gated_rows`), never from the onedoor
+    extension, so it is the same with the extension off. `sides` and `first` stand in for what the store holds."""
+    from onetrace_console import run_index
+    from onetrace_console.pages import _authorization_inputs
+    from onetrace_console.preview import label
+    from onetrace_console.render import _document, _held, _limit_sentence
+    from onetrace_console.views import investigate_title
+    from onetrace_console.words import run_named
+
+    runs = [_held(store, k) for k in (comparison.run_a, comparison.run_b)]
+    if sides is None:
+        got = []
+        for run in runs:
+            inputs = _authorization_inputs(run, store) if run is not None else {}
+            got.append(gated_rows(inputs.get("manifest") or {}, inputs.get("steps") or []))
+        sides = (got[0], got[1])
+    if first is None:
+        first = (run_index.first_difference(comparison, store) or {}).get("steps") or []
+    title = investigate_title(comparison, store)
+    by_step = [{e["step"]: e for e in side} for side in sides]
+    order = pair_order([e["step"] for e in sides[0]], [e["step"] for e in sides[1]], first)
+    head = (
+        f"<h1>{escape(title)}</h1>"
+        f'<p data-section="pair">baseline {run_named(store, comparison.run_a)} against candidate '
+        f"{run_named(store, comparison.run_b)}</p>" + tabs
+    )
+    if order:
+        rows = "".join(
+            f'<tr data-step="{escape(step, quote=True)}"><td><code data-words="record">{escape(step)}</code>'
+            + (
+                f' <span class="pill neu" data-first-difference>{escape(FIRST_DIFFERENCE)}</span>'
+                if step in first
+                else ""
+            )
+            + "</td>"
+            + "".join(f'<td data-side="{side}">{_side(by_step[i].get(step))}</td>' for i, side in enumerate("ab"))
+            + "</tr>"
+            for step in order
+        )
+        table = (
+            f'<table class="authorization"><thead><tr><th scope="col">{escape(COLUMNS[0])}</th>'
+            f'<th scope="col">Baseline</th><th scope="col">Candidate</th></tr></thead><tbody>{rows}</tbody></table>'
+        )
+        section = (
+            f'<section data-section="authorization" data-state="gated"><h2>{escape(PAIR_HEADING)}</h2>'
+            + scroll_region(table, PAIR_HEADING, "gated-steps")
+            + f'<p data-section="authorization-non-claims">{escape(PAIR_NON_CLAIMS)}</p>'
+            f'<p data-section="authorization-note">{escape(NOTE)}</p></section>'
+        )
+    else:
+        section = (
+            f'<section data-section="authorization" data-state="none"><h2>{escape(PAIR_HEADING)}</h2>'
+            f"<p>{escape(NEITHER)}</p><p>{escape(NOT_A_FAULT)}</p>"
+            f'<p data-section="authorization-note">{escape(NOTE)}</p></section>'
+        )
+    body = (
+        head
+        + section
+        + f'<p class="limit" data-section="limit">{escape(_limit_sentence())}</p>'
+        + generated_footer(generated_at)
+    )
+    return label(_document(title, f'<div class="cp">{body}</div>'), [r for r in runs if r is not None])

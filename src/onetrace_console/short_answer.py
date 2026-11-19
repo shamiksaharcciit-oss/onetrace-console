@@ -346,7 +346,7 @@ def render(answer: Answer) -> str:
             f'</span><span class="word">{escape(word)}</span></li>'
         )
     return (
-        '<section data-section="short-answer" class="short-answer">'
+        '<section data-section="short-answer" class="short-answer" id="first-difference">'
         f'<p class="kicker">{escape(KICKER)}</p>'
         f'<p class="headline" data-short="headline">{_html(answer.headline)}</p>'
         + (f'<p data-short="second">{_html(answer.second)}{_count_mark(answer)}</p>' if answer.second else "")

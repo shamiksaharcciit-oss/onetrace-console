@@ -1,0 +1,17 @@
+{
+  "runs": {
+    "state-kept": {
+      "command": "STATE_KEEP=outputs ONETRACE_RUN_ID=state-kept python store_state.py",
+      "exit": 0
+    },
+    "state-not-kept": {
+      "command": "STATE_KEEP=none ONETRACE_RUN_ID=state-not-kept python store_state.py",
+      "exit": 0
+    }
+  },
+  "versions": {
+    "onetrace": "0.8.0",
+    "onetrace-verify": "0.8.0",
+    "python": "3.12.10"
+  }
+}

@@ -594,6 +594,25 @@ def incidents_block(
     return html_text[:at] + "\n" + block + html_text[at:]
 
 
+def under_verdict(html_text: str) -> str:
+    """A run's view with its incident list moved under the run's head and its verdict: after the verdict's line
+    (`data-section="integrity"`), or, where a view has none, after the run's head and the views' tabs. A reader first
+    meets which run this is and what its record says, then the list, whose lines quote the verifier's own rows. A page
+    with no list, or with no head to put it under, is unchanged."""
+    import re
+
+    block = re.search(rf'\n?<section data-section="{RAISED}">.*?</section>', html_text, re.S)
+    if block is None:
+        return html_text
+    rest = html_text[: block.start()] + html_text[block.end() :]
+    anchor = re.search(r'<p data-section="integrity"[^>]*>.*?</p>', rest, re.S) or re.search(
+        r'<nav data-section="views"[^>]*>.*?</nav>', rest, re.S
+    )
+    if anchor is None:
+        return html_text
+    return rest[: anchor.end()] + "\n" + block.group(0).lstrip("\n") + rest[anchor.end() :]
+
+
 def for_subject(store: Store, subject_key: str) -> tuple[Incident, ...]:
     """Every incident whose subject is this run or comparison."""
     return tuple(i for i in derive(store) if i.subject == subject_key)

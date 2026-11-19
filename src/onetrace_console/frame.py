@@ -90,22 +90,29 @@ _FACES = {
 #: The navigation, in order: (label, href, the page it opens under `pages/`).
 ITEMS = (
     ("Overview", "/", "home.html"),
-    ("Runs", "/executions-all.html", "executions-all.html"),
+    #: The Runs page (`runs_page`), drawn as asked from the run index; every run stored is still listed, sealed, at
+    #: executions-all.html, which links it.
+    ("Runs", "/runs", "runs"),
     #: After Runs, named for what it lists, not the boards' "Diff & compare".
     ("Comparisons", "/comparisons.html", "comparisons.html"),
     ("Incidents", "/incidents.html", "incidents.html"),
+    #: Every run with a gated step (`authorization_list`), always listed; the Policy item below stays reserved for the
+    #: onedoor extension, beside it.
+    ("Authorization", "/authorization.html", "authorization.html"),
 )
 POLICY = ("Policy", "/policy.html", "policy.html")
+#: The page a person in no team is answered with, as served (`team_assign.no_team_page`): its frame has no run links.
+NO_TEAM_REL = "no-team"
 
 
-#: The pages the console draws itself, in v6 board 1's look (its source HTML is
+#: The pages the console draws itself, in the Overview design's look (its source HTML is
 #: the authority: sizes, spacing and weights as drawn there) -- the Overview and All counts,
 #: Incidents and each rule's list, and Comparisons. Scoped to `.cp`, the wrapper those pages
 #: alone carry, so the pages the viewer draws do not move with it. Every colour is a skin token; the two
-#: colours board 1 draws that the skin has no token for are mapped, and the item 12 report lists
-#: them: the banner's border #ecd9a8 to --line, and its text #5c3d00 to --cc-ink.
+#: colours the Overview design draws that the skin has no token for are mapped, each named here:
+#: the banner's border #ecd9a8 to --line, and its text #5c3d00 to --cc-ink.
 #: The elements keep the tags and attributes the tests read; the look comes from selectors.
-#: Board 7 on the Diff page -- its first difference outlined in the amber of a
+#: Where the change started, on the Diff page -- its first difference outlined in the amber of a
 #: change, and its wide tables scrolling inside their panel with the scrollbar drawn, as the graph's is
 #: Nothing past the edge unseen.
 PAGE_CSS = """
@@ -128,6 +135,14 @@ PAGE_CSS = """
   font-size:var(--fs-small);color:var(--ink-muted);list-style:none}
 .cp [data-card] details.def>summary:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 .cp .zero,.cp .zero a{color:var(--ink-faint)}
+.cp fieldset.filters{display:flex;flex-wrap:wrap;gap:8px 20px;border:0;padding:0;margin:8px 0 0}
+.cp fieldset.filters label{display:flex;flex-direction:column;gap:4px;font-size:var(--fs-small);color:var(--ink-muted)}
+.cp fieldset.search-box{border:0;padding:0;margin:0}
+.cp .step-marks{display:flex;flex-wrap:wrap;gap:1px;margin:2px 0}
+.cp [data-steps-said]{display:block;font-size:var(--fs-small)}
+.cp [data-answer=started] svg.bar{min-width:120px}
+.cp ul.inline{display:flex;flex-wrap:wrap;gap:8px 14px}
+.cp ul.inline li{margin:0}
 .cp .rel{color:var(--ink-muted)}
 .cp>[data-section=banner]{background:var(--cc-bg);border:1px solid var(--line);
   border-radius:var(--r-card);padding:10px 14px;font-size:var(--fs-body);color:var(--cc-ink)}
@@ -152,6 +167,7 @@ PAGE_CSS = """
   border-radius:var(--r-card);padding:14px 16px;min-width:0}
 .cp pre.term{background:var(--nav-bg);color:var(--nav-ink);border-radius:var(--r-ctl);
   padding:12px 14px;margin:0;font-size:var(--fs-small);white-space:pre}
+.cp .scroll-x>pre{overflow:visible;max-width:none;width:max-content;min-width:100%;box-sizing:border-box}
 .cp [data-section=printed] h3{margin:14px 0 4px;font-size:var(--fs-body)}
 .cp[data-view=receipt] .io{grid-template-columns:minmax(0,1.4fr) minmax(0,1fr)}
 .cp[data-view=text-diff] .io{grid-template-columns:minmax(0,300px) minmax(0,1fr)}
@@ -191,7 +207,7 @@ PAGE_CSS = """
 .cp[data-view=incident] pre[data-found=summary]{white-space:pre-wrap;overflow-wrap:anywhere}
 .cp [data-card]{background:var(--surface);border:1px solid var(--line);border-radius:var(--r-card);
   padding:16px}
-.cp [data-card] h3{margin:0;font-size:var(--fs-body);font-weight:400;color:var(--ink-muted)}
+.cp [data-card] h2{margin:0;font-size:var(--fs-body);font-weight:400;color:var(--ink-muted)}
 .cp [data-card] p{margin:4px 0 0;font-size:var(--fs-small);color:var(--ink-muted)}
 .cp [data-card] p.lead{margin-top:6px;line-height:1.3}
 .cp [data-card] p.lead a{color:var(--ink);text-decoration:none}
@@ -390,6 +406,19 @@ PAGE_CSS = """
   border-radius:6px}
 @supports not selector(::-webkit-scrollbar){.cp [data-section^=where-started] table{
   scrollbar-width:auto;scrollbar-color:var(--line-strong) var(--surface-sunk)}}
+.cp[data-page=forwarding] label.field{display:block;margin:6px 0}
+.cp[data-page=forwarding] .field-error{display:block;margin-top:4px;color:var(--bad-ink);font-size:var(--fs-small)}
+.cp[data-page=forwarding] :is(input,select)[aria-invalid=true]{border-color:var(--bad-ink);outline:1px solid var(--bad-ink)}
+.cp[data-page=forwarding] label.field input:not([type=checkbox]),.cp[data-page=forwarding] label.field select{display:block;width:100%;max-width:44rem;box-sizing:border-box;margin-top:2px}
+.cp[data-page=forwarding] code{overflow-wrap:anywhere}
+.cp[data-page=forwarding] .actions{display:flex;flex-wrap:wrap;gap:8px;align-items:flex-start;margin-top:8px}
+.cp[data-page=forwarding] .actions form{margin:0}
+.cp ul.admin-list{list-style:none;padding:0;margin:8px 0 16px}
+.cp ul.admin-list li{padding:8px 0;border-bottom:1px solid var(--line-soft);overflow-wrap:anywhere}
+.cp ul.admin-list .field{margin-right:14px}
+.cp ul.admin-list .field b{font-weight:500;color:var(--ink-muted);font-size:var(--fs-small)}
+.cp [data-admin] code{overflow-wrap:anywhere}
+.cp ul.admin-list code{word-break:break-all}
 """
 
 #: The one chip (0.1.1's one shared style). Every state chip, wherever a page draws it -- the console's
@@ -476,7 +505,7 @@ CHIP_CSS = (
     #: breaks a name that must, but leaves the column its longest piece between hyphens as its
     #: least width, and the column has a floor of its own: a name breaks at its hyphens.
     f".shell .page table.timeline[data-section=runs-table] td:first-child .mono{{overflow-wrap:break-word}}\n"
-    f"@media (min-width:761px){{.shell .page table.timeline[data-section=runs-table] td:first-child"
+    f"@media (min-width:1024px){{.shell .page table.timeline[data-section=runs-table] td:first-child"
     f"{{min-width:12ch}}}}\n"
     #: Its answers' chips a little narrower than elsewhere: a "Couldn't check" in "Ran as approved"
     #: (an agent's run, a graph with no plan row) took the table 12 pixels past its frame at 1280.
@@ -500,6 +529,7 @@ CHIP_CSS = (
 #: but a verifier-output or code block scrolls sideways (`tools/layout_check.py`, SCROLL_ALLOWED).
 NARROW_CSS = """
 .shell .graph-box svg.graph{max-width:100%;height:auto}
+.shell [data-section=watched] code{overflow-wrap:anywhere}
 @media (max-width:760px){
 .shell .graph-box svg.graph{display:none}
 .shell .graph-list{display:block;list-style:none;margin:0;padding:0}
@@ -511,7 +541,10 @@ NARROW_CSS = """
 .shell .graph-list>li[data-list-mark=recorded-change]{border-color:var(--cc-ink);border-width:2px}
 .shell .graph-list>li[data-list-mark=first]{border-color:var(--cc-ink);border-width:2px}
 .shell .graph-list .state{font-size:var(--fs-small);color:var(--ink-muted)}
+}
+@media (max-width:1023px){
 .shell .scroll-x{overflow:visible;mask-image:none;-webkit-mask-image:none}
+.shell .scroll-x:has(>pre){overflow-x:auto}
 .shell .scroll-x :is(table,thead,tbody,tr,th,td){display:block;width:auto;min-width:0}
 .shell .scroll-x thead{display:none}
 .shell .scroll-x tr{padding:8px 0;border-bottom:1px solid var(--line-soft)}
@@ -529,7 +562,9 @@ NARROW_CSS = """
 #: The console's three button styles, each from the theme's tokens, in both themes: primary, a form's main action;
 #: secondary, every other action; destructive, an action that removes something. Every button element the console draws
 #: carries one (`tests/test_button_styles.py`); a rule of its own elsewhere (the theme switch, the gear, Compare's
-#: request button) may shape it further. Text reads at 4.5:1 or more on its ground in both themes, disabled too.
+#: request button) may shape it further. Text reads at 4.5:1 or more on its ground in both themes, disabled too. A
+#: link that leads somewhere a form must not (sign-in's, to the identity provider: `signin._link_to`) takes the
+#: primary or secondary look, and its busy state the disabled look.
 BUTTON_CSS = """
 button.btn-primary,button.btn-secondary,button.btn-destructive{font:inherit;border-radius:var(--r-ctl);
   padding:4px 12px;cursor:pointer}
@@ -546,6 +581,16 @@ button.btn-destructive:hover{color:var(--bad-bg);background:var(--bad-ink)}
 button.btn-destructive:focus-visible{outline:2px solid var(--bad-ink);outline-offset:2px}
 button.btn-destructive:disabled{color:var(--ink-faint);background:var(--surface);border-color:var(--line-strong);cursor:default}
 button.btn-primary[hidden],button.btn-secondary[hidden],button.btn-destructive[hidden]{display:none}
+.visually-hidden{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+a.btn-primary[href],a.btn-secondary[href]{display:inline-block;font:inherit;border-radius:var(--r-ctl);
+  padding:4px 12px;text-decoration:none;cursor:pointer}
+a.btn-primary[href]{color:var(--accent-ink);background:var(--accent);border:1px solid var(--accent);font-weight:600}
+a.btn-primary[href]:hover{color:var(--accent-ink);background:var(--ink);border-color:var(--ink)}
+a.btn-secondary[href]{color:var(--ink);background:var(--surface);border:1px solid var(--line-strong)}
+a.btn-secondary[href]:hover{color:var(--ink);background:var(--surface-sunk)}
+a.btn-primary[href]:focus-visible,a.btn-secondary[href]:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+a.btn-primary[href][aria-busy=true],a.btn-secondary[href][aria-busy=true]{color:var(--ink-faint);
+  background:var(--surface);border-color:var(--line-strong);cursor:default;pointer-events:none}
 """
 
 #: Inputs, selects and text areas in the theme's tokens, both themes: the field's text at 4.5:1 or more on it, the
@@ -555,6 +600,48 @@ INPUT_CSS = """
 input:not([type=hidden],[type=checkbox],[type=radio]),select,textarea{color:var(--ink);background:var(--surface);border:1px solid var(--ink-faint);border-radius:var(--r-ctl);padding:4px 8px;font:inherit}
 ::placeholder{color:var(--ink-muted);opacity:1}
 :is(input,select,textarea):focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+"""
+
+#: The frame below 600 px (`nav`): one bar, the brand, the settings button where there is one, the banner's line and
+#: the menu button; each fold opens under the bar as the browser's own popover. The settings button takes its place in
+#: the bar, beside the menu button: fixed at the top right, as it is at 600 px and above, it lay on the menu button. At 600 px and above the buttons are not
+#: drawn and each fold is laid out in place, so the frame is as it was. No transition: nothing moves on its own.
+FOLD_CSS = """
+@media (min-width:600px){nav.frame .frame-fold{display:none}nav.frame [data-frame-fold]{display:contents}
+}
+@media (max-width:599px){nav.frame{flex-direction:row;flex-wrap:wrap;align-items:center;gap:8px;padding:10px 14px}
+nav.frame .brand{padding:0 6px 0 0;margin-right:auto}
+nav.frame .settings{position:static}
+.shell .card.grid{grid-template-columns:minmax(0,1fr)}
+.shell .card.grid>*{min-width:0;overflow-wrap:anywhere}
+.shell .card.grid :is(span,code,time,a){white-space:normal;overflow-wrap:anywhere}
+.shell .scroll-x table[data-section=runs-page] tbody tr:not(.more-row){display:flex;flex-wrap:wrap;align-items:baseline;
+  gap:2px 10px}
+.shell .scroll-x table[data-section=runs-page] td[data-answer]:not([data-answer=started],[data-answer=records-agree],
+  [data-answer=verdict]){display:none}
+.shell .scroll-x table[data-section=runs-page] tr.more-row{display:none}
+.shell .scroll-x table[data-section=runs-page] td:first-child{flex:1 1 auto}
+.shell .scroll-x table[data-section=runs-page] td[data-label]::before{display:none}
+.shell .scroll-x table[data-section=runs-page] td[data-answer=started] svg[data-bar]{display:none}
+nav.frame .frame-fold{font:inherit;font-size:var(--fs-small);color:var(--nav-ink);background:var(--nav-bg);
+  border:1px solid var(--nav-ink-faint);border-radius:var(--r-ctl);padding:6px 10px;cursor:pointer;text-align:left}
+nav.frame .frame-fold[popovertarget=frame-banner]{order:3;flex:1 1 100%}
+nav.frame .frame-fold:focus-visible{outline:2px solid var(--nav-on-ink);outline-offset:2px}
+nav.frame [data-frame-fold]:popover-open{position:fixed;inset:auto;top:0;left:0;right:0;margin:0;
+  max-height:100vh;overflow:auto;background:var(--nav-bg);color:var(--nav-ink);
+  border:0;border-bottom:1px solid var(--nav-ink-faint);padding:14px;display:flex;flex-direction:column;gap:4px}
+nav.frame [data-frame-fold=menu] footer{margin-top:8px}
+:is(.shell .page,.cp){padding:16px}
+:is(.shell .page,.cp) h1{font-size:20px;line-height:1.25}
+}
+"""
+
+#: A page's skip link (`render._document`), before the frame: off screen until focused, then over the page's top left,
+#: in the theme's tokens.
+SKIP_CSS = """
+a.skip-link{position:absolute;left:8px;top:-60px;z-index:10;padding:8px 12px;background:var(--surface);
+  color:var(--ink);border:2px solid var(--accent);border-radius:var(--r-ctl)}
+a.skip-link:focus{top:8px}
 """
 
 THEME_CSS = """
@@ -604,12 +691,14 @@ def stylesheet() -> bytes:
         for name, (family, weight, chars) in _FACES.items()
     )
     from onetrace_console.busy_script import BUSY_CSS
+    from onetrace_console.compare_view import COMPARE_PAGE_CSS
     from onetrace_console.explain import EXPLAIN_CSS
     from onetrace_console.explain_setup import SETUP_CSS
     from onetrace_console.info_mark import INFO_CSS
     from onetrace_console.run_head import HEAD_CSS
     from onetrace_console.settings_menu import SETTINGS_CSS
     from onetrace_console.short_answer import SHORT_CSS
+    from onetrace_console.token_levels import TOKEN_LEVELS_CSS
     from onetrace_console.views import VIEWS_CSS
 
     return (
@@ -628,7 +717,11 @@ def stylesheet() -> bytes:
         + BUSY_CSS
         + INPUT_CSS
         + THEME_CSS
+        + SKIP_CSS
+        + FOLD_CSS
+        + TOKEN_LEVELS_CSS
         + COMPARE_CSS
+        + COMPARE_PAGE_CSS
         + PUBLIC_CSS
         + HEAD_CSS
         + VIEWS_CSS
@@ -649,8 +742,10 @@ def _current(rel: str) -> str | None:
     """Which item a page belongs under, for `aria-current`."""
     if rel in ("home.html", "counts.html"):
         return "Overview"
-    if rel.startswith(("executions-", "runs/")):
+    if rel == "runs" or rel.startswith(("executions-", "runs/")):
         return "Runs"
+    if rel == "authorization.html":
+        return "Authorization"
     if rel == "comparisons.html" or rel.startswith("diff/"):
         return "Comparisons"
     if rel.startswith("incidents"):
@@ -707,17 +802,42 @@ from onetrace_console.explain_setup import PATH as _SETUP_PATH  # noqa: E402
 SETUP_LINK = f'<div><a href="{_SETUP_PATH}" data-frame="setup">{_SETUP_WORDS}</a></div>'
 
 
-def _footer(mode: str, setup_link: bool = False) -> str:
+#: The team a page is of, in its footer: a sealed page's, as drawn; an unsealed page's, as served.
+TEAM_WORDS = "Team: {team}"
+#: An admin's way back from a team's set to the all-teams set.
+ALL_TEAMS = "All teams"
+
+
+def team_line(current: str | None, choices: tuple[str, ...] = (), *, every: bool = False) -> str:
+    """The footer's team line: the team the page is of, and where there are others to read, a link to each (its
+    `/t/<team>/` Overview), the team switcher. `every`: an admin's, whose choices end with the all-teams set. "" for
+    a page of no team (a console without teams, or the all-teams set with nothing to switch to)."""
+    links = [
+        f'<a href="/t/{escape(t, quote=True)}/" data-team="{escape(t, quote=True)}">{escape(t)}</a>'
+        for t in choices
+        if t != current
+    ]
+    if every and current is not None:
+        links.append(f'<a href="/" data-team="">{escape(ALL_TEAMS)}</a>')
+    if current is None and not links:
+        return ""
+    said = escape(TEAM_WORDS.format(team=current)) if current is not None else escape(ALL_TEAMS)
+    #: Each link a block, as every link in the frame's sidebar is (`nav.frame a`): listed under the team, unseparated.
+    switch = f'<div data-frame="team-switch">{"".join(links)}</div>' if links else ""
+    return f'<div data-frame="team">{said}{switch}</div>'
+
+
+def _footer(mode: str, setup_link: bool = False, team: str = "") -> str:
     #: The setup link left the sidebar for the settings menu at the top right (console 0.6.1 item 13,
     #: `settings_menu`); `setup_link` is kept for its callers, and draws nothing in the footer.
     link = ""
     return (
-        f"<footer><div>{mode}</div><div>onetrace-console {escape(__version__)}</div>{link}"
+        f"<footer><div>{mode}</div>{team}<div>onetrace-console {escape(__version__)}</div>{link}"
         f"{THEME_SWITCH}{THEME_SCRIPT}</footer>"
     )
 
 
-def footer(user: str | None, *, public: bool = False, setup_link: bool = False) -> str:
+def footer(user: str | None, *, public: bool = False, setup_link: bool = False, team: str = "") -> str:
     """An unsealed page's footer, filled as it is served: the session and the version; on a local
     console as it serves the page (`setup_link`), the link to the setup page. Never on a public
     console, nor on an export, whose pages are files."""
@@ -725,17 +845,17 @@ def footer(user: str | None, *, public: bool = False, setup_link: bool = False) 
 
     if public:
         return _footer(FOOTER_MODE)
-    return _footer("Local mode" if user is None else f"Signed in as {escape(user)}", setup_link)
+    return _footer("Local mode" if user is None else f"Signed in as {escape(user)}", setup_link, team)
 
 
-def sealed_footer(sign_in: bool, *, public: bool = False) -> str:
+def sealed_footer(sign_in: bool, *, public: bool = False, team: str = "") -> str:
     """A sealed page's footer, filled as it is rendered: the configuration and the version, never
-    a user."""
+    a user; in a team's set, its team, never the person."""
     from onetrace_console.public import FOOTER_MODE
 
     if public:
         return _footer(FOOTER_MODE)
-    return _footer("Sign-in required" if sign_in else "Local mode")
+    return _footer("Sign-in required" if sign_in else "Local mode", team=team_line(team) if team else "")
 
 
 def banner() -> str:
@@ -749,13 +869,42 @@ def banner() -> str:
     )
 
 
+#: The navigation's fold below 600 px (`FOLD_CSS`): its button's words.
+MENU = "Menu"
+#: The frame's two folds, and each one's button as drawn: the frame's only controls but the theme switch, each opening
+#: a part of the frame and starting no work.
+FOLDS = ("banner", "menu")
+FOLD_BUTTONS = {
+    which: f'<button type="button" class="frame-fold btn-secondary" popovertarget="frame-{which}">' for which in FOLDS
+}
+
+
+def _fold(which: str, words: str, inner: str) -> str:
+    """A part of the frame that folds below 600 px behind a button of its own, the browser's own popover, with no
+    script: the button opens it, and Escape or a press outside closes it. At 600 px and above the button is not drawn
+    and the part is laid out in place."""
+    return (
+        f"{FOLD_BUTTONS[which]}{escape(words)}</button>"
+        f'<div id="frame-{which}" popover data-frame-fold="{which}">{inner}</div>'
+    )
+
+
 def nav(rel: str, *, onedoor: bool, foot: str, public: bool = False, settings: str = "") -> str:
     here = _current(rel)
-    links = "".join(
-        f'<a href="{href}"{' aria-current="page"' if label == here else ""}>{label}</a>'
-        for label, href, _ in items(onedoor)
+    #: A person in no team sees one page whatever they ask for: no link that leads back to it.
+    links = (
+        ""
+        if rel == NO_TEAM_REL
+        else "".join(
+            f'<a href="{href}"{' aria-current="page"' if label == here else ""}>{label}</a>'
+            for label, href, _ in items(onedoor)
+        )
     )
-    return f'<div class="brand">onetrace</div>{settings}{banner() if public else ""}{links}{foot}'
+    #: Below 600 px the banner folds to its own first sentence, its words unchanged, and opens whole on a press.
+    from onetrace_console.public import BANNER
+
+    folded = _fold("banner", BANNER.split(". ")[0] + ".", banner()) if public else ""
+    return f'<div class="brand">onetrace</div>{settings}{folded}{_fold("menu", MENU, links + foot)}'
 
 
 #: A form's CSRF field on a drawn page, left empty when it is drawn and filled with the session's token
@@ -786,6 +935,7 @@ def fill(
     setup_link: bool = False,
     store=None,
     csrf: str | None = None,
+    team: str = "",
 ) -> bytes:
     """An unsealed page with its frame filled as it is served, or the page unchanged when it has
     no empty frame -- a sealed page, whose frame was filled before its seal. `csrf`: the signed-in
@@ -808,7 +958,7 @@ def fill(
             nav(
                 rel,
                 onedoor=onedoor,
-                foot=footer(user, public=public, setup_link=setup_link),
+                foot=footer(user, public=public, setup_link=setup_link, team=team),
                 public=public,
                 settings=settings,
             ).encode("utf-8"),
@@ -833,6 +983,8 @@ class Rendering:
     tokenizers: tuple = ()
     #: The close-call flag's margin, in nats (`config.close_call_margin`).
     close_call_margin: float = 1.0
+    #: The team whose set is drawn; "" for the all-teams set and a console without teams.
+    team: str = ""
 
 
 _RENDERING: contextvars.ContextVar[Rendering | None] = contextvars.ContextVar("rendering", default=None)
@@ -847,6 +999,7 @@ def rendering(
     tracing_link: str = "",
     tokenizers: tuple = (),
     close_call_margin: float = 1.0,
+    team: str = "",
 ):
     """`with rendering(...)`: sealed pages drawn inside are framed, under this configuration.
     The server renders every page inside one; outside it -- a caller with no console around it --
@@ -859,6 +1012,7 @@ def rendering(
             tracing_link="" if public else tracing_link,
             tokenizers=() if public else tuple(tokenizers),
             close_call_margin=float(close_call_margin),
+            team=team,
         )
     )
     try:
@@ -908,9 +1062,15 @@ def fill_sealed(page: str, rel: str) -> str:
         return page
     if page.count(FRAME_NAV) != 1:
         raise ValueError(f"a sealed page to frame must carry exactly one empty frame: {rel}")
+    if r.public:
+        #: A public console's sealed page is not indexed, and its seal covers that (`search_engines`).
+        from onetrace_console.search_engines import with_noindex
+
+        page = with_noindex(page)
     return with_busy(
         page.replace(
-            FRAME_NAV, nav(rel, onedoor=r.onedoor, foot=sealed_footer(r.sign_in, public=r.public), public=r.public)
+            FRAME_NAV,
+            nav(rel, onedoor=r.onedoor, foot=sealed_footer(r.sign_in, public=r.public, team=r.team), public=r.public),
         ),
         public=r.public,
     )

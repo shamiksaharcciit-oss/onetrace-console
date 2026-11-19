@@ -1,5 +1,5 @@
 """ "Signed by a known recorder" on the console's other surfaces -- the receipt's
-Signature row and "Signed" pill, the stage page's signing badge (§6), and the Overview's row (§5) --
+Signature row and "Signed" pill, the stage page's signing badge, and the Overview's row --
 each the run page's own rung, read from this console's own check of a run the SDK really signed
 (tests/test_signed_run.py's fixture: the demo pipeline, a test-only key made outside the run).
 """
@@ -143,7 +143,7 @@ def test_without_an_own_check_the_page_reads_it_is_not_checked(signed, tmp_path)
     assert (row, pill, badge) == (f"Signature {rung}", "Not checked", f"Signed by a known recorder · {rung}")
 
 
-# ---------------------------------------------------------------- §5: the Overview's row
+# ---------------------------------------------------------------- the Overview's row
 
 
 @pytest.fixture

@@ -1,0 +1,1 @@
+{"choices":[{"finish_reason":"stop","index":0,"logprobs":null,"message":{"annotations":null,"audio":null,"content":"Twelve.","function_call":null,"refusal":null,"role":"assistant","tool_calls":null}}],"created":1,"id":"c1","model":"m-1","object":"chat.completion","service_tier":null,"system_fingerprint":"fp-1","usage":null}

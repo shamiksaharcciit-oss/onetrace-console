@@ -87,7 +87,7 @@ VERBS = (DIFF, LOCALIZE)
 #: The text diff is its own stored run of
 #: `onetrace diff A B --text --json --no-follow`, beside `diff` and `localize`, whose reports stay
 #: as they are. Its stdout (the `onetrace-textdiff/0.3` document) is kept byte for byte. The corpus
-#: trace is not followed here; that is board 7's. "Show more" re-runs it with the larger limit
+#: trace is not followed here; where the change started does that. "Show more" re-runs it with the larger limit
 #: below, a fixed constant -- ten times the SDK's default of 200 lines per output, the most allowed
 #: -- stored as a run of its own; neither changes a verdict or an earlier run.
 TEXT_DIFF = "diff --text"
@@ -640,8 +640,8 @@ def compare(
         #: again, so that comparing the pair again keeps it, as its Diff page says.
         no_text_diff = text_diff and held.verb(TEXT_DIFF) is None
         #: One whose text diff names a changed corpus link, and that holds no
-        #: trace run yet, is made again, so that board 7 can be drawn (`board7.needs_trace`).
-        from onetrace_console.board7 import needs_trace
+        #: trace run yet, is made again, so that where the change started can be drawn (`corpus_trace.needs_trace`).
+        from onetrace_console.corpus_trace import needs_trace
 
         no_trace = text_diff and not no_text_diff and needs_trace(held, store)
         if not (unkeyed or other_build or no_text_diff or no_trace):
@@ -672,7 +672,7 @@ def compare(
             runs.append(_run_text_diff(folder_a, folder_b, out, timeout, store))
             #: The trace's own run, only where that text diff names a changed
             #: corpus link; the text diff's run stays `--no-follow`.
-            from onetrace_console.board7 import trace_run
+            from onetrace_console.corpus_trace import trace_run
 
             traced = trace_run(store, folder_a, folder_b, root, timeout, runs[-1])
             if traced is not None:

@@ -73,8 +73,11 @@ def test_every_request_to_a_started_console_takes_its_limit_from_the_helper(exam
     #: once 1 (`test_press_once`) and the setup page's cards 1 (`test_explain_setup_wraps`); the capture store's app
     #: 5 (`test_deploy_fly_captures`, `test_app_links`), joined with the press's. Sign-in through Entra ID adds 1:
     #: the proxy in `test_entra_issuer` forwards to the fake within its limit; and its pages for the layout check
-    #: 2 (`test_entra_pages`). Sign out in the settings menu adds 2 (`test_signout_button`).
-    assert len(sites) == 71
+    #: 2 (`test_entra_pages`). Sign out in the settings menu adds 2 (`test_signout_button`). The busy page's way back
+    #: to its picker adds 1 (`test_pair_ways`). The audit log's actions add 3: 2 in `test_audit_events` and neighbours on
+    #: and off in `test_neighbours`. The error pages add 2: a browser's request and another client's
+    #: (`test_error_pages`).
+    assert len(sites) == 85
     assert [s for s in sites if not re.fullmatch(r"\{?limit\([0-9.]+\)\}?", s[2])] == []
 
 

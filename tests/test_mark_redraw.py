@@ -56,6 +56,9 @@ def test_a_mark_draws_exactly_the_pages_it_changes(shared_demo, tmp_path, examin
             store, generated_at=T, marked=(pipeline_of(run, store).label, frozenset(r.key for r in same))
         )
     run_pages = {k for k in after if any(k.startswith(f"runs/{r.key}/") for r in same)}
+    #: A comparison of the pipeline's runs shows each against its reference run, which the mark can make: drawn again.
+    keys = {r.key for r in same}
+    run_pages |= {f"diff/{c.key}.html" for c in store.comparisons() if c.run_a in keys or c.run_b in keys}
     changed = {k for k in before if before[k] != after[k]}
     examined(len(changed), "pages a mark changed")
     assert changed and changed <= set(narrowed) | run_pages, sorted(changed - set(narrowed) - run_pages)

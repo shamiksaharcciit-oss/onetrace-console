@@ -60,19 +60,20 @@ def test_the_release_lists_the_sign_in_and_lint_gaps(gap, examined):
     assert any(ln == f"- {gap}" for ln in lines), lines
 
 
-DESIGN_GAPS = REPO / "DESIGN_GAPS.md"
+#: The repository's own list of its design gaps, which the public export leaves out.
+GAPS_LIST = REPO / "DESIGN_GAPS.md"
 
 
-@pytest.mark.skipif(not DESIGN_GAPS.is_file(), reason="the public export leaves DESIGN_GAPS.md out")
+@pytest.mark.skipif(not GAPS_LIST.is_file(), reason="the public export leaves the list of design gaps out")
 def test_design_gaps_says_the_same_of_roles(examined):
     """0.7.0's gap, said of local accounts; with Entra ID, the app roles (console 0.8.0)."""
-    text = " ".join(DESIGN_GAPS.read_text(encoding="utf-8").split())
-    examined(1, "DESIGN_GAPS.md")
+    text = " ".join(GAPS_LIST.read_text(encoding="utf-8").split())
+    examined(1, "the list of design gaps")
     assert "there are no roles" not in text and "No identity provider" not in text
     assert ROLES_GAP in text
 
 
-#: DESIGN_GAPS.md's words since sign-in through Microsoft Entra ID (console 0.8.0); 0.7.0's CHANGELOG keeps its own.
+#: The gaps list's words since sign-in through Microsoft Entra ID (console 0.8.0); 0.7.0's CHANGELOG keeps its own.
 ROLES_GAP = (
     "With the console's own accounts, a signed-in person is always a viewer: the admin routes refuse every "
     "session. With sign-in through Microsoft Entra ID (`sign_in.method` `oidc`), Entra's app roles give each "
@@ -101,7 +102,7 @@ def test_the_install_line_names_the_readmes_that_give_it(examined):
     examined(1, "entry")
     assert "The READMEs" not in line and "`README.md`" in line and "`PYPI_DESCRIPTION.md`" in line
     for f in ("README.md", "PYPI_DESCRIPTION.md"):
-        assert "onetrace-explain[keyring]>=0.3" in (REPO / f).read_text(encoding="utf-8"), f
+        assert "onetrace-explain[keyring]>=0.3.2" in (REPO / f).read_text(encoding="utf-8"), f
 
 
 def test_the_tokenizer_zip_line_says_a_member_in_a_folder_is_taken_by_its_file_name(examined):
@@ -118,8 +119,8 @@ def test_the_0_7_0_heading_is_released_and_dated(examined):
 
 
 def test_the_old_roles_words_are_gone(examined):
-    examined(2, "CHANGELOG.md and DESIGN_GAPS.md")
-    for path in [REPO / "CHANGELOG.md"] + ([DESIGN_GAPS] if DESIGN_GAPS.is_file() else []):
+    examined(2, "CHANGELOG.md and the list of design gaps")
+    for path in [REPO / "CHANGELOG.md"] + ([GAPS_LIST] if GAPS_LIST.is_file() else []):
         text = " ".join(path.read_text(encoding="utf-8").split())
         assert "The admin role exists only for the command line" not in text, path.name
 
@@ -149,7 +150,7 @@ def test_the_next_release_lists_the_recipient_confirmation_s_rows_as_a_known_gap
     assert not any(re.match(r"- \*\*", ln) for ln in lines)
 
 
-#: The access log's gap (a public review of console 0.7.0's code): its head is kept on the same volume as its entries.
+#: The access log's gap (read in console 0.7.0's public code): its head is kept on the same volume as its entries.
 ACCESS_LOG_GAP = (
     "The access log shows an edit to its entries, not a cut tail: entries cut from its end, with `HEAD.json` "
     "rewritten to match, read as a whole chain, its head being kept on the same volume. Console 0.9's audit log "

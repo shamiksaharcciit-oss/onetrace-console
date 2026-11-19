@@ -348,13 +348,20 @@ def picker(pipeline) -> str:
     """The form on a pipeline's page of a public console: two of its runs, by run id."""
     from onetrace_console.store import arrival_order
 
-    runs = arrival_order(pipeline.runs, newest_first=False)
+    return picker_of([r.run_id for r in arrival_order(pipeline.runs, newest_first=False)])
+
+
+def picker_of(run_ids: list[str], chosen: tuple[str, str] = ("", ""), *, before: str = "") -> str:
+    """The visitor's picker of two runs of one pipeline, by run id, oldest first: the first two chosen unless `chosen`
+    names two it offers. `before`: drawn above the form, in its section. "" where there are fewer than two runs."""
+    runs = list(run_ids)
     if len(runs) < 2:
         return ""
+    at = (runs.index(chosen[0]), runs.index(chosen[1])) if chosen[0] in runs and chosen[1] in runs else (0, 1)
 
     def select(name: str, label: str, chosen: int) -> str:
         options = "".join(
-            f'<option value="{escape(r.run_id)}"{" selected" if i == chosen else ""}>{escape(r.run_id)}</option>'
+            f'<option value="{escape(r)}"{" selected" if i == chosen else ""}>{escape(r)}</option>'
             for i, r in enumerate(runs)
         )
         #: One field: the label's words above its own select, as the local console's picker draws it.
@@ -366,19 +373,30 @@ def picker(pipeline) -> str:
     return (
         f'<section id="visitor-compare" data-section="visitor-compare" class="visitor-compare">'
         f"<h2>{escape(PICKER_HEAD)}</h2>"
-        f"<p>{escape(PICKER_WORDS.format(per_minute=PER_MINUTE))}</p>"
+        f"<p>{escape(PICKER_WORDS.format(per_minute=PER_MINUTE))}</p>{before}"
         f'<form method="post" action="/compare" data-visitor-compare>'
-        f"{select('a', 'Baseline (run A)', 0)}{select('b', 'Candidate (run B)', 1)}"
+        f"{select('a', 'Baseline (run A)', at[0])}{select('b', 'Candidate (run B)', at[1])}"
         f'<button class="btn-primary" data-busy="Comparing…" data-busy-wait="the comparison" type="submit">{escape(PICKER_BUTTON)}</button></form></section>'
     )
 
 
-def answer_page(title: str, words: str, *, back: str = "") -> str:
-    """A short page for a refusal or "busy": its title, its words, and the way back to the Overview
-    (the request carries no pipeline, and no header is read for one)."""
+#: The busy page's way back: the Runs page, the pair's pipeline chosen, both runs still chosen in its picker.
+BACK_TO_PAIR = "Back to the picker, both runs still chosen"
+
+
+def back_to_pair(label: str, a_id: str, b_id: str) -> str:
+    """The Runs page with the pipeline `label` chosen and the pair `a_id`, `b_id` chosen in its picker."""
+    from urllib.parse import urlencode
+
+    return "/runs?" + urlencode([("pipeline", label), ("a", a_id), ("b", b_id)]) + "#visitor-compare"
+
+
+def answer_page(title: str, words: str, *, back: str = "", back_words: str = "Back to the Overview") -> str:
+    """A short page for a refusal or "busy": its title, its words, and the way back: to the Overview, or, for a pair
+    whose pipeline is known, to its picker (`back_to_pair`)."""
     from onetrace_console.render import _document
 
-    link = f'<p><a href="{escape(back)}">Back to the Overview</a></p>' if back else ""
+    link = f'<p><a href="{escape(back)}">{escape(back_words)}</a></p>' if back else ""
     return _document(
         title,
         f'<div class="cp"><h1>{escape(title)}</h1>'

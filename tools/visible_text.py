@@ -1,6 +1,6 @@
 """Every page kind's visible text, for the restyle: before and after must state the same.
 
-Item 12 restyles the console to the v6 boards' look. It must not drop or reword a sentence, a caveat
+The restyle moves the console to its design boards' look. It must not drop or reword a sentence, a caveat
 or a denominator. Restyling may move them. So each page's text is read as a multiset of blocks:
 the text of each block-level element, whitespace collapsed. A block may move within its page; it may
 not vanish or change. What `pages()` reads:

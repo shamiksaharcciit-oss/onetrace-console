@@ -124,6 +124,12 @@ def span_html(started, ended, *, attrs: str = "") -> str:
     return f"{time_html(started, attrs=attrs)} → {time_html(ended, attrs=attrs, text=second)}"
 
 
+def hidden_header(words: str) -> str:
+    """A column's header whose words are not drawn (its cells say what they are, as a link or a note), kept for a
+    screen reader and for tools that read a header's text: never an empty header."""
+    return f'<th scope="col"><span class="visually-hidden">{escape(words)}</span></th>'
+
+
 def scroll_region(inner: str, label: str, name: str) -> str:
     """A table in a region of its own, named for a screen reader and reached by a keyboard. In the
     console, on a narrow screen, its rows stack, each cell under its column's header (`labelled`),
@@ -137,7 +143,9 @@ def scroll_region(inner: str, label: str, name: str) -> str:
 _THEAD = re.compile(r"<thead>(.*?)</thead>", re.S)
 _TBODY = re.compile(r"(<tbody>)(.*?)(</tbody>)", re.S)
 _ROW = re.compile(r"(<tr\b[^>]*>)(.*?)(</tr>)", re.S)
-_CELL = re.compile(r"<td\b")
+#: A body row's cells in order, header cells too: a row that begins with its own header (`<th scope="row">`) keeps
+#: each data cell under its own column's label.
+_CELL = re.compile(r"<t([dh])\b")
 
 
 def labelled(inner: str) -> str:
@@ -147,8 +155,9 @@ def labelled(inner: str) -> str:
     head = _THEAD.search(inner)
     if head is None:
         return inner
+    #: A header whose words are hidden (`hidden_header`) labels nothing: its cells say what they are.
     labels = [
-        " ".join(_html.unescape(re.sub(r"<[^>]+>", " ", h)).split())
+        "" if 'class="visually-hidden"' in h else " ".join(_html.unescape(re.sub(r"<[^>]+>", " ", h)).split())
         for h in re.findall(r"<th\b[^>]*>(.*?)</th>", head.group(1), re.S)
     ]
     if not any(labels):
@@ -158,9 +167,9 @@ def labelled(inner: str) -> str:
         n = iter(range(10_000))
         cells = _CELL.sub(
             lambda c: (
-                f'<td data-label="{_html_escape(labels[i], quote=True)}"'
-                if (i := next(n)) < len(labels) and labels[i]
-                else "<td"
+                f"<t{c.group(1)}"
+                if (i := next(n)) is not None and (c.group(1) == "h" or i >= len(labels) or not labels[i])
+                else f'<td data-label="{_html_escape(labels[i], quote=True)}"'
             ),
             m.group(2),
         )

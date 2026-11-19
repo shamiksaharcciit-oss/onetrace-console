@@ -17,15 +17,15 @@ against the files, and that this table lists every file in the folder.
 | `dark_derived.css` | added here | `b5e914c6acf07da96baccd1aec0eb8743802b4a4765afed49cf84cb3952a9a25` |
 | `depth.py` | `f0762ec0287d6cf68bc0431b0bf2328a32802481852de3bc6dc831849eaf1ab6` | `9e855795f04f40ca0ef1d86ed0bb325fbf447173c9430c31a4553371b4918e1f` |
 | `fingerprint.py` | `98a46cd0211e695ba063e6946fae13e75b04424b37f20443b0366e063e0aca65` | `13e58d6703176378df741eafbd0b9edb642edeb1a582e59bc6902a5e14037c62` |
-| `graph.py` | `8bdccf003213f89d7c6bc7e0ba5572e3a7ed9e2765eabd8dadeb5c1afb0dfb2e` | `33d25b637f6e3e8dbc7e7571133eb19f38b2e5414b041a437a943e090c9d7711` |
-| `model.py` | `4ba956939f6d22c3381824958eb2782d515f2224c92cbf388bfafceb32eabfae` | `b4a1416ba56940f5da2aa760f3370902d582cdd726344bddb9a54269435a62b9` |
-| `page.py` | `7defb7d7def93b3ef9f96ddf6651af37f12ecf2b9776289cb4bb1210e4084931` | `8fa491b771deac4045d0571c0939e5bc7039099609729630b78c9666a50be9a9` |
+| `graph.py` | `8bdccf003213f89d7c6bc7e0ba5572e3a7ed9e2765eabd8dadeb5c1afb0dfb2e` | `874b8f22a2e3a9aa42c31852d1e8da35a422136d90145e4be4d97f5f13490972` |
+| `model.py` | `4ba956939f6d22c3381824958eb2782d515f2224c92cbf388bfafceb32eabfae` | `443ed3a89e7e7554ad3c73f95cee3490cd4b5382dc89b0037ca230fa9fc684a0` |
+| `page.py` | `7defb7d7def93b3ef9f96ddf6651af37f12ecf2b9776289cb4bb1210e4084931` | `e0013b3b798e4410770b2b7f37eee075d7fff23e6b4fd77f607704a314acd66b` |
 | `record.py` | `25396f5cec18aa69d5b43b581655065432830fc8ce0e0e8d653eb1344dcc3c3b` | `3c26fe334a2ef881b7f5b91bbade0ba32169aa2f056598c8d19caf8b41431325` |
 | `report.py` | `42c5df1f9c05749e0a2d8332a0cdae1b9adda9eea6e0a14774b6f40d6a513681` | `0e66060c595c463c625c7c1098d7ad63ab45012ed26cb31db184080ff19d21ad` |
-| `sentences.py` | `1194b0dbad220e71f2be2c3afae9e3d795bdd3fb021cc45a68c28a0eb9727d80` | `780c85599334400025c14842477cc8a0d00ed7d75e3dcdd563acea86c4797ab7` |
+| `sentences.py` | `1194b0dbad220e71f2be2c3afae9e3d795bdd3fb021cc45a68c28a0eb9727d80` | `b9c8dbdb6a704dc3599c5fe6d72efb9dd887babe1125ff185c7720ec91660ebd` |
 | `skin_tokens.py` | added here | `20cbaab61c397f964a0737812f562523acce55317de068e5c2d3e6897c94f6e5` |
 | `slot.py` | `2ea05f47a3063c77e16a873a0e253ba174561431c3d4ee3daf3c87fbe18fed75` | `2ea05f47a3063c77e16a873a0e253ba174561431c3d4ee3daf3c87fbe18fed75` |
-| `tokens.py` | `792b6759de97b9f0b68304d79a1b26fa3e38f2b804f8b3363eaa9475698c9d26` | `4cb0d2becf0169eb01704a35e9e28eba18eae34b42145edc0e9148b88aedb859` |
+| `tokens.py` | `792b6759de97b9f0b68304d79a1b26fa3e38f2b804f8b3363eaa9475698c9d26` | `2b324f9d44c487b2731730c5dcfbc4e9d48b4bdde8963bf721693cef37d52218` |
 | `verbs.py` | `22d2e2456324cbe990e1e40c68cd8fb8d2bd463853f93b93ba4faeb8e203f64a` | `246eb98c10ade29b2ca89dca900c1538b0247edfb06e19b945a572729be08bf2` |
 
 The skin's token block: for 0.8.0 it moved, byte for byte, into `skin_tokens.py` (added here), and the
@@ -74,3 +74,7 @@ after what each one's sentences are for, and every use with them. No value, no s
 
 Also for 0.8.0, `sentences.py`'s header says what each settled entry carries beside its sentence, and no longer
 that each names a document its words are checked against. Words only.
+
+For 0.9.0, the release design's boards named by number were taken out of the comments and docstrings of
+`model.py`, `page.py` and `tokens.py`, each now naming the page the board drew, and "sealed text" out of two
+comments of `sentences.py`; the export scan holds the export to it. No code, and no sentence a page draws, changed.

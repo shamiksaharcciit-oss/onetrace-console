@@ -1,0 +1,79 @@
+{
+  "source": "Microsoft Learn, \"Tutorial: Develop and plan provisioning for a SCIM endpoint in Microsoft Entra ID\" (its user requests and responses), and \"Known issues and resolutions with SCIM 2.0 protocol compliance of the Microsoft Entra user provisioning service\" (the PATCH op in title case, active as a string). Written from the shapes those pages give, as the design note's section 2.8 lists them; not fetched from this machine.",
+  "written": "2026-11-15",
+  "recheck": "Compare each request with the pages before the build ships; a changed shape is a new fixture, not an edit.",
+  "conversations": [
+    {
+      "name": "the person match, then create",
+      "steps": [
+        {"method": "GET", "path": "/Users?filter=userName+eq+%22Test_User_ab6490ee-1e48-479e-a20b-2d77186b5dd1%22", "status": 200, "list": 0},
+        {"method": "POST", "path": "/Users", "status": 201, "keep": "id", "body": {
+          "schemas": ["urn:ietf:params:scim:schemas:core:2.0:User", "urn:ietf:params:scim:schemas:extension:enterprise:2.0:User"],
+          "externalId": "0a21f0f2-8d2a-4f8e-bf98-7363c4aed4ef",
+          "userName": "Test_User_ab6490ee-1e48-479e-a20b-2d77186b5dd1",
+          "active": true,
+          "emails": [{"primary": true, "type": "work", "value": "Test_User_fd0ea19b-0777-472c-9f96-4f70d2226f2e@testuser.com"}],
+          "meta": {"resourceType": "User"},
+          "name": {"formatted": "givenName familyName", "familyName": "familyName", "givenName": "givenName"},
+          "roles": []
+        }, "shows": {"userName": "Test_User_ab6490ee-1e48-479e-a20b-2d77186b5dd1", "externalId": "0a21f0f2-8d2a-4f8e-bf98-7363c4aed4ef", "active": true}, "hides": ["name", "roles"]},
+        {"method": "GET", "path": "/Users?filter=userName+eq+%22Test_User_ab6490ee-1e48-479e-a20b-2d77186b5dd1%22", "status": 200, "list": 1},
+        {"method": "GET", "path": "/Users?filter=externalId+eq+%220A21F0F2-8D2A-4F8E-BF98-7363C4AED4EF%22", "status": 200, "list": 1},
+        {"method": "GET", "path": "/Users/{id}", "status": 200, "shows": {"active": true}}
+      ]
+    },
+    {
+      "name": "attribute replace, two Replace operations in one request",
+      "steps": [
+        {"method": "POST", "path": "/Users", "status": 201, "keep": "id", "body": {
+          "schemas": ["urn:ietf:params:scim:schemas:core:2.0:User"],
+          "externalId": "6f3a1e3b-5b2c-4a5e-9a3e-1b2c3d4e5f60", "userName": "Test_User_00aa", "active": true,
+          "emails": [{"primary": true, "type": "work", "value": "old@testuser.com"}]
+        }},
+        {"method": "PATCH", "path": "/Users/{id}", "status": 200, "body": {
+          "schemas": ["urn:ietf:params:scim:api:messages:2.0:PatchOp"],
+          "Operations": [
+            {"op": "Replace", "path": "emails[type eq \"work\"].value", "value": "updatedEmail@microsoft.com"},
+            {"op": "Replace", "path": "name.familyName", "value": "updatedFamilyName"}
+          ]
+        }, "shows": {"emails": [{"value": "updatedEmail@microsoft.com", "type": "work", "primary": true}]}, "hides": ["name"]}
+      ]
+    },
+    {
+      "name": "disable by active, as a boolean with replace and as Entra ID's string with Replace",
+      "steps": [
+        {"method": "POST", "path": "/Users", "status": 201, "keep": "id", "body": {
+          "schemas": ["urn:ietf:params:scim:schemas:core:2.0:User"],
+          "externalId": "7a0b1c2d-3e4f-4a5b-8c6d-7e8f9a0b1c2d", "userName": "Test_User_00bb", "active": true
+        }},
+        {"method": "PATCH", "path": "/Users/{id}", "status": 200, "body": {
+          "schemas": ["urn:ietf:params:scim:api:messages:2.0:PatchOp"],
+          "Operations": [{"op": "replace", "path": "active", "value": false}]
+        }, "shows": {"active": false}},
+        {"method": "PATCH", "path": "/Users/{id}", "status": 200, "body": {
+          "schemas": ["urn:ietf:params:scim:api:messages:2.0:PatchOp"],
+          "Operations": [{"op": "Replace", "path": "active", "value": "True"}]
+        }, "shows": {"active": true}},
+        {"method": "PATCH", "path": "/Users/{id}", "status": 200, "body": {
+          "schemas": ["urn:ietf:params:scim:api:messages:2.0:PatchOp"],
+          "Operations": [{"op": "Replace", "path": "active", "value": "False"}]
+        }, "shows": {"active": false}}
+      ]
+    },
+    {
+      "name": "replace by PUT, then delete",
+      "steps": [
+        {"method": "POST", "path": "/Users", "status": 201, "keep": "id", "body": {
+          "schemas": ["urn:ietf:params:scim:schemas:core:2.0:User"],
+          "externalId": "8b1c2d3e-4f5a-4b6c-9d7e-8f9a0b1c2d3e", "userName": "Test_User_00cc", "active": true
+        }},
+        {"method": "PUT", "path": "/Users/{id}", "status": 200, "body": {
+          "schemas": ["urn:ietf:params:scim:schemas:core:2.0:User"],
+          "externalId": "8b1c2d3e-4f5a-4b6c-9d7e-8f9a0b1c2d3e", "userName": "Test_User_00cc", "displayName": "Renamed", "active": true
+        }, "shows": {"displayName": "Renamed"}},
+        {"method": "DELETE", "path": "/Users/{id}", "status": 204},
+        {"method": "GET", "path": "/Users/{id}", "status": 404, "error": "404"}
+      ]
+    }
+  ]
+}

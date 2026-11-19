@@ -197,14 +197,19 @@ def authorization_rung(run: StoredRun, store: Store) -> tuple:
 def _authorization_inputs(run: StoredRun, store: Store) -> dict:
     """What the Authorization page reads of a run: its manifest, its steps, and the verifier's
     `decisions:` rows from its stored check."""
-    from onetrace_console import onedoor_panel
+    from onetrace_console import confirmations, onedoor_panel
+    from onetrace_console.info_mark import rows_of
     from onetrace_console.run_panels import manifest_of
     from onetrace_console.stage_pages import _steps
 
+    envelope = _envelope(run, store, required=False)
+    steps = _steps(run, store)
     return {
         "manifest": manifest_of(run, store),
-        "steps": _steps(run, store),
-        "rows": onedoor_panel.decision_rows(_envelope(run, store, required=False)),
+        "steps": steps,
+        "rows": onedoor_panel.decision_rows(envelope),
+        #: The recipient's confirmations (format 0.5's section J), with the verifier's own rows on them.
+        "confirmations": confirmations.section(steps, rows_of(envelope)),
     }
 
 
@@ -456,11 +461,25 @@ def refusal(e: Exception, *, log: bool = True) -> tuple[str, bool]:
 
 def render_execution(run: StoredRun, store: Store, *, generated_at: str) -> RenderedExecution:
     """One run's detail pages: the answer and the case, sealed as the viewer seals them."""
+    from onetrace_console import authorization_list
     from onetrace_console.authorization import authorization_link, render_authorization
+    from onetrace_console.run_head import AUTH_FACTS
     from onetrace_console.viewer import fingerprint
     from onetrace_console.viewer.page import render_answer, render_case
 
+    try:
+        auth = authorization_list.facts(run, store)
+    except Exception:  # noqa: BLE001 - a record that can't be read has no tab here; its page says why
+        auth = None
+
     def drawn(folder: Path) -> dict[str, str]:
+        token = AUTH_FACTS.set(auth)
+        try:
+            return _drawn(folder)
+        finally:
+            AUTH_FACTS.reset(token)
+
+    def _drawn(folder: Path) -> dict[str, str]:
         model = _model(run, store, generated_at, folder)
         #: In the console's frame a graph node opens its stage page,
         #: a sibling file; the free file keeps the viewer's in-page `#step-N`.
@@ -503,8 +522,12 @@ def render_execution(run: StoredRun, store: Store, *, generated_at: str) -> Rend
             case = render_case(model, CASE, sibling=ANSWER)
         #: The run's head, in place of the viewer's header, before the seal so the fingerprint
         #: covers it.
+        #: Format 0.5's kinds and agents: each step's line in the table of steps (`step_kinds`).
+        from onetrace_console import step_kinds
         from onetrace_console.run_head import run_head, with_head
 
+        k_steps, k_rows, k_agent, _ = step_kinds.context(run, store)
+        case = step_kinds.with_step_lines(case, k_steps, k_rows, k_agent)
         first = next((s.index for s in model.steps if s.index.isdigit()), "")
         case = with_head(
             case, run_head(run, store, model, receipt=RECEIPT, stage_page=stage_page(first) if first else "")
@@ -579,14 +602,20 @@ def render_execution(run: StoredRun, store: Store, *, generated_at: str) -> Rend
             #: Neighbours by input under it (`neighbours`), where the extra is installed on a local
             #: console; "" anywhere else.
             #: Beside it, the run's configuration against its pipeline's reference run (`config_compare`).
-            from onetrace_console import config_compare
+            #: The cross-service link: who called this run (`service_link`), on the case view.
+            #: Each with onetrace-verify's own lines on what its members do not show (`verifier_notes`).
+            from onetrace_console import config_compare, service_link, usage, verifier_notes
             from onetrace_console.model_call import draft_line
             from onetrace_console.neighbours.pages import run_section
 
+            notes = verifier_notes.of_run(run, store)
             whole = (
                 whole[:at]
+                + verifier_notes.within(service_link.called_by(run, store), notes, "link")
+                + verifier_notes.within(_code_section(run, store), notes, "code")
+                + verifier_notes.recovery_section(notes, _recovered(run, store))
+                + verifier_notes.within(usage.run_section(run, store), notes, "usage")
                 + draft_line(run, store)
-                + what_changed.section(run, store, public=rendering_public())
                 + config_compare.section(run, store)
                 + run_section(run, store)
                 + verdicts.section(run, store)
@@ -595,13 +624,43 @@ def render_execution(run: StoredRun, store: Store, *, generated_at: str) -> Rend
                 + box
                 + whole[at:]
             )
+        #: "What changed?" at the top, under the run's head and its tabs, above the case; the rest in its order.
+        heads = views._marked(whole, 'data-section="run-head"')
+        if heads:
+            end = heads[0][1]
+            whole = whole[:end] + what_changed.section(run, store, public=rendering_public()) + whole[end:]
         #: The authorization rung links to the Gated steps section it reads, on the same view.
         whole = with_gated_steps_link(whole)
         said, state = views.run_said(run, store)
-        what, proof = views.split(whole, "run", CASE, views.RUN_PROOF, said, state)
+        #: The run's tabs: its two views, then its Authorization page, with the count of its gated steps where it has
+        #: any: one tab, the run's head adding none of its own.
+        tab_words = views.AUTHORIZATION + (
+            f" · {authorization_list.gated_words(auth.gated)}" if auth is not None and auth.gated else ""
+        )
+        more = ((tab_words, AUTHORIZATION),)
+        what, proof = views.split(whole, "run", CASE, views.RUN_PROOF, said, state, more=more)
+        #: A page with the views' tabs has the Authorization tab there: the run's own tabs do not repeat it.
+        what, proof = (authorization_list.without_head_tab(v) for v in (what, proof))
+        #: The run's head and its verdict first, what the run raised under them.
+        from onetrace_console.incident_pages import under_verdict
+
+        what, proof = under_verdict(what), under_verdict(proof)
+        #: One plain line at the top of the run's head, by its state; the format terms stay below it.
+        not_anchored = _rung_of(model, "anchored").state == "not-anchored"
+        what, proof = (views.with_plain_line(v, state, not_anchored=not_anchored) for v in (what, proof))
+        #: "The decisions, as checked" leads to the run's Authorization page; the Policy line counts its gated steps.
+        if auth is not None:
+            what, proof = (
+                authorization_list.with_decisions_link(
+                    authorization_list.with_policy_line(v, auth, href=AUTHORIZATION), href=AUTHORIZATION
+                )
+                for v in (what, proof)
+            )
         #: The answer and authorization pages' tabs into the run page, at the view that holds them.
         answer = views.retarget(answer, what, proof, CASE, views.RUN_PROOF)
-        authorization_head = views.retarget(authorization_head, what, proof, CASE, views.RUN_PROOF)
+        authorization_head = authorization_list.without_head_tab(
+            views.retarget(authorization_head, what, proof, CASE, views.RUN_PROOF)
+        )
         return {
             ANSWER: fingerprint.seal(
                 fill_sealed(
@@ -614,7 +673,18 @@ def render_execution(run: StoredRun, store: Store, *, generated_at: str) -> Rend
                 fill_sealed(_check_names(proof, views.RUN_PROOF), f"runs/{run.key}/{views.RUN_PROOF}")
             ),
             AUTHORIZATION: render_authorization(
-                run, generated_at=generated_at, case=CASE, head=authorization_head, **_authorization_inputs(run, store)
+                run,
+                generated_at=generated_at,
+                case=CASE,
+                head=authorization_head
+                + views.tabs_row(((views.WHAT, CASE), (views.PROOF, views.RUN_PROOF), *more), tab_words)
+                #: A record that does not hold up: the same lines its other views carry, then what it says.
+                + (
+                    authorization_list.does_not_hold_up(said, state, views.RUN_ROWS_FROM[state])
+                    if state in views.RUN_ROWS_FROM
+                    else ""
+                ),
+                **_authorization_inputs(run, store),
             ),
             #: The run receipt, labelled like the run's other pages.
             RECEIPT: label(
@@ -811,6 +881,9 @@ def verdict_pill(run, store) -> str:
     )
 
 
+#: Format 0.5's kinds and agents (`step_kinds`): a column after "Closed", drawn on a list where some run records a
+#: kind or an agent. A list where none does has no such column: on it, every cell would read the same.
+KINDS_COLUMN = "Kinds"
 RUN_COLUMNS = (
     "Run",
     "Pipeline",
@@ -892,26 +965,35 @@ def _short_line(run: StoredRun, store: Store) -> str:
     )
 
 
+def rung_chip(state: str) -> str:
+    """One of a run's answers as the runs list shows it: the rung state's words in its tone, `data-state` its state."""
+    from onetrace_console import tones
+    from onetrace_console.viewer.page import escape as viewer_escape
+    from onetrace_console.viewer.sentences import template
+
+    return (
+        f'<span class="pill {tones.tone(tones.RUNG, state)}" data-state="{state}">'
+        f"{viewer_escape(template('rung.state.' + state.replace('-', '_')))}</span>"
+    )
+
+
 def runs_table(runs: list[StoredRun], store: Store) -> str:
     """The runs list's table: one row per run, in the order given, each linked to its page."""
-    from onetrace_console import closing, tones
+    from onetrace_console import closing, step_kinds
     from onetrace_console.benchmarks import badge
     from onetrace_console.overview import pipelines, ran_at
     from onetrace_console.run_head import declined_chip
     from onetrace_console.viewer.page import _named
     from onetrace_console.viewer.page import escape as viewer_escape
-    from onetrace_console.viewer.sentences import template
     from onetrace_console.words import record_href, rest, scroll_region, time_html
 
     label = {r.key: p.label for p in pipelines(store) for r in p.runs}
 
-    def chip(state: str) -> str:
-        return (
-            f'<span class="pill {tones.tone(tones.RUNG, state)}" data-state="{state}">'
-            f"{viewer_escape(template('rung.state.' + state.replace('-', '_')))}</span>"
-        )
+    chip = rung_chip
 
     rows, lines, verdicts_said = [], {}, {}
+    kinds = any(step_kinds.records_any(run.kinds) for run in runs)
+    columns = RUN_COLUMNS[:6] + (KINDS_COLUMN,) + RUN_COLUMNS[6:] if kinds else RUN_COLUMNS
     for run in runs:
         lines[run.key] = _short_line(run, store)
         verdicts_said[run.key] = verdict_pill(run, store)
@@ -932,6 +1014,8 @@ def runs_table(runs: list[StoredRun], store: Store) -> str:
             f"<td>{viewer_escape(got)}{(' ' + stopped) if (stopped := declined_chip(run)) else ''}</td>"
             #: Whether it closed and how it ended, as the run's head says it (`closing`).
             f'<td data-answer="closed" data-ending="{closing.state(run.ending)}">{closing.html(run.ending)}</td>'
+            #: The kinds and agents a format 0.5 run records (`step_kinds`); empty for an earlier format.
+            + (f'<td data-answer="kinds">{step_kinds.cell(run.kinds)}</td>' if kinds else "")
             + "".join(
                 f'<td data-answer="{k}">{chip(answers[k])}</td>'
                 for k in ("records-agree", "signed", "anchored", "approved")
@@ -944,7 +1028,7 @@ def runs_table(runs: list[StoredRun], store: Store) -> str:
             #: the cells are labelled by column (it is under none), at its empty placeholder.
             + (f'<tr data-what-changed-slot="{run.key}"></tr>' if lines[run.key] else "")
         )
-    head = "".join(f"<th>{c}</th>" for c in RUN_COLUMNS)
+    head = "".join(f"<th>{c}</th>" for c in columns)
     table = scroll_region(
         f'<table class="timeline" data-section="runs-table"><thead><tr>{head}</tr>'
         f"</thead><tbody>{''.join(rows)}</tbody></table>",
@@ -953,12 +1037,13 @@ def runs_table(runs: list[StoredRun], store: Store) -> str:
     )
     for key, line in lines.items():
         if line:
+            line = line.replace(f'colspan="{len(RUN_COLUMNS)}"', f'colspan="{len(columns)}"', 1)
             table = table.replace(f'<tr data-what-changed-slot="{key}"></tr>', line)
     for key, said in verdicts_said.items():
         if said:
             table = table.replace(
                 f'<tr data-verdict-slot="{key}"></tr>',
-                f'<tr class="verdict-row" data-verdict-of="{key}"><td colspan="{len(RUN_COLUMNS)}" '
+                f'<tr class="verdict-row" data-verdict-of="{key}"><td colspan="{len(columns)}" '
                 f'data-answer="verdict">{said.strip()}</td></tr>',
             )
     #: The verdicts' references, each seal whole once under the table (`verdicts.seals_note`).
@@ -984,6 +1069,11 @@ def _with_runs_table(page: str, runs: list[StoredRun], store: Store) -> str:
 
 
 NO_RUNS = "No run is listed here."
+#: On the list of every run stored: the Runs page, which lists them with filters, a page at a time.
+RUNS_PAGE_LINE = (
+    '<p data-section="runs-page-link">To narrow these runs by pipeline, records, verdict or time, a page at a time, '
+    'open <a href="/runs">Runs</a>.</p>'
+)
 
 
 def _without_runs_table(page: str) -> str:
@@ -1114,6 +1204,9 @@ def render_executions(
             locked = locked_section()
             if locked and "</header>" in page:
                 page = page.replace("</header>", "</header>" + locked, 1)
+            #: The Runs page (`runs_page`), which lists these runs with filters, a page at a time.
+            if "</header>" in page:
+                page = page.replace("</header>", f"</header>{RUNS_PAGE_LINE}", 1)
             #: The index's search box, on the Runs page (`search_page`).
             from onetrace_console.search_page import box
 
@@ -1148,3 +1241,19 @@ def render_executions(
     from onetrace_console.viewer import fingerprint
 
     return fingerprint.seal(fill_sealed(label(unshowable_runs_block(page, refused), runs), file_name))
+
+
+def _code_section(run, store) -> str:
+    """The case page's "Code" (`code_line`): the code version the record holds, and the verifier's rows on it."""
+    from onetrace_console import code_line, service_link
+
+    receipts, _, rows = service_link.context(run, store)
+    return code_line.section(receipts, rows)
+
+
+def _recovered(run, store) -> bool:
+    """Whether a later process recovered the run (`closing.recovered`)."""
+    from onetrace_console import closing, service_link
+
+    receipts, _, rows = service_link.context(run, store)
+    return bool(closing.recovered(receipts, rows))

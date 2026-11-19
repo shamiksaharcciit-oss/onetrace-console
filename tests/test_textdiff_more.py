@@ -5,7 +5,7 @@
 5.2 "Show more" re-runs it at the console's one larger limit (ten times the SDK's 200), for who may
     compare, behind the same guard as `/compare`; stored as a run of its own; the page names which
     limit it shows; nothing earlier changes.
-5.3 `--no-follow`: the corpus trace is board 7's.
+5.3 `--no-follow`: the corpus trace is read for where the change started, not here.
 """
 
 from __future__ import annotations

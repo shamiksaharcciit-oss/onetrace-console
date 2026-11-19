@@ -25,7 +25,7 @@ from __future__ import annotations
 import json
 import re
 
-from onetrace_console.words import escape
+from onetrace_console.words import escape, hidden_header
 
 SPAN_HEADING = "Span context"
 SPAN_LEAD = "The span context the app reported, as the run recorded it. onetrace does not check it."
@@ -247,10 +247,7 @@ def _span_table(sa: dict | None, sb: dict | None, origins: tuple, receipt_digest
     same = [r for r in rows if not r[3]]
     named = (sa or sb)["name"]  # type: ignore[index]  # a pair holds a span on one side at least
     depth = (sa or sb).get("depth", 0)  # type: ignore[union-attr]  # as above
-    head = (
-        "".join(f'<th scope="col">{escape(c)}</th>' for c in COLUMNS)
-        + f'<th scope="col" aria-label="{escape(DIFFERS_COLUMN)}"></th>'
-    )
+    head = "".join(f'<th scope="col">{escape(c)}</th>' for c in COLUMNS) + hidden_header(DIFFERS_COLUMN.capitalize())
     said = ""
     for s, digest, role in ((sa, receipt_digests[0], "baseline"), (sb, receipt_digests[1], "candidate")):
         got = s["attrs"].get("onetrace.receipt.digest") if s else None

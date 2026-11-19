@@ -168,16 +168,25 @@ _TOKENIZER_PICK = re.compile(r"<div data-tokenizer-pick>.*?</div>", re.S)
 
 #: A local console's pipeline picker (console 0.6.1 item 4): it posts to the console, so a file has none.
 _LOCAL_PICKER = re.compile(r'<section id="local-compare" data-section="local-compare"[^>]*>.*?</section>\n?', re.S)
+#: Investigate's way to another pair: the Runs page's picker, which a file has none of.
+_ANOTHER_PAIR = re.compile(r'<p data-investigate="another">.*?</p>', re.S)
+#: A comparison page's requests: Swap's ask for the reverse comparison, the checks' "Run on this page", and the runs
+#: with near inputs (a local console's feature). A held reverse comparison's Swap is a link, and stays.
+_SWAP_ASK = re.compile(r'<form method="post" action="/compare" data-swap="ask"[^>]*>.*?</form>', re.S)
+_RUN_HERE = re.compile(r' ?<form method="post" action="/compare/check" class="run-here"[^>]*>.*?</form>', re.S)
+_NEAR_RUNS = re.compile(r'<section class="near-runs" data-section="near-runs"[^>]*>.*?</section>', re.S)
 
 
 def without_run_tools(page: str) -> str:
     """A page less what only a console can answer: the index's search box, "Other runs with the
     same inputs" (which opens it), the benchmark mark's press -- a marked run keeps its mark,
     read-only; an unmarked run's page loses the empty section -- the expectations file's press, alike,
-    a model step's tokenizer picker, and the pipeline page's picker."""
+    a model step's tokenizer picker, the pipeline page's picker, Investigate's way to another pair, and a comparison's
+    requests: Swap's ask (a held reverse comparison's link stays), Run on this page, and the runs with near inputs."""
     from onetrace_console.benchmark_script import BENCHMARK_SCRIPT
 
-    page = _LOCAL_PICKER.sub("", _SAME_INPUTS.sub("", _RUN_SEARCH.sub("", page)))
+    page = _ANOTHER_PAIR.sub("", _LOCAL_PICKER.sub("", _SAME_INPUTS.sub("", _RUN_SEARCH.sub("", page))))
+    page = _NEAR_RUNS.sub("", _RUN_HERE.sub("", _SWAP_ASK.sub("", page)))
 
     def mark(m) -> str:
         sec = m.group(0)
@@ -214,12 +223,31 @@ def _page(served: bytes, rel: str) -> bytes:
     if len(opened) != 1:
         raise ExportError(f"{rel}: a page must open exactly one <main> to carry the banner")
     page = _MAIN.sub(lambda m: m.group(0) + _BANNER_HTML, page, count=1)
+    #: An export's pages are not to be indexed either, wherever they are put (`search_engines`).
+    from onetrace_console.search_engines import with_noindex
+
+    page = with_noindex(page)
     if _SLOT.search(page):
         from onetrace_console.viewer.fingerprint import seal
         from onetrace_console.viewer.slot import ZEROS
 
         page = seal(_SLOT.sub(lambda m: m.group(1) + ZEROS + m.group(2), page))
     return page.encode("utf-8")
+
+
+#: The Runs page as exported: every run on one page, its filters shown disabled (`runs_page`).
+RUNS_FILE = "runs.html"
+
+
+def _runs_page(work: Path) -> bytes:
+    """The Runs page drawn from the index the export's own render wrote, every run on one page, filled as a local
+    console serves it, its sidebar's link to itself made the file's."""
+    from onetrace_console import run_index, runs_page
+    from onetrace_console.frame import fill
+
+    html = runs_page.page(run_index.read(work), {}, public=False, exported=True)
+    served = fill(html.encode("utf-8"), "runs", onedoor=False, user=None)
+    return served.replace(b'href="/runs"', b'href="/runs.html"')
 
 
 def _scratch(source: Path, keys: list[str], into: Path):
@@ -324,6 +352,8 @@ def export(source: Path, keys: list[str], out: Path) -> dict[str, str]:
                 from onetrace_console.bisect_page import exported
 
                 served = exported(served.decode("utf-8")).encode("utf-8")
+            #: The Runs page is drawn as asked by a console: the export writes it once, unfiltered, as runs.html.
+            served = served.replace(b'href="/runs"', b'href="/runs.html"')
             #: Compare asks a console too: shown disabled, and no script that reads the session's token.
             from onetrace_console.compare_script import exported as compare_exported
 
@@ -333,6 +363,7 @@ def export(source: Path, keys: list[str], out: Path) -> dict[str, str]:
             if was:
                 now = _FINGERPRINT.search(files[rel].decode("utf-8")).group(1)  # type: ignore[union-attr]  # the page keeps the fingerprint it was served with
                 seals.append(f"{rel}  {was.group(1)}  {now}\n")
+        files[RUNS_FILE] = _page(_runs_page(work), RUNS_FILE)
         if any(f"{ERRORS_FILE}#".encode() in data for data in files.values()):
             files[ERRORS_FILE] = _page(errors_page(), ERRORS_FILE)
         css = STYLESHEET.lstrip("/")

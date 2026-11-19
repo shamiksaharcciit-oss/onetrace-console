@@ -279,6 +279,7 @@ def check_options(config) -> dict:
     time-stamp authority's certificate and roots."""
     return {
         "trust_file": getattr(config, "trust_file", None) if config is not None else None,
+        "recipients_file": getattr(config, "recipients_file", None) if config is not None else None,
         "tsa_cert": getattr(config, "tsa_cert", None) if config is not None else None,
         "tsa_roots": tuple(getattr(config, "tsa_roots", ()) or ()) if config is not None else (),
     }
@@ -437,8 +438,12 @@ def nothing_missing_state(folder: Path, envelope: dict | None = None) -> str:
 #:   8. adds what the run's own check says of its approved plan ("Ran as approved");
 #:   9. rung 3 reads "Not reached" where the run stopped at a step's own rule;
 #:  10. adds rung 1, "Records agree", as the run's own page decides it, and why;
-#:  11. adds whether the run closed and how it ended (`closing.ending_of`).
-DERIVED = "derivation-11"
+#:  11. adds whether the run closed and how it ended (`closing.ending_of`);
+#:  12. adds the kinds and agents a format 0.5 run records (`step_kinds.summary`);
+#:  13. adds each step's mark and recorded times (`step_marks.of_attempts`);
+#:  14. adds what the run is where it is a re-run or a check's run (`rerun_label.kept`);
+#:  15. adds each step's effect label to its kept steps (`effect_label.kept`).
+DERIVED = "derivation-15"
 
 
 def _reading(folder: Path, envelope: dict | None, read) -> str:
@@ -576,15 +581,24 @@ def derived_from(folder: Path, envelope: dict | None = None) -> dict:
     digests = digests_in(read)
     receipts = set()
     from onetrace_console.ingest import _declared_by, declined_at, delivered_and_retries, last_attempt_failed
+    from onetrace_console.step_marks import of_attempts
 
     declared: list[str] = []
     seen: set[str] = set()
-    attempts: list[tuple] = []  # (stage name, outcome class, outcome status), in the chain's order
+    #: (stage name, outcome class, outcome status, refusal reason, started, ended), in the chain's order
+    attempts: list[tuple] = []
+    from onetrace_console import effect_label
+    from onetrace_console.info_mark import rows_of
+
+    rows = rows_of(envelope)
+    effects: dict[str, dict | None] = {}
     #: The close receipt that ends a 0.4 chain is not a step, as at ingest (`viewer.record.is_close`).
     from onetrace_console.viewer.record import is_close
 
     chain = _manifest(folder / "MANIFEST.json").get("chain") or []
     chain = chain if isinstance(chain, list) else []
+    #: The steps' receipts with their files, for the kinds and agents a format 0.5 run records.
+    kind_receipts: list[tuple[str, dict]] = []
     for i, entry in enumerate(chain):
         name = entry.get("file") if isinstance(entry, dict) else None
         held = files.get(same_file(name)) if isinstance(name, str) else None
@@ -598,6 +612,12 @@ def derived_from(folder: Path, envelope: dict | None = None) -> dict:
             if held in receipts or (i == len(chain) - 1 and i > 0 and is_close(receipt)):
                 continue
             receipts.add(held)
+            kind_receipts.append((str(name), receipt))
+            #: The step's effect label, its last attempt's, where the verifier does not FAIL it.
+            got = effect_label.kept(receipt, str(name), rows)
+            stage_named = receipt.get("stage")
+            if isinstance(stage_named, dict) and isinstance(stage_named.get("name"), str):
+                effects[stage_named["name"]] = got
             _declared_by(receipt, declared, seen)
             stage, outcome = receipt.get("stage"), receipt.get("outcome")
             attempts.append(
@@ -610,6 +630,7 @@ def derived_from(folder: Path, envelope: dict | None = None) -> dict:
                     outcome.get("reason")
                     if isinstance(outcome, dict) and isinstance(outcome.get("reason"), str)
                     else "",
+                    *_times(receipt),
                 )
             )
     return {
@@ -624,9 +645,37 @@ def derived_from(folder: Path, envelope: dict | None = None) -> dict:
         "last_failed": json.dumps(last_attempt_failed(attempts, declared)),
         "declined": json.dumps(declined_at(attempts, declared)),
         "ending": _ending(folder),
+        "kinds": _kinds(kind_receipts, envelope),
+        "steps": json.dumps(of_attempts(attempts, declared, effects)),
+        "rerun": _rerun(kind_receipts, envelope),
         "digests": json.dumps(digests),
         "derived": DERIVED,
     }
+
+
+def _rerun(receipts: list[tuple[str, dict]], envelope: dict | None) -> str:
+    """The run's kept re-run mark or check (`rerun_label.kept`), or "" for neither."""
+    from onetrace_console.info_mark import rows_of
+    from onetrace_console.rerun_label import kept
+
+    said = kept([r for _n, r in receipts], rows_of(envelope))
+    return json.dumps(said, sort_keys=True) if said is not None else ""
+
+
+def _times(receipt: dict) -> tuple:
+    """A receipt's own `time.started` and `time.ended`, as written, or None where it states none."""
+    t = receipt.get("time")
+    t = t if isinstance(t, dict) else {}
+    return tuple(t.get(k) if isinstance(t.get(k), str) else None for k in ("started", "ended"))
+
+
+def _kinds(receipts: list[tuple[str, dict]], envelope: dict | None) -> str:
+    """The run's kept kinds and agents (`step_kinds.summary`), or "" where it records none in format 0.5."""
+    from onetrace_console import step_kinds
+    from onetrace_console.info_mark import rows_of
+
+    said = step_kinds.summary(receipts, rows_of(envelope))
+    return json.dumps(said, sort_keys=True) if said is not None else ""
 
 
 def _ending(folder: Path) -> str:
@@ -679,6 +728,7 @@ def run_and_record(
     trust_file: str | None = None,
     tsa_cert: str | None = None,
     tsa_roots=(),
+    recipients_file: str | None = None,
 ) -> StoredRun:
     """Check a stored run, store the report verbatim, and update the run's record."""
     #: A run that cannot be laid out here as it was stored is not checked at all -- the verifier
@@ -706,9 +756,16 @@ def run_and_record(
             #: The reader's trust and time-stamp files, copied beside the laid-out run and named
             #: from it: the stored check records no path of this machine.
             trust_file, tsa_cert, tsa_roots = _evidence_copies(Path(tmp) / "evidence", trust_file, tsa_cert, tsa_roots)
+            #: The recipients the reader trusts (`recipients_file`), copied beside the laid-out run as the trust file
+            #: is, and named from it: `--recipients`, for a recipient confirmation's key row.
+            given_recipients = recipients_file
+            if recipients_file:
+                copied = _evidence_copy(Path(tmp) / "evidence", recipients_file, "recipients")
+                extra = (*extra, "--recipients", _relative_to(copied, folder))
             result = check(
                 folder, ran_at=ran_at, trust_file=trust_file, tsa_cert=tsa_cert, tsa_roots=tsa_roots, extra=extra
             )
+            result.envelope["recipients_file"] = trust_record(given_recipients)
             _keep_export(run, store, folder)
             derived = derived_from(folder, result.envelope)
             shutil.rmtree(folder, ignore_errors=True)
@@ -754,6 +811,29 @@ def _evidence_copies(dest: Path, trust_file, tsa_cert, tsa_roots):
         copy(tsa_cert, "tsa-cert" + Path(tsa_cert).suffix if tsa_cert else ""),
         roots,
     )
+
+
+def _evidence_copy(dest: Path, path: str, name: str) -> str:
+    """One of the reader's files copied into `dest` as `name` and its suffix; one that cannot be read passed as given,
+    so the verifier says why in its own row."""
+    try:
+        dest.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(path, dest / (name + Path(path).suffix))
+        return str(dest / (name + Path(path).suffix))
+    except OSError:
+        return path
+
+
+def stored_recipients_record(run: StoredRun, store: Store) -> str | None:
+    """The recipients file the run's stored check ran with, as `trust_record` records a file; "none" for a check
+    stored before it was recorded, which ran with none; None where the run has no readable report."""
+    from onetrace_console.home import _envelope
+
+    envelope = _envelope(run, store)
+    if envelope is None:
+        return None
+    recorded = envelope.get("recipients_file", NO_TRUST_FILE)
+    return recorded if isinstance(recorded, str) else None
 
 
 def _relative_to(path, run_dir: Path):

@@ -44,58 +44,57 @@ CACHE = REPO / ".wheel-cache"
 
 #: The same two references `requirements.lock` pins by hash -- typed here once, not
 #: derived from anything downloaded, so a mismatch is caught rather than assumed away.
-#: onetrace 0.8.0 and onetrace-verify 0.8.0, each checked against these hashes: the wheels PyPI receives for
-#: 0.8.0, as their build gave them.
+#: onetrace 0.9.0 and onetrace-verify 0.9.0, each checked against these hashes: their wheels, as PyPI serves them.
 #: The "wheelhouse" source stays for a branch that pins a build on no index; nothing uses it now.
 SOURCE = "pypi"
 WHEELHOUSE = REPO / "wheelhouse" / "devbuild"
 WHEELS = {
-    "onetrace==0.8.0": (
-        "onetrace-0.8.0-py3-none-any.whl",
-        "a2072c5e6c97843cd4a8915b5392dbde696d3a5d59531b0c666473a794760214",
+    "onetrace==0.9.0": (
+        "onetrace-0.9.0-py3-none-any.whl",
+        "585b69e001dba2c65d64f3c882d4e2410e04835bdaddfda79aaef9cf274f304a",
     ),
-    "onetrace-verify==0.8.0": (
-        "onetrace_verify-0.8.0-py3-none-any.whl",
-        "5a2a60387fb25f35d67fdc0f2d6195d2b11465f4adc20465697574409bdef82d",
+    "onetrace-verify==0.9.0": (
+        "onetrace_verify-0.9.0-py3-none-any.whl",
+        "109d79e0c7b105ad8ceb4e8f806a0fdb9b495affcc74efa9db854554fa5b25a6",
     ),
 }
 
 
 #: A command the tests run, never a dependency of the console and never in the lock: the published
 #: onetrace-explain, whose wheel the explanation panel's tests install, with what it asks for, into a folder of
-#: their own (tests/conftest.py, `explain_command`). 0.3.1, the one a reader installs beside the console. Typed
+#: their own (tests/conftest.py, `explain_command`). 0.3.2, the one a reader installs beside the console. Typed
 #: here once, like WHEELS.
 TEST_COMMANDS = {
-    "onetrace-explain==0.3.1": (
-        "onetrace_explain-0.3.1-py3-none-any.whl",
-        "20a506dce8e5c1f19fb70c9054f6f7c1bfab313f71fd59aae3b745eebf81e7b5",
+    "onetrace-explain==0.3.2": (
+        "onetrace_explain-0.3.2-py3-none-any.whl",
+        "50988bd1cf761a7c3730b8b04eb13a7e0715cece56402c568d5b4e5ab3011d2f",
     ),
 }
 
 
 #: What a reader installs beside the console in one environment, never a dependency of it and never in
-#: the lock: the published onetrace-explain 0.3.1 (which reads the key from the keychain, and accepts onetrace 0.8), and onetrace-auto 0.8.0, whose
+#: the lock: the published onetrace-explain 0.3.2 (which reads the key from the keychain, and accepts onetrace 0.9), and onetrace-auto 0.9.0, whose
 #: wheels `tests/test_one_environment.py` installs with the console's, offline, and asks `pip check`
 #: about. Typed here once, like WHEELS.
 ONE_ENVIRONMENT = {
-    "onetrace-explain==0.3.1": (
-        "onetrace_explain-0.3.1-py3-none-any.whl",
-        "20a506dce8e5c1f19fb70c9054f6f7c1bfab313f71fd59aae3b745eebf81e7b5",
+    "onetrace-explain==0.3.2": (
+        "onetrace_explain-0.3.2-py3-none-any.whl",
+        "50988bd1cf761a7c3730b8b04eb13a7e0715cece56402c568d5b4e5ab3011d2f",
     ),
-    "onetrace-auto==0.8.0": (
-        "onetrace_auto-0.8.0-py3-none-any.whl",
-        "793031fb930359a21a74ece618b0de3b75ae07a2d496d3b6f6f6d6febb1ee938",
+    "onetrace-auto==0.9.0": (
+        "onetrace_auto-0.9.0-py3-none-any.whl",
+        "1b9da8947b5147f4defe0c349cbf491ded0bd061d3039a888209505fd1351f80",
     ),
 }
 
 
-#: An onetrace-explain that takes no onetrace 0.8 (it asks for `onetrace>=0.6.1,<0.8`): the published 0.3.0,
+#: An onetrace-explain that takes no onetrace 0.9 (it asks for `onetrace>=0.6.1,<0.9`): the published 0.3.1,
 #: which `tests/test_one_environment.py` installs beside the console to show pip refusing it. Never installed
 #: beside the console otherwise. Typed here once, from PyPI's JSON.
 EARLIER_EXPLAIN = {
-    "onetrace-explain==0.3.0": (
-        "onetrace_explain-0.3.0-py3-none-any.whl",
-        "6d3390459d2854cefcf3e7e5feaa1f8968b86a767f7cec7bf5d943a273ea21c5",
+    "onetrace-explain==0.3.1": (
+        "onetrace_explain-0.3.1-py3-none-any.whl",
+        "20a506dce8e5c1f19fb70c9054f6f7c1bfab313f71fd59aae3b745eebf81e7b5",
     ),
 }
 

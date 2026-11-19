@@ -12,7 +12,7 @@ from __future__ import annotations
 import re
 from urllib.parse import quote
 
-from onetrace_console.words import escape
+from onetrace_console.words import escape, hidden_header
 
 PATH = "neighbours/setup"
 TITLE = "Neighbours by input"
@@ -125,7 +125,7 @@ def run_section(run, store, *, up: str = "../../") -> str:
     script = COMPARE_SCRIPT if "data-compare-post=" in rows else ""
     body = (
         f'<table class="timeline" data-neighbours="rows"><thead><tr><th>Run</th><th>Near input</th>'
-        f"<th>Similarity</th><th></th></tr></thead><tbody>{rows}</tbody></table>"
+        f"<th>Similarity</th>{hidden_header('Action')}</tr></thead><tbody>{rows}</tbody></table>"
         if got.rows
         else f'<p data-neighbours="none">{escape(NONE_NEAR)}</p>'
     )

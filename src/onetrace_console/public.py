@@ -60,8 +60,45 @@ def count_word(n: int) -> str:
     return COUNT_WORDS[n] if n < len(COUNT_WORDS) else str(n)
 
 
+#: The capture store's own sentence: what it holds, its counts read from its own builder (`demo_store.captures`).
+CAPTURES_RUNS = (
+    "It holds {runs} runs from {count} small example pipelines whose model calls were captured, recorded when it was "
+    "built, with no network calls and no hosted model."
+)
+#: The store a public console's banner speaks for, by its builder's name: the demo's unless the store being built or
+#: served is another's (`speaks_for`).
+_SPEAKS_FOR = {"name": "demo"}
+
+
+def speaks_for(name: str) -> None:
+    """Make the banner speak for the store whose builder is `name` ("demo" or "captures"): set where a public store is
+    built (`folder_load.build_public`) and where a public console starts, from its build record."""
+    _SPEAKS_FOR["name"] = name
+
+
+def recorded_builder(folder: Path) -> str:
+    """The builder a public build's record names (`BUILD_RECORD.json`'s `builder`), the demo's where it names none."""
+    from onetrace_console.bounded_json import TooDeep, load_json_bounded
+
+    try:
+        got = load_json_bounded((folder / "BUILD_RECORD.json").read_text(encoding="utf-8"), "the build record").get(
+            "builder"
+        )
+    except (OSError, ValueError, AttributeError, TooDeep):
+        return "demo"
+    return got if isinstance(got, str) and got else "demo"
+
+
 def banner_runs() -> str:
-    """The banner's sentence on the demo's runs, its count read from the demo's builder."""
+    """The banner's sentence on the runs: the demo's, its count read from the demo's builder; or, for the capture store,
+    what it holds, its counts read from its own builder."""
+    if _SPEAKS_FOR["name"] == "captures":
+        from onetrace_console.demo_store import captures
+
+        specs = captures.runs()
+        return CAPTURES_RUNS.format(
+            runs=count_word(len(specs)), count=count_word(len(dict.fromkeys(s.pipeline for s in specs)))
+        )
     from onetrace_console.demo_store import pipeline_names
 
     return BANNER_RUNS.format(count=count_word(len(pipeline_names())))
@@ -81,12 +118,13 @@ def _script_hash(script: str) -> str:
 
 def inline_scripts() -> tuple[str, ...]:
     """Every inline script a page may carry: the print helper on the viewer's pages, the
-    Overview's relative times, the watched folder's notice, and the theme switch's two."""
+    Overview's relative times, the watched folder's notice, the theme switch's two, and a comparison's tabs."""
+    from onetrace_console.compare_view import TABS_SCRIPT
     from onetrace_console.frame import THEME_HEAD_SCRIPT, THEME_SCRIPT
     from onetrace_console.viewer.page import PRINT_SCRIPT
     from onetrace_console.words import RELATIVE_TIME_SCRIPT, WATCH_SCRIPT
 
-    return (PRINT_SCRIPT, RELATIVE_TIME_SCRIPT, WATCH_SCRIPT, THEME_HEAD_SCRIPT, THEME_SCRIPT)
+    return (PRINT_SCRIPT, RELATIVE_TIME_SCRIPT, WATCH_SCRIPT, THEME_HEAD_SCRIPT, THEME_SCRIPT, TABS_SCRIPT)
 
 
 def content_security_policy(*, local: bool = False) -> str:

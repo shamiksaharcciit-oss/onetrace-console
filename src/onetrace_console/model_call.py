@@ -530,9 +530,9 @@ def steps_line(name: str, record: dict) -> str:
     )
 
 
-def record_block(name: str, record: dict, steps: str = "", same: str = "") -> str:
-    """One record: its per-step capture line, its fields under their groups, then its token timeline
-    (`steps`, drawn by `timeline` or the reason it is not) and the runs that share its model files."""
+def record_block(name: str, record: dict, steps: str = "", same: str = "", head: str = "") -> str:
+    """One record: its per-step capture line, `head` (`call_ending`'s lines), its fields under their groups, then its
+    token timeline (`steps`, drawn by `timeline` or the reason it is not) and the runs that share its model files."""
     rows = "".join(
         _group_row(title)
         + "".join(_fingerprints(record[f]) if f == "fingerprints" else _shown(f, record[f]) for f in fields)
@@ -549,7 +549,7 @@ def record_block(name: str, record: dict, steps: str = "", same: str = "") -> st
     )
     return (
         f'<div class="model-call" id="{anchor(name)}" data-model-call="{escape(name)}"><h3><code>{escape(name)}</code></h3>'
-        f"{steps_line(name, record)}{table}{steps}{same}</div>"
+        f"{steps_line(name, record)}{head}{table}{steps}{same}</div>"
     )
 
 
@@ -610,7 +610,10 @@ def step_section(receipt: dict, receipt_file: str, read_file, same=None, searche
                 drawn = f"<p data-token-timeline-refused>{escape(TIMELINE_NOT_SHOWN.format(why=e))}</p>" + drawn
         got = files_value(record)
         line = same_files_line(record, same(got[0])) if same is not None and got is not None else ""
-        blocks.append(record_block(name, record, drawn, line))
+        #: A 1.1 record's own words on how the call ended, and a self-hosted call's engine (`call_ending`).
+        from onetrace_console.call_ending import lines
+
+        blocks.append(record_block(name, record, drawn, line, lines(record)))
     return (
         f'<section data-section="model-call" class="model-call"><h2>{escape(HEADING)}</h2>'
         f'<p class="label" data-model-call-label>{_label(formats)}</p>{"".join(blocks)}'

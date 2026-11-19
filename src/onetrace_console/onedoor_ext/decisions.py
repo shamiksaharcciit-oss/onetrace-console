@@ -267,7 +267,7 @@ def accept_export(data: bytes, store: Store, *, received_at: str | None = None, 
         raise DecisionsRejection(
             f"the sidecar names {sorted(sums)}, not {payload_name!r}: checksum does not cover the delivered file"
         )
-    #: Both ways, as a run delivery checks (the pin re-check, note 1): the side-car names the
+    #: Both ways, as a run delivery checks: the side-car names the
     #: delivered file and nothing else. A second entry -- `./x`, another case, another file -- is a
     #: second digest no check would read, so it is refused, by name.
     others = sorted(set(sums) - {payload_name})

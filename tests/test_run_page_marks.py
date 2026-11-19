@@ -200,7 +200,17 @@ def _titles(page: str) -> dict[str, str]:
 #: 246549412e88ba53cac64b8d23bb4483de88a16be59ff8b44c63d2bf030e871a: measured by rendering it with the hook and without.
 #: Moved by the version, 0.7.0 to 0.8.0, from fe6e6dda55d3f15647efa0e5a983534ab79b4712e8c09290f48ec3579e7041e1.
 #: Measured by rendering it with the version alone set back to 0.7.0: the old digest.
-UNMARKED_R_CASE_SHA256 = "6f01b2405e5d23e8754631e94f559a49612215f8a00f62e80e8ada15f8d936e0"
+#: Moved by the run's third tab (Authorization) and its What changed? at the top, under its head, from
+#: 6f01b2405e5d23e8754631e94f559a49612215f8a00f62e80e8ada15f8d936e0: measured at the commit before, where it held.
+#: Moved by the step tree's header for its notes column, said to a screen reader and hidden on screen
+#: (`words.hidden_header`), from 27ac3933fb3300972d3c151971454d8c9bb00f0b9ec9f766486e4740c32e4bfb: the one difference,
+#: measured at the commit that added it and at the one before it (the old digest).
+#: Moved by "What changed?" saying "Not compared." first where the comparison it picks is not held, the run it would use
+#: named as only that, from 9e5491a04f9eaa4966814c3f717ad762c5a136f83a462aba13e5be5c55d13ae5: the one difference, measured
+#: with the section's code and without it.
+#: Moved by the version, 0.8.0 to 0.9.0, from d248651c20b75b54811e63aa314932875ac456b5a99d37e6247435e8787bdca8.
+#: Measured by rendering it with the version alone set back to 0.8.0: the old digest.
+UNMARKED_R_CASE_SHA256 = "c0bbc8fd8e2906e6f1e672897a2abce366319c0782bca641585418ca51a9520e"
 _VERIFIER_PATH = re.compile(r"\S*onetrace_verify[/\\]verify\.py")
 _FINGERPRINT = re.compile(r"<!--fingerprint-->[0-9a-f]{64}<!--/fingerprint-->")
 _VERIFIER_BLOCK = re.compile(r'(<pre data-layer="3">)(\[[A-Z][A-Z-]* *\] .*?)(</pre>)', re.S)
@@ -217,13 +227,17 @@ def _before_050(page: str) -> str:
     """The page less what console 0.5.0 adds to every run's page and nothing else: the index's search
     box, "Other runs with the same inputs" and an unmarked run's benchmark section, as the static
     export leaves them out (`export_static.without_run_tools`); and 0.6.0's configuration against the
-    reference run (`config_compare`), which the export keeps. The hash below is then the one pinned
-    before 0.5.0, so the rest of the page is shown unchanged."""
+    reference run (`config_compare`), which the export keeps; and 0.9's plain line at the top of the run's head, with
+    what "Not anchored" is (`views.with_plain_line`). The hash below is then the one pinned before 0.5.0, so the rest
+    of the page is shown unchanged."""
     import re
 
     from onetrace_console.export_static import without_run_tools
 
-    return re.sub(r'<section data-section="config-compare".*?</section>', "", without_run_tools(page), flags=re.S)
+    page = re.sub(r'<section data-section="config-compare".*?</section>', "", without_run_tools(page), flags=re.S)
+    return re.sub(
+        r'<p class="plain(?:-anchor)?" data-section="run-plain(?:-anchor)?"[^>]*>.*?</p>', "", page, flags=re.S
+    )
 
 
 def _machine_free(page: str) -> str:

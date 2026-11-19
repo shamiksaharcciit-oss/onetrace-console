@@ -106,7 +106,7 @@ def content_problems(main: str, *, named: str | None, path: str) -> list[str]:
         S.BUTTON_USES,
         "--include-text",
         "--redact NAME",
-        'pip install "onetrace-explain[keyring]>=0.3"',
+        'pip install "onetrace-explain[keyring]>=0.3.2"',
         "On this machine",
         "Your model provider",
         "Show the packet",
@@ -206,7 +206,7 @@ def examples_problems(main: str) -> list[str]:
     blocks = [unescape(b) for b in re.findall(r"<pre><code>(.*?)</code></pre>", main, re.S)]
     out = []
     models = [b for b in blocks if b.startswith("[model]")]
-    if len(models) != 2 or not any(b == 'pip install "onetrace-explain[keyring]>=0.3"' for b in blocks):
+    if len(models) != 2 or not any(b == 'pip install "onetrace-explain[keyring]>=0.3.2"' for b in blocks):
         out.append(f"examples {[b[:20] for b in blocks]}")
     for b in models:
         if b.count("\n") < 3 or not b.splitlines()[1].startswith("provider = "):

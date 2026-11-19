@@ -1,4 +1,4 @@
-"""The Overview's facts (v6 board 1), from what the store already holds.
+"""The Overview's facts, as its design draws them, from what the store already holds.
 
     Release 1: ... The Overview has no permit or decision figures; its cards are runs,
     records agree, changed vs baseline, and open incidents.
@@ -31,7 +31,7 @@ PIPELINE_RULE = (
     "in the same order. No record names its pipeline."
 )
 
-#: The needs-attention order, as the page states it. v6 board 1's order, with the states this
+#: The needs-attention order, as the page states it. The design's order, with the states this
 #: store records: "gaps" is a declared stage with no receipt, and a run no check has reached
 #: is its own state (the three-outcome rule), placed after the two the check did reach.
 #: "Last attempt failed" comes after a declared stage missing; the order's own sentence names it

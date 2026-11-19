@@ -10,6 +10,7 @@ import re
 
 import pytest
 
+from onetrace_console.frame import FOLD_BUTTONS
 from tests.test_bisect_page import CHANGED, SAME, _series
 
 NEEDS = "Needs a running console."
@@ -44,7 +45,8 @@ def live_controls(pages: dict[str, str]) -> list[str]:
         if rel.endswith(".html") and "data-compare-post" in s:
             out.append(f"{rel}: data-compare-post")
         for b in re.findall(r"<button\b[^>]*>", s):
-            if b not in THEME and " disabled" not in b:
+            #: The frame's folds below 600 px open a part of the frame, and start no work (`frame.FOLD_BUTTONS`).
+            if b not in THEME and b not in FOLD_BUTTONS.values() and " disabled" not in b:
                 out.append(f"{rel}: an enabled button {b[:80]}")
         for f in re.findall(r"<form\b[^>]*>", s):
             out.append(f"{rel}: a form {f[:80]}")

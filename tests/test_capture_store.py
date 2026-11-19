@@ -48,11 +48,11 @@ def built(tmp_path_factory):
 
 def test_the_capture_store_is_its_own_and_the_demo_s_runs_stay_as_they_are(examined):
     folders = {s.folder for s in captures.runs()}
-    demo = {s.folder for s in demo_store.runs()} | {s.folder for s in demo_store.RECORDED_BESIDE_KEPT}
+    demo = {s.folder for s in demo_store.runs()}
     examined(len(folders), "capture runs")
     assert set(RUNS) <= folders and not folders & demo
     assert captures.COMPARISONS == PAIRS
-    assert not any(set(p) & folders for p in demo_store.COMPARISONS + demo_store.COMPARISONS_BESIDE_KEPT)
+    assert not any(set(p) & folders for p in demo_store.COMPARISONS)
 
 
 def test_every_run_verifies(built, examined):

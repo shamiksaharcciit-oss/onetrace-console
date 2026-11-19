@@ -4,7 +4,7 @@
 - The text diff: a frame on the Diff page, under the diff report's own blocks, with **no
   field names** -- what `onetrace-textdiff/0.2` writes decides its rows.
 - The excerpts: one line below the compare graph, never a guessed excerpt on a node.
-- Board 7, where the change started: **absent on every pair before 0.2.0**, the diverged one
+- Where the change started: **absent on every pair before 0.2.0**, the diverged one
   included. Only 0.2.0 can say whether the first difference sits at a node
   whose corpus link changed; a frame on every diverged pair would suggest a source change.
 - The signing and anchoring badges: two rows on each stage page, in the run ladder's fixed
@@ -81,9 +81,11 @@ def test_the_text_diff_is_the_sdks_own_stored_run_drawn_as_it_wrote_it(diverging
     assert PLACEHOLDER not in frame
 
 
-def test_the_text_diff_sits_under_the_diff_report_s_own_blocks(linear_page):
+def test_the_text_diff_opens_first_in_its_tab_before_the_sdk_s_own_layer(linear_page):
+    """The text diff is the comparison page's first tab, open first (`compare_view`), above the SDK's own layer."""
     at = linear_page.index('data-section="text-diff"')
-    assert linear_page.index('data-section="changes"') < at
+    panel = linear_page.index('<section class="tab-panel" id="compare-tab-text" data-tab-panel="text">')
+    assert panel < at < linear_page.index('data-tab-panel="kind"')
     assert at < linear_page.index('<details data-layer="3">'), "before the SDK's own layer"
 
 
@@ -108,12 +110,12 @@ def test_the_text_diff_is_on_a_pair_where_nothing_differs_too(same_page):
 
 
 def test_the_compare_page_promises_no_excerpts_its_text_diff_is_on_the_page(dag_pages):  # noqa: F811
-    """The excerpts placeholder is gone: 0.2.0's text diff is the page's own,
-    below the changes table, and no line promises a later version."""
+    """The excerpts placeholder is gone: 0.2.0's text diff is the page's own, in its tab (`compare_view`), and no line
+    promises a later version."""
     for pair, page in dag_pages.items():
         assert 'data-section="excerpts"' not in page, pair
         assert PLACEHOLDER not in page and "until onetrace" not in page, pair
-        assert page.index('data-section="changes"') < page.index('data-section="text-diff"')
+        assert page.index('data-tab-panel="text"') < page.index('data-section="text-diff"'), pair
 
 
 def test_a_linear_comparison_has_no_excerpts_line(linear_page, same_page):

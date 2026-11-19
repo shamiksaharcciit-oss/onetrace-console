@@ -1,4 +1,4 @@
-"""The fourth review's re-check: its two blockers and one further finding, fixed alone.
+"""A re-check's two blockers and one further finding, fixed alone.
 
 - On a Windows host, an altered delivery was recorded as "holds": a second member named by the
      receipt's 8.3 short name (`receipts/01-ZET~1.JSO`) wrote the original bytes over the altered
@@ -53,7 +53,7 @@ SHORT_NAMES = _makes_short_names()
 
 
 def _altered(files, alias: str | None, run_id: str = "altered") -> dict[str, bytes]:
-    """A review's probe: `receipts/01-zeta.json` altered after the run (its sums honest, since
+    """A probe: `receipts/01-zeta.json` altered after the run (its sums honest, since
     whoever altered it wrote them), and, under `alias`, a member holding the original bytes."""
     out = dict(files)
     manifest = json.loads(out["MANIFEST.json"].decode("utf-8"))
@@ -75,7 +75,7 @@ def _altered(files, alias: str | None, run_id: str = "altered") -> dict[str, byt
     not SHORT_NAMES, reason="this host's temp volume makes no 8.3 short names, so the alias cannot be made here"
 )
 def test_the_short_name_upload_is_refused_over_http_and_nothing_is_stored(server, files):
-    """A review's probe_short_member_http.py. Before the fix: POST 200, verdict holds, while the
+    """A probe of a short-name member over HTTP. Before the fix: POST 200, verdict holds, while the
     stored receipt was the altered one and the exported bundle verified FAIL."""
     from tests.test_serve import _post
 
@@ -226,7 +226,7 @@ def _sdk_delivery(tmp_path: Path, which: str, setting: str) -> dict[str, bytes]:
     longer make this run here. The run_id and the stage names -- in each
     receipt's `run_id`, `stage.name` and coverage lists, and the manifest's `run_id` and chain --
     are replaced with the hostile ones, and the chain is recomputed with the SDK's own canonical
-    form and digest, as the review probes did. File and folder names stay the emitter's."""
+    form and digest, as the probes that found it did. File and folder names stay the emitter's."""
     from onetrace.canonical import canonicalize, digest
     from onetrace.emit import Instrument, Recorder
 

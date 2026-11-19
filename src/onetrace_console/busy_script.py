@@ -1,11 +1,16 @@
 """Every button that starts work shows that it is working, from one shared rule.
 
 A button that starts work carries `data-busy="<the work in progress>"` ("Sending…", "Comparing…"); an instant one (the
-theme switch, Copy, the settings gear) carries none. On a local console, `BUSY_SCRIPT`, on every page the console
+theme switch, Copy, the settings gear) carries none. So does a link that leads where a form must not (sign-in's, to
+the identity provider: `signin._link_to`): its plain press takes the same busy state while the browser leaves the
+page. On a local console, `BUSY_SCRIPT`, on every page the console
 fills (`frame.fill`) and on the sign-in page, makes a press of one, within the same task:
 
 - the button disabled, with `aria-busy="true"`, its label the work in progress, and a small spinner beside it (still
   under `prefers-reduced-motion`, the label carrying it alone);
+- the same words in a polite live region beside it (`data-busy-said`, `role="status"`), read by a screen reader and
+  not shown, so the press is said where a changed label is not; gone when the busy state ends, the page's own line
+  then saying any error;
 - the other buttons in the same form, or in the same `data-busy-scope`, disabled too, so Cancel can't race Remove;
 - a form's own press still posted as the button would have posted it (its name and value kept in a hidden field);
 - after 5 s, where nothing hands over to a progress view (`data-busy-handover`), a line under it saying what it waits
@@ -32,6 +37,8 @@ BUSY_CSS = """
 @keyframes busy-spin{to{transform:rotate(360deg)}}
 @media (prefers-reduced-motion: reduce){.busy-spin{animation:none;border-top-color:var(--line-strong)}}
 [data-busy-wait-line]{display:block;margin-top:4px;font-size:var(--fs-small);color:var(--ink-muted)}
+[data-busy-said]{position:absolute;width:1px;height:1px;margin:-1px;padding:0;overflow:hidden;clip:rect(0 0 0 0);
+  white-space:nowrap;border:0}
 """
 
 BUSY_SCRIPT = (
@@ -43,6 +50,8 @@ BUSY_SCRIPT = (
     "b.setAttribute('aria-busy','true');"
     "var s=document.createElement('span');s.className='busy-spin';s.setAttribute('aria-hidden','true');"
     "s.setAttribute('data-busy-spin','');b.after(s);"
+    "var r=document.createElement('span');r.setAttribute('data-busy-said','');r.setAttribute('role','status');"
+    "r.setAttribute('aria-live','polite');s.after(r);setTimeout(function(){r.textContent=b.getAttribute('data-busy')},50);"
     "scope(b).querySelectorAll('button').forEach(function(o){if(!o.disabled){o.disabled=true;"
     "o.setAttribute('data-busy-off','')}});b.disabled=true;"
     "if(!b.hasAttribute('data-busy-handover')){var t0=Date.now(),w=b.getAttribute('data-busy-wait')||'the console';"
@@ -52,7 +61,7 @@ BUSY_SCRIPT = (
     "l.textContent='Waiting for '+w+': '+n+' s'},250)}}"
     "function end(b){if(b.getAttribute('aria-busy')!=='true')return;clearInterval(b._busyTimer);"
     "b.textContent=b.getAttribute('data-busy-was');b.removeAttribute('aria-busy');"
-    "var p=b.parentNode;p.querySelectorAll('[data-busy-spin],[data-busy-wait-line]').forEach(function(x){x.remove()});"
+    "var p=b.parentNode;p.querySelectorAll('[data-busy-spin],[data-busy-wait-line],[data-busy-said]').forEach(function(x){x.remove()});"
     "scope(b).querySelectorAll('[data-busy-off]').forEach(function(o){o.disabled=false;"
     "o.removeAttribute('data-busy-off')});b.disabled=false}"
     "window.onetraceBusy={start:start,end:end};var current=null;"
@@ -62,6 +71,9 @@ BUSY_SCRIPT = (
     "document.addEventListener('click',function(e){var b=e.target.closest&&e.target.closest('button[data-busy]');"
     "if(!b||b.type==='submit')return;if(b.getAttribute('aria-busy')==='true'){e.preventDefault();"
     "e.stopImmediatePropagation();return}current=b;setTimeout(function(){start(b)},0)},true);"
+    "document.addEventListener('click',function(e){var a=e.target.closest&&e.target.closest('a[data-busy]');"
+    "if(!a||e.button!==0||e.metaKey||e.ctrlKey||e.shiftKey||e.altKey)return;"
+    "if(a.getAttribute('aria-busy')==='true'){e.preventDefault();return}start(a)},false);"
     "document.addEventListener('submit',function(e){var b=e.submitter;if(!b||!b.hasAttribute('data-busy'))return;"
     "if(b.getAttribute('aria-busy')==='true'){e.preventDefault();return}"
     "if(b.name){var h=document.createElement('input');h.type='hidden';h.name=b.name;h.value=b.value;"
@@ -80,7 +92,7 @@ BUSY_SCRIPT = (
     "var st=n.querySelector('[data-status]');if(st){var w=st.textContent;st.textContent='';"
     "setTimeout(function(){st.textContent=w},50)}})},function(){if(b)end(b)})},false);"
     "window.addEventListener('pageshow',function(){"
-    "document.querySelectorAll('button[aria-busy=\"true\"]').forEach(end);"
+    "document.querySelectorAll('[data-busy][aria-busy=\"true\"]').forEach(end);"
     "document.querySelectorAll('button[data-busy-off]').forEach(function(o){o.disabled=false;"
     "o.removeAttribute('data-busy-off')})})"
     "})()</script>"

@@ -47,6 +47,8 @@ NOT_COMPARED = "not compared"
 #: first whose comparison is held, and says so.
 HELD_ONLY = "that this demo compared"
 PUBLIC_ONLY = "This demo compares nothing; it offers the comparisons it holds."
+#: Where the comparison the rule picks is not held: said once, first, with the run it would use named as only that.
+NOT_HELD = "Not compared. The run it would be compared with is {run}, {rule}."
 
 
 def _receipts(run, store) -> list[dict]:
@@ -190,16 +192,28 @@ def section(run, store, *, public: bool, up: str = "../../") -> str:
             f"{same_inputs_line(run, store, up=up)}</section>"
         )
     other, rule, held_only = got
-    words = f"Compared with {other.run_id}, {rule_words(rule, held_only)}."
+    c = held(store, other.key, run.key)
+    words = (
+        f"Compared with {other.run_id}, {rule_words(rule, held_only)}."
+        if c is not None
+        else NOT_HELD.format(run=other.run_id, rule=rule_words(rule, held_only))
+    )
     if rule in (BENCHMARK_INPUTS, BENCHMARK_EARLIER):
         over = without_benchmarks(run, store, public=public)
         if over is not None and over.key != other.key:
             words += f" A benchmark, taken over {over.run_id}, which the rules take without benchmarks."
-    c = held(store, other.key, run.key)
     if c is not None:
-        act = f'<a href="{up}diff/{escape(c.key)}.html" data-what-changed="open">{escape(BUTTON)}</a>'
+        from onetrace_console.render import short_headline
+        from onetrace_console.views import INVESTIGATE
+
+        #: A held comparison opens as Investigate, with its short answer where it has one.
+        said = short_headline(c, store)
+        act = (f'<span data-what-changed="answer">{escape(said)}</span> ' if said else "") + (
+            f'<a href="{up}diff/{escape(c.key)}.html" data-what-changed="open">{escape(INVESTIGATE)}</a>'
+        )
     elif public:
-        act = f'<span data-what-changed="not-held">{escape(NOT_COMPARED)}.</span> {escape(PUBLIC_ONLY)}'
+        #: "Not compared" is said once, in the line above: here, only what a public console offers instead.
+        act = f'<span data-what-changed="not-held">{escape(PUBLIC_ONLY)}</span>'
     else:
         from onetrace_console.compare_script import COMPARE_SCRIPT
 

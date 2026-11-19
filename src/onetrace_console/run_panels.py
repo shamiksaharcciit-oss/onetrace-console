@@ -98,6 +98,7 @@ def step_blocks(
     same_files=None,
     spans=None,
     searched=None,
+    kinds=None,
 ) -> str:
     """One step's page: its decisions, its span ids (or "ran outside any span", where the run has a
     span context) and the app's spans joined to it (`spans`: the run's trace file read, `span_tree`),
@@ -132,4 +133,43 @@ def step_blocks(
     calls = (
         model_call.step_section(receipt, receipt_file, read_file, same_files, searched) if read_file is not None else ""
     )
-    return out + nest + calls
+    #: Format 0.5's kind, agent and tool-call record (`step_kinds`): `kinds` is (rows, run agent, node pages, run key,
+    #: (runs held by id, store)).
+    from onetrace_console import step_kinds
+
+    #: Each section carries onetrace-verify's own lines on what its members do not show (`verifier_notes`), from the
+    #: run's stored check: `kinds[5]`.
+    from onetrace_console.verifier_notes import within
+
+    notes = kinds[5] if kinds is not None and len(kinds) > 5 else {}
+    kind = (
+        within(step_kinds.step_section(receipt, receipt_file, *kinds[:3]), notes, "kinds") if kinds is not None else ""
+    )
+    #: Format 0.5's messages between agents (`agent_messages`): what the step sent and took in.
+    from onetrace_console import agent_messages
+
+    if kinds is not None:
+        kind += within(
+            agent_messages.step_section(receipt, receipt_file, kinds[0], kinds[2], read_file), notes, "messages"
+        )
+    #: The step's effect label (`effect_label`): read, write or unknown, and its basis, as recorded.
+    from onetrace_console import effect_label
+
+    if kinds is not None:
+        kind += effect_label.step_section(receipt, receipt_file, kinds[0])
+    #: Format 0.5's store state (`store_state`): what the step read from and wrote to a store.
+    from onetrace_console import store_state
+
+    if kinds is not None:
+        kind += within(store_state.step_section(receipt, receipt_file, kinds[0], read_file, kinds[3]), notes, "store")
+    #: Format 0.5's calls to other services (`service_link`): `kinds[4]` is (the runs held by id, the store).
+    from onetrace_console import service_link
+
+    if kinds is not None:
+        kind += within(service_link.calls_section(receipt, kinds[0], kinds[4][0], kinds[3], kinds[4][1]), notes, "link")
+    #: Format 0.5's tokens and cost (`usage`): each model-call record's, as recorded.
+    from onetrace_console import usage
+
+    if kinds is not None:
+        kind += within(usage.step_section(receipt, receipt_file, kinds[0], read_file), notes, "usage")
+    return kind + out + nest + calls

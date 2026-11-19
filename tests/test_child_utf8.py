@@ -67,12 +67,12 @@ def test_the_static_check_names_a_site_without_it(tmp_path, monkeypatch, examine
     examined(1, "planted module")
     copy = tmp_path / "onetrace_console"
     shutil.copytree(SRC, copy)
-    target = copy / "board7.py"
+    target = copy / "corpus_trace.py"
     text = target.read_text(encoding="utf-8")
     assert text.count(", env=utf8_env())") == 1
     target.write_text(text.replace(", env=utf8_env())", ")"), encoding="utf-8")
     monkeypatch.setattr(__import__(__name__), "SRC", copy)
-    assert [p for p in runs_problems() if p.startswith("board7.py:")]
+    assert [p for p in runs_problems() if p.startswith("corpus_trace.py:")]
 
 
 def _record(folder: Path, run_id: str, text: str) -> None:
@@ -140,12 +140,12 @@ def test_a_text_diff_with_non_ascii_text_shows_with_utf8_not_forced(tmp_path, mo
 def test_sabotage_without_the_forcing_the_same_diff_fails(tmp_path, monkeypatch, pair, examined):
     """With `utf8_env` giving back the environment unforced, the child writes cp1252 and the
     console can't read the text diff: the test above would fail."""
-    from onetrace_console import board7, compare, staging
+    from onetrace_console import compare, corpus_trace, staging
     from onetrace_console.viewer import report
 
     _not_forced(monkeypatch)
     unforced = lambda base=None: dict(os.environ if base is None else base)  # noqa: E731
-    for module in (compare, board7, staging, report):
+    for module in (compare, corpus_trace, staging, report):
         monkeypatch.setattr(module, "utf8_env", unforced)
     from html import unescape
 

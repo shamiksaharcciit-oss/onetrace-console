@@ -60,12 +60,15 @@ def _framed(folder: Path) -> list[Served]:
 
 def without_the_console_s_own(page: str) -> str:
     """`page` with the console's own inline scripts (each named in the policy by its hash) and the
-    theme switch taken out, each where it is: what other tests' "no script, no button" rules then
-    read. The switch is the one named exception to "no mechanism to press"."""
+    theme switch and the frame's two folds taken out, each where it is: what other tests' "no script, no button" rules
+    then read. The switch and the folds are the named exceptions to "no mechanism to press"."""
     from onetrace_console.public import inline_scripts
 
     for own in (*inline_scripts(), frame.THEME_SWITCH):
         page = page.replace(own, "")
+    #: The frame's folds below 600 px, each by its exact markup: they open a part of the frame and run nothing.
+    for tag in frame.FOLD_BUTTONS.values():
+        page = re.sub(re.escape(tag) + r"[^<]*</button>", "", page)
     return page
 
 
@@ -97,6 +100,9 @@ def switch_problems(page: str) -> list[str]:
     from tests.run_tools import without_run_tools
 
     page = without_run_tools(page)
+    #: The frame's folds below 600 px, each by its exact markup: they open a part of the frame and run nothing.
+    for tag in frame.FOLD_BUTTONS.values():
+        page = re.sub(re.escape(tag) + r"[^<]*</button>", "", page)
     out = []
     footer = re.findall(r"<footer>(.*?)</footer>", page, re.S)
     if sum(f.count(frame.THEME_SWITCH) for f in footer) != 1 or page.count(frame.THEME_SWITCH) != 1:

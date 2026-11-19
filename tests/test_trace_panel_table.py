@@ -90,7 +90,9 @@ def test_one_row_per_attribute_the_differing_ones_first_and_marked(drawn, examin
     examined(len(tables), "span tables")
     first = tables[0]
     head = _text(re.search(r"<thead>.*?</thead>", first, re.S).group(0))
-    assert head == "attribute baseline candidate"
+    #: The last column's header is not drawn; its words are there for a screen reader (`words.hidden_header`).
+    assert head == "attribute baseline candidate Whether it differs"
+    assert '<span class="visually-hidden">Whether it differs</span>' in first
     rows = re.findall(r"<tr[^>]*>.*?</tr>", re.search(r"<tbody>.*?</tbody>", first, re.S).group(0), re.S)
     assert 'data-differs="yes"' in rows[0] and _text(rows[0]) == "gen_ai.request.model model-a model-b differs"
     assert all('data-differs="yes"' in r for r in rows if "differs" in _text(r))

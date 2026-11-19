@@ -18,7 +18,7 @@ itself and never shows an output the SDK did not mark verified:
 
 Where it comes from: each comparison's own stored run of `onetrace diff A B
 --text --json --no-follow` (`compare.text_diff_raw`), and "Show more" its run at the console's one
-larger limit; the corpus trace is board 7's.
+larger limit; the corpus trace, for where the change started, is read in `corpus_trace`.
 """
 
 from __future__ import annotations
@@ -167,7 +167,7 @@ def _output(out, what: str) -> None:
         for j, line in enumerate(hunk["lines"]):
             _line(line, f"{what}'s hunk {i} line {j}")
     for i, entry in enumerate(out.get("entries", [])):
-        #: Not drawn here (board 7 and item 3 read them); held to their shape all the same.
+        #: Not drawn here (where the change started and the comparison on the graph read them); held to their shape all the same.
         _keys(entry, _ENTRY, {"change", "note"}, f"{what}'s entry {i}")
         if entry["change"] not in _CHANGES:
             _fail(f"{what}'s entry {i} change is {entry['change']!r}")
@@ -186,7 +186,7 @@ def _node(node, what: str) -> None:
     if "presence" in node:
         _shown(node["presence"], f"{what}'s presence")
     for i, cause in enumerate(node.get("causes", [])):
-        #: Not drawn here (the cause table is board 6's); held to its keys and enums.
+        #: Not drawn here (the cause table is the Compare page's); held to its keys and enums.
         _keys(cause, _CAUSE, _CAUSE, f"{what}'s cause {i}")
         if cause["kind"] not in _CAUSE_KINDS or cause["status"] not in ("same", "changed"):
             _fail(f"{what}'s cause {i} is not one this console reads")

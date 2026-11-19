@@ -329,6 +329,12 @@ class Config:
     #: trusted", never Yes. The console never makes, edits or guesses a trust file: a file the
     #: verifier can't read is its own `--trust` FAIL row, shown as it is.
     trust_file: str | None = None
+    #: The recipients this console's operator trusts to confirm an action, a path to an
+    #: `onetrace-recipient-trust/1` file, or absent (the default). Set, every check runs the verifier with
+    #: `--recipients <that file>`, so a recipient's confirmation's key row reads as the verifier reads it; absent, that
+    #: row reads NOT-RUN, with format.md's words on a match with an unauthenticated statement. Like the trust file, a
+    #: statement of whom to trust: the console never makes, edits or guesses one.
+    recipients_file: str | None = None
     #: The RFC 3161 time-stamp authority this console's operator trusts: its certificate, and the
     #: root (or roots) it chains to, paths to PEM or DER files, or absent (the default). Set, every
     #: check runs the verifier with `--tsa-cert <file>` and a `--tsa-root <file>` for each root, so
@@ -370,9 +376,97 @@ class Config:
     #: The close-call flag's margin on a model step's page (`token_levels.close_calls`), in nats: a position whose
     #: chosen token leads the runner-up by at most this much is a close call. Above zero.
     close_call_margin: float = 1.0
+    #: Teams: each team's name, and how people are joined to it, {"<team>": {"role_claim":
+    #: "<an app role's value>", "scim_group": "<an Entra ID group's object id>"}}. With teams, the pages are drawn
+    #: once per team (`pages/t/<team>/`) beside the all-teams set, and each person is served their team's. Without
+    #: SCIM, a person is in a team while the ID token's app roles hold its `role_claim`. Empty: no teams.
+    teams: dict = field(default_factory=dict)
+    #: A folder console's team: with teams, `onetrace-console <runs folder>` started with a
+    #: configuration file takes every run it reads into this team, and refuses to start without it. A key of its own
+    #: beside `teams`, so it takes no team's name. None: no folder team.
+    folder_team: str | None = None
+    #: The audit log: `enabled`, off by default; `head_location`, the file on a second mounted
+    #: volume each append's head is also written to, required while it is on and refused on the store's volume (at
+    #: start); `max_segment_bytes`, where a segment is closed and the next begun.
+    audit: dict = field(default_factory=lambda: dict(AUDIT_DEFAULTS))
+    #: SCIM 2.0 provisioning from Entra ID: `enabled`, off by default; `tenant_id`, the tenant
+    #: SCIM's Users sign in from, `sign_in.oidc.tenant_id`'s where left empty; `required_for_sign_in`;
+    #: `token_max_days`, the longest a SCIM token may be made for (at most 365); `allowed_sources`, address ranges
+    #: that may reach `/scim/v2/*`, any where empty; `max_body_bytes`; `max_results`, a list's largest page.
+    scim: dict = field(default_factory=lambda: _scim_defaults())
 
+
+def _scim_defaults() -> dict:
+    from onetrace_console.scim import DEFAULTS
+
+    return {**DEFAULTS, "allowed_sources": list(DEFAULTS["allowed_sources"])}
+
+
+#: The audit log's keys and their defaults.
+AUDIT_DEFAULTS: dict = {"enabled": False, "head_location": None, "max_segment_bytes": 1024 * 1024}
 
 _KEYS = {f.name for f in fields(Config)}
+#: What a team's entry may hold.
+_TEAM_KEYS = frozenset({"role_claim", "scim_group"})
+
+
+#: What a team's name may be, said once for every key that names a team.
+TEAM_NAME_SAID = "a lower-case letter, then up to 62 lower-case letters, digits or hyphens"
+
+
+def refuse_team_name(name: object, key: str, *, source: str, fix: str) -> None:
+    """Refuses, naming `key`, a team's name outside the store's rule (`store.TEAM_NAME`): a team so named would be
+    taken at start, and every run it took in would then refuse to read."""
+    from onetrace_console.store import TEAM_NAME
+
+    if not isinstance(name, str) or not TEAM_NAME.match(name):
+        raise ConfigError(
+            f"{source}: {key} is {name!r}, not a team's name: {TEAM_NAME_SAID}",
+            fix=f"{fix} so that it is {TEAM_NAME_SAID}, such as payments or search-eu.",
+        )
+
+
+def _validate_folder_team(value: object, teams: dict, *, source: str) -> str | None:
+    """`folder_team`: a team's name, one `teams` holds."""
+    if value is None:
+        return None
+    refuse_team_name(value, "folder_team", source=source, fix=f"set folder_team in {source}")
+    if value not in teams:
+        raise ConfigError(
+            f"{source}: folder_team is {value!r}, a team teams does not hold"
+            + (f" (it holds {', '.join(teams)})" if teams else " (it holds none)"),
+            fix=f"set folder_team in {source} to one of the teams in teams, or add {value!r} to teams.",
+        )
+    return str(value)
+
+
+def _validate_teams(value: object, *, public: bool, source: str) -> dict:
+    """`teams`: an object of team names, each an object with `role_claim` and `scim_group`, both text, both optional."""
+    fix = f'give teams as {{"payments": {{"role_claim": "Team.Payments"}}}} in {source}, or remove it.'
+    if not isinstance(value, dict):
+        raise ConfigError(f"{source}: teams must be an object of team names, got {value!r}", fix=fix)
+    if value and public:
+        raise ConfigError(
+            f"{source}: public is true and teams is set. A public console serves its demo to anyone, with no "
+            f"sign-in, so it has no teams.",
+            fix=f"remove teams from {source}, or remove public to run a team's console.",
+        )
+    for name, entry in value.items():
+        refuse_team_name(name, f"teams.{name}", source=source, fix=f"rename the team {name!r} in {source}")
+        if not isinstance(entry, dict):
+            raise ConfigError(f"{source}: teams.{name} must be an object, got {entry!r}", fix=fix)
+        unknown = set(entry) - _TEAM_KEYS
+        if unknown:
+            raise ConfigError(
+                f"{source}: unknown key(s) {sorted(unknown)} in teams.{name}. A team's entry may hold "
+                f"{sorted(_TEAM_KEYS)}.",
+                fix=f"remove {sorted(unknown)} from teams.{name} in {source}.",
+            )
+        for key, said in entry.items():
+            if not isinstance(said, str) or not said.strip() or not _text(said):
+                raise ConfigError(f"{source}: teams.{name}.{key} must be text, got {said!r}", fix=fix)
+    return {name: dict(entry) for name, entry in value.items()}
+
 
 #: What each top-level value must be, read from the dataclass's own annotations (the two
 #: mappings are checked by their own validators). `bool` is refused where a number belongs --
@@ -428,6 +522,82 @@ def _validate_top(data: dict, *, source: str) -> None:
                 fix=f"give {f.name} {want} in {source} (its default is {f.default!r}), or "
                 f"remove the key to use that default.",
             )
+
+
+def _validate_scim(value: object, *, source: str) -> dict:
+    """`scim`: its keys, each checked; `token_max_days` at most 365, said with the limit."""
+    import ipaddress
+    import re
+
+    from onetrace_console.scim import DEFAULTS, TOKEN_DAYS_CEILING
+
+    fix = f'give scim as {{"enabled": true}} in {source}, beside sign_in.method oidc, or remove it.'
+    if not isinstance(value, dict):
+        raise ConfigError(f"{source}: scim must be an object, got {value!r}", fix=fix)
+    unknown = set(value) - set(DEFAULTS)
+    if unknown:
+        raise ConfigError(
+            f"{source}: unknown scim key(s) {sorted(unknown)}. Known keys: {sorted(DEFAULTS)}.",
+            fix=f"remove {sorted(unknown)} from scim in {source}.",
+        )
+    merged = {**DEFAULTS, **value}
+    for key in ("enabled", "required_for_sign_in"):
+        if not isinstance(merged[key], bool):
+            raise ConfigError(f"{source}: scim.{key} must be true or false, got {merged[key]!r}", fix=fix)
+    tenant = merged["tenant_id"]
+    guid = r"[0-9a-fA-F]{8}-(?:[0-9a-fA-F]{4}-){3}[0-9a-fA-F]{12}"
+    if not isinstance(tenant, str) or (tenant and not re.fullmatch(guid, tenant)):
+        raise ConfigError(f"{source}: scim.tenant_id must be a tenant's id (a GUID), or empty, got {tenant!r}", fix=fix)
+    days = merged["token_max_days"]
+    if isinstance(days, bool) or not isinstance(days, int) or not 1 <= days <= TOKEN_DAYS_CEILING:
+        raise ConfigError(
+            f"{source}: scim.token_max_days is {days!r}; it is a whole number of days, at most {TOKEN_DAYS_CEILING}. "
+            "A token pasted by hand is never left for longer than a year.",
+            fix=f"set scim.token_max_days in {source} to {TOKEN_DAYS_CEILING} or fewer (180 by default).",
+        )
+    ranges = merged["allowed_sources"]
+    if not isinstance(ranges, list) or not all(isinstance(r_, str) for r_ in ranges):
+        raise ConfigError(f"{source}: scim.allowed_sources must be a list of address ranges, got {ranges!r}", fix=fix)
+    for r_ in ranges:
+        try:
+            ipaddress.ip_network(r_, strict=False)
+        except ValueError:
+            raise ConfigError(
+                f"{source}: scim.allowed_sources holds {r_!r}, not an address range such as 20.20.32.0/19", fix=fix
+            ) from None
+    for key, low, high in (("max_body_bytes", 1024, 64 * 1024 * 1024), ("max_results", 1, 1000)):
+        n = merged[key]
+        if isinstance(n, bool) or not isinstance(n, int) or not low <= n <= high:
+            raise ConfigError(f"{source}: scim.{key} must be a whole number from {low} to {high}, got {n!r}", fix=fix)
+    return {**merged, "allowed_sources": list(ranges)}
+
+
+def _validate_audit(value: object, *, source: str) -> dict:
+    """`audit`: an object of `enabled` (true or false), `head_location` (a path, or null) and `max_segment_bytes` (a
+    whole number of at least 4096)."""
+    fix = (
+        f'give audit as {{"enabled": true, "head_location": "/mnt/audit-heads/heads.jsonl"}} in {source}, or remove it.'
+    )
+    if not isinstance(value, dict):
+        raise ConfigError(f"{source}: audit must be an object, got {value!r}", fix=fix)
+    unknown = set(value) - set(AUDIT_DEFAULTS)
+    if unknown:
+        raise ConfigError(
+            f"{source}: unknown audit key(s) {sorted(unknown)}. Known keys: {sorted(AUDIT_DEFAULTS)}.",
+            fix=f"remove {sorted(unknown)} from audit in {source}.",
+        )
+    merged = {**AUDIT_DEFAULTS, **value}
+    if not isinstance(merged["enabled"], bool):
+        raise ConfigError(f"{source}: audit.enabled must be true or false, got {merged['enabled']!r}", fix=fix)
+    location = merged["head_location"]
+    if location is not None and not (isinstance(location, str) and location.strip()):
+        raise ConfigError(f"{source}: audit.head_location must be a path, or null, got {location!r}", fix=fix)
+    size = merged["max_segment_bytes"]
+    if isinstance(size, bool) or not isinstance(size, int) or size < 4096:
+        raise ConfigError(
+            f"{source}: audit.max_segment_bytes must be a whole number of at least 4096, got {size!r}", fix=fix
+        )
+    return merged
 
 
 def _validate_tracing(value: object, *, source: str) -> dict:
@@ -673,6 +843,16 @@ def _from_mapping(data: dict, *, source: str) -> Config:
             f'key to check without one (a valid signature then reads "Signed, key not '
             f'trusted").',
         )
+    if (
+        "recipients_file" in data
+        and data["recipients_file"] is not None
+        and not _fits("recipients_file", "str", data["recipients_file"])
+    ):
+        raise ConfigError(
+            f"{source}: recipients_file must be a path ({_WANT['str']}) or null, got {data['recipients_file']!r}",
+            fix=f"give recipients_file the path of an onetrace-recipient-trust/1 file in {source}, or remove the key "
+            "to check without one (a recipient's key row then reads NOT-RUN).",
+        )
     if "tsa_cert" in data and data["tsa_cert"] is not None and not _fits("tsa_cert", "str", data["tsa_cert"]):
         raise ConfigError(
             f"{source}: tsa_cert must be a path ({_WANT['str']}) or null, got {data['tsa_cert']!r}",
@@ -698,6 +878,14 @@ def _from_mapping(data: dict, *, source: str) -> Config:
         data = {**data, "tracing": _validate_tracing(data["tracing"], source=source)}
     if "tokenizers" in data:
         data = {**data, "tokenizers": _validate_tokenizers(data["tokenizers"], source=source)}
+    if "teams" in data:
+        data = {**data, "teams": _validate_teams(data["teams"], public=data.get("public") is True, source=source)}
+    if "audit" in data:
+        data = {**data, "audit": _validate_audit(data["audit"], source=source)}
+    if "scim" in data:
+        data = {**data, "scim": _validate_scim(data["scim"], source=source)}
+    if "folder_team" in data:
+        data = {**data, "folder_team": _validate_folder_team(data["folder_team"], data.get("teams", {}), source=source)}
     if "extensions" in data or "sign_in" in data:
         data = dict(data)
         if "extensions" in data:
@@ -790,6 +978,7 @@ def resolve_paths(config: Config, base: Path) -> Config:
     return replace(
         config,
         trust_file=absolute(config.trust_file),
+        recipients_file=absolute(config.recipients_file),
         tsa_cert=absolute(config.tsa_cert),
         tsa_roots=[absolute(r) for r in config.tsa_roots],
         tokenizers=[{**t, "folder": absolute(t["folder"])} for t in config.tokenizers],

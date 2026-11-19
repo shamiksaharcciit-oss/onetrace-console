@@ -147,7 +147,8 @@ def _served_path(rel: str, value: str) -> str:
 def test_every_exported_page_is_the_served_page_less_the_rewrite_and_the_banner(exported, tmp_path, examined):
     out, files, source = exported
     served = _served(source, tmp_path)
-    assert {p for p in served if p.endswith(".html")} == {p for p in files if p.endswith(".html")}, (
+    #: The Runs page is drawn as asked by a console, never ahead: the export writes it once, as runs.html.
+    assert {p for p in served if p.endswith(".html")} | {"runs.html"} == {p for p in files if p.endswith(".html")}, (
         "a page served and not exported, or the reverse"
     )
     examined(len(served), "served files compared with their exported copies")
@@ -161,6 +162,11 @@ def test_every_exported_page_is_the_served_page_less_the_rewrite_and_the_banner(
             assert got.decode() == want.decode().replace("url(/static/fonts/", "url(fonts/"), rel
             continue
         page = _unbanner(got.decode("utf-8"))
+        #: A file is not to be indexed (`search_engines`): its one `noindex`, and otherwise the page as served.
+        from onetrace_console.search_engines import NOINDEX
+
+        assert page.count(NOINDEX) == 1, rel
+        page = page.replace(NOINDEX, "", 1)
         #: A local console serves its footer with a link to its setup page; a file has none.
         #: A local console serves its settings menu at the top right (console 0.6.1 item 13); a file has none.
         served_page = re.sub(
@@ -191,12 +197,15 @@ def test_every_exported_page_is_the_served_page_less_the_rewrite_and_the_banner(
         served_links = _ATTR.findall(served_page)
         assert len(exported_links) == len(served_links), rel
         for (_kind, mine), (_, theirs) in zip(exported_links, served_links):
+            #: The sidebar's Runs, drawn as asked by a console, is the export's runs.html.
+            theirs = "/runs.html" if theirs == "/runs" else theirs
             if theirs.startswith("/"):
                 assert not mine.startswith("/") and _served_path(rel, mine) == theirs, (rel, mine, theirs)
             else:
                 assert mine == theirs, (rel, mine, theirs)
         #: One iterator, made once and shared by every substitution, so each takes the next link.
         restored = _ATTR.sub(lambda m, it=iter(served_links): f'{m.group(1)}="{next(it)[1]}"', page)  # noqa: B008
+        restored = restored.replace('href="/runs.html"', 'href="/runs"')
         assert _SLOT.sub("<!--fp-->", restored) == _SLOT.sub("<!--fp-->", served_page), rel
 
 
@@ -431,3 +440,21 @@ def test_the_command_exports_and_prints_the_file_list(source, tmp_path, monkeypa
     assert listed and set(listed) == {p.relative_to(out).as_posix() for p in out.rglob("*") if p.is_file()}
     assert any(line.startswith("project ids: 0") for line in printed)
     assert any(line.startswith("external requests: 0") for line in printed)
+
+
+def test_the_runs_page_is_exported_once_every_run_on_it_its_filters_named_with_no_control(exported, examined):
+    """The Runs page asks a console for each filter and page: a file holds it unfiltered, every run on one page, its
+    filters named with no form and no control, and the sidebar's Runs links it from every page."""
+    import re
+
+    out, files, _source = exported
+    page = (out / "runs.html").read_text(encoding="utf-8")
+    keys = set(re.findall(r'<tr data-run="[^"]*" data-key="([0-9a-f]{64})"', page))
+    listed = {p.split("/")[1] for p in files if p.startswith("runs/") and p.endswith("/record.tar")}
+    examined(len(listed), "runs on the exported Runs page")
+    assert keys == listed
+    assert "<form" not in page and "data-needs-console" in page and "Needs a running console." in page
+    assert not re.search(r"<(input|select|textarea)\b", page) and "Filters: Pipeline, Records agree" in page
+    assert 'href="runs.html" aria-current="page"' in page or 'aria-current="page" href="runs.html"' in page
+    home = (out / "home.html").read_text(encoding="utf-8")
+    assert 'href="runs.html"' in home and 'href="/runs' not in home

@@ -1,6 +1,6 @@
 """Two pages, and the five prohibitions on both of them.
 
-    The design note's five prohibitions apply to every page: no score or grade; no
+    The console's five prohibitions apply to every page: no score or grade; no
     percentage without its counts; no check button; colour only for verdicts; nothing
     inferred.
 
@@ -66,9 +66,9 @@ def every_page(execution, checked, store) -> dict[str, str]:
 
 def test_both_pages_render(execution):
     """The viewer's two pages, and the console's authorization page."""
-    #: And one stage page per step (board 4).
+    #: And one stage page per step.
     stages = {n for n in execution.pages if re.fullmatch(r"stage-\d+\.html", n)}
-    #: And the run receipt (board 5).
+    #: And the run receipt.
     from onetrace_console.receipt_page import RECEIPT
 
     assert stages and set(execution.pages) == {ANSWER, CASE, RUN_PROOF, AUTHORIZATION, RECEIPT} | stages
@@ -157,7 +157,7 @@ def test_the_command_to_repeat_the_check_is_on_the_page(execution):
 # --------------------------------------------------- the five prohibitions
 
 #: Words that would make a page a grade rather than a record. `score` and `grade` are the
-#: two the specification names; the rest are the ways the same thing arrives wearing a hat.
+#: two named outright; the rest are the ways the same thing arrives wearing a hat.
 FORBIDDEN_WORDS = (
     "trust score",
     "trustscore",
@@ -327,11 +327,11 @@ def test_nothing_inferred_beyond_the_record(every_page, name):
 def test_the_limit_sentence_is_on_the_pages_the_viewer_puts_it_on(every_page, name):
     """ "…what was verified and evaluated at the time — not what was ultimately true."
 
-    The design note §6 says it stays on every run page. The viewer renders `case.limit` on
+    The console's rule is that it stays on every run page. The viewer renders `case.limit` on
     the **case** and **executions** pages and not on the answer page — measured, and it is
     the viewer's fixed arrangement, not something this console may change.
     The answer page is also the frozen reader-session page, so changing it is forbidden
-    outright right now. Raised as a question in DESIGN_GAPS.md rather than asserted here.
+    outright right now. Raised as a question in the repository's list of design gaps rather than asserted here.
     """
     assert "not what was ultimately true" in every_page[name], f"{name} has lost the limit sentence"
 
@@ -340,11 +340,11 @@ def test_the_answer_page_carries_no_limit_sentence_and_that_is_recorded(every_pa
     """The discrepancy above, pinned so it cannot drift unnoticed in either direction.
 
     If the viewer later puts the sentence on the answer page, this fails and the question
-    in DESIGN_GAPS.md comes out — the guard reports its own obsolescence.
+    in the list of design gaps comes out — the guard reports its own obsolescence.
     """
     assert "not what was ultimately true" not in every_page[ANSWER], (
-        "the answer page now carries the limit sentence, so the design-note discrepancy "
-        "recorded in DESIGN_GAPS.md is resolved and should be removed from it"
+        "the answer page now carries the limit sentence, so the discrepancy with the console's rule "
+        "recorded in the list of design gaps is resolved and should be removed from it"
     )
 
 

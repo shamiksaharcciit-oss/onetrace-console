@@ -50,22 +50,21 @@ class TokenRecord:
     hash_hex: str
     created_at: str
     revoked: bool
+    #: The team every run this token delivers belongs to, where `teams` is configured; empty
+    #: for none. Written only when set, so a token made before teams reads, and is written back, as it was.
+    team: str = ""
 
     def to_json(self) -> str:
-        return (
-            json.dumps(
-                {
-                    "token_id": self.token_id,
-                    "principal": self.principal,
-                    "hash_hex": self.hash_hex,
-                    "created_at": self.created_at,
-                    "revoked": self.revoked,
-                },
-                sort_keys=True,
-                indent=1,
-            )
-            + "\n"
-        )
+        record = {
+            "token_id": self.token_id,
+            "principal": self.principal,
+            "hash_hex": self.hash_hex,
+            "created_at": self.created_at,
+            "revoked": self.revoked,
+        }
+        if self.team:
+            record["team"] = self.team
+        return json.dumps(record, sort_keys=True, indent=1) + "\n"
 
     @staticmethod
     def from_json(text: str) -> TokenRecord:
@@ -98,10 +97,10 @@ class TokenStore:
     def _path(self, token_id: str) -> Path:
         return self.root / f"{token_id}.json"
 
-    def create(self, principal: str) -> tuple[TokenRecord, str]:
+    def create(self, principal: str, team: str = "") -> tuple[TokenRecord, str]:
         """Returns `(record, raw_token)`. `raw_token` is returned exactly once --
         the caller (the CLI) must print it and never store it anywhere itself;
-        this store persists only its hash.
+        this store persists only its hash. `team`: the team it is bound to, which the CLI has checked.
         """
         if not _PRINCIPAL_RE.match(principal):
             raise TokenError(
@@ -111,10 +110,19 @@ class TokenStore:
         token_id = secrets.token_hex(8)
         raw = secrets.token_urlsafe(TOKEN_BYTES)
         record = TokenRecord(
-            token_id=token_id, principal=principal, hash_hex=_hash_token(raw), created_at=_now_iso(), revoked=False
+            token_id=token_id,
+            principal=principal,
+            hash_hex=_hash_token(raw),
+            created_at=_now_iso(),
+            revoked=False,
+            team=team,
         )
         _atomic_write(self._path(token_id), record.to_json().encode("utf-8"))
         return record, raw
+
+    def forget(self, token_id: str) -> None:
+        """Take back a token just made and never shown: its making could not be recorded (`audit`)."""
+        self._path(token_id).unlink(missing_ok=True)
 
     def get(self, token_id: str) -> TokenRecord | None:
         path = self._path(token_id)
@@ -136,6 +144,7 @@ class TokenStore:
             hash_hex=record.hash_hex,
             created_at=record.created_at,
             revoked=True,
+            team=record.team,
         )
         _atomic_write(self._path(token_id), revoked.to_json().encode("utf-8"))
         return True
@@ -146,11 +155,19 @@ class TokenStore:
         distinguished in the response, so a revoked token cannot be told apart
         from one that never existed.
         """
+        record = self.record_for(raw_token)
+        return record.principal if record is not None else None
+
+    def record_for(self, raw_token: str) -> TokenRecord | None:
+        """The live record `raw_token` matches, or `None`, as `principal_for` reads it."""
         want = _hash_token(raw_token)
-        for path in sorted(self.root.glob("*.json")):
-            record = TokenRecord.from_json(path.read_text(encoding="utf-8"))
+        for record in self.records():
             if record.revoked:
                 continue
             if hmac.compare_digest(record.hash_hex, want):
-                return record.principal
+                return record
         return None
+
+    def records(self) -> list[TokenRecord]:
+        """Every token record, live and revoked, in the order of their ids."""
+        return [TokenRecord.from_json(path.read_text(encoding="utf-8")) for path in sorted(self.root.glob("*.json"))]

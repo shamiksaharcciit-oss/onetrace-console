@@ -1,6 +1,6 @@
-"""A run's authorization page, in release 1's "no records" state (v6 board 3).
+"""A run's authorization page, in release 1's "no records" state, as its design draws it.
 
-    Only the "no records" authorization board (board 3), rather than waiting for onedoor.
+    Only the "no records" authorization page, rather than waiting for onedoor.
     It is never counted as a pass. It is never blank.
 
 The page is this console's own (the viewer has no authorization page), rendered in the
@@ -9,7 +9,7 @@ section links to it, and it links back.
 
 It says what release 1 has -- no authorization records for this run -- and nothing about
 what a run's receipts contain or what the pipeline behind them does: this console looks for
-neither. The viewer's independent review found the same over-claim in the Policy sentence
+neither. The viewer was found earlier to make the same over-claim in the Policy sentence
 (the case page's Policy sentence), so the page is held to it from the start.
 """
 
@@ -56,7 +56,7 @@ def test_the_page_never_reads_as_a_pass_and_is_never_blank(pages):
 
 
 #: Every word the page's own section says, exactly. Pinned whole, so a sentence cannot join
-#: it unnoticed: the review of the first version found one ("When a policy engine that speaks
+#: it unnoticed: the first version was found to hold one ("When a policy engine that speaks
 #: AADP is added, this page shows the whole chain...") presupposing no engine was added and
 #: promising a feature nothing backs, while the phrase-list test below let it through.
 SECTION_WORDS = (
@@ -76,7 +76,7 @@ def test_each_runs_page_is_titled_with_its_run(pages, checked):
 
 
 def test_the_page_claims_nothing_it_does_not_check(pages):
-    """Board 3's "Nothing in the record shows a policy decision, a permit or a confirmation" and
+    """The design's "Nothing in the record shows a policy decision, a permit or a confirmation" and
     "this pipeline does not yet send its actions through a policy engine" are claims about the
     receipts and about a system this console does not look at; the drawing's "proposed an
     action (stage 5)" is its own illustrative run."""
@@ -117,7 +117,7 @@ def test_a_case_page_with_no_policy_section_refuses_rather_than_losing_the_link(
 
 
 def test_a_marker_outside_the_policy_section_neither_hides_a_missing_section_nor_the_link():
-    """A review found that the "already done" guard ran before the Policy check, so a marker
+    """The "already done" guard used to run before the Policy check, so a marker
     anywhere on the page skipped both. It is looked for only inside the Policy section."""
     from onetrace_console.authorization import authorization_link
 
@@ -132,7 +132,7 @@ def test_a_marker_outside_the_policy_section_neither_hides_a_missing_section_nor
 def test_the_page_carries_the_limit_sentence_and_no_control(pages):
     """The five prohibitions run over this page in test_pages.py, with every other run page;
     here, what is particular to it: the limit sentence is on it, and it has no button --
-    board 3 draws two, and both are rendered as plain links or not at all."""
+    the design draws two, and both are rendered as plain links or not at all."""
     page = pages[AUTHORIZATION].lower()
     assert "<button" not in page and "<form" not in page
     assert "not what was ultimately true" in page, "the limit sentence, as on every run page"
@@ -159,7 +159,7 @@ def test_the_authorization_page_is_a_viewer_page_in_the_role_table(examined):
 
 
 #: A run key is sha256 hex (`store.run_key`), so the row admits exactly that and nothing else --
-#: in particular not `..` (a review found `[^/]+` let `runs/../authorization.html` through
+#: in particular not `..` (`[^/]+` was found to let `runs/../authorization.html` through
 #: to a file at the top of `pages/`).
 KEY = "0123456789abcdef" * 4
 
@@ -169,7 +169,10 @@ KEY = "0123456789abcdef" * 4
     [
         f"runs/{KEY}/authorization.htm",
         f"runs/{KEY}/sub/authorization.html",
-        "authorization.html",
+        #: The console's own Authorization page is a row of its own (`authorization_list`); near misses of it, refused.
+        "authorization.htm",
+        "Authorization.html",
+        "authorization.html/",
         "runs//authorization.html",
         "runs/../authorization.html",
         "runs/..\\x/authorization.html",

@@ -108,7 +108,7 @@ def demo_calls(tmp_path_factory):
 def warranty_calls(store, tmp_path, monkeypatch):
     """The SDK's warranty pair, its runs checked with no trust file and compared: the comparison
     follows its changed corpus link, so the trace runs with its runs root."""
-    from tests.test_board7 import _pair, _require_warranty
+    from tests.test_corpus_trace import _pair, _require_warranty
 
     _require_warranty()
     calls = _recorded(monkeypatch)

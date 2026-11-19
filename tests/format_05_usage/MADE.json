@@ -1,0 +1,19 @@
+{
+  "runs": {
+    "usage-a": {
+      "command": "ONETRACE_AUTO=1 ONETRACE_AUTO_KEEP=outputs ONETRACE_RUNS=runs ONETRACE_RUN_ID=usage-a USAGE_TOKENS=12,5,17 python usage_app.py",
+      "exit": 0
+    },
+    "usage-b": {
+      "command": "ONETRACE_AUTO=1 ONETRACE_AUTO_KEEP=outputs ONETRACE_RUNS=runs ONETRACE_RUN_ID=usage-b USAGE_TOKENS=20,6,26 python usage_app.py",
+      "exit": 0
+    }
+  },
+  "versions": {
+    "onetrace": "0.8.0",
+    "onetrace-auto": "0.8.0",
+    "onetrace-verify": "0.8.0",
+    "openai": "1.58.1",
+    "python": "3.12.10"
+  }
+}

@@ -243,21 +243,36 @@ def _local_picker(pipeline) -> str:
     public console (which has its own picker) nor on a static export, whose pages press nothing; and
     not for a pipeline over the list cap, whose two-step pages stay."""
     from onetrace_console.explain import _NO_PRESSES
-    from onetrace_console.frame import CSRF_SLOT, rendering_public
+    from onetrace_console.frame import rendering_public
     from onetrace_console.store import arrival_order
-    from onetrace_console.viewer.model import LIST_CAP, NAME_CAP
 
     if rendering_public() or _NO_PRESSES.get():
         return ""
     runs = arrival_order(pipeline.runs, newest_first=False)
+    return local_picker_of([(r.key, r.run_id, str(r.received_at)) for r in runs])
+
+
+def local_picker_of(runs: list[tuple[str, str, str]], chosen: tuple[str, str] = ("", ""), *, before: str = "") -> str:
+    """A local console's picker of two runs of one pipeline, each (key, run id, received), oldest first: the last two
+    chosen unless `chosen` names two keys it offers. `before`: drawn above the form, in its section. "" where there are
+    fewer than two runs, or more than the list cap."""
+    from onetrace_console.frame import CSRF_SLOT
+    from onetrace_console.viewer.model import LIST_CAP, NAME_CAP
+
     if len(runs) < 2 or len(runs) > LIST_CAP:
         return ""
+    keys = [k for k, _r, _w in runs]
+    at = (
+        (keys.index(chosen[0]), keys.index(chosen[1]))
+        if chosen[0] in keys and chosen[1] in keys
+        else (len(runs) - 2, len(runs) - 1)
+    )
 
     def select(name: str, label: str, chosen: int) -> str:
         options = "".join(
-            f'<option value="{_tag(r.key)}"{" selected" if i == chosen else ""}>'
-            f"{escape(r.run_id[:NAME_CAP])} · {escape(str(r.received_at).replace('T', ' '))}</option>"
-            for i, r in enumerate(runs)
+            f'<option value="{_tag(key)}"{" selected" if i == chosen else ""}>'
+            f"{escape(run_id[:NAME_CAP])} · {escape(received.replace('T', ' '))}</option>"
+            for i, (key, run_id, received) in enumerate(runs)
         )
         #: One field: the label's words above its own select (`compare-field`).
         return (
@@ -267,9 +282,9 @@ def _local_picker(pipeline) -> str:
 
     return (
         f'<section id="local-compare" data-section="local-compare" class="visitor-compare">'
-        f"<h2>{escape(LOCAL_PICKER_HEAD)}</h2><p>{escape(LOCAL_PICKER_WORDS)}</p>"
+        f"<h2>{escape(LOCAL_PICKER_HEAD)}</h2><p>{escape(LOCAL_PICKER_WORDS)}</p>{before}"
         f'<form method="post" action="/compare" data-local-compare>{CSRF_SLOT}'
-        f"{select('a', 'Baseline (run A)', len(runs) - 2)}{select('b', 'Candidate (run B)', len(runs) - 1)}"
+        f"{select('a', 'Baseline (run A)', at[0])}{select('b', 'Candidate (run B)', at[1])}"
         f'<button class="btn-primary" data-busy="Comparing…" data-busy-wait="the comparison" type="submit">{escape(LOCAL_PICKER_BUTTON)}</button></form></section>'
     )
 
@@ -319,6 +334,8 @@ def render_pipeline(pipeline, store: Store, *, generated_at: str, which: str = "
         f'<p data-section="shown">{len(shown)} of {n} run{"" if n == 1 else "s"} shown.</p>',
         legend(),
         '<ol class="tiles" data-section="runs">' + "".join(_tile(number[r.key], r, store) for r in shown) + "</ol>",
+        #: Tokens and cost per model across the pipeline's runs, through the run index (`usage`).
+        usage_section([r.key for r in pipeline.runs]),
         generated_footer(generated_at),
     ]
     return _document(f"Pipeline · {pipeline.label}", "\n".join(['<div class="cp">', *body, "</div>"]))
@@ -397,6 +414,24 @@ def _caught(run, line: str, signing: bool, store: Store) -> str:
     )
 
 
+#: The Overview's line naming the run to open for a run's Authorization page (`demo_store.AUTHORIZATION_EXAMPLE`).
+AUTHORIZATION_EXAMPLE_LINE = "A run's Authorization page, with a gated step and the decision it cites:"
+
+
+def _authorization_example(by_id: dict) -> str:
+    """The line naming the demo's run whose Authorization page shows a gated step; none where the store lacks it."""
+    from onetrace_console import demo_store
+
+    run = by_id.get(demo_store.AUTHORIZATION_EXAMPLE)
+    if run is None:
+        return ""
+    return (
+        f'<p data-section="authorization-example">{escape(AUTHORIZATION_EXAMPLE_LINE)} '
+        f'<a href="runs/{escape(run.key)}/authorization.html"><span class="mono" data-words="record">'
+        f"{escape(run.run_id)}</span></a></p>"
+    )
+
+
 def _planted_table(group: str, label: str, rows: str) -> str:
     """The planted runs of one group, a table of the three columns; on a narrow screen its rows
     stack, each cell under its column's header (`words.scroll_region`)."""
@@ -448,6 +483,7 @@ def way_in(store: Store) -> str:
             if quiet
             else ""
         )
+        + _authorization_example(by_id)
         + "</section>"
     )
     from onetrace_console.visitor_compare import PER_MINUTE
@@ -463,3 +499,10 @@ def way_in(store: Store) -> str:
     )
     out.append(f'<p data-section="all-pipelines"><a href="#pipeline-cards">{escape(ALL_PIPELINES)}</a></p>')
     return "".join(out)
+
+
+def usage_section(keys: list[str]) -> str:
+    """The pipeline's tokens and cost across its runs (`usage.pipeline_section`)."""
+    from onetrace_console import usage
+
+    return usage.pipeline_section(keys)

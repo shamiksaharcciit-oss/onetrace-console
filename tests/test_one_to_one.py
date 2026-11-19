@@ -2,7 +2,7 @@
 
 The viewer (its commit 93d4d87) shows a backslash already in a word doubled, so a raw control and its
 written-out escape no longer draw alike. This redraws the measurement's corpus -- the r11 fixture,
-the EXAM reference pair and its comparison, a review's digest pair and the control-character
+the EXAM reference pair and its comparison, a forged digest pair and the control-character
 pair -- with the escaping as it was and as it is, and holds that the only difference anywhere is a
 backslash drawn doubled, and that the Diff page's folder labels are unchanged.
 """

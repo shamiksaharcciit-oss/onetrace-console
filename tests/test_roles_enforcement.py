@@ -1,7 +1,7 @@
 """Role enforcement (item 7), ingester bearer tokens (item 8), and
 CSRF on `POST /compare` (item 9), all over real HTTP.
 
-The pure mapping -- every route in `docs/design/signin-and-roles.md` §3's own
+The pure mapping -- every route in the console's own role
 table -- is checked exhaustively, one sub-case per row, in `tests/test_roles.py`
 against `roles.required_role` directly. This file is the live-HTTP half: a
 representative case per credential kind (none, viewer session, ingester token),
@@ -241,7 +241,7 @@ def test_compare_with_a_valid_csrf_token_succeeds(roles_enabled, examined):
 #: directly (a new preview delivery is refused since 0.2.0): what the console does with runs it holds.
 @pytest.mark.usefixtures("preview_stored_directly")
 def test_an_ingester_token_on_compare_gets_403(roles_enabled, examined):
-    """`/compare` is `viewer` (design note §3's own judgement call) -- an
+    """`/compare` is `viewer` (a judgement call: reading runs, not changing them) -- an
     ingester credential must not satisfy it, CSRF question aside.
     """
     base, raw_token = roles_enabled

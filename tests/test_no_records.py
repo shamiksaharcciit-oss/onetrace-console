@@ -5,8 +5,8 @@
     records" in each of those places.
 
 The run detail is the viewer's case page, rendered through the vendored viewer: its evidence
-ladder and its Policy section. The authorization page (board 3) is batch 3, and this console
-has no receipt page (board 5) yet, so those two places are not asserted here.
+ladder and its Policy section. The authorization page has its own tests, and this console
+has no receipt page yet, so those two places are not asserted here.
 """
 
 from __future__ import annotations

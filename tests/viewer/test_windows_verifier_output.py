@@ -1,8 +1,8 @@
 """What the console's first Windows run of the 0.2.0 branch found, in two parts.
 
-§1  The verifier's output is read with each \\r\\n written as \\n -- at capture, and on reading a report
+1.  The verifier's output is read with each \\r\\n written as \\n -- at capture, and on reading a report
     stored before -- so a page never carries \\r. Only \\r\\n: a lone \\r is kept.
-§2  A text row is paired with its --json row by the name as the verifier escapes it: the text writes a
+2.  A text row is paired with its --json row by the name as the verifier escapes it: the text writes a
     backslash doubled and a control character as \\uXXXX, the --json row carries the name raw.
 
 A stand-in verifier writes both as Windows and the real verifier do: \\r\\n line endings, and rows whose

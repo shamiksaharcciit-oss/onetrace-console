@@ -45,5 +45,5 @@ def required_script(
             return folder / file
     pytest.fail(
         f"{file} is in neither this interpreter's scripts folder nor its own folder: "
-        f"{', '.join(str(f) for f in folders)}. Install it into this environment (see PINS.md)."
+        f"{', '.join(str(f) for f in folders)}. Install it into this environment from the pinned wheels."
     )

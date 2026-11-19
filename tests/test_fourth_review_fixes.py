@@ -1,6 +1,6 @@
-"""The fourth confirmation review's findings in the console, and the escaping of a record's own words.
+"""Further probe findings in the console, and the escaping of a record's own words.
 
-The fourth confirmation review re-ran the third's probes and found these. The viewer's halves
+Re-running the earlier probes found these. The viewer's halves
 (resolved names in its duplicate check, a lookup set for declared stages, capped lists, a
 record's words escaped) are the viewer's, re-vendored here.
 
@@ -103,7 +103,7 @@ def test_a_receipt_the_chain_names_another_way_is_still_format_checked(files, st
 
 
 def _spelled(files, n: int) -> dict[str, bytes]:
-    """The chain names one receipt `n` more times, each spelled differently (the review's probe)."""
+    """The chain names one receipt `n` more times, each spelled differently (a probe found it)."""
     out = _renamed(files)
     manifest = json.loads(out["MANIFEST.json"].decode("utf-8"))
     rel = manifest["chain"][1]["file"]
@@ -117,7 +117,7 @@ def _spelled(files, n: int) -> dict[str, bytes]:
 
 
 def test_the_113_kb_upload_that_drew_254_mb_of_pages_is_stored_and_stated(server, files):
-    """The review's probe_new1_e2e.py: 400 spellings of one receipt. Stored (it is no damage), its
+    """A probe found it: 400 spellings of one receipt. Stored (it is no damage), its
     pages say the viewer's refusal, and every page written together stays small."""
     from onetrace_console.serve import PAGES_DIRNAME
     from tests.test_serve import _get, _post
@@ -137,7 +137,7 @@ def test_the_113_kb_upload_that_drew_254_mb_of_pages_is_stored_and_stated(server
 
 def _early_stopped(tmp_path: Path) -> dict[str, bytes]:
     """A run from the pinned SDK that stopped early: three stages declared, two run. Made with
-    the SDK's own Recorder, delivered as the SDK leaves it (the review's probe_sdk_early_stop)."""
+    the SDK's own Recorder, delivered as the SDK leaves it, as a probe did."""
     from onetrace.emit import Instrument, Recorder
 
     code = tmp_path / "pipeline.py"
@@ -207,7 +207,7 @@ def test_a_run_with_gaps_is_counted_on_home_as_its_own_page_says(files, store):
 
 
 def test_a_run_whose_record_the_viewer_refuses_is_not_counted_as_missing_nothing(files, store):
-    """The review's probe_missing_claim.py: its run page cannot be drawn, and Home counted it
+    """Found by a probe: its run page cannot be drawn, and Home counted it
     "missing nothing". Neither is established, and Home says so."""
     run = _stored(missing_a_receipt(files), store)
     assert run.nothing_missing == ""
@@ -220,7 +220,7 @@ def test_a_run_whose_record_the_viewer_refuses_is_not_counted_as_missing_nothing
 
 #: Names no host holds: one part longer than a file name may be.
 EVERY_HOST = ["notes/" + "x" * 300 + ".txt"]
-#: Names Windows cannot hold (the review's probe_member_names.py and probe_winnames.py, and
+#: Names Windows cannot hold (found by probes of member names and Windows names, and
 #: `notes/NUL`, which staging wrote to the null device).
 WINDOWS_ONLY = [
     "notes/a:b.txt",
@@ -311,7 +311,7 @@ def _written(pages: dict[str, str]) -> int:
 
 
 def test_the_39_mb_upload_of_a_million_gaps_is_stored_and_draws_small_pages(files, store):
-    """The review's probe_shapes_amp.py gaps 1000000: a 3.9 KB upload drew 39 MB of run pages.
+    """A probe with a million gaps: a 3.9 KB upload drew 39 MB of run pages.
     Ingest does not refuse it; its pages draw the first hundred gaps and a count."""
     from onetrace_console.viewer.model import LIST_CAP
 
@@ -329,7 +329,7 @@ def test_the_39_mb_upload_of_a_million_gaps_is_stored_and_draws_small_pages(file
 
 
 def test_twenty_thousand_declared_stages_draw_a_hundred_and_a_count(files, store):
-    """The review's 47.8 KB upload. The Overview's pipelines table names the first hundred."""
+    """A probe's 47.8 KB upload. The Overview's pipelines table names the first hundred."""
     from onetrace_console.viewer.model import LIST_CAP
     from onetrace_console.viewer.sentences import template
 
@@ -570,7 +570,7 @@ def test_an_unreadable_records_old_pages_are_replaced_at_start_up(
     store,  # noqa: F811
     tmp_path,
 ):
-    """The review, plausible from reading the code: the old Diff page stayed on disk and was
+    """Plausible from reading the code: the old Diff page stayed on disk and was
     served. Measured here, and the same for a run record's own pages."""
     from onetrace_console.serve import PAGES_DIRNAME, _render_startup_pages
     from onetrace_console.unreadable import PAGE_FAILED

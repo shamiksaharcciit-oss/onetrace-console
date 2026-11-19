@@ -161,9 +161,11 @@ def test_the_base_install_gains_no_dependency():
 
     project = tomllib.loads((REPO / "pyproject.toml").read_text(encoding="utf-8"))["project"]
     #: PyJWT is the base's own, for sign-in through Microsoft Entra ID, not the extra's.
-    assert project["dependencies"] == ["onetrace==0.8.0", "onetrace-verify[crypto]==0.8.0", "pyjwt[crypto]==2.15.1"]
+    assert project["dependencies"] == ["onetrace==0.9.0", "onetrace-verify[crypto]==0.9.0", "pyjwt[crypto]==2.15.1"]
     assert project["optional-dependencies"] == {
-        "neighbours": ["onnxruntime==1.31.0", "tokenizers==0.23.3", "numpy==2.5.4"]
+        "neighbours": ["onnxruntime==1.31.0", "tokenizers==0.23.3", "numpy==2.5.4"],
+        #: Trace forwarding's protobuf, an extra of its own (`forwarding`).
+        "otlp": ["opentelemetry-proto>=1.39,<1.46"],
     }
     base = (REPO / "requirements.lock").read_text(encoding="utf-8")
     assert not re.search(r"^(onnxruntime|tokenizers|numpy|huggingface)", base, re.M)
@@ -452,13 +454,24 @@ def test_the_nearness_ladder_beside_the_exact_one(on, held):
     assert section.count("data-largest-drop") == 1
     marked = re.search(r"<tr [^>]*data-largest-drop>.*?</tr>", section, re.S).group(0)
     assert "digest differs" in marked
-    #: Nothing else on the page moved: without the section it is the page drawn with neighbours off.
+    #: Nothing else on the page moved: without what neighbours add (the Nearness ladder's tab and its panel, and the
+    #: runs with near inputs), it is the page drawn with neighbours off.
     off_store, off_runs = held
     off = _diff(
         _comparison(off_store, off_runs["p7-39-cold-chain-baseline"], off_runs["p7-40-cold-chain-one-reading-changed"]),
         off_store,
     )
-    assert re.sub(r"\n?" + re.escape(section), "", page) == off
+    without = re.sub(
+        r'<section class="tab-panel" id="compare-tab-nearness" data-tab-panel="nearness">'
+        r'<h2 class="visually-hidden">Nearness ladder</h2>\n?' + re.escape(section) + "</section>",
+        "",
+        page,
+    )
+    without = re.sub(
+        r'<a href="#compare-tab-nearness" id="compare-tabbtn-nearness" data-tab="nearness">[^<]*</a>', "", without
+    )
+    without = re.sub(r'\n?<section class="near-runs" data-section="near-runs".*?</section>', "", without, flags=re.S)
+    assert without != page and without == off
     #: Two runs of another configuration each are not neighbours: no ladder.
     assert 'data-section="nearness"' not in _diff(
         _comparison(store, runs["p4-29-reply-30-days"], runs["p4-30-reply-14-days"]), store
@@ -610,7 +623,7 @@ def test_the_public_demo_build_has_no_embedder(shared_demo):
 # ------------------------------------------------------------------------------ 8. words
 
 #: The feature's page in this repository's docs/, which the public export leaves out as it leaves out every
-#: doc but the README's images: read where it is here, as tests/test_pins.py reads PINS.md.
+#: doc but the README's images: read where it is here, as tests/test_pins.py reads the record of its pins.
 DOC = REPO / "docs" / "neighbours.md"
 
 
@@ -627,7 +640,7 @@ def test_the_non_claims_word_for_word_on_the_setup_page_and_in_the_docs(held, mo
 
 
 def test_the_operator_readme_says_what_the_extra_is_and_what_it_is_not():
-    """The operator README, which the export carries where docs/neighbours.md is left out: what the
+    """The operator README, which the export carries where the feature's doc page is left out: what the
     extra is, how to install it, local only and off by default, the four non-claims word for word, and
     the setup page; and the image it describes installs no extra."""
     from onetrace_console.neighbours import NON_CLAIMS
@@ -800,6 +813,45 @@ def test_the_setup_page_turns_it_on_and_off_over_http(server, monkeypatch):
     with pytest.raises(urllib.error.HTTPError) as got:
         opener.open(urllib.request.Request(base + "/neighbours/off", data=b""), timeout=limit(60))
     assert got.value.code == 303 and settings.read(Handler.store) is None
+
+
+@needs_extra
+def test_neighbours_turned_on_and_off_are_recorded_in_the_audit_log(server, monkeypatch, tmp_path):
+    """`setting.changed` for neighbours on, naming the embedder, and off."""
+    import urllib.error
+    import urllib.parse
+    import urllib.request
+
+    from onetrace_console import audit
+    from onetrace_console.neighbours import embedder, settings
+    from onetrace_console.serve import Handler
+
+    base, _root = server
+    heads = tmp_path / "second-volume" / "heads.jsonl"
+    heads.parent.mkdir()
+    log = audit.AuditLog(tmp_path / "audit_log", head_location=heads)
+    monkeypatch.setattr(Handler, "audit", audit.Audit(log))
+    monkeypatch.setattr(embedder, "_post_json", bag_of_words)
+    words = settings.confirmation(ENDPOINT)
+
+    class NoRedirect(urllib.request.HTTPRedirectHandler):
+        def redirect_request(self, *a, **k):
+            return None
+
+    opener = urllib.request.build_opener(NoRedirect)
+    body = urllib.parse.urlencode(
+        {"embedder": "endpoint", "base_url": ENDPOINT["base_url"], "model": ENDPOINT["model"], "confirmed": words}
+    ).encode()
+    for path, data in (("/neighbours/on", body), ("/neighbours/off", b""), ("/neighbours/off", b"")):
+        with pytest.raises(urllib.error.HTTPError) as got:
+            opener.open(urllib.request.Request(base + path, data=data), timeout=limit(60))
+        assert got.value.code == 303
+    entries = [(e["event"], e["object"], e["detail"]) for e in log.entries()]
+    assert entries == [
+        ("setting.changed", "neighbours", {"setting": "neighbours", "on": True, "embedder": ENDPOINT["model"]}),
+        ("setting.changed", "neighbours", {"setting": "neighbours", "on": False}),
+    ], "on, then off; the second off found it off, and changed nothing"
+    assert settings.read(Handler.store) is None
 
 
 def test_an_embedder_number_that_rounds_to_one_never_reads_as_the_record_s_equality():

@@ -107,7 +107,7 @@ INCIDENTS_DIR = Path(__file__).resolve().parent.parent / "incidents"
 def _documented_rules() -> dict[str, tuple[str, ...]]:
     """The rule table as `RULES.md` specifies it, parsed from its own markdown table.
 
-    `RULES.md` is **the specification**, written by hand, so it is
+    `RULES.md` is **the rule table's source of truth**, written by hand, so it is
     the side this comparison reads first. The code must match the document, not the other way
     round — which was the first version's mistake, and would make the document describe
     whatever the code happens to do.
@@ -118,7 +118,7 @@ def _documented_rules() -> dict[str, tuple[str, ...]]:
     for line in doc.read_text(encoding="utf-8").splitlines():
         if not line.startswith("| `I-"):
             continue
-        #: Backticks are markdown presentation, not content: the specification writes
+        #: Backticks are markdown presentation, not content: the document writes
         #: `'run_id reused'` where the code holds the bare string. Stripped from BOTH sides so
         #: the comparison is about what the rule says, not about how the document marks it up.
         cells = [c.strip().replace("`", "") for c in line.strip().strip("|").split("|")]
@@ -132,7 +132,7 @@ def test_the_code_and_the_specification_agree_rule_for_rule(examined):
     """A test fails if the code and `RULES.md` differ IN ANY WAY.
 
     Compared field by field — id, source, field, condition, displayed words — not merely by
-    the ids being present. A rule whose condition drifted from the specification while keeping
+    the ids being present. A rule whose condition drifted from the document while keeping
     its name is the drift worth catching.
     """
     documented = _documented_rules()
@@ -148,8 +148,8 @@ def test_the_code_and_the_specification_agree_rule_for_rule(examined):
         for name, want, mine in zip(("id", "source", "field", "condition", "words"), spec, got):
             assert want == mine, (
                 f"{rule.id}: RULES.md specifies {name} = {want!r}, the code has {mine!r}. "
-                f"The document is the specification; change the code to match it, or change "
-                f"the document deliberately and have it reviewed."
+                f"The document is the source of truth; change the code to match it, or change "
+                f"the document deliberately and have someone else check it."
             )
 
 
@@ -159,7 +159,7 @@ def test_the_specification_carries_no_hand_typed_digest(examined):
     The digest lives in `RULES.SHA256`, written by `tools/rule_digest.py`.
     """
     text = (INCIDENTS_DIR / "RULES.md").read_text(encoding="utf-8")
-    examined(1, "specification checked for a transcribed digest")
+    examined(1, "rule document checked for a transcribed digest")
     assert RULE_TABLE_DIGEST not in text, (
         "RULES.md carries the rule table's digest. It is hand-written, so that digest would "
         "be transcribed — it belongs in RULES.SHA256, written by tooling."
@@ -188,7 +188,7 @@ def test_the_specification_records_the_refused_rule_and_that_it_is_refused(exami
     examined(len(NOT_BUILT), "rules recorded as not built")
     assert NOT_BUILT[0] in text, "the rule left out is not recorded in RULES.md"
     assert "Refused by design, not deferred" in text, (
-        "RULES.md does not say the rule is refused by design; the specification "
+        "RULES.md does not say the rule is refused by design; the document "
         "requires that distinction, because deferred invites someone to build it later"
     )
 

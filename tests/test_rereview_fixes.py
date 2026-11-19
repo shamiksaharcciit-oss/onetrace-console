@@ -1,9 +1,9 @@
-"""The second confirmation review's console findings.
+"""Console findings from a second confirmation run.
 
     None may crash a page.  /  Config errors: print a clean message with a `fix:` line, never
     a traceback.
 
-A second fresh review confirmed the first review's ten findings closed, then found these, each
+A second fresh look confirmed the first ten findings closed, then found these, each
 by running it. The viewer's halves are its commits 2491b86 and b7c7f52, re-vendored here.
 
 B1. A lone surrogate reached pages through the Overview's day-change marker, which reads stored
@@ -51,7 +51,7 @@ def _with_raw(files, part, raw):
 @pytest.fixture
 def two_days(files, store, checked):  # noqa: F811
     """The clean run, received yesterday; the same pipeline today, with a lone surrogate in a
-    recorded digest -- the review's probe_marker_surrogate.py."""
+    recorded digest -- as a probe found it."""
     store.put_run(replace(checked, received_at="2026-09-28T09:00:00+00:00"))
     bad = _stored(_with_raw(files, "manifest_digest", '"\\ud800"'), store)
     store.put_run(replace(bad, received_at="2026-09-29T09:00:00+00:00"))
@@ -135,7 +135,7 @@ def test_the_check_waits_as_long_as_staging_does():
 
 
 def test_a_stored_run_with_no_check_report_does_not_stop_a_restart(files, store, tmp_path):
-    """The review's probe_unchecked_run_restart.py: a process stopped during the check leaves
+    """Found by a probe: a process stopped during the check leaves
     exactly this. Its pages say so; the others are drawn; the console starts."""
     from onetrace_console.ingest import accept
     from onetrace_console.serve import PAGES_DIRNAME, _render_startup_pages

@@ -95,30 +95,30 @@ def test_the_four_install_into_one_environment_and_pip_check_finds_nothing(conso
     examined(len(FOUR), "distributions installed into one environment")
     assert exit_code == 0, said
     assert "No broken requirements found." in said, said
-    assert versions["onetrace"] == PINNED_SDK_VERSION == "0.8.0", versions
-    assert (versions["onetrace-explain"], versions["onetrace-auto"]) == ("0.3.1", "0.8.0"), versions
+    assert versions["onetrace"] == PINNED_SDK_VERSION == "0.9.0", versions
+    assert (versions["onetrace-explain"], versions["onetrace-auto"]) == ("0.3.2", "0.9.0"), versions
 
 
-def test_onetrace_explain_0_3_1_is_pinned_by_its_hash_and_no_candidate_remains(examined):
-    """onetrace-explain 0.3.1 as released: its wheel's sha256 as its release build gave it, the one the tests of
+def test_onetrace_explain_0_3_2_is_pinned_by_its_hash_and_no_candidate_remains(examined):
+    """onetrace-explain 0.3.2 as released: its wheel's sha256 as PyPI serves it, the one the tests of
     the Set up Explain form run against; the cache keeps no candidate taken from a folder."""
     from tools import fetch_wheel_cache as w
 
     examined(1, "pin")
-    assert w.ONE_ENVIRONMENT["onetrace-explain==0.3.1"] == (
-        "onetrace_explain-0.3.1-py3-none-any.whl",
-        "20a506dce8e5c1f19fb70c9054f6f7c1bfab313f71fd59aae3b745eebf81e7b5",
+    assert w.ONE_ENVIRONMENT["onetrace-explain==0.3.2"] == (
+        "onetrace_explain-0.3.2-py3-none-any.whl",
+        "50988bd1cf761a7c3730b8b04eb13a7e0715cece56402c568d5b4e5ab3011d2f",
     )
     assert not hasattr(w, "CANDIDATE") and not hasattr(w, "take_candidate")
 
 
-def test_sabotage_an_onetrace_explain_that_takes_no_0_8_is_named(console_wheel, tmp_path, examined):
-    """onetrace-explain 0.3.0 takes onetrace below 0.8: beside the console's pin, pip refuses or pip
+def test_sabotage_an_onetrace_explain_that_takes_no_0_9_is_named(console_wheel, tmp_path, examined):
+    """onetrace-explain 0.3.1 takes onetrace below 0.9: beside the console's pin, pip refuses or pip
     check names it."""
     from tools.fetch_wheel_cache import EARLIER_EXPLAIN
 
     (older,) = EARLIER_EXPLAIN
-    assert older == "onetrace-explain==0.3.0", older
+    assert older == "onetrace-explain==0.3.1", older
     exit_code, said, _ = installed_together(tmp_path / "venv", console_wheel, [older])
-    examined(1, "an environment with an onetrace-explain that takes no 0.8")
+    examined(1, "an environment with an onetrace-explain that takes no 0.9")
     assert exit_code != 0 and "onetrace" in said, said

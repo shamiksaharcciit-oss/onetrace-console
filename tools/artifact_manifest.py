@@ -18,7 +18,7 @@ WHAT IT DOES NOT DO
 It does not classify a difference. Each difference is to be confirmed as a removed
 process id, a new test or a README line, and that reading needs the new files in front of it.
 Writing that classifier now, against no data, would be exactly the untested-hypothesis habit
-the review warned against -- so it is written when there is something to run it on.
+an earlier check warned against -- so it is written when there is something to run it on.
 
 Usage:
     python tools/artifact_manifest.py baselines/dae64ce.json <file> [<file> ...]

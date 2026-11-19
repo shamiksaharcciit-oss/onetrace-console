@@ -1,0 +1,17 @@
+{
+  "runs": {
+    "agents-kept": {
+      "command": "AGENTS_KEEP=outputs ONETRACE_RUN_ID=agents-kept python agents.py",
+      "exit": 0
+    },
+    "agents-not-kept": {
+      "command": "AGENTS_KEEP=none ONETRACE_RUN_ID=agents-not-kept python agents.py",
+      "exit": 0
+    }
+  },
+  "versions": {
+    "onetrace": "0.8.0",
+    "onetrace-verify": "0.8.0",
+    "python": "3.12.10"
+  }
+}

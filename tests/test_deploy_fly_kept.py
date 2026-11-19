@@ -260,43 +260,40 @@ def _said(folder, run) -> tuple[str, str]:
     return both, " ".join(html.unescape(re.sub(r"<[^>]+>", " ", both)).split())
 
 
-def test_p10_is_recorded_again_in_1_0_beside_the_kept_draft_pair(built, examined):
-    """The build from the kept runs records P10's agent pair once more, its records in
-    model-call-record/1.0, signed by the kept trust file's key, and compares the new pair; the kept
-    runs stay byte for byte (the build record vouches for them, as for every run)."""
-    from onetrace_console import records
-    from onetrace_console.demo_store import COMPARISONS_BESIDE_KEPT, RECORDED_BESIDE_KEPT
+def test_nothing_is_recorded_beside_the_kept_runs(built, examined):
+    """The kept runs hold P10's agent pair with its records in model-call-record/1.0 already, so the build from them
+    records nothing beside them: its runs are the kept runs, byte for byte, and its comparisons the kept ones."""
+    from onetrace_console.demo_store import COMPARISONS
 
     folder, store, pairs = built
-    runs = {r.run_id: r for r in store.runs()}
-    examined(len(RECORDED_BESIDE_KEPT), "runs recorded beside the kept ones")
-    for spec in RECORDED_BESIDE_KEPT:
-        assert spec.folder in runs, spec.folder
-        assert records.state(runs[spec.folder], store) == records.YES, spec.folder
-    for pair in COMPARISONS_BESIDE_KEPT:
-        assert pair in pairs, pair
+    kept = sorted(p.name for p in (KEPT / "runs").iterdir() if p.is_dir())
+    examined(len(kept), "kept runs")
+    assert sorted(p.name for p in (folder / "runs").iterdir() if p.is_dir()) == kept
+    assert not any("-1-0" in r.run_id for r in store.runs())
+    assert not any("-1-0" in a or "-1-0" in b for a, b in pairs)
+    assert [p for p in COMPARISONS if p[0].startswith("pz-5")] == [
+        ("pz-51-agent-baseline", "pz-53-agent-amount-changed")
+    ]
     for name in ("pz-51-agent-baseline", "pz-53-agent-amount-changed"):
         for f in (KEPT / "runs" / name).rglob("*"):
             if f.is_file():
                 assert (folder / "runs" / name / f.relative_to(KEPT / "runs" / name)).read_bytes() == f.read_bytes(), f
 
 
-def test_p10_s_reference_is_the_new_baseline_and_the_kept_pair_gets_its_verdict(built, examined):
+def test_p10_s_reference_is_its_kept_baseline_and_the_kept_pair_gets_its_verdict(built, examined):
     """The kept runs were recorded again in console 0.8.0, P10's agent runs with their model-call records in
     model-call-record/1.0, so their records are checked and each gets its verdict, against the reference made
-    from the 1.0 baseline recorded beside them (P10's benchmark marked most recently), as the runs beside them
-    do. Until then the kept pair's draft records could not be checked, and it got no verdict."""
+    from P10's own kept baseline, its benchmark."""
     from onetrace_console import model_call, records, verdicts
-    from onetrace_console.demo_store import BENCHMARK_BESIDE_KEPT
 
     folder, store, _pairs = built
     runs = {r.run_id: r for r in store.runs()}
     kept = [runs["pz-51-agent-baseline"], runs["pz-53-agent-amount-changed"]]
-    examined(len(kept) + 1, "kept P10 runs, and the run beside them")
+    examined(len(kept), "kept P10 runs")
     assert {records.state(r, store) for r in kept} == {records.YES}
     ref = verdicts.reference_record(verdicts.pipeline_of(kept[0], store), store, compute=False)
-    assert ref["reference"]["made_from"]["run_ids"][0] == BENCHMARK_BESIDE_KEPT
-    for r in [*kept, runs["pz-57-agent-amount-changed-1-0"]]:
+    assert ref["reference"]["made_from"]["run_ids"][0] == "pz-51-agent-baseline"
+    for r in kept:
         both, _words = _said(folder, r)
         assert verdicts.word_of(r, store) is not None and "data-verdict-lines" in both, r.run_id
         assert 'data-section="draft-records"' not in both and model_call.draft_formats(r, store) == [], r.run_id
@@ -337,13 +334,13 @@ def record_link_problems(folder: Path, run_key: str) -> list[str]:
 
 
 def test_the_run_page_links_each_model_call_record_to_its_section_on_the_step_page(built, examined):
-    """On P10's 1.0 run, each of the step's two records under "What came out" links to its section on
+    """On P10's kept run (its records in 1.0), each of the step's two records under "What came out" links to its section on
     the step's page, and that section is there; the step's other output is not linked."""
     folder, store, _pairs = built
-    run = {r.run_id: r for r in store.runs()}["pz-57-agent-amount-changed-1-0"]
+    run = {r.run_id: r for r in store.runs()}["pz-53-agent-amount-changed"]
     case = (folder / "store" / "pages" / "runs" / run.key / "case.html").read_text(encoding="utf-8")
     hrefs = re.findall(r'<a href="([^"]*)" data-output-link>', case)
-    examined(len(hrefs), "record links on pz-57's run page")
+    examined(len(hrefs), "record links on pz-53's run page")
     assert sorted(set(hrefs)) == [
         "stage-1.html#model-call-model_call-2-json",
         "stage-1.html#model-call-model_call-json",
@@ -353,7 +350,7 @@ def test_the_run_page_links_each_model_call_record_to_its_section_on_the_step_pa
 
 def test_sabotage_a_record_link_to_no_section_and_an_unlinked_record_are_named(built, tmp_path, examined):
     folder, store, _pairs = built
-    run = {r.run_id: r for r in store.runs()}["pz-57-agent-amount-changed-1-0"]
+    run = {r.run_id: r for r in store.runs()}["pz-53-agent-amount-changed"]
     pages = tmp_path / "store" / "pages" / "runs" / run.key
     shutil.copytree(folder / "store" / "pages" / "runs" / run.key, pages)
     case = (pages / "case.html").read_text(encoding="utf-8")
@@ -567,7 +564,8 @@ def _local_page(store, comparison) -> str:
 
 def test_the_explanation_is_directly_under_the_short_answer(built, local_p1, explain_installed, examined):
     """P1 kept on the public build and P1 on a local console with its explanation: right under the
-    short answer. P8 43->44, none kept, public: its one line stays at the foot."""
+    short answer. P8 43->44, none kept, public: its one line in the same place, beside the tabs, as the comparison
+    page draws Explain on every pair (`compare_view.explain_aside`)."""
     folder, _, pairs = built
     p1 = _page(folder, pairs[("p1-02-baseline-set2", "p1-08-candidate-set2")])
     p8 = _page(folder, pairs[("p8-43-invoice-tolerance-5pct", "p8-44-invoice-quantity-changed")])
@@ -576,7 +574,7 @@ def test_the_explanation_is_directly_under_the_short_answer(built, local_p1, exp
     assert "<article data-explanation=" in local and 'data-explain="buttons"' in local
     assert {
         "public P1": order_problems(p1, True),
-        "public P8 43->44": order_problems(p8, False),
+        "public P8 43->44": order_problems(p8, True),
         "local P1": order_problems(local, True),
     } == {"public P1": [], "public P8 43->44": [], "local P1": []}
 

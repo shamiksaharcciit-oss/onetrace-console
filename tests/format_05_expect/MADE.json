@@ -1,0 +1,17 @@
+{
+  "runs": {
+    "expect-record": {
+      "command": "EXPECT_RUN=record ONETRACE_RUN_ID=expect-record python expect_checked.py",
+      "exit": 0
+    },
+    "expect-stop": {
+      "command": "EXPECT_RUN=stop ONETRACE_RUN_ID=expect-stop python expect_checked.py",
+      "exit": 0
+    }
+  },
+  "versions": {
+    "onetrace": "0.8.0",
+    "onetrace-verify": "0.8.0",
+    "python": "3.12.10"
+  }
+}

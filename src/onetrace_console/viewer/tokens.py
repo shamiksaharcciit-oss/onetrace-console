@@ -1,7 +1,7 @@
 """The onetrace Console Skin's design tokens, read from the vendored block -- never retyped.
 
-The viewer's token source is the **onetrace Console Skin v1**, the token block issued with the v6
-release boards, in place of the earlier shared tokens (whose dark single theme the boards replaced for
+The viewer's token source is the **onetrace Console Skin v1**, the token block issued with the
+release's design boards, in place of the earlier shared tokens (whose dark single theme the boards replaced for
 onetrace's console and viewer). `skin_tokens.py` holds that token block byte for byte (console 0.8.0).
 onedoor's and onewatch's copies of the earlier tokens are untouched, and this module still does
 **not** import the original repository's tokens: by design nothing in `viewer/` imports from that

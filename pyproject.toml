@@ -8,7 +8,7 @@ backend-path = ["tools/build_backend"]
 
 [project]
 name = "onetrace-console"
-version = "0.8.0"
+version = "0.9.0"
 description = "The onetrace console: every run in one place, read from the reports the verifier and the verbs produced."
 readme = "PYPI_DESCRIPTION.md"     # the README with absolute image links: tools/pypi_description.py
 requires-python = ">=3.12"
@@ -25,8 +25,8 @@ authors = [{ name = "Shamik Saha" }]
 # server is `http.server`, the store is files, the index is `sqlite3`, the tar is
 # `tarfile`, the digests are `hashlib`: all standard library. See DESIGN_GAPS.md.
 dependencies = [
-    "onetrace==0.8.0",                 # the SDK this release was tested with: the verbs
-    "onetrace-verify[crypto]==0.8.0",  # the verifier, with what it needs to check signatures
+    "onetrace==0.9.0",                 # the SDK this release was tested with: the verbs
+    "onetrace-verify[crypto]==0.9.0",  # the verifier, with what it needs to check signatures
     "pyjwt[crypto]==2.15.1",           # the ID token's checks, for sign-in through Microsoft Entra ID
 ]
 
@@ -35,6 +35,8 @@ dependencies = [
 # Pinned with every dependency's hash in requirements-neighbours.lock.
 [project.optional-dependencies]
 neighbours = ["onnxruntime==1.31.0", "tokenizers==0.23.3", "numpy==2.5.4"]
+#: Trace forwarding in protobuf (console 0.9): OTLP's own messages, in the range tested at both ends.
+otlp = ["opentelemetry-proto>=1.39,<1.46"]
 
 [project.scripts]
 onetrace-console = "onetrace_console.__main__:main"
@@ -42,7 +44,7 @@ onetrace-console = "onetrace_console.__main__:main"
 # The upgrade notes, in the public repository at this release's tag, as the PyPI description links it.
 [project.urls]
 Homepage = "https://oneproof.dev/"
-Changelog = "https://github.com/shamiksaharcciit-oss/onetrace-console/blob/v0.8.0/CHANGELOG.md"
+Changelog = "https://github.com/shamiksaharcciit-oss/onetrace-console/blob/v0.9.0/CHANGELOG.md"
 
 [tool.setuptools.packages.find]
 where = ["src"]
@@ -125,6 +127,9 @@ extend-exclude = "tests/fixtures|store|src/onetrace_console/_received"
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 python_files = ["test_*.py"]
+#: `browser`: a test that drives Playwright's Chromium (named by ONETRACE_BROWSER_PYTHON), skipped where it is absent;
+#: the CI's browser job runs these alone (`-m browser`) and fails where any of them skipped.
+markers = ["browser: drives Playwright's Chromium, named by ONETRACE_BROWSER_PYTHON"]
 
 # `--basetemp` is set here, to a repository-local folder git ignores, so the suite stops
 # depending on pytest's cleanup of the system temp folder.

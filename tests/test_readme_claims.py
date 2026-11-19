@@ -21,7 +21,7 @@ import pytest
 from onetrace_console.config import Config
 
 REPO = Path(__file__).resolve().parent.parent
-RELEASE = "0.8.0"
+RELEASE = "0.9.0"
 #: The package's own version: the next release, whose heading says "(not released)" until the release
 #: step drops it. Every other version's heading is plain.
 VERSION = tomllib.loads((REPO / "pyproject.toml").read_text(encoding="utf-8"))["project"]["version"]
@@ -139,8 +139,37 @@ CLAIMS_050 = [
     ("A run's incident takes", "fix", "An incident's page has a new address; the old address no longer answers."),
 ]
 #: The earlier releases' tables, by release.
-#: This release's (0.8.0), under `## [Unreleased]` until its version was set.
+#: This release's (0.9.0), under `## [Unreleased]` until its version was set.
 CLAIMS: list = [
+    ("Trace forwarding, set up from the Settings gear", "feature", "- **Trace forwarding:**"),
+    ("Runs, one page of runs across pipelines, with filters", "feature", "- **The Runs page:**"),
+    ("Investigate: a comparison's pages, titled with the pair, as tabs", "feature", "- **Investigate:**"),
+    ("Re-runs and checks' runs, shown as what they are", "feature", "- **Re-runs and checks' runs:**"),
+    ("Each step's effect label", "feature", "- **A step's effect:**"),
+    ("What a stored check came back with", "feature", "- **What a stored check came back with:**"),
+    ("The configuration comparison shows kept values", "page", None),
+    ("How a model call ended, and a self-hosted call's engine", "page", None),
+    ("The frame folds on a narrow screen", "page", None),
+    ("Each run against the first, on the Runs page", "feature", "- **Each run against the first:**"),
+    ("Search engines index a public console's Overview only", "fix", None),
+    ("Teams: every run in one team", "feature", "(`teams`, `folder_team`)"),
+    ("SCIM provisioning from Microsoft Entra ID", "feature", "groups from Entra ID by SCIM (`scim`)"),
+    ("The audit log", "feature", "an append-only audit log of who did what"),
+    (
+        "Admin pages for people, teams and the audit log",
+        "feature",
+        "An admin's `/admin/people`, `/admin/teams` and `/admin/audit`",
+    ),
+    ("Teams' start-up rules", "page", None),
+    ("The run index is `onetrace-console-run-index/0.3`", "format", None),
+    ("The hosted demo no longer records the P10 pair a second time", "demo data", None),
+    ("onetrace 0.9.0 and onetrace-verify 0.9.0", "pins", "`onetrace` 0.9.0 and `onetrace-verify` 0.9.0"),
+    ("A request whose handling fails is answered, never dropped", "fix", None),
+    ('"Sign in with Microsoft" works in Chrome, Edge and other Chromium-based browsers', "fix", None),
+    ("Forwarding reads only the variables made for it", "fix", None),
+]
+#: 0.8.0's, held as they were.
+CLAIMS_080: list = [
     ("A signed-in write from another origin is refused", "fix", None),
     ("Sessions per account", "fix", None),
     ("The sign-in limit behind a proxy", "fix", None),
@@ -259,14 +288,25 @@ CLAIMS_070: list = [
         "Every pipeline but the reference demo's keeps the inputs its steps read",
     ),
     ("A static export's first-run-to-leave control is shown disabled", "fix", None),
-    ("onetrace-explain 0.3.0 beside the console, as released", "pins", 'pip install "onetrace-explain[keyring]>=0.3"'),
+    (
+        "onetrace-explain 0.3.0 beside the console, as released",
+        "pins",
+        'pip install "onetrace-explain[keyring]>=0.3.2"',
+    ),
     ("The sign-in limit counts a rolling window", "fix", None),
     ("A locked keychain refuses a Save with no key", "fix", None),
     ("The settings menu reads `key_source` before `key_env`", "fix", None),
     ("A static export has no live Compare", "fix", None),
     ("CSRF values are compared in constant time", "fix", None),
 ]
-EARLIER = {"0.7.0": CLAIMS_070, "0.6.1": CLAIMS_061, "0.6.0": CLAIMS_060, "0.5.1": CLAIMS_051, "0.5.0": CLAIMS_050}
+EARLIER = {
+    "0.8.0": CLAIMS_080,
+    "0.7.0": CLAIMS_070,
+    "0.6.1": CLAIMS_061,
+    "0.6.0": CLAIMS_060,
+    "0.5.1": CLAIMS_051,
+    "0.5.0": CLAIMS_050,
+}
 #: The configuration keys added since 0.5.0, each named in the README.
 NEW_KEYS = [
     "compare_cache",
@@ -279,6 +319,10 @@ NEW_KEYS = [
     "tracing",
     "tokenizers",
     "close_call_margin",
+    "teams",
+    "folder_team",
+    "scim",
+    "audit",
 ]
 
 

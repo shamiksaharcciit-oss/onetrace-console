@@ -118,7 +118,7 @@ def command() -> Path | None:
 
 
 #: What the panel installs where this environment has no onetrace-explain, as the setup page names it.
-EXPLAIN_PACKAGE = '"onetrace-explain[keyring]>=0.3"'
+EXPLAIN_PACKAGE = '"onetrace-explain[keyring]>=0.3.2"'
 INSTALL_HERE = "To use Explain, install it into the Python this console runs from:"
 
 
@@ -144,7 +144,7 @@ FOLDER, KEY_HEX, REPORT, KEY_FILE = "x", 16, "r", "key"
 #: there is `/explain/<run id>/artifacts/_staging/post_check/checked.json.<8>.tmp`, the run id
 #: onetrace-explain's (27 characters), the staging folder and temporary name the SDK's
 #: (tests/test_explain_paths.py measures them, and refuses other versions).
-MEASURED = {"onetrace-explain": "0.3.1", "onetrace": "0.8.0"}
+MEASURED = {"onetrace-explain": "0.3.2", "onetrace": "0.9.0"}
 #: onetrace-explain's run id, as measured with those versions.
 RUN_ID = 27
 MEASURED_BELOW = len("/explain/") + RUN_ID + len("/artifacts/_staging/post_check/checked.json") + len(".12345678.tmp")
@@ -210,7 +210,9 @@ def folder_of(store, key: str) -> Path:
 
     if not _SHA256.match(key):
         raise ValueError(f"not a comparison key: {key!r}")
-    folder = Path(store.root) / FOLDER / key[:KEY_HEX]
+    folder = store.kept_path(FOLDER, key, key[:KEY_HEX], kind="comparison")
+    if folder is None:
+        raise ValueError(f"no comparison {key!r} is held")
     held = folder / KEY_FILE
     if held.is_file():
         other = held.read_text(encoding="ascii", errors="replace").strip()
@@ -680,7 +682,7 @@ def _press(comparison, store, folder: Path, send: bool) -> None:
                 proc.stdin.close()
             deadline = t0 + TIMEOUT
             while (code := proc.poll()) is None:
-                new = [p for p in (d.iterdir() if d.is_dir() else ()) if p.is_dir() and p.name not in before]
+                new = _new_runs(d, before)
                 receipts = new[0] / "receipts" if new else None
                 if receipts and "evidence" not in marks and any(receipts.glob("01-*.json")):
                     marks["evidence"] = time.monotonic()
@@ -699,7 +701,7 @@ def _press(comparison, store, folder: Path, send: bool) -> None:
     #: The step times from the command's own receipts, each written as its stage closes: the
     #: watch above only says the step while it runs, and a quick stage can close between looks.
     ended = time.time()
-    new = sorted(p for p in (d.iterdir() if d.is_dir() else ()) if p.is_dir() and p.name not in before)
+    new = _new_runs(d, before)
     closed = [
         min((r.stat().st_mtime for r in (new[0] / "receipts").glob(f"0{i}-*.json")), default=None) if new else None
         for i in (1, 2)
@@ -726,8 +728,17 @@ def _press(comparison, store, folder: Path, send: bool) -> None:
         stderr=err.read_bytes() if err.is_file() else b"",
     )
     _keep(folder, kind, args, got, note=note, steps=times)
-    out.unlink(missing_ok=True)
-    err.unlink(missing_ok=True)
+    #: Tidying only: on Windows a file another process still holds cannot be removed, and a child the command started
+    #: can still hold its output after it stops. The next press writes both again.
+    for f in (out, err):
+        with contextlib.suppress(OSError):
+            f.unlink(missing_ok=True)
+
+
+def _new_runs(d: Path, before: set[str]) -> list[Path]:
+    """The report's runs a press made, by name: the watch and the step times take the same first one, whatever order
+    the file system lists them in."""
+    return sorted(p for p in (d.iterdir() if d.is_dir() else ()) if p.is_dir() and p.name not in before)
 
 
 def packet(comparison, store) -> dict:
@@ -939,6 +950,12 @@ def _chain_head(folder: Path) -> str:
     except (OSError, ValueError, AttributeError):
         return ""
     return head if isinstance(head, str) else ""
+
+
+def record_heads(store, key: str) -> dict[str, str]:
+    """{record: its chain head} for each explanation record the comparison holds."""
+    d = folder_of(store, key) / REPORT / "explain"
+    return {p.name: _chain_head(p) for p in sorted(d.iterdir()) if p.is_dir()} if d.is_dir() else {}
 
 
 def verified(store, key: str, record: str) -> str:

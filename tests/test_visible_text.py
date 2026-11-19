@@ -393,25 +393,25 @@ _29DZ4_NAMES_PAGES: dict[str, dict[str, list[str]]] = {
 for _page, _kinds in _29DZ4_NAMES_PAGES.items():
     for _kind, _blocks in _kinds.items():
         EXPLAINED.setdefault(_page, {}).setdefault(_kind, {}).update(dict.fromkeys(_blocks, _29DZ4_NAMES))
-#: Board 5: the case page links the run receipt from its Policy section.
+#: The case page links the run receipt from its Policy section.
 #: Generated from the measured difference by tooling, not typed.
-_ITEM8 = "the case page links the run receipt (board 5)"
-_ITEM8_PAGES: dict[str, dict[str, list[str]]] = {
+_RECEIPT_LINK = "the case page links the run receipt"
+_RECEIPT_LINK_PAGES: dict[str, dict[str, list[str]]] = {
     "run[forged]/case.html": {"new": ["The run receipt"]},
     "run[held-a]/case.html": {"new": ["The run receipt"]},
     "run[held-b]/case.html": {"new": ["The run receipt"]},
     "run[preview]/case.html": {"new": ["The run receipt"]},
     "run[r11]/case.html": {"new": ["The run receipt"]},
 }
-for _page, _kinds in _ITEM8_PAGES.items():
+for _page, _kinds in _RECEIPT_LINK_PAGES.items():
     for _kind, _blocks in _kinds.items():
-        EXPLAINED.setdefault(_page, {}).setdefault(_kind, {}).update(dict.fromkeys(_blocks, _ITEM8))
+        EXPLAINED.setdefault(_page, {}).setdefault(_kind, {}).update(dict.fromkeys(_blocks, _RECEIPT_LINK))
 #: Viewer commit 75f13ac: the run ladder asks "Ran as approved". A
 #: straight-line run reads its line alone; a graph run checked by 0.1.2 reads that the check that
 #: ran can't say; the forged run's check rows can't be read one by one, so its plan rows
 #: aren't. Generated from the measured difference by tooling, not typed.
-_ITEM21 = "the run ladder's Ran as approved rung"
-_ITEM21_PAGES: dict[str, dict[str, list[str]]] = {
+_RAN_AS_APPROVED = "the run ladder's Ran as approved rung"
+_RAN_AS_APPROVED_PAGES: dict[str, dict[str, list[str]]] = {
     "run[forged]/case.html": {
         "new": [
             "Couldn't check · the check's rows can't be read one by one, so its plan rows aren't read",
@@ -428,9 +428,9 @@ _ITEM21_PAGES: dict[str, dict[str, list[str]]] = {
         ]
     },
 }
-for _page, _kinds in _ITEM21_PAGES.items():
+for _page, _kinds in _RAN_AS_APPROVED_PAGES.items():
     for _kind, _blocks in _kinds.items():
-        EXPLAINED.setdefault(_page, {}).setdefault(_kind, {}).update(dict.fromkeys(_blocks, _ITEM21))
+        EXPLAINED.setdefault(_page, {}).setdefault(_kind, {}).update(dict.fromkeys(_blocks, _RAN_AS_APPROVED))
 #: Before 0.2.0, the Overview's evidence gains
 #: its anchoring rung, reading its placeholder; nothing on the page is gone or reworded.
 _A1 = "the Overview's anchoring rung, item 8's placeholder until 0.2.0"
@@ -438,7 +438,7 @@ EXPLAINED.setdefault("home.html + counts.html", {}).setdefault("new", {}).update
     dict.fromkeys(["Committed by a known time", "not available until onetrace 0.2.0"], _A1)
 )
 #: Before 0.2.0, the Diff page gains its text-diff frame,
-#: reading its placeholder; board 7 has no frame before 0.2.0. Nothing is
+#: reading its placeholder; where the change started has no frame before 0.2.0. Nothing is
 #: gone or reworded. Generated from the measured difference.
 _A2 = "the text diff's frame, item 8's placeholder until 0.2.0"
 EXPLAINED.setdefault("diff[held-a,held-b]", {}).setdefault("new", {}).update(
@@ -1780,19 +1780,19 @@ NEW_PAGES: dict[str, str] = {
     "executions-anchored-not-checked.html": "the runs one anchoring count counted",
     "comparisons.html": "the Comparisons index, an approved addition",
     "counts.html": "the All counts page, the Overview's counts moved whole",
-    "run[forged]/stage-1.html": "a stage's inputs and outputs, board 4",
-    "run[forged]/stage-2.html": "a stage's inputs and outputs, board 4",
-    "run[held-a]/stage-1.html": "a stage's inputs and outputs, board 4",
-    "run[held-a]/stage-2.html": "a stage's inputs and outputs, board 4",
-    "run[held-b]/stage-1.html": "a stage's inputs and outputs, board 4",
-    "run[held-b]/stage-2.html": "a stage's inputs and outputs, board 4",
-    "run[r11]/stage-1.html": "a stage's inputs and outputs, board 4",
-    "run[r11]/stage-2.html": "a stage's inputs and outputs, board 4",
-    "run[r11]/stage-3.html": "a stage's inputs and outputs, board 4",
-    "run[forged]/receipt.html": "the run receipt, board 5",
-    "run[held-a]/receipt.html": "the run receipt, board 5",
-    "run[held-b]/receipt.html": "the run receipt, board 5",
-    "run[r11]/receipt.html": "the run receipt, board 5",
+    "run[forged]/stage-1.html": "a stage's inputs and outputs, the stage page",
+    "run[forged]/stage-2.html": "a stage's inputs and outputs, the stage page",
+    "run[held-a]/stage-1.html": "a stage's inputs and outputs, the stage page",
+    "run[held-a]/stage-2.html": "a stage's inputs and outputs, the stage page",
+    "run[held-b]/stage-1.html": "a stage's inputs and outputs, the stage page",
+    "run[held-b]/stage-2.html": "a stage's inputs and outputs, the stage page",
+    "run[r11]/stage-1.html": "a stage's inputs and outputs, the stage page",
+    "run[r11]/stage-2.html": "a stage's inputs and outputs, the stage page",
+    "run[r11]/stage-3.html": "a stage's inputs and outputs, the stage page",
+    "run[forged]/receipt.html": "the run receipt page",
+    "run[held-a]/receipt.html": "the run receipt page",
+    "run[held-b]/receipt.html": "the run receipt page",
+    "run[r11]/receipt.html": "the run receipt page",
 }
 
 #: The Overview's cards in 0.1.1's look: a one-line subtitle, the page's rule folded under "How
@@ -2717,6 +2717,12 @@ _SDK_080 = "the comparison names the installed SDK, 0.8.0"
 EXPLAINED.setdefault("diff[held-a,held-b]", {}).setdefault("new", {}).update(
     dict.fromkeys(["Compared with onetrace 0.8.0, build wheel:<hex>, at <time>."], _SDK_080)
 )
+#: 0.9.0 since the pins moved to its release on PyPI (console 0.9.0), installed by tools/install_pinned.py. Measured,
+#: not typed.
+_SDK_090 = "the comparison names the installed SDK, 0.9.0"
+EXPLAINED.setdefault("diff[held-a,held-b]", {}).setdefault("new", {}).update(
+    dict.fromkeys(["Compared with onetrace 0.9.0, build wheel:<hex>, at <time>."], _SDK_090)
+)
 #: onetrace 0.8.0 records the runs made here in format 0.5, and onetrace-verify 0.8.0 checks them: the format each
 #: run page names and the receipts as recorded. Each block is its format 0.4 entry above with the format's minor
 #: 0.5 (console 0.8.0). Generated from the measured difference.
@@ -2785,6 +2791,36 @@ _FORMAT_05_PAGES = {
 for _page, _kinds in _FORMAT_05_PAGES.items():
     for _kind, _texts in _kinds.items():
         EXPLAINED.setdefault(_page, {}).setdefault(_kind, {}).update(dict.fromkeys(_texts, _FORMAT_05))
+
+#: Format 0.5's kinds and agents (console 0.9): the runs made here, in format 0.5, record no kind and no run agent,
+#: so each step's line reads "kind not recorded" and the run's head "The run's agent: not recorded". Measured, not
+#: typed.
+_KINDS = "format 0.5's step kinds and agents: none recorded on the runs made here, said so (console 0.9)"
+for _run in ("forged", "held-a", "held-b"):
+    for _page in (f"run[{_run}]/answer.html", f"run[{_run}]/authorization.html"):
+        EXPLAINED.setdefault(_page, {}).setdefault("new", {})["The run's agent: not recorded"] = _KINDS
+    EXPLAINED.setdefault(f"run[{_run}]/case.html + run[{_run}]/proof.html", {}).setdefault("new", {}).update(
+        dict.fromkeys(["The run's agent: not recorded", "kind not recorded"], _KINDS)
+    )
+
+
+#: Format 0.5's code version (console 0.9): the runs made here, in format 0.5, did not ask for theirs, so each case
+#: page's "Code" reads "not recorded", with docs/format.md's words on what a code version does not show. The blocks are
+#: the section's own, read by the tool's own reading of a page (`tools.visible_text.blocks`), not typed.
+_CODE = "format 0.5's code version: not asked for on the runs made here, said so (console 0.9)"
+
+
+def _code_blocks() -> list[str]:
+    from onetrace_console import code_line
+    from tools.visible_text import blocks
+
+    return blocks(code_line.section([{"format": "stage-receipt/0.5", "stage": {"name": "x"}}], []))
+
+
+for _run in ("forged", "held-a", "held-b"):
+    EXPLAINED.setdefault(f"run[{_run}]/case.html + run[{_run}]/proof.html", {}).setdefault("new", {}).update(
+        dict.fromkeys(_code_blocks(), _CODE)
+    )
 
 #: Whether each run closed and how it ended, in onetrace-verify's words: in its head, and in the runs
 #: lists' "Closed" column (console 0.7.0). Generated from the measured difference.
@@ -3305,6 +3341,33 @@ EXPLAINED.setdefault("diff[held-a,held-b]", {}).setdefault("new", {}).update(
         _EXPLAIN_061_7,
     )
 )
+
+
+#: The list of every run stored links the Runs page (`runs_page`), which lists them with filters, a page at a time.
+_RUNS_PAGE = "the list of every run links the Runs page, /runs"
+EXPLAINED.setdefault("executions-all.html", {}).setdefault("new", {})[
+    "To narrow these runs by pipeline, records, verdict or time, a page at a time, open Runs."
+] = _RUNS_PAGE
+
+#: A comparison's pages are Investigate's tabs, titled with the pair where each was "Diff" (`views.investigate_title`).
+_INVESTIGATE = "a comparison's pages are Investigate's tabs, titled with the pair"
+_PAIR = EXPLAINED.setdefault("diff[held-a,held-b]", {})
+_PAIR.setdefault("gone", {})["Diff"] = _INVESTIGATE
+_PAIR.setdefault("new", {})["Investigate · nb2-base → nb2-cand"] = _INVESTIGATE
+_PAIR["new"]["Compare another pair"] = (
+    "a comparison of one pipeline's runs links to that pipeline's picker on the Runs page"
+)
+
+#: A run's tabs: its two views, then its Authorization page, which each of the three carries.
+_RUN_TABS = "a run's Authorization page is its third tab, beside its two views"
+for _run in ("forged", "held-a", "held-b", "r11"):
+    EXPLAINED.setdefault(f"run[{_run}]/authorization.html", {}).setdefault("new", {})[
+        "What changedProofAuthorization"
+    ] = _RUN_TABS
+for _run in ("forged", "held-a", "held-b", "preview", "r11"):
+    EXPLAINED.setdefault(f"run[{_run}]/case.html + run[{_run}]/proof.html", {}).setdefault("new", {})[
+        "What changedProofAuthorization"
+    ] = _RUN_TABS
 
 
 @pytest.fixture(scope="module")
@@ -3947,3 +4010,103 @@ def test_the_fixture_runs_arrive_in_a_fixed_order_whatever_the_clock(tmp_path, m
         (REPO / "tests" / "fixtures" / "r11" / "two-minimal-nodes" / "MANIFEST.json").read_text(encoding="utf-8")
     )["run_id"]
     assert [r.run_id for r in pipelines(store)[0].runs] == [r11], "r11 alone is not P1"
+
+
+#: The lines of a check that compared files say only that: the files match what the record says, or do not; when the
+#: record was made is the anchor's question.
+#: Each run's page opens with one plain line by its record's state (what this console checked,
+#: what that means, what it does not say), and, where the record carries no anchor, what "Not anchored" is. On both
+#: views of each run, written out word for word.
+_PLAIN = "a run's plain line by its state, and what Not anchored is"
+_PLAIN_NOT_ANCHORED = (
+    "Not anchored: no outside service recorded when the run's record was made, so this console cannot show it was "
+    "not written later. Most runs are recorded this way; it is not a fault."
+)
+_PLAIN_LINES = {
+    "held-a": (
+        "This console checked the run's output files against its record, and they match what the record says. It "
+        "does not show when the record was made (see Anchored), and it does not judge the outputs."
+    ),
+    "forged": (
+        "This console checked the run's output files against its record, and they do not match: a file differs from "
+        "what the record says, or is missing. So this page does not compare the run step by step: Proof says which "
+        "file."
+    ),
+    "held-b": (
+        "This console checked the run's output files against its record, and they do not match: a file differs from "
+        "what the record says, or is missing. So this page does not compare the run step by step: Proof says which "
+        "file."
+    ),
+    "preview": (
+        "This console tried to check the run's record and could not finish. That means nothing here confirms or "
+        "contradicts what the run recorded. It does not say anything is wrong: Proof says what stopped the check."
+    ),
+    "r11": (
+        "This console checked the run's record without its output files. That means the record agrees with itself "
+        "as far as it was read, but the files it names were not compared with it. It does not say whether they "
+        "match."
+    ),
+}
+for _run, _line in _PLAIN_LINES.items():
+    EXPLAINED.setdefault(f"run[{_run}]/case.html + run[{_run}]/proof.html", {}).setdefault("new", {}).update(
+        dict.fromkeys([_line, _PLAIN_NOT_ANCHORED], _PLAIN)
+    )
+
+
+#: A column whose header is not drawn keeps its words for a screen reader (`words.hidden_header`),
+#: never an empty header: the run graph's links table's last column, "Note".
+for _run in ("forged", "held-a", "held-b", "preview", "r11"):
+    EXPLAINED.setdefault(f"run[{_run}]/case.html + run[{_run}]/proof.html", {}).setdefault("new", {}).update(
+        {"Note": "the graph's links table's last column, its header's words kept for a screen reader"}
+    )
+
+
+#: The console's Authorization page (every run with a gated step), new; and a run whose record does
+#: not hold up shows, on its Authorization page, the same lines its other views carry, written out word for word.
+NEW_PAGES["authorization.html"] = "the console's Authorization page, every run with a gated step"
+_AUTH_WITHHELD = "a failing record's Authorization page, under the same lines as its other views"
+for _run in ("forged", "held-b"):
+    EXPLAINED.setdefault(f"run[{_run}]/authorization.html", {}).setdefault("new", {}).update(
+        dict.fromkeys(
+            [
+                "Contradicts its record: this console's check, with the run's output files required, failed.",
+                "These rows come from a record that does not hold up.",
+            ],
+            _AUTH_WITHHELD,
+        )
+    )
+
+
+#: A comparison page leads with its header (the pair, what their records establish, their configuration, Swap) and the
+#: first difference; its parts are in tabs (`compare_view`). On the forged pair, whose side couldn't be checked, the
+#: header, the tabs it has data for (the text diff, each run against its pipeline's reference run) and Swap.
+_COMPARE_VIEW = "a comparison page's header, Swap, and its parts in tabs, each run against its reference"
+EXPLAINED.setdefault("diff[held-a,held-b]", {}).setdefault("new", {}).update(
+    dict.fromkeys(
+        [
+            "A reference is made by python -m onetrace reference make from the pipeline's benchmark; on a local "
+            "console, marking a run as a benchmark makes one.",
+            "Against the reference",
+            "Comparing nb2-base · <hex> against nb2-cand · <hex>",
+            "Configuration against the reference",
+            "Run A against its pipeline's reference run",
+            "Run A's record verifies · run B's contradicts itself same configuration · 1.0.0",
+            "Run B against its pipeline's reference run",
+            "Runs are compared within their pipeline, as this console groups them by their declared stages.",
+            "Swap runs",
+            "Text diff",
+            "Text diffAgainst the reference",
+            "This pipeline has no reference yet.",
+        ],
+        _COMPARE_VIEW,
+    )
+)
+
+
+#: "What changed?" where the comparison it picks is not held: "Not compared." said once, first, the run it would use
+#: named as only that, where it said "Compared with" that run (`what_changed.NOT_HELD`).
+_NOT_HELD = "What changed? says Not compared first where its comparison is not held"
+for _run, _other in (("forged", "nb2-cand"), ("held-b", "nb2-base")):
+    EXPLAINED.setdefault(f"run[{_run}]/case.html + run[{_run}]/proof.html", {}).setdefault("new", {})[
+        f"Not compared. The run it would be compared with is {_other}, the most recent earlier run of this pipeline."
+    ] = _NOT_HELD

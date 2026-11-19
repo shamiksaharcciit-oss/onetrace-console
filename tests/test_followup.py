@@ -64,7 +64,7 @@ def test_a_stored_record_naming_a_place_outside_the_store_is_unreadable(
     tmp_path,
     change,
 ):
-    """A review's probe_store_types2.py: such a record wrote a file outside the store root at
+    """Found earlier by a probe: such a record wrote a file outside the store root at
     check time, and pages outside the pages folder at start-up. It is left out and named."""
     from onetrace_console.serve import _render_startup_pages
 

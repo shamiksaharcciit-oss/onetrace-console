@@ -1,0 +1,21 @@
+{
+  "runs": {
+    "link-billing": {
+      "command": "BILLING_RUN_ID=link-billing ONETRACE_RUN_ID=link-desk python linked_desk.py",
+      "exit": 0
+    },
+    "link-desk": {
+      "command": "BILLING_RUN_ID=link-billing ONETRACE_RUN_ID=link-desk python linked_desk.py",
+      "exit": 0
+    },
+    "link-garbled": {
+      "command": "LINK_PARENT=1.not-a-link ONETRACE_RUN_ID=link-garbled python linked_billing.py A-1001",
+      "exit": 0
+    }
+  },
+  "versions": {
+    "onetrace": "0.8.0",
+    "onetrace-verify": "0.8.0",
+    "python": "3.12.10"
+  }
+}

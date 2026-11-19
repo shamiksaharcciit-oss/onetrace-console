@@ -93,6 +93,41 @@ L2_CAPTURE = (
     ("k returned, most", "steps.k_returned_max"),
     ("log-probabilities", "steps.logprobs"),
 )
+#: A field the record does not hold, in its cell.
+NOT_RECORDED = "not recorded"
+#: The capture settings, folded where every one is identical, open where any differs.
+SETTINGS_SAME = "Capture settings: {n} recorded, all identical"
+SETTINGS_DIFFER = "Capture settings: {d} of {n} differ, shown here; the identical ones folded below."
+SETTINGS_REST = "{n} identical"
+#: The caveats each part keeps folded under its one short line.
+WHAT_NOT = "What this does not show"
+#: L3's strip of token positions.
+STRIP_LEGEND = (
+    "Each position: whether its logits row and its chosen token are the same, and where ids are shown the chosen "
+    "token's id, baseline / candidate."
+)
+STRIP_WINDOW = "Positions {a} to {b} of the {n} compared, around the first change."
+STRIP_MAX = 40
+STATE_WORDS = {"same": "same", "row": "row changed, same token", "token": "choice changed"}
+FIRST_WORDS = {"row": "first row change", "choice": "first choice change"}
+#: L2's table at a differing token.
+L2_TABLE = "At token {at}: each side's candidates, by rank"
+L2_ALL = "Show all {n} differing positions"
+L2_CHOSEN = "chosen"
+L2_MISSING = "not in the {other}'s top {k}"
+L2_COLUMNS = ("rank", "baseline", "candidate")
+L2_LOGPROB = "logprob"
+
+
+def shown_value(record: dict, field: str) -> str:
+    """A field's value as a cell gives it: its value, or its state, or "not recorded" where the record holds none."""
+    got = said(record, field)
+    return NOT_RECORDED if got == "absent" else got
+
+
+def level_words(level_: str, l2: bool = False) -> str:
+    """The capture level's row label: on L2's settings, an L3 capture says it includes L2."""
+    return "capture level (L3 includes L2)" if l2 and level_ == "L3" else "capture level"
 
 
 @dataclass(frozen=True)
@@ -251,34 +286,108 @@ def l3_words(r: L3Reading) -> list[str]:
     return lines
 
 
-def _capture_rows(ra: dict, rb: dict, fields) -> str:
-    rows = "".join(
-        f"<tr><th>{escape(words)}</th><td>{escape(f'{words} {said(ra, f)}')}</td>"
-        f"<td>{escape(f'{words} {said(rb, f)}')}</td></tr>"
-        for words, f in fields
-    )
+def _capture_rows(ra: dict, rb: dict, fields, part: str = "L3") -> str:
+    """The capture settings, as the records hold them, each cell its value only ("not recorded" where absent): folded
+    into one line where every one is identical; where any differs, those rows shown and marked, the rest folded."""
     from onetrace_console.words import scroll_region
 
-    return scroll_region(
-        f'<table class="board" data-token-levels-capture><thead><tr><th>the capture, as recorded</th>'
-        f"<th>baseline</th><th>candidate</th></tr></thead><tbody>{rows}</tbody></table>",
-        "The two captures, as recorded",
-        "token-levels-capture",
+    rows = [(words, shown_value(ra, f), shown_value(rb, f)) for words, f in fields]
+    differ = [r for r in rows if r[1] != r[2]]
+    same = [r for r in rows if r[1] == r[2]]
+
+    def table(rs, kind: str) -> str:
+        marked = ' data-differs="yes"' if kind == "differ" else ""
+        body = "".join(
+            f'<tr{marked}><th scope="row">{escape(w)}</th><td>{escape(a)}</td><td>{escape(b)}</td></tr>'
+            for w, a, b in rs
+        )
+        return scroll_region(
+            f'<table class="board capture-settings" data-settings="{kind}" data-token-levels-capture><thead><tr>'
+            f'<th scope="col">setting</th><th scope="col">baseline</th><th scope="col">candidate</th></tr></thead>'
+            f"<tbody>{body}</tbody></table>",
+            f"The {part} capture's settings" + (", those that differ" if kind == "differ" else ""),
+            f"token-levels-{part.lower()}-{kind}",
+        )
+
+    if not differ:
+        return (
+            f'<details data-settings="identical"><summary>{escape(SETTINGS_SAME.format(n=len(rows)))}</summary>'
+            f"{table(rows, 'identical')}</details>"
+        )
+    out = f"<p data-settings-said>{escape(SETTINGS_DIFFER.format(d=len(differ), n=len(rows)))}</p>{table(differ, 'differ')}"
+    if same:
+        out += (
+            f'<details data-settings="identical"><summary>{escape(SETTINGS_REST.format(n=len(same)))}</summary>'
+            f"{table(same, 'identical')}</details>"
+        )
+    return out
+
+
+def _caveats(part: str, shown: str, folded: list[str]) -> str:
+    """One short caveat under a part, the rest under "What this does not show"."""
+    items = "".join(f"<li>{escape(x)}</li>" for x in folded)
+    return (
+        f'<p class="caveat" data-caveat="{part}">{escape(shown)}</p>'
+        f'<details data-caveats="{part}"><summary>{escape(WHAT_NOT)}</summary>'
+        f'<ul class="plain nonclaims" data-{part.lower()}-nonclaims>{items}</ul></details>'
     )
 
 
-def _l3_block(ra: dict, rb: dict, reading: L3Reading) -> str:
+def l3_cells(a_doc: dict, b_doc: dict) -> list[tuple[int, str, str, str]]:
+    """Each compared position: (its index, "same", "row" (the row changed, the token the same) or "token" (the chosen
+    token changed), the baseline's chosen id, the candidate's)."""
+    ia, ib = [str(x) for x in a_doc.get("token_ids") or []], [str(x) for x in b_doc.get("token_ids") or []]
+    da, db = list(a_doc.get("digests") or []), list(b_doc.get("digests") or [])
+    n = min(len(ia), len(ib), len(da), len(db))
+    return [(i, "token" if ia[i] != ib[i] else "row" if da[i] != db[i] else "same", ia[i], ib[i]) for i in range(n)]
+
+
+def _strip(a_doc: dict, b_doc: dict, reading: L3Reading, shown: bool) -> str:
+    """L3's positions as a strip, one cell each, its state in words; the first row change and the first choice
+    change marked; a window around the first change where there are more than `STRIP_MAX`."""
+    cells = l3_cells(a_doc, b_doc)
+    if not cells:
+        return ""
+    n = len(cells)
+    changes = [x for x in (reading.row_at, reading.token_at) if x is not None]
+    first = min(changes) if changes else 0
+    start = max(0, min(first - 8, n - STRIP_MAX)) if n > STRIP_MAX else 0
+    end = min(n, start + STRIP_MAX)
+    items = []
+    for i, state, a, b in cells[start:end]:
+        marks = [m for m, at in (("row", reading.row_at), ("choice", reading.token_at)) if at == i]
+        first_attr = f' data-first="{" ".join(marks)}"' if marks else ""
+        said_first = "".join(f'<span class="first">{escape(FIRST_WORDS[m])}</span>' for m in marks)
+        ids = f'<span class="ids">{escape(a)} / {escape(b)}</span>' if shown else ""
+        items.append(
+            f'<li data-state="{state}"{first_attr}><span class="pos">token {i}</span>'
+            f'<span class="state">{escape(STATE_WORDS[state])}</span>{said_first}{ids}</li>'
+        )
+    window = (
+        f"<p data-l3-window>{escape(STRIP_WINDOW.format(a=start, b=end - 1, n=n))}</p>"
+        if (start, end) != (0, n)
+        else ""
+    )
+    return (
+        f'<ol class="token-strip" data-l3-strip aria-label="Token positions {start} to {end - 1}">{"".join(items)}</ol>'
+        f'{window}<p class="legend" data-l3-legend>{escape(STRIP_LEGEND)}</p>'
+    )
+
+
+def _l3_block(ra: dict, rb: dict, reading: L3Reading, docs: tuple = (None, None), shown: bool = True) -> str:
     lines = "".join(f"<p data-l3-reading>{escape(line)}</p>" for line in l3_words(reading))
     if reading.kind == "not-comparable":
         return f'<div data-token-level="L3" data-l3="not-comparable"><h4>{escape(L3_HEADING)}</h4>{lines}</div>'
-    surplus = f"<p data-l3-surplus>{escape(SURPLUS.format(a=value(ra, 'steps.surplus') or said(ra, 'steps.surplus'), b=value(rb, 'steps.surplus') or said(rb, 'steps.surplus')))}</p>"
+    surplus = SURPLUS.format(
+        a=value(ra, "steps.surplus") or shown_value(ra, "steps.surplus"),
+        b=value(rb, "steps.surplus") or shown_value(rb, "steps.surplus"),
+    )
     off = any(value(r, "batch.batch_invariant") != "on" for r in (ra, rb))
-    batching = f'<p data-l3-batching class="nonclaim">{escape(BATCHING)}</p>' if off else ""
-    nonclaims = "".join(f"<li>{escape(n)}</li>" for n in L3_NON_CLAIMS)
+    strip = _strip(docs[0], docs[1], reading, shown) if all(isinstance(d, dict) for d in docs) else ""
+    folded = [*L3_NON_CLAIMS[:2], *([BATCHING] if off else []), surplus]
     return (
-        f'<div data-token-level="L3" data-l3="{escape(reading.kind)}"><h4>{escape(L3_HEADING)}</h4>{lines}'
-        f"{_capture_rows(ra, rb, L3_CAPTURE)}{batching}{surplus}"
-        f'<ul class="plain nonclaims" data-l3-nonclaims>{nonclaims}</ul></div>'
+        f'<div data-token-level="L3" data-l3="{escape(reading.kind)}"><h4>{escape(L3_HEADING)}</h4>{lines}{strip}'
+        f"{_capture_rows(ra, rb, L3_CAPTURE, 'L3')}{_caveats('L3', L3_NON_CLAIMS[2], folded)}</div>"
     )
 
 
@@ -299,7 +408,84 @@ def _greedy(record: dict) -> str:
         return f"temperature {t}"
 
 
-def _l2_block(ra: dict, rb: dict, reading: L2Reading, shown: bool, why_hidden: str, example: bool) -> str:
+def _candidates(doc: dict, hosted: bool) -> tuple[list[str], list[list[tuple[str, str | None]]]]:
+    """(each step's chosen token, each step's candidates as (token, its logprob as recorded or None))."""
+    if hosted:
+        steps = [s for s in doc.get("steps") or [] if isinstance(s, dict)]
+        return (
+            [str((s.get("chosen") or {}).get("text", "")) for s in steps],
+            [
+                [
+                    (str((c or {}).get("text", "")), None if (c or {}).get("logprob") is None else str(c["logprob"]))
+                    for c in s.get("candidates") or []
+                ]
+                for s in steps
+            ],
+        )
+    return [str(x) for x in doc.get("token_ids") or []], [
+        [(str(x), None) for x in xs] for xs in doc.get("top_k_ids") or []
+    ]
+
+
+def _l2_table(at: int, a: tuple, b: tuple, k: str, hosted: bool) -> str:
+    """At token `at`: each side's candidates by rank, side by side; the logprob where the record holds one; the chosen
+    token marked on each side, and a token missing from the other side's top k marked."""
+    (ca, xa), (cb, xb) = a, b
+    sa, sb = xa[at], xb[at]
+    logprobs = any(lp is not None for _t, lp in sa + sb)
+    in_a, in_b = {tok for tok, _ in sa}, {tok for tok, _ in sb}
+
+    def cell(item, chosen: str, other: set, other_name: str) -> str:
+        if item is None:
+            return "<td></td>" + ("<td></td>" if logprobs else "")
+        tok, lp = item
+        marks = [L2_CHOSEN] if tok == chosen else []
+        marks += [L2_MISSING.format(other=other_name, k=k)] if tok not in other else []
+        said_marks = "".join(f' <span class="mark">{escape(m)}</span>' for m in marks)
+        token = f"<code>{escape(tok)}</code>" if not hosted else f"“{escape(tok)}”"
+        chosen_attr = ' data-chosen="yes"' if tok == chosen else ""
+        out = f"<td{chosen_attr}>{token}{said_marks}</td>"
+        return out + (f"<td>{escape(lp) if lp is not None else escape(NOT_RECORDED)}</td>" if logprobs else "")
+
+    rows = "".join(
+        f'<tr><th scope="row">{r + 1}</th>'
+        + cell(sa[r] if r < len(sa) else None, ca[at], in_b, "candidate")
+        + cell(sb[r] if r < len(sb) else None, cb[at], in_a, "baseline")
+        + "</tr>"
+        for r in range(max(len(sa), len(sb)))
+    )
+    lp_head = f'<th scope="col">{escape(L2_LOGPROB)}</th>' if logprobs else ""
+    head = (
+        f'<th scope="col">{escape(L2_COLUMNS[0])}</th><th scope="col">{escape(L2_COLUMNS[1])}</th>{lp_head}'
+        f'<th scope="col">{escape(L2_COLUMNS[2])}</th>{lp_head}'
+    )
+    from onetrace_console.words import scroll_region
+
+    return scroll_region(
+        f'<table class="board l2" data-l2-at="{at}"><caption>{escape(L2_TABLE.format(at=at))}</caption>'
+        f"<thead><tr>{head}</tr></thead><tbody>{rows}</tbody></table>",
+        L2_TABLE.format(at=at),
+        f"token-levels-l2-{at}",
+    )
+
+
+def _l2_tables(a_doc: dict, b_doc: dict, k: str, hosted: bool) -> str:
+    """The tables at each token whose choice differs: the first three, the rest in place behind "Show all"."""
+    a, b = _candidates(a_doc, hosted), _candidates(b_doc, hosted)
+    n = min(len(a[0]), len(b[0]), len(a[1]), len(b[1]))
+    at = [i for i in range(n) if a[0][i] != b[0][i]]
+    if not at:
+        return ""
+    first = "".join(_l2_table(i, a, b, k, hosted) for i in at[:3])
+    if len(at) <= 3:
+        return first
+    rest = "".join(_l2_table(i, a, b, k, hosted) for i in at[3:])
+    return f"{first}<details data-l2-all><summary>{escape(L2_ALL.format(n=len(at)))}</summary>{rest}</details>"
+
+
+def _l2_block(
+    ra: dict, rb: dict, reading: L2Reading, shown: bool, why_hidden: str, example: bool, docs: tuple = (None, None)
+) -> str:
     if reading.kind == "not-comparable":
         return (
             f'<div data-token-level="L2" data-l2="not-comparable"><h4>{escape(L2_HEADING)}</h4>'
@@ -327,20 +513,23 @@ def _l2_block(ra: dict, rb: dict, reading: L2Reading, shown: bool, why_hidden: s
         )
     elif why_hidden:
         lines.append(f"<p data-l2-hidden>{escape(why_hidden)}</p>")
-    lines.append(f"<p data-l2-k>{escape(L2_K.format(a=reading.k[0], b=reading.k[1]))}</p>")
+    if reading.kind == "rank" and shown and all(isinstance(d, dict) for d in docs):
+        lines.append(_l2_tables(docs[0], docs[1], reading.k[0] or NOT_RECORDED, reading.hosted))
     sampled = [h for h in (_greedy(ra), _greedy(rb)) if h]
+    folded = [*L2_NON_CLAIMS[:2], L2_K.format(a=reading.k[0], b=reading.k[1])]
     if sampled:
-        lines.append(
-            f'<p data-l2-sampled class="nonclaim">{escape(L2_SAMPLED.format(how="; ".join(dict.fromkeys(sampled))))}</p>'
-        )
+        folded.append(L2_SAMPLED.format(how="; ".join(dict.fromkeys(sampled))))
     sampling = tuple(
         (f"sampling: {k[len('sampling.') :]}", k) for k in sorted(set(ra) | set(rb)) if k.startswith("sampling.")
     )
-    fields = tuple(f for f in L2_CAPTURE if f[1] in ra or f[1] in rb) + sampling
-    nonclaims = "".join(f"<li>{escape(n)}</li>" for n in L2_NON_CLAIMS)
+    lvl = level(ra, docs[0] if isinstance(docs[0], dict) else None)
+    fields = (
+        tuple((level_words(lvl, l2=True) if f == "steps.level" else w, f) for w, f in L2_CAPTURE if f in ra or f in rb)
+        + sampling
+    )
     return (
         f'<div data-token-level="L2" data-l2="{escape(reading.kind)}"><h4>{escape(L2_HEADING)}</h4>{"".join(lines)}'
-        f'{_capture_rows(ra, rb, fields)}<ul class="plain nonclaims" data-l2-nonclaims>{nonclaims}</ul></div>'
+        f"{_capture_rows(ra, rb, fields, 'L2')}{_caveats('L2', L2_NON_CLAIMS[2], folded)}</div>"
     )
 
 
@@ -359,6 +548,35 @@ def _shown_here(digests: tuple, public: bool | None = None) -> tuple[bool, str, 
         return True, "", True
     return False, L2_PUBLIC, False
 
+
+#: The section's own look, in the skin's tokens: the strip's cells wrap; each state in words, its tone a second cue.
+TOKEN_LEVELS_CSS = """
+[data-section=token-levels] h3{font-size:var(--fs-body);font-weight:600;margin:14px 0 6px}
+[data-section=token-levels] ol.token-strip{list-style:none;display:flex;flex-wrap:wrap;gap:6px;margin:10px 0 6px;
+  padding:0}
+[data-section=token-levels] ol.token-strip li{display:flex;flex-direction:column;gap:2px;min-width:92px;
+  padding:6px 8px;border:1px solid var(--line);border-radius:var(--r-ctl);background:var(--surface);
+  font-size:var(--fs-small);color:var(--ink)}
+[data-section=token-levels] ol.token-strip li .pos{color:var(--ink-muted)}
+[data-section=token-levels] ol.token-strip li[data-state=row]{border-color:var(--cc-ink)}
+[data-section=token-levels] ol.token-strip li[data-state=token]{border-color:var(--bad-ink);border-width:2px}
+[data-section=token-levels] ol.token-strip li[data-first]{outline:2px solid var(--accent);outline-offset:1px}
+[data-section=token-levels] ol.token-strip li .first{font-weight:600}
+[data-section=token-levels] ol.token-strip li .ids{font-family:var(--font-mono, ui-monospace, monospace)}
+[data-section=token-levels] table.board :is(th,td){padding:6px 10px;vertical-align:top;
+  border-bottom:1px solid var(--line-soft)}
+[data-section=token-levels] table.board caption{text-align:left;font-size:var(--fs-small);color:var(--ink-muted);
+  padding:0 0 4px}
+[data-section=token-levels] table.board tr[data-differs=yes] :is(th,td){font-weight:600}
+[data-section=token-levels] table.l2 td[data-chosen=yes]{font-weight:600}
+[data-section=token-levels] .mark{font-size:var(--fs-small);color:var(--ink-muted)}
+[data-section=token-levels] details{margin:6px 0}
+[data-section=token-levels] details>summary{cursor:pointer}
+[data-section=token-levels] .caveat{font-size:var(--fs-small);color:var(--ink-muted);margin:6px 0 0}
+[data-section=token-levels] .legend{font-size:var(--fs-small);color:var(--ink-muted);margin:0 0 8px}
+[data-section=token-levels] table.board tbody th{font-size:var(--fs-body);font-weight:400;color:var(--ink-muted);
+  text-align:left}
+"""
 
 CLOSE_HEADING = "Close calls"
 CLOSE_FIRST = "At token {at}: {chosen} was chosen; {runner} was the {rank} candidate, {lead} {way}; {n} close call{s} in this output (a lead of at most {margin} nats)."
@@ -500,13 +718,13 @@ def pair_block(name: str, a: tuple, b: tuple, verified: tuple[bool, bool], publi
             f"<p>{escape(COULD_NOT_CHECK.format(who=who))}</p></div>"
         )
     blocks = []
+    shown, why_hidden, example = _shown_here((value(ra, "steps") or "", value(rb, "steps") or ""), public)
     reading = l3_reading(ra, da, rb, db)
     if reading is not None:
-        blocks.append(_l3_block(ra, rb, reading))
+        blocks.append(_l3_block(ra, rb, reading, (da, db), shown))
     second = l2_reading(ra, da, rb, db)
     if second is not None:
-        shown, why_hidden, example = _shown_here((value(ra, "steps") or "", value(rb, "steps") or ""), public)
-        blocks.append(_l2_block(ra, rb, second, shown, why_hidden, example))
+        blocks.append(_l2_block(ra, rb, second, shown, why_hidden, example, (da, db)))
     if not blocks:
         return ""
     return f'<div class="token-levels-pair" data-token-levels="{escape(name)}">{head}{"".join(blocks)}</div>'

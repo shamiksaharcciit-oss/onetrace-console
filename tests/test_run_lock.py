@@ -312,8 +312,9 @@ def test_the_watcher_takes_in_a_gone_recorder_s_run_and_lists_an_empty_lock(tmp_
 
 
 def _killed(folder: Path, run_id: str) -> None:
-    """A run onetrace 0.7.1 records one step of, in a process that then exits without closing it: what a
-    kill leaves, a MANIFEST.json and an empty `.lock`."""
+    """A run the installed onetrace records one step of, in a process that then exits without closing it, with
+    its `.lock` as onetrace before 0.9 left it: a MANIFEST.json and an empty `.lock`. onetrace 0.9 names the
+    recording process in it (`dead` once the process is gone, loaded by itself); the press is for the empty one."""
     code = (
         "import os, sys\nfrom pathlib import Path\nfrom onetrace.emit import Instrument, Recorder\n"
         "rec = Recorder(sys.argv[1], run_id=sys.argv[2], declared_stages=['one', 'two'], "
@@ -322,7 +323,8 @@ def _killed(folder: Path, run_id: str) -> None:
         "lambda ctx: ctx.write('one.txt', b'1\\n', 'text/plain'))\nos._exit(0)\n"
     )
     subprocess.run([sys.executable, "-c", code, str(folder), run_id, __file__], check=True)
-    assert (folder / run_lock.NAME).read_bytes() == b"" and (folder / "MANIFEST.json").is_file()
+    assert (folder / run_lock.NAME).is_file() and (folder / "MANIFEST.json").is_file()
+    (folder / run_lock.NAME).write_bytes(b"")
 
 
 def test_the_press_loads_the_folder_as_not_closed(tmp_path, examined):

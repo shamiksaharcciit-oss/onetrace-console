@@ -2,7 +2,7 @@
 
     "Sample" isn't true of these runs. Fixed words, in the console's frame: "This record is in a
     preview format ({format})." The format is read from the manifest. The free file's own
-    wording goes to the next specification with the viewer changes.
+    wording waits for the next set of viewer changes.
 
 The viewer draws its banner when the manifest's format ends in `-preview`; that says what format
 the record is in, not where it came from. A run the console stores is a run, not a sample.

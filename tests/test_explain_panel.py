@@ -863,7 +863,7 @@ def test_a_static_export_carries_the_place_only(pair, tmp_path, examined):
 
 
 def test_the_command_the_tests_run_is_the_published_wheel(explain_command, examined):
-    """The panel's tests run onetrace-explain 0.3.1 as released: installed from the wheel cache by its pinned
+    """The panel's tests run onetrace-explain 0.3.2 as released: installed from the wheel cache by its pinned
     hash, with what it asks for, apart from this environment, which does not hold it."""
     import importlib.util
 
@@ -872,8 +872,8 @@ def test_the_command_the_tests_run_is_the_published_wheel(explain_command, exami
     found, lib = explain_command
     ((requirement, (name, sha)),) = w.TEST_COMMANDS.items()
     examined(1, "installed command")
-    assert requirement == "onetrace-explain==0.3.1" and name == "onetrace_explain-0.3.1-py3-none-any.whl"
-    assert (lib / "onetrace_explain-0.3.1.dist-info").is_dir()
+    assert requirement == "onetrace-explain==0.3.2" and name == "onetrace_explain-0.3.2-py3-none-any.whl"
+    assert (lib / "onetrace_explain-0.3.2.dist-info").is_dir()
     assert importlib.util.find_spec("onetrace_explain") is None or not str(
         importlib.util.find_spec("onetrace_explain").origin
     ).startswith(str(lib))

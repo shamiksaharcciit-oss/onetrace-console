@@ -190,7 +190,7 @@ class CheckCount:
 
 @dataclass(frozen=True, slots=True)
 class Rung:
-    """One rung of the run's evidence ladder (v6 board 2): a question, its state, its evidence.
+    """One rung of the run's evidence ladder, as the run page's design draws it: a question, its state, its evidence.
 
     `state` is the rung's own slug (`yes`, `no`, `couldnt-check`, `not-checked`,
     `not-yet-available`, `no-records`); `state_key` is the table key its words come from.
@@ -233,7 +233,7 @@ class PageModel:
     report_problem: str | None
     manifest_raw: str
     generated_at: str
-    #: The run's evidence ladder (v6 board 2). Required: a page built without one would
+    #: The run's evidence ladder, as the run page's design draws it. Required: a page built without one would
     #: render no rungs, and "no rungs" is not a state any rung is allowed to be in.
     ladder: tuple[Rung, ...]
     generator: str = GENERATOR
@@ -1710,7 +1710,7 @@ def approved_rung(manifest: dict, check: CheckRows | None, own_check: bool,
 def ladder(record: Record, report: Report | None, strip: Strip, verbs: dict | None,
            problem: str | None, *, own_check: bool,
            checker: str | None = None) -> tuple[Rung, ...]:
-    """The run's seven rungs, in board 2's order, with "Ran as approved" after "Nothing declared
+    """The run's seven rungs, in the run page design's order, with "Ran as approved" after "Nothing declared
     is missing". Signing is not yet available
     in this format, and release 1 has no authorization records: neither is
     ever a yes. `checker` names the check that ran, where the caller knows it."""

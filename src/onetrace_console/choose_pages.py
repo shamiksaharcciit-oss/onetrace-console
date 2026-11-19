@@ -19,7 +19,7 @@ from typing import TYPE_CHECKING
 from onetrace_console.render import _document, _tag, run_named
 from onetrace_console.store import Store, arrival_order
 from onetrace_console.viewer.model import LIST_CAP
-from onetrace_console.words import escape, generated_footer, scroll_region, time_html
+from onetrace_console.words import escape, generated_footer, hidden_header, scroll_region, time_html
 
 if TYPE_CHECKING:
     from onetrace_console.compare import StoredComparison
@@ -93,7 +93,7 @@ def render_choose(pipeline, store: Store, *, generated_at: str) -> str:
     )
     listing = scroll_region(
         '<table class="timeline" data-section="choose-a"><thead><tr>'
-        "<th>Run</th><th>Arrived</th><th></th></tr>"
+        "<th>Run</th><th>Arrived</th>" + hidden_header("Action") + "</tr>"
         f"</thead><tbody>{rows}</tbody></table>",
         "Runs to choose from, scrolls sideways",
         "choose-a",

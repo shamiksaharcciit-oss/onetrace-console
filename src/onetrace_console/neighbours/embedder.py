@@ -200,13 +200,17 @@ def _tokens_digest(ids) -> str:
 
 
 def usable_cpus() -> int:
-    """The CPUs this process can run on (its affinity, where the platform says), at least one."""
+    """The CPUs this process can run on (its affinity, where the platform says), at least one. Only Linux says
+    (`os.sched_getaffinity`): elsewhere, every CPU the machine has."""
     import os
+    import sys
 
-    try:
-        return max(1, len(os.sched_getaffinity(0)))
-    except (AttributeError, OSError):
-        return max(1, os.cpu_count() or 1)
+    if sys.platform == "linux":
+        try:
+            return max(1, len(os.sched_getaffinity(0)))
+        except OSError:
+            pass
+    return max(1, os.cpu_count() or 1)
 
 
 class Local:

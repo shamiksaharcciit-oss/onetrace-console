@@ -1,5 +1,5 @@
 """The pin (console 0.7.0): the console depends on neither onetrace-explain nor keyring, and its docs and
-install line name `onetrace-explain[keyring]>=0.3` beside the console: the README's install sentence, and
+install line name `onetrace-explain[keyring]>=0.3.2` beside the console: the README's install sentence, and
 the Set up Explain page's step 3."""
 
 from __future__ import annotations
@@ -18,7 +18,7 @@ from tests.test_explain_setup import _get, _main, local  # noqa: F401
 pytestmark = pytest.mark.usefixtures("planted_key_searched")
 
 REPO = Path(__file__).resolve().parent.parent
-LINE = 'pip install "onetrace-explain[keyring]>=0.3"'
+LINE = 'pip install "onetrace-explain[keyring]>=0.3.2"'
 NAMES = re.compile(r"onetrace[-_.]explain|\bkeyring\b", re.I)
 
 

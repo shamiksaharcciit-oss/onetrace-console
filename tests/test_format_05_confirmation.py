@@ -1,7 +1,7 @@
 """A recipient confirmation (onetrace 0.8's section J) in a run the console stores: the CHANGELOG's known gap.
 
-The Authorization page does not draw a recipient confirmation's rows in this release: it keeps the room an earlier
-release left for them (`tests/test_authorization_gated.py`). What the check says of a confirmation shows where
+The Authorization page draws a recipient confirmation's rows, in the room an earlier release left for them
+(`confirmations`, `tests/test_confirmations_page.py`). What the check says of a confirmation shows where
 the console shows a check's rows: onetrace-verify's own `confirmation: …` rows, and its line on what a recipient
 confirmation does not show, read as every other (`viewer.report`).
 
@@ -79,7 +79,7 @@ def test_the_run_is_stored_and_holds(stored, examined):
     assert run.format == "stage-receipt-chain/0.5" and run.check_verdict == HOLDS, (run.format, run.check_verdict)
 
 
-def test_its_rows_show_on_the_proof_page_and_the_authorization_page_draws_none(stored, examined):
+def test_its_rows_show_on_the_proof_page_and_on_the_authorization_page(stored, examined):
     from onetrace_console.pages import render_execution
 
     run, store = stored
@@ -88,5 +88,6 @@ def test_its_rows_show_on_the_proof_page_and_the_authorization_page_draws_none(s
     examined(2, "pages")
     assert all(r in proof for r in CONFIRMATION_ROWS), [r for r in CONFIRMATION_ROWS if r not in proof]
     assert "a recipient confirmation: A confirmation shows the recipient said it acted." in proof
-    assert 'data-section="confirmations"' not in authorization
-    assert not any(r in _text(authorization) for r in CONFIRMATION_ROWS)
+    #: The room an earlier release left for them is filled (`confirmations`, `tests/test_confirmations_page.py`).
+    assert 'data-section="confirmations"' in authorization
+    assert all(r in _text(authorization) for r in CONFIRMATION_ROWS)

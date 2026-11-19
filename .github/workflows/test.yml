@@ -1,4 +1,5 @@
-# The test suite, on Linux and on Windows, Python 3.12, for every push and pull request.
+# The test suite, on Linux and on Windows, Python 3.12, for every push and pull request; and its browser tests alone,
+# on Linux, with Playwright's Chromium (from requirements-browser.txt, by hash), failing where any of them skipped.
 #
 # Read-only: no secrets (checkout uses GitHub's automatic per-run token, read-only here, and does not
 # keep it), no pull_request_target, nothing scheduled. Every action is pinned by its full commit SHA,
@@ -63,3 +64,56 @@ jobs:
         run: >-
           python -B -m pytest -p no:cacheprovider -p no:randomly
           --basetemp="$RUNNER_TEMP/test-bt" tests -rsxX
+
+  browser:
+    name: browser tests, ubuntu-24.04, Python 3.12
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    defaults:
+      run:
+        shell: bash
+    env:
+      PYTHONPATH: src
+      PYTHONUTF8: "1"
+      PYTHONDONTWRITEBYTECODE: "1"
+    steps:
+      - name: Check out the commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Python 3.12
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12.10"
+
+      - name: The test tools, hash-checked (requirements-test.txt)
+        run: python -m pip install --require-hashes -r requirements-test.txt
+
+      - name: The console's pins, hash-checked (requirements.lock, through install_pinned.py)
+        run: python tools/install_pinned.py
+
+      - name: The SDK fixtures, then their check
+        run: |
+          python tools/fetch_sdk_fixtures.py
+          python tools/fetch_sdk_fixtures.py --check
+
+      - name: The wheel cache, then its check
+        run: |
+          python tools/fetch_wheel_cache.py
+          python tools/fetch_wheel_cache.py --check
+
+      - name: Playwright, hash-checked (requirements-browser.txt), and its Chromium
+        run: |
+          python -m pip install --require-hashes -r requirements-browser.txt
+          python -m playwright install --with-deps chromium
+
+      - name: The browser tests alone
+        run: >-
+          ONETRACE_BROWSER_PYTHON="$(python -c 'import sys; print(sys.executable)')"
+          python -B -m pytest -p no:cacheprovider -p no:randomly -m browser
+          --basetemp="$RUNNER_TEMP/browser-bt" tests -rsxX --junitxml="$RUNNER_TEMP/browser.xml"
+
+      - name: No browser test skipped
+        if: ${{ !cancelled() }}
+        run: python tools/browser_ran.py "$RUNNER_TEMP/browser.xml"

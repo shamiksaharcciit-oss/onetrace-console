@@ -22,7 +22,7 @@ from __future__ import annotations
 
 import json
 import re
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 from pathlib import Path
 
 from onetrace_console.words import escape
@@ -59,14 +59,14 @@ class MarkError(ValueError):
     """A mark refused, said in words."""
 
 
-def _folder(store) -> Path:
-    return Path(store.root) / FOLDER
-
-
 def _path(store, key: str) -> Path:
+    """A run's mark, kept by its key (`Store.kept_path`); a team's view answers its own runs' alone."""
     if not _KEY.fullmatch(key or ""):
         raise MarkError(f"not a run key: {key!r}")
-    return _folder(store) / f"{key}.json"
+    path = store.kept_path(FOLDER, key, f"{key}.json")
+    if path is None:
+        raise MarkError(f"no run {key!r} is held")
+    return path
 
 
 def marks(store) -> dict[str, dict]:
@@ -77,8 +77,12 @@ def marks(store) -> dict[str, dict]:
     from onetrace_console.bounded_json import load_json_bounded
 
     out = {}
-    folder = _folder(store)
-    for p in sorted(folder.glob("*.json")) if folder.is_dir() else ():
+    for name in store.kept_names(FOLDER):
+        if not name.endswith(".json"):
+            continue
+        p = store.kept_path(FOLDER, name[: -len(".json")], name)
+        if p is None:
+            continue
         try:
             mark = load_json_bounded(p.read_text(encoding="utf-8"), "a benchmark mark")
         except (OSError, ValueError, UnicodeDecodeError, RecursionError):
@@ -96,6 +100,10 @@ def mark_of(store, key: str) -> dict | None:
 
 def mark(store, run, *, who: str, note: str = "", when: str | None = None) -> dict:
     """Mark `run` as a benchmark, replacing any earlier mark of it."""
+    from onetrace_console.rerun_label import never_reference
+
+    if why := never_reference(run):
+        raise MarkError(why)
     note = (note or "").strip()
     if len(note) > NOTE_CHARS:
         raise MarkError(f"the note is {len(note)} characters; a note holds at most {NOTE_CHARS}")
@@ -127,19 +135,12 @@ def unmark(store, key: str) -> bool:
 
 def mark_build(store, folders: list[str], when: str) -> list[str]:
     """The public demo's marks: each pipeline's baseline among `folders` (`demo_store.BENCHMARKS`)."""
-    from onetrace_console.demo_store import BENCHMARK_BESIDE_KEPT, BENCHMARKS
+    from onetrace_console.demo_store import BENCHMARKS
 
     done = []
     for run in store.runs():
         if run.folder and Path(run.folder).name in BENCHMARKS and Path(run.folder).name in folders:
             mark(store, run, who=DEMO_WHO, note=DEMO_NOTE, when=when)
-            done.append(run.run_id)
-    #: On a build from an earlier build's runs, P10's 1.0 baseline, marked after the kept one: the
-    #: most recently marked, so P10's reference is made from it (`verdicts.chosen`).
-    later = (datetime.fromisoformat(when) + timedelta(seconds=1)).isoformat(timespec="seconds")
-    for run in store.runs():
-        if run.folder and Path(run.folder).name == BENCHMARK_BESIDE_KEPT and BENCHMARK_BESIDE_KEPT in folders:
-            mark(store, run, who=DEMO_WHO, note=DEMO_NOTE, when=later)
             done.append(run.run_id)
     return done
 
@@ -176,7 +177,11 @@ def mark_section(run, store, *, public: bool) -> str:
             f'<p class="note">{escape(NOT_CORRECT)}</p></section>'
         )
     from onetrace_console.benchmark_script import BENCHMARK_SCRIPT
+    from onetrace_console.rerun_label import never_reference
 
+    if m is None and (why := never_reference(run)):
+        #: A re-run or a check's run: never offered as a reference, so no press, and why.
+        return f'<section data-section="benchmark" class="benchmark"><h2>Benchmark</h2><p data-benchmark-never>{escape(why)}</p></section>'
     if m is None:
         control = (
             f'<label hidden data-benchmark-note>Note (optional) <input type="text" maxlength="{NOTE_CHARS}" '
@@ -245,8 +250,13 @@ def repeats(run, store) -> list[tuple[object, str]]:
     if not mine:
         return []
     out = []
+    from onetrace_console.rerun_label import of_run
+
     for other in arrival_order(store.runs(), newest_first=False):
         if other.key == run.key or declared_list(other) != declared_list(run):
+            continue
+        #: A re-run or a check's run is never offered as a reference, so never one of its repeats.
+        if of_run(other) is not None:
             continue
         if (_repeat_of(other, store) == run.run_id and run.run_id) or (
             _repeat_of(run, store) == other.run_id and other.run_id

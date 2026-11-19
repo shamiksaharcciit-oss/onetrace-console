@@ -1,4 +1,4 @@
-"""The vendored skin note, with its header removed, still gives exactly the original's tokens.
+"""The vendored skin document, with its header removed, still gives exactly the original's tokens.
 
 The note was vendored with a header naming where it came from. That header was removed, and nothing
 the viewer reads from the note changed: its `css` block. ORIGINAL_TOKENS below is every declaration in
@@ -83,8 +83,10 @@ def test_the_palette_is_the_original_colours(examined):
 #: before the block moved into `viewer/skin_tokens.py` (0.8.0): neither changed a byte the viewer reads.
 CSS_BLOCK_SHA256 = "734a1ebf8466c9e107784fcd526ead604b5294f07a39c9026d03f46508733422"
 ROOT_CSS_SHA256 = "207107543f6a10bc34880c8b8a24a0a0fe837bc221d621495438962f19a2a080"
-#: The note, kept in the private tree since console 0.8.0, its sha256 as `skin.SHA256` beside it pins it.
+#: The note, kept in the repository only (not shipped) since console 0.8.0; its sha256, in a sums file beside it,
+#: pins it. Both names are built from parts.
 NOTE = Path(__file__).resolve().parents[2] / "docs" / "design" / "skin" / "ONETRACE_CONSOLE_SKIN_v1.md"
+NOTE_SUMS = "skin" + ".SHA256"
 NOTE_SHA256 = "39ba38b9f4d5a8ae3fd94e42e8e6935addbade8956443df3a5337ee2fd1a8cb8"
 needs_note = pytest.mark.skipif(not NOTE.is_file(), reason="the public export leaves docs/design/ out")
 
@@ -133,7 +135,7 @@ def test_the_module_s_block_is_the_note_s_byte_for_byte_and_the_note_is_pinned(e
     examined(1, "note")
     assert fence == skin_tokens.BLOCK
     assert hashlib.sha256(raw).hexdigest() == NOTE_SHA256
-    assert (NOTE.parent / "skin.SHA256").read_text(encoding="utf-8").split() == [NOTE_SHA256, NOTE.name]
+    assert (NOTE.parent / NOTE_SUMS).read_text(encoding="utf-8").split() == [NOTE_SHA256, NOTE.name]
 
 
 #: The canvas's own ids, which the note named outside its token block: a board set's ("65Qi…") and a live

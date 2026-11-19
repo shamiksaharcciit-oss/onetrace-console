@@ -12,6 +12,7 @@ import pytest
 from onetrace_console.accounts import AccountStore
 from onetrace_console.serve import ACCOUNTS_DIRNAME
 from onetrace_console.sessions import SessionStore
+from tests.test_session_index import console  # noqa: F401 - a fixture, requested by name
 
 T = 1_794_750_330_000_000_000
 
@@ -75,3 +76,54 @@ def test_the_wait_is_bounded_where_the_clock_does_not_move(accounts, monkeypatch
     assert accounts.end_sessions("alice") == T
     assert time.monotonic() - started < A.CLOCK_WAIT_SECONDS + 1.0
     examined(1, "call")
+
+
+# ---------------------------------------------------------------- admin sessions end, by principal
+
+
+class TickOnSleep:
+    """`time.time_ns` stuck on one reading until something sleeps, then the next tick: a coarse clock that only a
+    wait moves, whatever reads it in between."""
+
+    def __init__(self, at: int) -> None:
+        self.at = at
+
+    def __call__(self) -> int:
+        return self.at
+
+    def sleep(self, _seconds: float) -> None:
+        self.at += 1
+
+
+def test_end_times_write_returns_only_once_the_clock_reads_past_it(tmp_path, monkeypatch, examined):
+    from onetrace_console.session_ends import EndTimes
+
+    ends = EndTimes(tmp_path / "sessions_ended")
+    sessions = SessionStore(idle_timeout_seconds=1800, absolute_timeout_seconds=43200, ended=ends.read)
+    monkeypatch.setattr(time, "time_ns", CoarseClock(T - 1, T, T, T + 1))
+    before = sessions.create("alice")
+    written = ends.write("alice")
+    after = sessions.create("alice")
+    assert written == T and ends.read("alice") == T
+    assert sessions.get(before.session_id) is None, "a session made before the end time is gone"
+    assert sessions.get(after.session_id) is not None, "a session made after the end returned lives"
+    examined(2, "sessions either side of the end time")
+
+
+@pytest.mark.parametrize("who", ["alice", "0f1e2d3c-4b5a-4968-8778-695a4b3c2d1e/11112222-3333-4444-8555-666677778888"])
+def test_a_sign_in_in_the_end_s_own_tick_stays_signed_in_through_the_command(console, who, monkeypatch, examined):
+    """`admin sessions end` on a clock that repeats one reading until something waits: a session made before it in that
+    tick is ended (`<=` kept), and one made after it returns lives, for a local account and an Entra ID key."""
+    from onetrace_console.__main__ import main as cli_main
+
+    store, told = console
+    clock = TickOnSleep(T)
+    monkeypatch.setattr(time, "time_ns", clock)
+    monkeypatch.setattr(time, "sleep", clock.sleep)
+    before = store.create(who)
+    assert cli_main(["admin", "sessions", "end", who]) == 0
+    after = store.create(who)
+    assert store.get(after.session_id) is not None, "made after the command returned: signed in"
+    assert store.get(before.session_id) is None, "made in the end's tick, before it: ended"
+    assert told == [(who, 1)]
+    examined(2, "sessions in one tick")

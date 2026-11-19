@@ -12,6 +12,10 @@ reference: the reference's settings were taken from the reference run, so they a
 
 What is compared: the parts that should not change between runs, per step --
 - the configuration fingerprint (the receipt's `instrument.config_digest`);
+- the kept configuration, key by key, where both steps kept theirs (format 0.4's `config_kept`, the file under
+  `config/<receipt stem>/config.json`, its bytes matching its recorded digest and the verifier failing neither of its
+  rows): each key's value on both sides. A key a step kept in part left out (its value `not kept`, under `partial`)
+  reads "not recorded", never "same";
 - the declared settings (the receipt's `assertions.constants`, without onetrace's own `onetrace.*`);
 - the code fingerprint (`instrument.manifest_digest`);
 - per model-call record, paired by name, the groups `onetrace.model_call.comparator` names:
@@ -100,15 +104,20 @@ class Step:
     receipt: dict
     file: str
     read: object
+    #: The verifier's rows of the run's stored check, for the members a FAIL stops drawing from.
+    rows: tuple = ()
 
 
 def steps_of(run, store) -> list[Step]:
     """The run's steps in its chain's order, each with a reader of the run's own files."""
+    from onetrace_console.home import _envelope
+    from onetrace_console.info_mark import rows_of
     from onetrace_console.stage_pages import _files, _read, _steps
 
     files = _files(run, store)
+    rows = tuple(rows_of(_envelope(run, store)))
     return [
-        Step(node_id(s["receipt"]), s["receipt"], s["file"], lambda path, files=files: _read(files, store, path))
+        Step(node_id(s["receipt"]), s["receipt"], s["file"], lambda path, files=files: _read(files, store, path), rows)
         for s in _steps(run, store)
     ]
 
@@ -158,6 +167,69 @@ def config_fingerprint(ref: Step, mine: Step, store) -> list[Item]:
             _recorded(_instrument(mine.receipt).get("config_digest")),
         )
     ]
+
+
+#: The verifier's rows on a receipt's kept configuration.
+KEPT_ROWS = ("config_kept.digest against instrument.config_digest", "config_kept file")
+#: A key a step kept in part left out of its kept file: its value as the file holds it.
+LEFT_OUT = "not kept"
+
+
+def kept_config(step: Step) -> dict | None:
+    """The step's kept configuration, {key: value}, where its receipt names one, the file's bytes match its recorded
+    digest, it reads as an object, and the verifier FAILs neither of its rows; else None. A key left out of a file kept
+    in part maps to None."""
+    import hashlib
+    from pathlib import PurePosixPath
+
+    from onetrace_console.step_kinds import failed
+
+    ck = step.receipt.get("config_kept")
+    if (
+        not isinstance(ck, dict)
+        or not isinstance(ck.get("digest"), str)
+        or failed(list(step.rows), step.file, KEPT_ROWS)
+    ):
+        return None
+    try:
+        raw = step.read(f"config/{PurePosixPath(step.file).stem}/config.json")  # type: ignore[operator]  # a reader
+    except (OSError, StoreError, KeyError):
+        return None
+    if not isinstance(raw, bytes) or "sha256:" + hashlib.sha256(raw).hexdigest() != ck["digest"]:
+        return None
+    from onetrace_console.bounded_json import load_json_bounded
+
+    try:
+        got = load_json_bounded(raw.decode("utf-8"), "a kept configuration")
+    except (UnicodeDecodeError, ValueError):
+        return None
+    if not isinstance(got, dict):
+        return None
+    partial = ck.get("partial") == "true"
+    return {str(k): (None if partial and v == LEFT_OUT else v) for k, v in got.items()}
+
+
+def kept_configuration(ref: Step, mine: Step, store) -> list[Item]:
+    """Where both steps kept their configuration: each key's value on both sides, in the reference's order, then this
+    run's own keys; nothing where either kept none."""
+    a, b = kept_config(ref), kept_config(mine)
+    if a is None or b is None:
+        return []
+    keys = list(a) + [k for k in b if k not in a]
+    return [
+        compare_values(
+            f"kept configuration {k}",
+            None if a.get(k) is None else _shown(a[k]),
+            None if b.get(k) is None else _shown(b[k]),
+        )
+        for k in keys
+    ]
+
+
+def _shown(value) -> str:
+    import json
+
+    return value if isinstance(value, str) else json.dumps(value, sort_keys=True, ensure_ascii=False)
 
 
 def _constants(receipt: dict) -> dict:
@@ -265,7 +337,7 @@ def policy_version(ref: dict, store) -> str | None:
     """The policy version on the held onedoor export row a decision reference names: the row with its
     request id and its decision digest, as the Decisions cited panel joins them (`decision_refs`), and
     only where every stored copy of the row matches its delivery. None where no such row is held."""
-    if not _onedoor_on() or not (store.root / "decision_exports").is_dir():
+    if not _onedoor_on() or not store.has_decision_exports():
         return None
     from onetrace_console.onedoor_ext.policy_pages import all_decisions
 
@@ -299,7 +371,7 @@ def policies(ref: Step, mine: Step, store) -> list[Item]:
 
 
 #: Each compared item, in the order a step lists them.
-ITEMS = (config_fingerprint, declared_settings, code_fingerprint, model_calls, policies)
+ITEMS = (config_fingerprint, kept_configuration, declared_settings, code_fingerprint, model_calls, policies)
 
 
 def compare_step(ref: Step, mine: Step, store) -> list[Item]:

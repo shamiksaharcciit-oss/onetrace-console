@@ -32,7 +32,7 @@ def _rungs(case: str) -> dict[str, str]:
 def test_a_stored_runs_rung_one_is_the_consoles_own_check(checked, store):  # noqa: F811
     """Its own check, so never the supplied-report sentence. Run without
     `--require-artifacts` (the pinned verifier has no such flag, B4), so not a yes either:
-    the confirmation review held rung 1 to a check with the output files required. With
+    rung 1 is held to a check with the output files required. With
     the flag it reads yes; see tests/test_review_fixes.py."""
     case = render_execution(checked, store, generated_at=GENERATED_AT).pages[CASE]
     assert _rungs(case)["records-agree"] == "not-checked"

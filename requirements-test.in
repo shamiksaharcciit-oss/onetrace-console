@@ -9,3 +9,5 @@ setuptools==83.0.0
 # configuration.
 ruff==0.17.4
 mypy==2.4.1
+# The [otlp] extra's package, so the suite sends a trace in protobuf: the newest of the extra's range.
+opentelemetry-proto==1.45.2

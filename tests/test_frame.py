@@ -1,6 +1,6 @@
 """The console's frame -- its navigation, its footer and its one stylesheet.
 
-What the specification fixes, and what each test below holds:
+What the frame must do, and what each test below holds:
 - the navigation lists pages that exist, and only those: Overview, Runs, Comparisons (after Runs),
   Incidents, and Policy when the onedoor extension is on. Nothing is drawn as "not available";
 - every link in it answers 200 to a signed-in user, and every item is a page that exists;
@@ -88,16 +88,17 @@ def onedoor(server):
 # ----------------------------------------------------------------------- the navigation
 
 
-def test_the_navigation_lists_overview_runs_comparisons_and_incidents_without_onedoor(server, examined):
+def test_the_navigation_lists_overview_runs_comparisons_incidents_and_authorization_without_onedoor(server, examined):
     base, _ = server
     status, page, _, _ = _get(base, "/")
     examined(1, "Overview served")
     assert status == 200
     assert [(label, href) for label, href, _ in _items(page)] == [
         ("Overview", "/"),
-        ("Runs", "/executions-all.html"),
+        ("Runs", "/runs"),
         ("Comparisons", "/comparisons.html"),
         ("Incidents", "/incidents.html"),
+        ("Authorization", "/authorization.html"),
     ]
 
 
@@ -106,7 +107,14 @@ def test_the_navigation_adds_policy_with_onedoor(onedoor, examined):
     status, page, _, _ = _get(base, "/")
     examined(1, "Overview served")
     assert status == 200
-    assert [label for label, _, _ in _items(page)] == ["Overview", "Runs", "Comparisons", "Incidents", "Policy"]
+    assert [label for label, _, _ in _items(page)] == [
+        "Overview",
+        "Runs",
+        "Comparisons",
+        "Incidents",
+        "Authorization",
+        "Policy",
+    ]
 
 
 def test_nothing_is_drawn_as_not_available(onedoor, examined):
@@ -125,11 +133,16 @@ def test_nothing_is_drawn_as_not_available(onedoor, examined):
 
 
 def test_every_item_is_a_page_that_exists(onedoor, examined):
+    """Each item is a page drawn ahead, or the Runs page, drawn as asked from the run index, which answers."""
     base, store_root = onedoor
     items = _items(_get(base, "/")[1])
     examined(len(items), "navigation items")
     pages = store_root / PAGES_DIRNAME
     for label, href, _ in items:
+        if href == "/runs":
+            status, page, _, _ = _get(base, href)
+            assert status == 200 and b"<h1>Runs</h1>" in page, (label, status)
+            continue
         rel = "home.html" if href == "/" else href.lstrip("/")
         assert (pages / rel).is_file(), (label, rel)
 

@@ -48,11 +48,22 @@ RUN_READ_FROM = {"strip", "case", "declined", "onedoor", "span-context", "nestin
 FROM_TRAIL = 'data-from="trail"'
 #: A comparison page's parts: the same three kinds. The localize report's own parts, from its
 #: envelope on, are on "Proof" with the SDK's reports as it wrote them.
-DIFF_BOTH = {"pair", "limit", "preview"}
+DIFF_BOTH = {"pair", "compare-head", "limit", "preview"}
 DIFF_PROOF_PARTS = {"stage-table", "sdk", "localize-envelope", "localize-repeat"}
 #: The suggested explanation goes with the step-by-step verdicts it speaks of: on "What changed"
 #: where they are, and on "Proof" with them where they are withheld.
-DIFF_STEPS = {"first-difference", "graph", "settings-changed", "text-diff", "localized", "explain"}
+DIFF_STEPS = {
+    "first-difference",
+    "graph",
+    "settings-changed",
+    "text-diff",
+    "localized",
+    "explain",
+    "compare-first",
+    "step-cards",
+    "compare-main",
+    "near-runs",
+}
 
 #: The integrity line's words. Each state as `records` defines it, said of this run.
 RUN_SAID = {
@@ -62,6 +73,58 @@ RUN_SAID = {
     "not-checked": "Not checked: this console's check did not look at what this needs.",
     "no-verdict": "No verdict recorded: this console's check has not reached this run.",
 }
+#: The plain line at the top of a run's head, by its state: what this console checked, what that means, and what it
+#: does not say. Only what the check establishes; never whether an output is good. The record's format terms stay
+#: on the line below it.
+RUN_PLAIN = {
+    "yes": (
+        "This console checked the run's output files against its record, and they match what the record says. It "
+        "does not show when the record was made (see Anchored), and it does not judge the outputs."
+    ),
+    "no": (
+        "This console checked the run's output files against its record, and they do not match: a file differs from "
+        "what the record says, or is missing. So this page does not compare the run step by step: Proof says which "
+        "file."
+    ),
+    "couldnt-check": (
+        "This console tried to check the run's record and could not finish. That means nothing here confirms or "
+        "contradicts what the run recorded. It does not say anything is wrong: Proof says what stopped the check."
+    ),
+    "not-checked": (
+        "This console checked the run's record without its output files. That means the record agrees with itself "
+        "as far as it was read, but the files it names were not compared with it. It does not say whether they "
+        "match."
+    ),
+    "no-verdict": (
+        "This console has not checked this run's record yet. Nothing on this page has been compared with what the "
+        "run recorded. It does not say anything is wrong."
+    ),
+}
+#: Under the plain line, where the record carries no anchor: what "Not anchored" is.
+RUN_PLAIN_NOT_ANCHORED = (
+    "Not anchored: no outside service recorded when the run's record was made, so this console cannot show it was "
+    "not written later. Most runs are recorded this way; it is not a fault."
+)
+
+
+def with_plain_line(page: str, state: str, *, not_anchored: bool) -> str:
+    """`page`, a run's view, with its plain line at the top of the run's head: above the line of the record's format
+    terms (`<p class="sub">`). Unchanged where the page has no run head, or carries the line already."""
+    if 'data-section="run-plain"' in page or state not in RUN_PLAIN:
+        return page
+    head = page.find('data-section="run-head"')
+    sub = page.find('<p class="sub">', head) if head >= 0 else -1
+    if sub < 0:
+        return page
+    anchor = (
+        f'<p class="plain-anchor" data-section="run-plain-anchor">{escape(RUN_PLAIN_NOT_ANCHORED)}</p>'
+        if not_anchored
+        else ""
+    )
+    line = f'<p class="plain" data-section="run-plain" data-state="{escape(state)}">{escape(RUN_PLAIN[state])}</p>'
+    return page[:sub] + line + anchor + page[sub:]
+
+
 #: Said after the line where the step-by-step verdicts are withheld: of a run, by its state; of a
 #: pair, once.
 RUN_WITHHELD = {
@@ -93,6 +156,8 @@ VIEWS_CSS = """
 :is(.shell .page,.cp) nav[data-section=views] a{padding:8px 2px;text-decoration:none;color:var(--ink-muted);
   border-bottom:2px solid transparent}
 :is(.shell .page,.cp) nav[data-section=views] a[aria-current=page]{color:var(--ink);border-bottom-color:var(--accent)}
+@media (max-width:760px){:is(.shell .page,.cp) nav[data-section=views]{flex-wrap:nowrap;overflow-x:auto;gap:4px 18px}
+:is(.shell .page,.cp) nav[data-section=views] a{flex:none;white-space:nowrap}}
 :is(.shell .page,.cp) [data-section=integrity]{margin:0 0 12px;padding:10px 14px;border:1px solid var(--line);
   border-radius:8px;background:var(--surface);color:var(--ink)}
 :is(.shell .page,.cp) [data-section=integrity][data-tone=ok]{background:var(--ok-bg);color:var(--ok-ink)}
@@ -229,12 +294,46 @@ def _places_diff(items: list[Part], red: bool) -> list[str]:
     return out
 
 
-def _tabs(what_href: str, proof_href: str, current: str) -> str:
-    links = []
-    for words, href in ((WHAT, what_href), (PROOF, proof_href)):
+def tabs_row(links: list[tuple[str, str]] | tuple[tuple[str, str], ...], current: str) -> str:
+    """One row of view tabs: each (words, href) a link, the current one marked `aria-current`, with no script."""
+    out = []
+    for words, href in links:
         mark = ' aria-current="page"' if words == current else ""
-        links.append(f'<a href="{escape(href, quote=True)}"{mark}>{escape(words)}</a>')
-    return f'<nav data-section="views" aria-label="This page\'s views">{"".join(links)}</nav>'
+        out.append(f'<a href="{escape(href, quote=True)}"{mark}>{escape(words)}</a>')
+    return f'<nav data-section="views" aria-label="This page\'s views">{"".join(out)}</nav>'
+
+
+def _tabs(what_href: str, proof_href: str, current: str, more: tuple[tuple[str, str], ...] = ()) -> str:
+    return tabs_row(((WHAT, what_href), (PROOF, proof_href), *more), current)
+
+
+#: A comparison's pages are Investigate's tabs: titled with the pair, at their same addresses.
+INVESTIGATE = "Investigate"
+TEXT_DIFF = "Text diff"
+AUTHORIZATION = "Authorization"
+AUTHORIZATION_SUFFIX = "-authorization.html"
+
+
+def investigate_title(comparison, store) -> str:
+    """ "Investigate · <baseline> → <candidate>", each run by its shown name (its key's start where it is not held)."""
+    from onetrace_console.words import shown_name
+
+    def name(key: str) -> str:
+        run = store.get_run(key)
+        return shown_name(run.run_id) if run is not None else key[:12]
+
+    return f"{INVESTIGATE} · {name(comparison.run_a)} → {name(comparison.run_b)}"
+
+
+def investigate_tabs(key: str, *, text: str = "") -> list[tuple[str, str]]:
+    """Investigate's tabs for the comparison `key`: What changed, Proof, the text diff where `text` names its page,
+    and Authorization; each a file beside the others in `diff/`."""
+    return [
+        (WHAT, f"{key}.html"),
+        (PROOF, proof_name(f"{key}.html")),
+        *([(TEXT_DIFF, text)] if text else []),
+        (AUTHORIZATION, f"{key}{AUTHORIZATION_SUFFIX}"),
+    ]
 
 
 def _line(said: str, red: bool, proof_href: str, tone: str, withheld: str) -> str:
@@ -302,11 +401,19 @@ def _with_repeat(reproduce: str, command: str) -> str:
 
 
 def split(
-    page: str, kind: str, what_href: str, proof_href: str, said: str, state: str, withheld: str = WITHHELD
+    page: str,
+    kind: str,
+    what_href: str,
+    proof_href: str,
+    said: str,
+    state: str,
+    withheld: str = WITHHELD,
+    more: tuple[tuple[str, str], ...] = (),
 ) -> tuple[str, str]:
     """(the "What changed" view, the "Proof" view) of a drawn page. `kind` is "run" or "diff";
     `said` is the integrity line's words and `state` the rung 1 state it was read from (for a pair,
-    the worse of the two), which makes the line red and withholds the step-by-step verdicts."""
+    the worse of the two), which makes the line red and withholds the step-by-step verdicts. `more`: the
+    page's other tabs, (words, href) each, after the two views'."""
     red = state in RED
     rows_from = ""
     if kind == "run":
@@ -325,7 +432,7 @@ def split(
     after = next((i for i, part in enumerate(items) if key(part) in ("run-head", "pair")), None)
     views = {}
     for view, keep in ((WHAT, ("what", "both")), (PROOF, ("proof", "both"))):
-        head = _tabs(what_href, proof_href, view)
+        head = _tabs(what_href, proof_href, view, more)
         if view == WHAT:
             head += _line(said, red, proof_href, tone, withheld)
         elif red:

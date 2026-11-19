@@ -1,6 +1,6 @@
 """The two IPv6 tests skip only where the host has no IPv6 loopback, measured
 by binding ('::1', 0) -- never assumed from the platform. On Windows a failed probe is a failure,
-not a skip: the PC has IPv6, and §5's Windows run is what covers these tests.
+not a skip: the PC has IPv6, and the Windows test run is what covers these tests.
 
 These tests drive `ipv6_loopback_port()` with a stand-in socket, so each outcome is exercised on
 every host: a bind that works, a bind that fails off Windows, and a bind that fails on Windows.

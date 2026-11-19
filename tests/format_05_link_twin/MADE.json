@@ -1,0 +1,17 @@
+{
+  "runs": {
+    "link-billing-twin": {
+      "command": "BILLING_RUN_ID=link-billing-twin ONETRACE_RUN_ID=link-desk python linked_desk.py",
+      "exit": 0
+    },
+    "link-desk": {
+      "command": "BILLING_RUN_ID=link-billing-twin ONETRACE_RUN_ID=link-desk python linked_desk.py",
+      "exit": 0
+    }
+  },
+  "versions": {
+    "onetrace": "0.8.0",
+    "onetrace-verify": "0.8.0",
+    "python": "3.12.10"
+  }
+}

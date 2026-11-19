@@ -7,7 +7,7 @@
     Option 2, a reverse proxy, is documented as the alternative ... Option 3 is refused.
 
 These tests hold the image's own configuration and the refusal. The real `docker run` checks
-the specification asks for -- a mounted test certificate reaches /health over TLS from the host, and
+-- a mounted test certificate reaches /health over TLS from the host, and
 without one the container refuses -- are `tools/container_tls_check.py`, whose output is in the
 report: this suite runs offline and without Docker.
 """

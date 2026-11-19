@@ -50,6 +50,7 @@ this whole console never re-queries a model.
 
 from __future__ import annotations
 
+import contextlib
 import errno
 import json
 import os
@@ -60,12 +61,14 @@ import sys
 import threading
 import time
 import traceback
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import TYPE_CHECKING
 from urllib.parse import parse_qs, urlsplit
 
+from onetrace_console.audit import Audit
 from onetrace_console.config import Config
 from onetrace_console.store import Store
 
@@ -98,6 +101,14 @@ STATIC_FILES["/static/favicon.svg"] = Path(__file__).parent / "static" / "favico
 PAGES_DIRNAME = "pages"
 #: What a client is told when the console fails to answer it: never the cause, which the log has under `ref`.
 SERVER_ERROR = "the console could not answer this request; its log names the cause under reference {ref}\n"
+
+
+def _error_pages():
+    from onetrace_console import error_pages
+
+    return error_pages
+
+
 #: Where local accounts live, relative to the store's own root. A sibling of
 #: `pages/` and `store/store`, inside the one mounted volume, the same reasoning as both.
 ACCOUNTS_DIRNAME = "accounts"
@@ -107,12 +118,48 @@ ACCOUNTS_DIRNAME = "accounts"
 TOKENS_DIRNAME = "tokens"
 
 
+#: The teams' page sets: `pages/t/<team>/`, one per team, beside the all-teams set, `pages/`.
+TEAMS_DIRNAME = "t"
+
+
+@dataclass(frozen=True)
+class TeamSet:
+    """Where a team's page set is drawn: its pages at `pages`, its run index inside it. Passed where the
+    console's root is, so each drawing writes the team's set as it writes the all-teams set; `os.fspath` of it is its
+    own folder, which the run index is written beside."""
+
+    pages: Path
+    team: str
+
+    def __fspath__(self) -> str:
+        return str(self.pages)
+
+
+def team_set(root: Path, team: str) -> TeamSet:
+    return TeamSet(Path(root) / PAGES_DIRNAME / TEAMS_DIRNAME / team, team)
+
+
+def _pages(root) -> Path:
+    """The folder a page set is written to: the console's `pages/`, or a team's set."""
+    return root.pages if isinstance(root, TeamSet) else Path(root) / PAGES_DIRNAME
+
+
+def _team_sets(store, root, config: Config | None, only=None) -> list:
+    """(the team's view, its set) for each configured team, or for those of `only`; none for a team's view itself, or
+    without teams."""
+    if not isinstance(store, Store) or isinstance(root, TeamSet) or config is None or not config.teams:
+        return []
+    from onetrace_console.team_view import view_of
+
+    return [(view_of(store, t), team_set(root, t)) for t in config.teams if only is None or t in only]
+
+
 def _now() -> str:
     return datetime.now(UTC).isoformat(timespec="seconds")
 
 
 def _write(root: Path, rel: str, html: str) -> None:
-    target = root / PAGES_DIRNAME / rel
+    target = _pages(root) / rel
     target.parent.mkdir(parents=True, exist_ok=True)
     try:
         html.encode("utf-8")
@@ -131,7 +178,7 @@ def _write(root: Path, rel: str, html: str) -> None:
 def _remove_policy_pages_not_in(root: Path, keep: set[str]) -> None:
     """Remove the Policy pages (policy.html, policy-*.html, policy/*.html) that are not in
     `keep`. Only these generated pages, never anything else under the pages folder."""
-    pages = root / PAGES_DIRNAME
+    pages = _pages(root)
     candidates = (
         list(pages.glob("policy.html")) + list(pages.glob("policy-*.html")) + list((pages / "policy").glob("*.html"))
     )
@@ -140,8 +187,8 @@ def _remove_policy_pages_not_in(root: Path, keep: set[str]) -> None:
             path.unlink()
 
 
-def _rendering(config: Config | None):
-    """The configuration a sealed page's frame states, for a render now. With
+def _rendering(config: Config | None, root=None):
+    """The configuration a sealed page's frame states, for a render now, and the team whose set `root` is. With
     no configuration -- a caller outside a running console -- sealed pages are drawn unframed."""
     import contextlib
 
@@ -156,6 +203,7 @@ def _rendering(config: Config | None):
         tracing_link=(config.tracing or {}).get("link", ""),
         tokenizers=tuple((t["folder"], tuple(t["files"])) for t in config.tokenizers or ()) + _kept_tokenizers(config),
         close_call_margin=config.close_call_margin,
+        team=root.team if isinstance(root, TeamSet) else "",
     )
 
 
@@ -174,10 +222,28 @@ def _render_run_pages(run, store: Store, root: Path, config: Config | None = Non
 
 
 def _render_run_pages_read(run, store: Store, root: Path, config: Config | None = None) -> None:
+    """The run's pages in the all-teams set, then in its team's set, drawn from the team's view."""
+    _render_run_pages_one(run, store, root, config)
+    for view, where in _team_sets(store, root, config, only=(run.team,)):
+        _render_run_pages_one(run, view, where, config)
+
+
+def _render_run_pages_one(run, store: Store, root: Path, config: Config | None = None) -> None:
+    from contextlib import nullcontext
+
+    from onetrace_console import run_index
     from onetrace_console.pages import ANSWER, AUTHORIZATION, CASE, RUN_PROOF, PageError, render_execution
 
+    #: A run's pages drawn alone read the index the console last wrote: lineage from an index written before it held
+    #: store writes, or from none, reads as not indexed (`store_state`).
+    drawn = run_index.drawn_with()
+    index = drawn or run_index.read(root)
+    written = "" if drawn is not None else run_index.written_at(root)
     try:
-        with _rendering(config):
+        with (
+            _rendering(config, root),
+            run_index.drawing(index, written) if index is not None and drawn is None else nullcontext(),
+        ):
             pages = render_execution(run, store, generated_at=_now()).pages
     except Exception as e:  # noqa: BLE001 - PageError and anything else: said, and logged
         if not isinstance(e, PageError):
@@ -214,23 +280,41 @@ def _render_run_pages_read(run, store: Store, root: Path, config: Config | None 
         _write(root, f"runs/{run.key}/{name}", html)
 
 
-def _render_all_pages(store: Store, root: Path, config: Config | None = None) -> None:
+def _render_all_pages(store: Store, root: Path, config: Config | None = None, only=None) -> None:
+    """`only`: the teams whose sets a change touched (a delivery's, a mark's); without it, every team's."""
     with store.reading():
-        _render_all_pages_read(store, root, config)
+        _render_all_pages_read(store, root, config, only)
 
 
-def _render_all_pages_read(store: Store, root: Path, config: Config | None = None) -> None:
+def _render_all_pages_read(store: Store, root: Path, config: Config | None = None, only=None) -> None:
+    """The pages over all runs, in the all-teams set, then in each team's set (or `only`'s), from its view."""
+    _render_all_pages_one(store, root, config)
+    for view, where in _team_sets(store, root, config, only):
+        _render_all_pages_one(view, where, config)
+
+
+def _render_all_pages_one(store: Store, root: Path, config: Config | None = None) -> None:
+    #: The run index, derived from the records beside the store, rebuilt whenever the pages are: built first, so the
+    #: pages read lineage from it (`run_index.drawing`), then written as they read it.
+    #: Each linked pair this store holds, checked from both sides once (`service_link`), before the pages quote it.
+    from onetrace_console import run_index, service_link
     from onetrace_console.render import render_all
 
-    with _rendering(config):
-        rendered = render_all(store, generated_at=_now())
+    try:
+        service_link.keep_linked_checks(store)
+    except Exception:  # noqa: BLE001 - logged; the pages say what is kept
+        traceback.print_exc(file=sys.stderr)
+    #: Built as the pages are drawn (`_rendering`), so each run's verdict in its list entry is made as the runs list
+    #: makes it (`run_index.LIST`).
+    with _rendering(config, root):
+        index = run_index.build(store)
+        with run_index.drawing(index, _now()):
+            rendered = render_all(store, generated_at=_now())
     for href, html in rendered.items():
         _write(root, href, html)
-    #: The run index, derived from the records beside the store, rebuilt whenever the pages are.
-    from onetrace_console import run_index
-
-    run_index.write(store, root)
-    if config is not None and config.extensions.get("onedoor"):
+    run_index.write(store, root, index)
+    #: A decision export names no team until its token is bound to one, so a team's set draws no Policy page.
+    if config is not None and config.extensions.get("onedoor") and not isinstance(root, TeamSet):
         #: Imported only here, only when the extension is on. `_render_incidents_page`
         #: OVERWRITES incidents.html (already written above by the base render_all) with
         #: the merged rule table -- the base render is never skipped, only superseded,
@@ -254,36 +338,62 @@ def _render_all_pages_read(store: Store, root: Path, config: Config | None = Non
 
 def _render_marked_pages(run, same: list, store: Store, root: Path, config: Config | None = None) -> None:
     """The store's pages a mark of `run` changes (`render.render_all(marked=...)`), its pipeline's runs `same`; then the
-    run index, which holds each run's mark."""
+    run index, which holds each run's mark. In the all-teams set and the run's team's."""
+    _render_marked_pages_one(run, same, store, root, config)
+    for view, where in _team_sets(store, root, config, only=(run.team,)):
+        _render_marked_pages_one(run, [r for r in same if view.get_run(r.key) is not None], view, where, config)
+
+
+def _render_marked_pages_one(run, same: list, store: Store, root: Path, config: Config | None = None) -> None:
     from onetrace_console.render import render_all
     from onetrace_console.verdicts import pipeline_of
 
     with store.reading():
         pipeline = pipeline_of(run, store)
         label = pipeline.label if pipeline is not None else ""
-        with _rendering(config):
-            drawn = render_all(store, generated_at=_now(), marked=(label, frozenset(r.key for r in same)))
-        for href, html in drawn.items():
-            _write(root, href, html)
         from onetrace_console import run_index
 
-        run_index.write(store, root)
+        with _rendering(config, root):
+            index = run_index.build(store)
+            with run_index.drawing(index, _now()):
+                drawn = render_all(store, generated_at=_now(), marked=(label, frozenset(r.key for r in same)))
+        for href, html in drawn.items():
+            _write(root, href, html)
+        run_index.write(store, root, index)
 
 
-def _render_diff_page(comparison, store: Store, root: Path, *, public: bool = False) -> str:
+def _render_diff_page(
+    comparison, store: Store, root: Path, *, public: bool = False, config: Config | None = None
+) -> str:
     """`public`: drawn for a public console, whose explanation panel is its place only. In one
     reading of the store (`Store.reading`), as every drawing is, even drawn alone."""
     with store.reading():
-        return _render_diff_page_read(comparison, store, root, public=public)
+        return _render_diff_page_read(comparison, store, root, public=public, config=config)
 
 
-def _render_diff_page_read(comparison, store: Store, root: Path, *, public: bool = False) -> str:
+def _render_diff_page_read(
+    comparison, store: Store, root: Path, *, public: bool = False, config: Config | None = None
+) -> str:
+    """The comparison's pages in the all-teams set, then in its team's set where both its runs are that team's."""
+    rel = _render_diff_page_one(comparison, store, root, public=public)
+    for view, where in _team_sets(store, root, config):
+        if view.get_comparison(comparison.key) is not None:
+            _render_diff_page_one(comparison, view, where, public=public)
+    return rel
+
+
+def _render_diff_page_one(comparison, store: Store, root: Path, *, public: bool = False) -> str:
     from onetrace_console import views
+    from onetrace_console.authorization import render_pair_authorization
     from onetrace_console.render import render_diff
+    from onetrace_console.textdiff_page import page_name, render_text_diff_page, shown_document
 
     html = render_diff(comparison, store, generated_at=_now(), public=public)
     rel = f"diff/{comparison.key}.html"
-    #: Its two views: "What changed" at the page's address, "Proof" beside it.
+    #: Investigate's tabs: "What changed" at the page's address, "Proof" beside it, the text diff where the
+    #: comparison has one shown, and the pair's Authorization.
+    text_name = page_name(comparison) if shown_document(comparison, store) is not None else ""
+    tabs = views.investigate_tabs(comparison.key, text=text_name)
     said, state = views.pair_said(comparison, store)
     what, proof = views.split(
         html,
@@ -293,18 +403,27 @@ def _render_diff_page_read(comparison, store: Store, root: Path, *, public: bool
         said,
         state,
         views.WITHHELD_PAIR,
+        tuple(tabs[2:]),
     )
-    _write(root, rel, what)
+    from onetrace_console.render import SKIP_TO_FIRST, with_skip
+
+    #: The What changed tab's first focusable item: a skip link to its short answer.
+    _write(root, rel, with_skip(what, SKIP_TO_FIRST))
     _write(root, f"diff/{views.proof_name(comparison.key + '.html')}", proof)
     #: Its text diff on a page of its own, where it has one shown; where it has none, no page --
     #: never one left from an earlier drawing.
-    from onetrace_console.textdiff_page import page_name, render_text_diff_page
-
-    text = render_text_diff_page(comparison, store, generated_at=_now())
+    text = render_text_diff_page(comparison, store, generated_at=_now(), tabs=views.tabs_row(tabs, views.TEXT_DIFF))
     if text is not None:
         _write(root, f"diff/{page_name(comparison)}", text)
     else:
-        (root / PAGES_DIRNAME / "diff" / page_name(comparison)).unlink(missing_ok=True)
+        (_pages(root) / "diff" / page_name(comparison)).unlink(missing_ok=True)
+    _write(
+        root,
+        f"diff/{comparison.key}{views.AUTHORIZATION_SUFFIX}",
+        render_pair_authorization(
+            comparison, store, generated_at=_now(), tabs=views.tabs_row(tabs, views.AUTHORIZATION)
+        ),
+    )
     return rel
 
 
@@ -343,7 +462,7 @@ def _render_neighbour_pages(store: Store, root: Path, config: Config | None) -> 
             _render_run_pages_read(run, store, root, config)
         for comparison in store.comparisons():
             try:
-                _render_diff_page_read(comparison, store, root, public=bool(config and config.public))
+                _render_diff_page_read(comparison, store, root, public=bool(config and config.public), config=config)
             except Exception:  # noqa: BLE001 - that page keeps what it had; logged
                 traceback.print_exc(file=sys.stderr)
         _render_all_pages_read(store, root, config)
@@ -384,6 +503,7 @@ def _render_startup_pages_read(store: Store, root: Path, config: Config | None =
     from onetrace_console.checks import (
         check_options,
         run_and_record,
+        stored_recipients_record,
         stored_trust_record,
         stored_tsa_record,
         trust_record,
@@ -393,10 +513,14 @@ def _render_startup_pages_read(store: Store, root: Path, config: Config | None =
     options = check_options(config)
     current = trust_record(options["trust_file"])
     current_tsa = tsa_record(options["tsa_cert"], options["tsa_roots"])
+    current_recipients = trust_record(options["recipients_file"])
     rechecked = 0
     for run in store.runs():
         recorded, recorded_tsa = stored_trust_record(run, store), stored_tsa_record(run, store)
-        if recorded is not None and (recorded != current or recorded_tsa != current_tsa):
+        recorded_recipients = stored_recipients_record(run, store)
+        if recorded is not None and (
+            recorded != current or recorded_tsa != current_tsa or recorded_recipients != current_recipients
+        ):
             try:
                 run_and_record(run, store, **options)
                 rechecked += 1
@@ -429,18 +553,19 @@ def _render_startup_drawn(store: Store, root: Path, config: Config | None, runs,
     for comparison in comparisons:
         step()
         try:
-            _render_diff_page(comparison, store, root, public=bool(config and config.public))
+            _render_diff_page(comparison, store, root, public=bool(config and config.public), config=config)
         except Exception as e:  # noqa: BLE001 - that page says so, and the log has it
             #: One comparison's failure never keeps the console from starting.
             from onetrace_console.pages import refusal
             from onetrace_console.textdiff_page import page_name
             from onetrace_console.unreadable import render_failed_page
-            from onetrace_console.views import proof_name
+            from onetrace_console.views import AUTHORIZATION_SUFFIX, proof_name
 
             for name in (
                 f"diff/{comparison.key}.html",
                 f"diff/{proof_name(comparison.key + '.html')}",
                 f"diff/{page_name(comparison)}",
+                f"diff/{comparison.key}{AUTHORIZATION_SUFFIX}",
             ):
                 _write(root, name, render_failed_page(refusal(e)[0], generated_at=_now()))
     for key in store.unreadable_comparison_keys:
@@ -458,7 +583,7 @@ def _render_unreadable_record_pages(store: Store, root: Path, key: str, *, kind:
     from onetrace_console.pages import ANSWER, AUTHORIZATION, CASE, RUN_PROOF
     from onetrace_console.store import _SHA256
     from onetrace_console.unreadable import render_failed_page
-    from onetrace_console.views import proof_name
+    from onetrace_console.views import AUTHORIZATION_SUFFIX, proof_name
 
     if not _SHA256.fullmatch(key):
         return
@@ -471,7 +596,12 @@ def _render_unreadable_record_pages(store: Store, root: Path, key: str, *, kind:
     names = (
         [f"runs/{key}/{n}" for n in (ANSWER, CASE, RUN_PROOF, AUTHORIZATION)]
         if kind == "run"
-        else [f"diff/{key}.html", f"diff/{proof_name(key + '.html')}", f"diff/{key}{SUFFIX}"]
+        else [
+            f"diff/{key}.html",
+            f"diff/{proof_name(key + '.html')}",
+            f"diff/{key}{SUFFIX}",
+            f"diff/{key}{AUTHORIZATION_SUFFIX}",
+        ]
     )
     for name in names:
         _write(root, name, page)
@@ -592,6 +722,8 @@ class Handler(BaseHTTPRequestHandler):
     #: the four above; `rate_limit_concurrent_hashes` guards `verify_password` itself,
     #: independent of which account or client is asking.
     token_store: TokenStore | None = None
+    #: The audit log (`audit.Audit`): off, and recording nothing, until main() reads `audit.enabled`.
+    audit: Audit = Audit()
     rate_limit_concurrent_hashes: ConcurrencyLimiter = None  # type: ignore[assignment]  # None until main() sets it, and read only where sign-in is on
     #: The account's other two windows (`rate_limit.account_refusal`): per known browser, and per
     #: (account, client address) pair; `rate_limit_per_account` is the account's ceiling.
@@ -804,7 +936,25 @@ class Handler(BaseHTTPRequestHandler):
         session_id = cookies.get(SESSION_COOKIE)
         if not session_id:
             return None
-        return self.session_store.get(session_id)
+        session = self.session_store.get(session_id)
+        if session is not None and session.role is not None and self._scim_enforcing():
+            #: The per-request active check: a session from Entra ID whose person the join
+            #: no longer admits ends here, with every other session of that person, before the role check.
+            refused = self._directory().refusal(
+                session.username, tenant=self._scim_tenant(), required=self.config.scim["required_for_sign_in"]
+            )
+            if refused is not None:
+                from onetrace_console.audit import CONSOLE
+
+                count = self.session_store.end_principal(session.username)
+                self._audit_removal(
+                    "sessions.ended",
+                    session.username,
+                    {"count": count, "by": f"the active check: {refused}"},
+                    actor=CONSOLE,
+                )
+                return None
+        return session
 
     def _bearer_token(self) -> str | None:
         auth = self.headers.get("Authorization", "")
@@ -862,11 +1012,129 @@ class Handler(BaseHTTPRequestHandler):
             return "someone signed in through Microsoft Entra ID"
         return self._principal()
 
+    def _audited(
+        self, event: str, obj: str, detail: dict | None = None, *, actor: str | None = None, undo=None
+    ) -> bool:
+        """Record an action in the audit log before it is reported done: True, or False once the
+        refusal is answered (`503`, nothing done; `undo`, where given, run first, so what was done is taken back before
+        anyone is told). Off, it records nothing and answers True."""
+        from onetrace_console.audit import AuditRefused
+
+        try:
+            self.audit.record(actor or self._principal(), event, obj, detail)
+        except AuditRefused as e:
+            if undo is not None:
+                undo()
+            self._respond(503, f"Not done: {e}.\n".encode(), "text/plain; charset=utf-8")
+            return False
+        return True
+
+    def _signin_detail(self, principal: str, method: str, roles: tuple, teams: tuple) -> dict:
+        """`signin.ok`'s detail: the method, the roles and teams granted, and whether they differ from the
+        principal's last sign-in."""
+        return {
+            "method": method,
+            "roles": list(roles),
+            "teams": list(teams),
+            "differs": self.audit.signin_differs(principal, (tuple(roles), tuple(teams))) if self.audit.on else False,
+        }
+
+    def _audit_removal(self, event: str, obj: str, detail: dict | None = None, *, actor: str | None = None) -> None:
+        """Record an action that removes access: it applies whether or not the entry could be appended."""
+        self.audit.record(actor or self._principal(), event, obj, detail, removes_access=True)
+
     def _principal(self) -> str:
         """The name the access log records for this request -- the identity
         `_resolve_request_identity` already captured at request start.
         """
         return getattr(self, "_request_principal", "anonymous")
+
+    # -------------------------------------------------------------- teams
+    def _every_team(self) -> bool:
+        """Whether this request reads every team: without teams; on a console with no sign-in, the machine's own
+        user's; an `admin`'s."""
+        from onetrace_console import roles
+
+        return (
+            not self.config.teams
+            or not self.config.sign_in.get("enabled")
+            or getattr(self, "_request_role", None) == roles.ADMIN
+        )
+
+    def _my_teams(self) -> tuple[str, ...]:
+        """The configured teams this request may read, in the configuration's order: every one where it reads every
+        team; else the teams its session was given at sign-in; none for a bearer token or no session."""
+        if self._every_team():
+            return tuple(self.config.teams)
+        session = self._current_session()
+        if session is not None and self._scim_on():
+            #: With SCIM on, teams come from its Groups, read on each request, and a role claim grants none
+            #:; while its enforcement is off, SCIM grants none either.
+            held = self._directory().teams_of(session.username, self.config.teams) if self._scim_enforcing() else ()
+        else:
+            held = session.teams if session is not None else ()
+        return tuple(t for t in self.config.teams if t in held)
+
+    def _scim_on(self) -> bool:
+        return bool(self.config.scim.get("enabled")) and self.config.sign_in.get("method") == "oidc"
+
+    def _scim_tenant(self) -> str:
+        return str(self.config.scim.get("tenant_id") or (self.config.sign_in.get("oidc") or {}).get("tenant_id", ""))
+
+    def _directory(self):
+        """SCIM's records as this console reads them on each request (`scim.Directory`), made once per store root."""
+        from onetrace_console import scim
+
+        got = type(self).__dict__.get("scim_directory")
+        if got is None or got.store_root != Path(self.store_root):
+            got = scim.Directory(self.store_root)
+            type(self).scim_directory = got
+        return got
+
+    def _scim_enforcing(self) -> bool:
+        """SCIM on, and its enforcement of sign-in not turned off on the machine."""
+        return self._scim_on() and self._directory().enforcement()[0]
+
+    def _scope(self, asked: str | None):
+        """(the store this request reads, the root its pages are served from), or None where it may read no set:
+        another team's prefix, a prefix naming no team, or a person in no team. `asked`: the team a `/t/<team>/`
+        prefix names. Without one, an `admin` reads the all-teams set and anyone else their first team's."""
+        if asked is None and self._every_team():
+            return self.store, self.store_root
+        mine = self._my_teams()
+        team = asked if asked is not None else (mine[0] if mine else None)
+        if team is None or team not in mine:
+            return None
+        from onetrace_console.team_view import view_of
+
+        return view_of(self.store, team), team_set(self.store_root, team)
+
+    def _team_frame(self) -> str:
+        """The served page's team line (`frame.team_line`): the team read, and the person's others to switch to; an
+        admin's lists every team and the all-teams set. "" without teams."""
+        if not self.config.teams:
+            return ""
+        from onetrace_console.frame import team_line
+
+        seen = getattr(self, "_seen_root", None)
+        current = seen.team if isinstance(seen, TeamSet) else None
+        return team_line(current, self._my_teams(), every=self._every_team())
+
+    def _views(self) -> list:
+        """The stores a request that names a key may read it in: the store, where it reads every team; else each
+        of its teams' views."""
+        if self._every_team():
+            return [self.store]
+        from onetrace_console.team_view import view_of
+
+        return [view_of(self.store, t) for t in self._my_teams()]
+
+    def _seen_run(self, key: str):
+        """The run `key` names where this request may read it, else None: another team's key reads as unknown."""
+        return next((r for v in self._views() if (r := v.get_run(key)) is not None), None)
+
+    def _seen_comparison(self, key: str):
+        return next((c for v in self._views() if (c := v.get_comparison(key)) is not None), None)
 
     def _enforce_role(self, method: str, path: str, *, rel_for_get: str | None = None) -> bool:
         """`True` if the request may proceed. `False` means a refusal has ALREADY
@@ -965,8 +1233,166 @@ class Handler(BaseHTTPRequestHandler):
         return store.reading() if store is not None else nullcontext()
 
     def do_GET(self) -> None:  # noqa: N802
-        with self._reading():
-            self._do_get()
+        with self._reading(), self._answering():
+            if not self._scim("GET"):
+                self._do_get()
+
+    def do_PUT(self) -> None:  # noqa: N802
+        with self._reading(), self._answering():
+            if not self._scim("PUT"):
+                self._unsupported()
+
+    def do_PATCH(self) -> None:  # noqa: N802
+        with self._reading(), self._answering():
+            if not self._scim("PATCH"):
+                self._unsupported()
+
+    def do_DELETE(self) -> None:  # noqa: N802
+        with self._reading(), self._answering():
+            if not self._scim("DELETE"):
+                self._unsupported()
+
+    def _unsupported(self) -> None:
+        """A PUT, PATCH or DELETE outside `/scim/v2`: the console serves none, so it is answered as the standard server
+        answers a method with no handler, as it was before SCIM's routes."""
+        self.send_error(501, f"Unsupported method ({self.command!r})")
+
+    #: Requests from outside `scim.allowed_sources`, refused since start: the admin page and the start-up line say how
+    #: many.
+    scim_refused_sources: int = 0
+    #: SCIM's records as read on each request (`_directory`).
+    scim_directory = None
+    #: The SCIM writes refused since start, newest last, at most 100: the People page lists those that would have
+    #: removed access.
+    scim_refused_writes: list = []
+
+    def _scim(self, method: str) -> bool:
+        """`/scim/v2/*`: answered here, ahead of the role table and the pages, by SCIM's own
+        token check; False for any other path. With `scim.enabled` false, or from outside `scim.allowed_sources`, it
+        answers as a route the console does not have. The token comes before every other answer, so a caller without
+        it learns nothing from a `404` or a `501`."""
+        from onetrace_console import scim
+
+        path = urlsplit(self.path).path
+        if path != scim.PREFIX and not path.startswith(scim.PREFIX + "/"):
+            return False
+        settings = self.config.scim
+        self._request_role, self._request_principal = None, "anonymous"
+        if not settings.get("enabled") or self.config.public:
+            self._respond(404, b"no such route\n", "text/plain")
+            return True
+        if not scim.allowed_from(settings, self.client_address[0] if self.client_address else ""):
+            type(self).scim_refused_sources += 1
+            self._respond(404, b"no such route\n", "text/plain")
+            return True
+        query = urlsplit(self.path).query
+        raw = scim.bearer(self.headers.get("Authorization"))
+        in_query = "access_token" in parse_qs(query, keep_blank_values=True)
+        form = (self.headers.get("Content-Type") or "").split(";")[
+            0
+        ].strip().lower() == "application/x-www-form-urlencoded"
+        token = scim.TokenStore(self.store_root).find(raw) if raw is not None and not in_query and not form else None
+        if token is None:
+            #: A token in the query or a form body is refused and never looked up (RFC 6750 §2.3).
+            self._scim_answer(scim.unauthorized(given=raw is not None))
+            return True
+        self._request_role, self._request_principal = "scim", f"scim:{token.token_id}"
+        from onetrace_console import roles
+
+        rest = path[len(scim.PREFIX) :]
+        if not roles.scim_row(method, path) and not (rest in ("/Me", "/.search", "/Bulk") or rest.endswith("/.search")):
+            #: No row: answered in SCIM's form, after the token, so nothing is learnt without it.
+            known = any(roles.scim_row(m, path) for m in ("GET", "POST", "PUT", "PATCH", "DELETE"))
+            status, said = (405, "the method is not served here") if known else (404, "no such resource")
+            self._scim_answer(scim.Answer(status, scim.ScimError(status, said).body()))
+            return True
+        body = b""
+        if method in ("POST", "PUT", "PATCH"):
+            raw_length = self.headers.get("Content-Length", "0") or "0"
+            try:
+                length = int(raw_length)
+            except ValueError:
+                length = -1
+            if length < 0 or length > settings["max_body_bytes"]:
+                self.close_connection = True
+                said = "the body is over the console's limit" if length >= 0 else "Content-Length is not a length"
+                self._scim_answer(
+                    scim.Answer(413 if length >= 0 else 400, scim.ScimError(413, said, "invalidSyntax").body())
+                )
+                return True
+            got = self._read_body_bounded(length) if length else b""
+            if got is None:
+                self.close_connection = True
+                self._scim_answer(scim.Answer(408, scim.ScimError(408, "the body did not arrive in time").body()))
+                return True
+            body = got
+        kind = "groups" if path.startswith(scim.PREFIX + "/Groups") else "users"
+        folder = Path(self.store_root) / scim.DIRNAME / kind
+        named = path.rsplit("/", 1)[-1] if path.count("/") > 3 else ""
+        before = (folder / f"{named}.json").read_bytes() if named and (folder / f"{named}.json").is_file() else None
+        base = (self.config.sign_in.get("public_url") or "").rstrip("/")
+        answer, written = scim.answer(
+            method, path, query, body, store_root=self.store_root, settings=settings, base=base, token_id=token.token_id
+        )
+        if written is not None:
+            from onetrace_console.audit import CONSOLE, AuditRefused
+
+            detail = {
+                "method": written.method,
+                "changed": list(written.changed),
+                "active": written.active,
+                **({"dropped": list(written.dropped)} if written.dropped else {}),
+            }
+            if written.kind == "Group":
+                detail = {"resource": "Group", **detail, "members": list(written.members or ())}
+                del detail["active"]
+            try:
+                self.audit.record(
+                    f"scim:{token.token_id}",
+                    "scim.write",
+                    written.user_id,
+                    detail,
+                    removes_access=written.removes_access,
+                )
+            except AuditRefused as e:
+                #: Not a removal: taken back, and the directory told, so it tries again.
+                kept = folder / f"{written.user_id}.json"
+                if before is None:
+                    kept.unlink(missing_ok=True)
+                else:
+                    from onetrace_console.store import _atomic_write
+
+                    _atomic_write(kept, before)
+                answer = scim.Answer(503, scim.ScimError(503, str(e)).body())
+            if written.removes_access and written.kind == "User" and written.external_id and self.session_store:
+                #: Deprovisioning: every live session of that person ends through the
+                #: index before the answer, whatever SCIM's enforcement says, and the count is recorded.
+                principal = f"{self._scim_tenant().lower()}/{written.external_id}"
+                count = self.session_store.end_principal(principal)
+                self._audit_removal(
+                    "sessions.ended", principal, {"count": count, "by": "deprovisioning"}, actor=CONSOLE
+                )
+        if answer.status >= 400 and method in ("PUT", "PATCH", "DELETE"):
+            text = body.decode("utf-8", "replace").lower().replace(" ", "")
+            removal = "active" in text and ("false" in text)
+            if method == "DELETE" or removal or '"members' in text:
+                from onetrace_console.audit import now_iso
+
+                reason = (answer.body or {}).get("detail") or (answer.body or {}).get("scimType") or ""
+                type(self).scim_refused_writes = [
+                    *type(self).scim_refused_writes[-99:],
+                    {"at": now_iso(), "method": method, "status": answer.status, "reason": str(reason)[:200]},
+                ]
+        self._scim_answer(answer)
+        return True
+
+    def _scim_answer(self, answer) -> None:
+        import json as _json
+
+        from onetrace_console import scim
+
+        body = b"" if answer.body is None else _json.dumps(answer.body, sort_keys=True).encode("utf-8")
+        self._respond(answer.status, body, scim.MEDIA_TYPE, list(answer.headers))
 
     def _do_get(self) -> None:
         self._resolve_request_identity()
@@ -988,6 +1414,12 @@ class Handler(BaseHTTPRequestHandler):
         if path in ("/signin/oidc/start", "/signin/oidc/callback") and self._oidc():
             self._handle_oidc(path)
             return
+        if path == "/robots.txt" and self.config.public:
+            #: A public console lets search engines crawl, so each page's `noindex` can be read (`search_engines`).
+            from onetrace_console.search_engines import ROBOTS_TXT
+
+            self._respond(200, ROBOTS_TXT.encode("utf-8"), "text/plain; charset=utf-8")
+            return
         if path.startswith("/static/"):
             #: Exact paths only: anything else under /static/ -- another name, an encoded
             #: traversal -- is not found, and never reaches the pages lookup below.
@@ -1004,6 +1436,11 @@ class Handler(BaseHTTPRequestHandler):
             return
 
         rel = "home.html" if path in ("/", "") else path.lstrip("/")
+        #: With teams, `/t/<team>/` names the team whose set is read; the rest of the path is the page.
+        asked, team = rel, None
+        prefixed = _TEAM_PREFIX.fullmatch(rel) if self.config.teams else None
+        if prefixed:
+            team, rel = prefixed.group(1), prefixed.group(2) or "home.html"
         #: A path that could step around the role table is refused
         #: before the role check and before any file is touched -- `..`, a backslash, an
         #: encoded dot or backslash, or an empty or `.` segment.
@@ -1013,17 +1450,72 @@ class Handler(BaseHTTPRequestHandler):
             return
         if not self._enforce_role("GET", path, rel_for_get=rel):
             return
+        scope = self._scope(team)
+        if scope is None and not self._every_team() and not self._my_teams():
+            #: A person in no team: one page, the same whatever was asked for, naming no team.
+            from onetrace_console.team_assign import no_team_page
+
+            self._setup_page(403, no_team_page(), "no-team", self._signed_in_as())
+            return
+        if scope is None:
+            #: Another team's set, a team that does not exist: the answer of a page not drawn, echoing the path asked
+            #: for, byte for byte.
+            self._respond(404, f"not rendered: {asked}\n".encode(), "text/plain")
+            return
+        self._seen, self._seen_root = scope
+        moved = _MOVED_RUN_PATH.fullmatch(rel) if self.config.teams else None
+        if moved and self._seen.get_run(moved.group(1)) is None:
+            #: A run `run assign` keyed anew: its old address leads to the new one for a person who can see the
+            #: run where it is asked for; anyone else gets what a run that does not exist gets, below.
+            new = self.store.moved_to(moved.group(1))
+            if new is not None and self._seen.get_run(new) is not None:
+                where = asked[: len(asked) - len(rel)] + f"runs/{new}/{moved.group(2)}"
+                self._respond(302, b"", "text/plain", [("Location", "/" + where)])
+                return
         if rel == "v1/folder":
             #: The watched folder's state, for a viewer: the folder's path, the runs it took in and changed, its
             #: errors. A console with no watcher has none.
             if self.watcher is None:
                 self._respond(404, b"not found\n", "text/plain")
                 return
+            if self.config.teams and not self._every_team() and self.config.folder_team not in self._my_teams():
+                #: With teams, the folder's runs are its team's: anyone else is answered as for a
+                #: route the console does not have, as the role check answers one.
+                self._respond(404, b"no such route\n", "text/plain")
+                return
             self._respond_json(200, self.watcher.state.as_json())
             return
         record = _RECORD_PATH.fullmatch(rel)
         if record:
             self._handle_record(record.group(1))
+            return
+        if rel in ("admin/people", "admin/teams", "admin/audit"):
+            #: The admin pages (`admin_pages`): drawn as they are asked for, from SCIM's records, the configuration
+            #: and the audit log's head, never from runs. A public console has none.
+            if self.config.public:
+                self._respond(404, f"not rendered: {asked}\n".encode(), "text/plain")
+                return
+            from onetrace_console import admin_pages
+            from onetrace_console.frame import fill
+
+            facts = admin_pages.gather(
+                self.store_root,
+                self.config,
+                audit_log=self.audit.log,
+                refused_sources=type(self).scim_refused_sources,
+                refused_writes=list(type(self).scim_refused_writes),
+            )
+            drawn = admin_pages.page(rel.split("/", 1)[1], facts).encode("utf-8")
+            framed = fill(
+                drawn,
+                rel,
+                onedoor=bool(self.config.extensions.get("onedoor")),
+                user=self._signed_in_as(),
+                csrf=self._session_csrf(),
+                setup_link=True,
+                store=None,
+            )
+            self._respond(200, framed, "text/html; charset=utf-8")
             return
         if rel == "explain/setup":
             #: The setup page, a local console's only: drawn as it is asked for, read-only, and
@@ -1036,6 +1528,15 @@ class Handler(BaseHTTPRequestHandler):
 
             user = self._signed_in_as()
             self._setup_page(200, setup_page(self.store), rel, user)
+            return
+        if rel == "forwarding/setup":
+            #: Trace forwarding's setup page (`forward_pages`), a local console's only, an admin's (the role table).
+            if self.config.public:
+                self._respond(404, b"not found\n", "text/plain")
+                return
+            from onetrace_console.forward_pages import page as forwarding_page
+
+            self._setup_page(200, forwarding_page(self.store_root), rel, self._signed_in_as())
             return
         if rel == "neighbours/setup" and self._neighbours():
             self._handle_neighbours_setup()
@@ -1093,6 +1594,9 @@ class Handler(BaseHTTPRequestHandler):
         if rel == "search":
             self._handle_search()
             return
+        if rel == "runs":
+            self._handle_runs()
+            return
         if rel == "bisect":
             self._handle_bisect()
             return
@@ -1102,14 +1606,14 @@ class Handler(BaseHTTPRequestHandler):
 
             key = (parse_qs(urlsplit(self.path).query).get("c") or [""])[0]
             try:
-                said = explain.state(self.store, key)
+                said = explain.state(self._seen, key)
             except ValueError:
                 self._respond_json(400, {"error": "unknown or malformed comparison key"})
                 return
             self._respond_json(200, said)
             return
-        pages = (self.store_root / PAGES_DIRNAME).resolve()
-        target = self.store_root / PAGES_DIRNAME / rel
+        pages = _pages(self._seen_root).resolve()
+        target = _pages(self._seen_root) / rel
         try:
             #: The page served is exactly the one the role row matched: under `pages/`, and
             #: resolving to the same relative path, spelled the same way.
@@ -1130,7 +1634,7 @@ class Handler(BaseHTTPRequestHandler):
                 self._respond(200, fill(cached, rel, onedoor=False, user=None, public=True), "text/html; charset=utf-8")
                 return
         if not target.is_file():
-            self._respond(404, f"not rendered: {rel}\n".encode(), "text/plain")
+            self._respond(404, f"not rendered: {asked}\n".encode(), "text/plain")
             return
         #: The frame is filled here, as the page is served, because only the
         #: server knows the session the footer states. A page with no empty frame -- a sealed
@@ -1147,6 +1651,7 @@ class Handler(BaseHTTPRequestHandler):
             public=self.config.public,
             setup_link=not self.config.public,
             store=self.store,
+            team=self._team_frame(),
         )
         #: The hosted demo and the capture store's app link to each other, as their deploy names them.
         from onetrace_console.app_links import with_link
@@ -1156,11 +1661,17 @@ class Handler(BaseHTTPRequestHandler):
             from onetrace_console.frame import fill_csrf
 
             served = fill_csrf(served, self._session_csrf())
+            #: A comparison's checks run on its page: their kept results where the checks are listed.
+            ran = re.fullmatch(r"(?:t/[^/]+/)?diff/([0-9a-f]{64})\.html", rel)
+            if ran:
+                from onetrace_console.compare_view import with_results
+
+                served = with_results(served, self.store, ran.group(1))
         self._respond(200, served, "text/html; charset=utf-8")
 
     # -------------------------------------------------------------- POST
     def do_POST(self) -> None:  # noqa: N802
-        with self._reading():
+        with self._reading(), self._answering():
             self._do_post()
 
     def _do_post(self) -> None:
@@ -1177,6 +1688,8 @@ class Handler(BaseHTTPRequestHandler):
 
             self.close_connection = True
             self._respond(403, (REFUSAL + "\n").encode("utf-8"), "text/plain; charset=utf-8")
+            return
+        if self._scim("POST"):
             return
         self._resolve_request_identity()
         if not self._local_guard("POST"):
@@ -1236,6 +1749,15 @@ class Handler(BaseHTTPRequestHandler):
                     self._respond(403, b"missing or mismatched CSRF token\n", "text/plain")
                     return
                 self._handle_compare(query, form=form)
+            elif split.path == "/compare/check":
+                if not self._enforce_role("POST", "/compare/check"):
+                    return
+                #: The page's form sends its fields in the body; a client may name them in the query, as for /compare.
+                form_q = {**parse_qs(split.query), **parse_qs(body.decode("utf-8", "replace"))}
+                if not self._check_action_csrf(query=form_q):
+                    self._respond(403, b"missing or mismatched CSRF token\n", "text/plain")
+                    return
+                self._handle_compare_check(form_q)
             elif split.path in ("/explain", "/explain/packet", "/explain/check", "/explain/cancel", "/explain/text"):
                 if not self._enforce_role("POST", split.path):
                     return
@@ -1293,6 +1815,14 @@ class Handler(BaseHTTPRequestHandler):
                     self._respond(403, b"missing or mismatched CSRF token\n", "text/plain")
                     return
                 self._handle_explain_setup(body)
+            elif split.path == "/forwarding/setup" and not self.config.public:
+                #: Trace forwarding's changes and its test trace (`forward_pages`): a local console's only.
+                if not self._enforce_role("POST", split.path):
+                    return
+                if not self._check_action_csrf(body=body):
+                    self._respond(403, b"missing or mismatched CSRF token\n", "text/plain")
+                    return
+                self._handle_forwarding(body)
             elif split.path in ("/neighbours/on", "/neighbours/off") and self._neighbours():
                 #: Neighbours by input (`neighbours`): a route only where the extra is installed on a
                 #: local console; anywhere else this is the unknown route below.
@@ -1320,15 +1850,9 @@ class Handler(BaseHTTPRequestHandler):
             else:
                 self._respond(404, b"no such route\n", "text/plain")
         except Exception:  # noqa: BLE001 - reported, not swallowed
-            #: The type, message and traceback go to stderr (the operator's own logs) under a short reference;
-            #: the client gets a fixed sentence and that reference, never the exception's words, which can name a
-            #: path on this machine (an error reading the accounts during `POST /signin`, which needs no session).
-            import secrets
-
-            ref = secrets.token_hex(4)
-            print(f"error {ref}: answering {self.command} {urlsplit(self.path).path}", file=sys.stderr)
-            traceback.print_exc()
-            self._respond(500, SERVER_ERROR.format(ref=ref).encode(), "text/plain")
+            #: An error reading the accounts during `POST /signin`, which needs no session, can name a path on this
+            #: machine: answered as any request's unhandled error is.
+            self._unhandled()
 
     # ---------------------------------------------------------------- sign-in
     def _cookie_secure(self) -> bool:
@@ -1408,6 +1932,8 @@ class Handler(BaseHTTPRequestHandler):
                 self.rate_limit_per_account.clear_once(username, self.account_store.unlocked_at(username))
             refused = account_refusal(username, client_key, device, self._signin_limiters())
             if refused is not None:
+                named = username if self.account_store.exists(username) else "unknown"
+                self._audit_removal("signin.refused", named, {"method": "local", "reason": "locked out"}, actor=named)
                 #: The same words and status whether or not the name has an account.
                 token = new_csrf_form_token()
                 page = render_signin_page(csrf_token=token, error=SIGNIN_LIMIT_WORDS[refused]).encode("utf-8")
@@ -1445,6 +1971,8 @@ class Handler(BaseHTTPRequestHandler):
             from onetrace_console.rate_limit import after_right_password
 
             after_right_password(username, client_key, device, self._signin_limiters())
+            if not self._audited("signin.ok", username, self._signin_detail(username, "local", (), ()), actor=username):
+                return
             session = self.session_store.create(username)
             cookie = set_cookie_header(SESSION_COOKIE, session.session_id, http_only=True, secure=self._cookie_secure())
             #: The CSRF cookie is no longer just cleared on
@@ -1469,6 +1997,9 @@ class Handler(BaseHTTPRequestHandler):
             )
             return
 
+        #: A name that matches no account is not kept: it may be a password typed into the wrong field.
+        named = username if username and self.account_store.exists(username) else "unknown"
+        self._audit_removal("signin.refused", named, {"method": "local", "reason": "wrong password"}, actor=named)
         #: A fresh CSRF token for the re-shown form -- the one just submitted is spent
         #: either way, matching the "one token per render" shape the GET side sets up.
         token = new_csrf_form_token()
@@ -1515,7 +2046,8 @@ class Handler(BaseHTTPRequestHandler):
         from onetrace_console.store import MISSING_OBJECT, StoreError
 
         try:
-            run = self.store.get_run(key)
+            #: Another team's key reads as an unknown one, before the run is looked up.
+            run = self._seen_run(key)
             gone = self.store.missing(run) if run is not None else ()
             if gone:
                 #: Said in the fixed words, not as an object's hash.
@@ -1613,13 +2145,41 @@ class Handler(BaseHTTPRequestHandler):
             assert taken is not None
             who = oidc_flow.finish(code, taken, self.oidc_settings, self.oidc_issuer)
         except NoRole as e:
+            who_refused = getattr(e, "key", "") or "unknown"
+            self._audit_removal(
+                "signin.refused", who_refused, {"method": "oidc", "reason": "no role"}, actor=who_refused
+            )
             self._respond(403, render_oidc_refused_page(str(e), no_role=True).encode("utf-8"), html, [cleared])
             return
         except oidc_flow.SignInRefused as e:
+            self._audit_removal(
+                "signin.refused", "unknown", {"method": "oidc", "reason": "the sign-in was refused"}, actor="unknown"
+            )
             self._respond(400, render_oidc_refused_page(str(e)).encode("utf-8"), html, [cleared])
             return
+        #: Without SCIM, a person is in each team whose `role_claim` the token's app roles hold, read here, at sign-in
+        #: only.
+        teams = tuple(t for t, entry in self.config.teams.items() if entry.get("role_claim") in who.app_roles)
+        if self._scim_on():
+            #: With SCIM on, a role claim grants no team; SCIM's Groups do, read on each request.
+            teams = ()
+            if self._scim_enforcing():
+                refused = self._directory().refusal(
+                    who.key, tenant=self._scim_tenant(), required=self.config.scim["required_for_sign_in"]
+                )
+                if refused is not None:
+                    #: The join: refused, and the refusal recorded.
+                    self._audit_removal("signin.refused", who.key, {"method": "oidc", "reason": refused}, actor=who.key)
+                    page = render_oidc_refused_page("not provisioned for this console")
+                    self._respond(403, page.encode("utf-8"), html, [cleared])
+                    return
+        roles_granted = (who.role,) if who.role else ()
+        if not self._audited(
+            "signin.ok", who.key, self._signin_detail(who.key, "oidc", roles_granted, teams), actor=who.key
+        ):
+            return
         session = self.session_store.create(
-            who.key, role=who.role, display_name=who.display_name, expires_at=who.expires_at
+            who.key, role=who.role, display_name=who.display_name, expires_at=who.expires_at, teams=teams
         )
         self._respond(
             200,
@@ -1638,6 +2198,9 @@ class Handler(BaseHTTPRequestHandler):
         cookies = parse_cookies(self.headers.get("Cookie"))
         session_id = cookies.get(SESSION_COOKIE)
         if session_id:
+            ending = self.session_store.get(session_id)
+            if ending is not None:
+                self._audit_removal("signout", ending.username, {"how": "pressed"}, actor=ending.username)
             self.session_store.invalidate(session_id)
         cookie = clear_cookie_header(SESSION_COOKIE, secure=self._cookie_secure())
         csrf_cookie = clear_cookie_header(CSRF_COOKIE, secure=self._cookie_secure())
@@ -1667,7 +2230,27 @@ class Handler(BaseHTTPRequestHandler):
     def _ingest_locked(self, body: bytes, accept, Rejection) -> None:
         from onetrace_console.checks import run_and_record
 
-        accepted = accept(body, self.store, limits=self.config)
+        team = ""
+        if self.config.teams:
+            #: The delivering token's team, and nothing the uploader writes. The console
+            #: refused to start with a live token bound to none, so a delivery with none came with no token.
+            token = self._bearer_token()
+            record = self.token_store.record_for(token) if token is not None and self.token_store else None
+            team = record.team if record is not None else ""
+            if not team:
+                self._respond_json(
+                    403,
+                    {
+                        "accepted": False,
+                        "rows": [],
+                        "body": "Not stored: this console has teams, and a run is delivered by an ingester token "
+                        "bound to its team. Deliver it with one (onetrace-console token create <principal> "
+                        "--team <team>).\n",
+                        "from_verifier": False,
+                    },
+                )
+                return
+        accepted = accept(body, self.store, limits=self.config, team=team)
         if isinstance(accepted, Rejection):
             self._respond_json(
                 accepted.status,
@@ -1682,6 +2265,23 @@ class Handler(BaseHTTPRequestHandler):
         from onetrace_console.checks import check_options
 
         run = run_and_record(accepted.run, self.store, **check_options(self.config))
+        if accepted.created:
+            #: Recorded once its check has said its verdict, before a page is drawn or the uploader told; where it
+            #: cannot be, the run is taken back and the delivery refused.
+            token = self._bearer_token()
+            held = self.token_store.record_for(token) if token is not None and self.token_store else None
+            detail = {
+                "run_id": run.run_id,
+                "team": run.team,
+                "token": held.token_id if held is not None else None,
+                "build": _build_identity(),
+                "verdict": run.check_verdict,
+            }
+            actor = f"ingester:{held.token_id}" if held is not None else None
+            if not self._audited(
+                "run.uploaded", run.key, detail, actor=actor, undo=lambda: type(self).store.withdraw_run(run.key)
+            ):
+                return
         #: A new run's kept texts embedded first, where neighbours are on: its page and its group's
         #: are drawn with them.
         if _neighbours_on(self.store, self.config):
@@ -1689,7 +2289,8 @@ class Handler(BaseHTTPRequestHandler):
             _render_neighbour_pages(self.store, self.store_root, self.config)
         else:
             _render_run_pages(run, self.store, self.store_root, self.config)
-            _render_all_pages(self.store, self.store_root, self.config)
+            #: The all-teams set and the delivered run's team's set.
+            _render_all_pages(self.store, self.store_root, self.config, only=(run.team,))
         self._respond_json(
             200,
             {
@@ -1714,7 +2315,8 @@ class Handler(BaseHTTPRequestHandler):
         except DecisionsRejection as e:
             self._respond(422, e.body.encode("utf-8"), "text/plain")
             return
-        _render_all_pages(self.store, self.store_root, self.config)
+        #: A decision export changes the Policy pages, which only the all-teams set draws.
+        _render_all_pages(self.store, self.store_root, self.config, only=())
         self._respond_json(
             accepted.status,
             {
@@ -1763,7 +2365,7 @@ class Handler(BaseHTTPRequestHandler):
             if not key:
                 return None
             try:
-                return self.store.get_run(key)
+                return self._seen_run(key)
             except StoreError as e:
                 if "cannot be read" in str(e):
                     #: A record the store holds and cannot read is said as that, not as an
@@ -1782,6 +2384,12 @@ class Handler(BaseHTTPRequestHandler):
                 {"error": "; ".join(unreadable) if unreadable else f"unknown or malformed run key(s): {missing}"},
                 form,
             )
+            return
+        if not self._every_team() and not any(
+            v.get_run(a_run.key) is not None and v.get_run(b_run.key) is not None for v in self._views()
+        ):
+            #: Both runs in one of the person's teams, or the second answers as an unknown key.
+            self._compare_answer(400, {"error": "unknown or malformed run key(s): ['b']"}, form)
             return
         if a_run.key == b_run.key:
             #: Said plainly, never 500. Nothing is compared and nothing
@@ -1828,8 +2436,40 @@ class Handler(BaseHTTPRequestHandler):
         status, payload = flight["answer"]
         self._compare_answer(status, payload, form)
 
+    def _handle_compare_check(self, form: dict[str, list[str]]) -> None:
+        """`POST /compare/check` (a local console's "Run on this page"): the text diff or localize at the comparison's
+        first difference, run over its laid-out runs and kept (`compare_view.run_check`), then back to the page the
+        person pressed it on, at the result. The command is the console's own, never one from the request."""
+        import subprocess
+
+        from onetrace_console import compare_view
+        from onetrace_console.store import StoreError
+
+        key, check = (form.get("key") or [""])[0], (form.get("check") or [""])[0]
+        try:
+            comparison = self._seen_comparison(key) if re.fullmatch(r"[0-9a-f]{64}", key) else None
+        except (StoreError, OSError, ValueError):
+            comparison = None
+        if comparison is None:
+            self._respond(400, b"unknown or malformed comparison key\n", "text/plain")
+            return
+        try:
+            compare_view.run_check(comparison, self.store, check)
+        except ValueError as e:
+            self._respond(400, f"{e}\n".encode(), "text/plain")
+            return
+        except subprocess.TimeoutExpired:
+            self._respond(503, b"the check did not finish in time; nothing was kept\n", "text/plain")
+            return
+        #: Back to the page it was pressed on: the comparison's own page, in the person's team's set or the whole
+        #: console's, as the request's Referer names it; any other address is not followed.
+        referer = urlsplit(self.headers.get("Referer") or "").path
+        back = referer if re.fullmatch(rf"(?:/t/[A-Za-z0-9_.-]+)?/diff/{key}\.html", referer) else f"/diff/{key}.html"
+        self._respond(303, b"", "text/plain", [("Location", back + "#pair-checks-result")])
+
     def _compare_pair(self, a_run, b_run, compare, ComparisonError, SameFileError) -> tuple[int, dict]:  # noqa: N803
         """Compare the pair and draw its pages: (the status, the answer)."""
+        held = type(self).store.comparison_names()
         try:
             comparison = compare(a_run, b_run, self.store)
         except ComparisonError as e:
@@ -1839,11 +2479,22 @@ class Handler(BaseHTTPRequestHandler):
             #: A run the store holds that cannot be laid out here as stored: said, nothing
             #: compared and nothing stored.
             return 400, {"error": f"this console cannot lay out a run of this pair on this host: {e}"}
-        rel = _render_diff_page(comparison, self.store, self.store_root, public=self.config.public)
+        if comparison.key not in held:
+            #: A comparison made, not one held already, is recorded before its page is drawn; where it cannot be,
+            #: it is taken back and nothing drawn.
+            from onetrace_console.audit import AuditRefused
+
+            detail = {"a": a_run.key, "b": b_run.key, "team": a_run.team, "build": comparison.sdk_build_digest}
+            try:
+                self.audit.record(self._principal(), "compare.made", comparison.key, detail)
+            except AuditRefused as e:
+                type(self).store.withdraw_comparison(comparison.key)
+                return 503, {"error": f"Not done: {e}."}
+        rel = _render_diff_page(comparison, self.store, self.store_root, public=self.config.public, config=self.config)
         #: Storing a comparison re-renders its candidate's pages, whose
         #: graph is marked from it; nothing else re-renders them but start-up.
         _render_run_pages(b_run, self.store, self.store_root, self.config)
-        _render_all_pages(self.store, self.store_root, self.config)
+        _render_all_pages(self.store, self.store_root, self.config, only=(a_run.team, b_run.team))
         return 200, {"comparison_key": comparison.key, "pages": {"diff": f"/{rel}"}}
 
     def _handle_visitor_compare(self) -> None:
@@ -1890,6 +2541,17 @@ class Handler(BaseHTTPRequestHandler):
                     if not got:
                         outcome = "busy"
                         page = vc.answer_page(vc.BUSY, vc.BUSY_WORDS, back="/")
+                        with self.store.reading():
+                            from onetrace_console.verdicts import pipeline_of
+
+                            pipeline = pipeline_of(a, self.store)
+                        if pipeline is not None:
+                            page = vc.answer_page(
+                                vc.BUSY,
+                                vc.BUSY_WORDS,
+                                back=vc.back_to_pair(pipeline.label, a.run_id, b.run_id),
+                                back_words=vc.BACK_TO_PAIR,
+                            )
                         self._respond(
                             503,
                             fill(page.encode("utf-8"), "busy", onedoor=False, user=None, public=True),
@@ -1927,14 +2589,15 @@ class Handler(BaseHTTPRequestHandler):
         run_key = (query.get("run") or [""])[0]
         run_key = run_key if re.fullmatch(r"[0-9a-f]{64}", run_key) else ""
         with self.store.reading():
-            index = run_index.read(self.store_root)
+            #: The current team's index, or the all-teams index.
+            index = run_index.read(self._seen_root)
             html = search_page.page(
                 index,
                 q,
                 run_key,
-                self.store,
+                self._seen,
                 public=self.config.public,
-                found=None if index is not None else run_index.format_of(self.store_root),
+                found=None if index is not None else run_index.format_of(self._seen_root),
             )
         user = self._signed_in_as()
         self._respond(
@@ -1948,9 +2611,48 @@ class Handler(BaseHTTPRequestHandler):
                 public=self.config.public,
                 setup_link=not self.config.public,
                 store=self.store,
+                team=self._team_frame(),
             ),
             "text/html; charset=utf-8",
         )
+
+    def _handle_runs(self) -> None:
+        """The Runs page (`runs_page`): the index the store root holds, read and never written, and the page drawn as
+        asked, its filters and page from the query. Nothing is run, on either console."""
+        from onetrace_console import run_index, runs_page
+        from onetrace_console.frame import fill
+
+        query = parse_qs(urlsplit(self.path).query)
+        params = {
+            name: (query.get(name) or [""])[0][: runs_page.MOST_CHARS]
+            for name in ("q", "page", *(p for p, _f, _l in runs_page.FILTERS), *runs_page.PAIR_PARAMS)
+        }
+        with self.store.reading():
+            index = run_index.read(self._seen_root)
+            html = runs_page.page(
+                index,
+                params,
+                public=self.config.public,
+                found=None if index is not None else run_index.format_of(self._seen_root),
+            )
+        user = self._signed_in_as()
+        served = fill(
+            html.encode("utf-8"),
+            "runs",
+            onedoor=bool(self.config.extensions.get("onedoor")),
+            user=user,
+            csrf=self._session_csrf(),
+            public=self.config.public,
+            setup_link=not self.config.public,
+            store=self.store,
+            team=self._team_frame(),
+        )
+        if not self.config.public:
+            #: The page's own forms (its Compare picker) carry the session's token, as every served page's do.
+            from onetrace_console.frame import fill_csrf
+
+            served = fill_csrf(served, self._session_csrf())
+        self._respond(200, served, "text/html; charset=utf-8")
 
     def _handle_bisect(self) -> None:
         """A pipeline's first run to leave the reference after a time (`bisect_page`): what the store
@@ -1965,8 +2667,9 @@ class Handler(BaseHTTPRequestHandler):
             self._respond(404, b"no such pipeline\n", "text/plain")
             return
         with self.store.reading(), _rendering(self.config):
+            #: `P<n>` within the current team: its P1 is the team's P1.
             html = bisect_page.page_for(
-                self.store, label, after, generated_at=datetime.now(UTC).isoformat(timespec="seconds")
+                self._seen, label, after, generated_at=datetime.now(UTC).isoformat(timespec="seconds")
             )
         if html is None:
             self._respond(404, b"no such pipeline\n", "text/plain")
@@ -1983,6 +2686,7 @@ class Handler(BaseHTTPRequestHandler):
                 public=self.config.public,
                 setup_link=not self.config.public,
                 store=self.store,
+                team=self._team_frame(),
             ),
             "text/html; charset=utf-8",
         )
@@ -2028,8 +2732,11 @@ class Handler(BaseHTTPRequestHandler):
         named = tuple((t["folder"], tuple(t["files"])) for t in self.config.tokenizers or ()) + _kept_tokenizers(
             self.config
         )
+        #: The runs listed are those of the store this request reads (`_scope`): with teams, the viewer's team's view,
+        #: as the Runs and Search pages read. The tokenizers kept are the whole console's.
+        seen = self._seen
         with self.store.reading():
-            return token_upload.page_body(self.store, Path(self.store.root), named=named)
+            return token_upload.page_body(seen, Path(self.store.root), named=named)
 
     def _setup_page(self, status: int, page: str, rel: str = "explain/setup", user: str | None = None) -> None:
         """The Set up Explain page, framed as every page is, its form's CSRF slot holding the session's
@@ -2065,6 +2772,8 @@ class Handler(BaseHTTPRequestHandler):
             from onetrace_console import explain
 
             on = form.get("always_stop") == "yes"
+            if not self._audited("setting.changed", "explain", {"setting": "always stop before sending", "on": on}):
+                return
             explain.set_always_stop(self.store, on)
             said = explain.ALWAYS_STOP_ON if on else explain.ALWAYS_STOP_OFF
             self._setup_page(200, explain_setup.page(self.store, said=said, at=explain_setup.STOP_SECTION), user=user)
@@ -2086,12 +2795,68 @@ class Handler(BaseHTTPRequestHandler):
             if taken != "fresh":
                 self._respond(403, b"missing or mismatched confirmation token\n", "text/plain")
                 return
+        changed = explain_setup.change_of(form)
+        if changed is not None and not self._audited("setting.changed", "explain", changed):
+            return
         status, said, written = explain_setup.save(form)
         #: Said in the section the press came from, where the page then opens.
         self._setup_page(
             status,
             explain_setup.page(self.store, said=said, written=written, at=explain_setup.FORM_SECTION),
             user=user,
+        )
+
+    def _send_done(self, comparison, store, root, *, public: bool, config):
+        """What a Send does when it ends: the comparison's page drawn again, and `explain.completed`, the
+        explanation records the send made and their chain heads, which do not exist when it starts; none where it made
+        none. The send has happened by then, so an entry that cannot be appended is noted, never a refusal."""
+        from onetrace_console import explain
+        from onetrace_console.audit import AuditRefused
+
+        before = explain.record_heads(store, comparison.key)
+        audit, actor = self.audit, self._principal()
+
+        def done() -> None:
+            _render_diff_page(comparison, store, root, public=public, config=config)
+            made = [
+                {"record": name, "chain_head": head}
+                for name, head in explain.record_heads(store, comparison.key).items()
+                if name not in before
+            ]
+            try:
+                audit.record(actor, "explain.completed", comparison.key, {"records": made})
+            except AuditRefused:
+                pass  # noted by the log, and said on the error stream (`Audit.record`)
+
+        return done
+
+    def _handle_forwarding(self, body: bytes) -> None:
+        """One press on the forwarding page: recorded in the audit log first (the destination and the fields, never a
+        value), then made; the page again, saying what was done or why nothing was. The test trace changes nothing
+        and is not recorded."""
+        from onetrace_console import forward_pages
+        from onetrace_console.signin import parse_signin_form
+
+        form = parse_signin_form(body) if body else {}
+        planned = forward_pages.plan(self.store_root, form)
+        if planned.status:
+            self._setup_page(
+                planned.status,
+                forward_pages.page(self.store_root, planned.said, planned),
+                forward_pages.REL,
+                self._signed_in_as(),
+            )
+            return
+        if form.get("action") != "test" and not self._audited(
+            "forwarding.changed", planned.destination, {"action": form.get("action", ""), "fields": planned.fields}
+        ):
+            return
+        done = forward_pages.apply(self.store_root, form)
+        self._setup_page(
+            done.status,
+            forward_pages.page(self.store_root, done.said, done if done.status >= 400 else None),
+            forward_pages.REL,
+            self._signed_in_as(),
         )
 
     def _handle_neighbours(self, path: str, body: bytes) -> None:
@@ -2120,11 +2885,23 @@ class Handler(BaseHTTPRequestHandler):
                         _neighbours_refresh(store, config)
                         _render_neighbour_pages(store, root, config)
 
+                    if not self._audited(
+                        "setting.changed",
+                        "neighbours",
+                        {"setting": "neighbours", "on": True, "embedder": chosen.get("model", "")},
+                    ):
+                        return
                     fetching.forget(self.store)
                     fetching.start(
                         self.store, chosen, who=self._principal(), confirmed=form.get("confirmed", ""), after=after
                     )
                     self._respond(303, b"", "text/plain", [("Location", "/neighbours/setup")])
+                    return
+                if not self._audited(
+                    "setting.changed",
+                    "neighbours",
+                    {"setting": "neighbours", "on": True, "embedder": chosen.get("model", "")},
+                ):
                     return
                 settings.turn_on(self.store, chosen, who=self._principal(), confirmed=form.get("confirmed", ""))
             except fetching.AlreadyFetching as e:
@@ -2139,6 +2916,10 @@ class Handler(BaseHTTPRequestHandler):
                 self._handle_neighbours_setup(said=f"Not turned on: {said(e)}", status=400)
                 return
         else:
+            if settings.read(self.store) is not None and not self._audited(
+                "setting.changed", "neighbours", {"setting": "neighbours", "on": False}
+            ):
+                return
             settings.turn_off(self.store)
         _neighbours_refresh(self.store, self.config)
         _render_neighbour_pages(self.store, self.store_root, self.config)
@@ -2155,7 +2936,7 @@ class Handler(BaseHTTPRequestHandler):
         key = (query.get("run") or [""])[0]
         which = (query.get("mark") or [""])[0]
         try:
-            run = self.store.get_run(key) if re.fullmatch(r"[0-9a-f]{64}", key) else None
+            run = self._seen_run(key) if re.fullmatch(r"[0-9a-f]{64}", key) else None
         except StoreError:
             run = None
         if run is None:
@@ -2177,6 +2958,7 @@ class Handler(BaseHTTPRequestHandler):
                 self._respond_json(400, {"error": 'the body is {"note": "<text>"} or empty'})
                 return
             note = said
+        undo = _undo_of(benchmarks._path(self.store, run.key), self.store)
         try:
             if which == "yes":
                 benchmarks.mark(self.store, run, who=self._principal(), note=note)
@@ -2184,6 +2966,10 @@ class Handler(BaseHTTPRequestHandler):
                 benchmarks.unmark(self.store, run.key)
         except benchmarks.MarkError as e:
             self._respond_json(400, {"error": str(e)})
+            return
+        event = "benchmark.marked" if which == "yes" else "benchmark.unmarked"
+        detail = {"team": run.team, "note": bool(note)} if which == "yes" else {}
+        if not self._audited(event, run.key, detail, undo=undo):
             return
         #: The mark changes which run "What changed?" takes for the pipeline's later runs, and the
         #: badge wherever the run is listed: every page of the pipeline's runs is drawn again, and only
@@ -2193,6 +2979,12 @@ class Handler(BaseHTTPRequestHandler):
         same = [other for other in self.store.runs() if declared_list(other) == declared_list(run)]
         for other in same:
             _render_run_pages(other, self.store, self.store_root, self.config)
+        #: A comparison page shows each run against its pipeline's reference run, which a mark can make: each
+        #: comparison of the pipeline's runs is drawn again.
+        keys = {r.key for r in same}
+        for c in self.store.comparisons():
+            if c.run_a in keys or c.run_b in keys:
+                _render_diff_page(c, self.store, self.store_root, public=self.config.public, config=self.config)
         _render_marked_pages(run, same, self.store, self.store_root, self.config)
         self._respond_json(200, {"run_key": run.key, "benchmark": which == "yes"})
 
@@ -2206,7 +2998,7 @@ class Handler(BaseHTTPRequestHandler):
 
         key = (query.get("run") or [""])[0]
         try:
-            run = self.store.get_run(key) if re.fullmatch(r"[0-9a-f]{64}", key) else None
+            run = self._seen_run(key) if re.fullmatch(r"[0-9a-f]{64}", key) else None
         except StoreError:
             run = None
         if run is None:
@@ -2220,10 +3012,16 @@ class Handler(BaseHTTPRequestHandler):
         if not isinstance(named, str):
             self._respond_json(400, {"error": 'the body is {"path": "<the file\'s path on this machine>"}'})
             return
+        kept = self.store.kept_path(expectations_after.FOLDER, run.key, f"{run.key}.json")
+        undo = _undo_of(kept, self.store) if kept is not None else (lambda: None)
         try:
             entry = expectations_after.check(self.store, run, named.strip())
         except expectations_after.ExpectationsError as e:
             self._respond_json(400, {"error": str(e)})
+            return
+        #: The seal of what the check said, never the file's path or its rows.
+        detail = {"seal": entry["seal"], "rows": len(entry["rows"])}
+        if not self._audited("expectations.checked", run.key, detail, undo=undo):
             return
         _render_run_pages(run, self.store, self.store_root, self.config)
         self._respond_json(
@@ -2259,13 +3057,24 @@ class Handler(BaseHTTPRequestHandler):
         digest = (query.get("digest") or [""])[0]
         try:
             if path == "/model-tokenizers/remove":
+                held = {k.get("digest") for k in token_upload.kept(Path(self.store.root))}
+                if digest in held and not self._audited("tokenizer.removed", digest):
+                    return
                 if not token_upload.remove(Path(self.store.root), digest):
                     self._respond_json(400, {"error": f"this console keeps no tokenizer {digest}"})
                     return
                 entry = {"digest": digest, "removed": True}
             else:
                 name = (query.get("name") or [""])[0]
+                held = {k.get("digest") for k in token_upload.kept(Path(self.store.root))}
                 entry = token_upload.keep(Path(self.store.root), digest, body, name)
+                if digest not in held and not self._audited(
+                    "setting.changed",
+                    "tokenizer",
+                    {"setting": "tokenizer kept", "digest": digest},
+                    undo=lambda: token_upload.remove(Path(self.store.root), digest),
+                ):
+                    return
         except token_upload.UploadError as e:
             self._respond_json(400, {"error": str(e)})
             return
@@ -2285,7 +3094,7 @@ class Handler(BaseHTTPRequestHandler):
 
         key = (query.get("c") or [""])[0]
         try:
-            comparison = self.store.get_comparison(key) if key else None
+            comparison = self._seen_comparison(key) if key else None
         except (StoreError, OSError, ValueError):
             comparison = None
         if comparison is None:
@@ -2294,7 +3103,7 @@ class Handler(BaseHTTPRequestHandler):
         if explain.command() is None:
             self._respond_json(400, {"error": "onetrace-explain is not installed with this console"})
             return
-        store, root, public = self.store, self.store_root, self.config.public
+        store, root, public, config = self.store, self.store_root, self.config.public, self.config
         sending = path == "/explain" and (query.get("send") or [""])[0] == "yes"
         if sending and explain._lock(comparison.key).locked():
             #: A press counts once: a second Send while this comparison's send runs is answered with that run,
@@ -2314,9 +3123,14 @@ class Handler(BaseHTTPRequestHandler):
                 raise explain.Busy(explain.BUSY)
             if path == "/explain" and (query.get("send") or [""])[0] == "yes":
                 #: Send, the only press that sends: it starts the work and answers at once; the page is
-                #: drawn again when it ends.
+                #: drawn again when it ends. Recorded before anything leaves.
+                if not self._audited("explain.sent", comparison.key, _sent_detail(store, comparison.key)):
+                    return
                 explain.start(
-                    comparison, store, send=True, done=lambda: _render_diff_page(comparison, store, root, public=public)
+                    comparison,
+                    store,
+                    send=True,
+                    done=self._send_done(comparison, store, root, public=public, config=config),
                 )
                 self._respond_json(
                     202,
@@ -2328,11 +3142,13 @@ class Handler(BaseHTTPRequestHandler):
                 #: new consent (`explain.sends_at_once`), answering as Send does.
                 got = explain.prepare(comparison, self.store)
                 if got.get("exit") == "0" and explain.sends_at_once(store, comparison.key):
+                    if not self._audited("explain.sent", comparison.key, _sent_detail(store, comparison.key)):
+                        return
                     explain.start(
                         comparison,
                         store,
                         send=True,
-                        done=lambda: _render_diff_page(comparison, store, root, public=public),
+                        done=self._send_done(comparison, store, root, public=public, config=config),
                     )
                     self._respond_json(
                         202,
@@ -2368,7 +3184,7 @@ class Handler(BaseHTTPRequestHandler):
                 500, {"error": f"the command could not be run: {getattr(e, 'strerror', None) or type(e).__name__}"}
             )
             return
-        rel = _render_diff_page(comparison, self.store, self.store_root, public=self.config.public)
+        rel = _render_diff_page(comparison, self.store, self.store_root, public=self.config.public, config=self.config)
         self._respond_json(
             200, {"comparison_key": comparison.key, "exit": got.get("exit", ""), "pages": {"diff": f"/{rel}"}}
         )
@@ -2387,7 +3203,7 @@ class Handler(BaseHTTPRequestHandler):
         from onetrace_console.store import StoreError
 
         try:
-            comparison = self.store.get_comparison(key) if key else None
+            comparison = self._seen_comparison(key) if key else None
         except (StoreError, OSError, ValueError):
             comparison = None
         if comparison is None:
@@ -2398,7 +3214,7 @@ class Handler(BaseHTTPRequestHandler):
         except ComparisonError as e:
             self._respond_json(400, {"error": str(e)})
             return
-        rel = _render_diff_page(comparison, self.store, self.store_root, public=self.config.public)
+        rel = _render_diff_page(comparison, self.store, self.store_root, public=self.config.public, config=self.config)
         self._respond_json(
             200, {"comparison_key": comparison.key, "max_lines": TEXT_DIFF_MORE_LINES, "pages": {"diff": f"/{rel}"}}
         )
@@ -2433,6 +3249,18 @@ class Handler(BaseHTTPRequestHandler):
             body = (shown(f"the access log could not be written: {e}") + "\n").encode("utf-8")
             content_type = "text/plain"
             extra_headers = None
+        config = getattr(type(self), "config", None)
+        if status in _error_pages().PAGES and content_type.startswith("text/plain"):
+            #: A browser's request for a page meets an error as a page in the frame (`error_pages`); every other
+            #: client gets the line as it was.
+            framed = self._framed_error(status, body)
+            if framed is not None:
+                body, content_type = framed, "text/html; charset=utf-8"
+        if config is not None and config.public and content_type.startswith("text/html"):
+            #: Search engines index a public console's Overview only (`search_engines`).
+            from onetrace_console.search_engines import for_search
+
+            body = for_search(body, urlsplit(self.path).path)
         self.send_response(status)
         self.send_header("Content-Type", content_type)
         self.send_header("Content-Length", str(len(body)))
@@ -2468,6 +3296,89 @@ class Handler(BaseHTTPRequestHandler):
             self.send_header("Content-Security-Policy", content_security_policy(local=True))
         super().end_headers()
 
+    def send_response(self, code: int, message: str | None = None) -> None:
+        #: Once a status line is on its way, an error is only logged (`_unhandled`).
+        self._answer_started = True
+        super().send_response(code, message)
+
+    @contextlib.contextmanager
+    def _answering(self):
+        """Around a request's handling: an error nothing caught is answered (`_unhandled`). A broken pipe or a reset
+        connection is the client gone, not the console's error: it reaches the server's own handling, as before."""
+        self._answer_started = False
+        try:
+            yield
+        except (BrokenPipeError, ConnectionResetError):
+            raise
+        except Exception:  # noqa: BLE001 - answered and logged, never dropped
+            self._unhandled()
+
+    def _unhandled(self) -> None:
+        """The error being handled, which nothing caught: its type, message and traceback go to the console's own log
+        under a short reference, with the request's method and path (never its query); the client gets the 500 line
+        with that reference, which a browser meets as the framed page (`error_pages`), and never the exception's
+        words, which can name a path on this machine. A public console logs one JSON line, as `handle_error` does.
+        If the answer had already started, nothing more is sent and the connection is closed."""
+        import secrets
+
+        ref = secrets.token_hex(4)
+        path = urlsplit(self.path).path
+        config = getattr(type(self), "config", None)
+        if config is not None and config.public:
+            error = sys.exc_info()[1]
+            line = json.dumps(
+                {
+                    "at": _now(),
+                    "event": "error",
+                    "reference": ref,
+                    "method": self.command,
+                    "path": path,
+                    "exception": type(error).__name__ if error is not None else "unknown",
+                    "traceback": traceback.format_exc(),
+                },
+                ensure_ascii=False,
+            )
+            sys.stderr.write(line + "\n")
+            sys.stderr.flush()
+        else:
+            print(f"error {ref}: answering {self.command} {path}", file=sys.stderr)
+            traceback.print_exc()
+            sys.stderr.flush()
+        if getattr(self, "_answer_started", False):
+            self.close_connection = True
+            return
+        self._respond(500, SERVER_ERROR.format(ref=ref).encode(), "text/plain")
+
+    def _framed_error(self, status: int, said: bytes) -> bytes | None:
+        """`said`, an error's plain line, as a page in the frame where a browser asked for a page; None where it
+        did not, or where the page could not be drawn (the line is then sent as it is)."""
+        from onetrace_console import error_pages
+        from onetrace_console.frame import fill, fill_csrf
+
+        headers = getattr(self, "headers", None)
+        if headers is None or not error_pages.wants_page(urlsplit(self.path).path, headers.get("Accept")):
+            return None
+        try:
+            public = bool(self.config.public)
+            csrf = None if public else self._session_csrf()
+            user = None if public else self._signed_in_as()
+            page = error_pages.document(status, said.decode("utf-8", errors="replace")).encode("utf-8")
+            filled = fill(
+                page,
+                "error.html",
+                onedoor=bool(self.config.extensions.get("onedoor")),
+                user=user,
+                public=public,
+                #: The settings menu says what the console has configured: with sign-in on, for a signed-in person
+                #: only, as the sign-in page draws none for a caller with no session.
+                setup_link=not public and (user is not None or not self.config.sign_in.get("enabled")),
+                store=self.store,
+                csrf=csrf,
+            )
+            return fill_csrf(filled, csrf)
+        except Exception:  # noqa: BLE001 - the plain line is sent instead, as before
+            return None
+
     def _respond_json(self, status: int, obj: dict, extra_headers: list[tuple[str, str]] | None = None) -> None:
         self._respond(status, json.dumps(obj, indent=1).encode("utf-8"), "application/json", extra_headers)
 
@@ -2476,8 +3387,12 @@ class Handler(BaseHTTPRequestHandler):
 #: may not contain.
 _ENCODED_DOT_OR_BACKSLASH = re.compile(r"%(2e|5c)", re.IGNORECASE)
 
+#: A page of a run, by its key: what a run's old address, after `run assign`, is read by.
+_MOVED_RUN_PATH = re.compile(r"runs/([0-9a-f]{64})/(.*)")
 #: The run's own record: `runs/<key>/record.tar`, the key a sha256 run key.
 _RECORD_PATH = re.compile(r"runs/([0-9a-f]{64})/record\.tar")
+#: `t/<team>/<page>`: a team's name (`store.TEAM_NAME`), then the page; `t/<team>/` alone is the team's Overview.
+_TEAM_PREFIX = re.compile(r"t/([a-z][a-z0-9-]{0,62})/(.*)", re.S)
 
 #: Local mode's one address.
 LOCAL_HOST = "127.0.0.1"
@@ -2517,16 +3432,70 @@ def signin_limiters(config: Config) -> dict:
     }
 
 
-def session_store_for(config: Config, accounts):
+def _build_identity() -> str:
+    """The SDK build the console checks and compares with (`compare.sdk_build_digest`), for the audit log's entries:
+    said as unidentified where it cannot be told, never guessed."""
+    from onetrace_console.compare import sdk_build_digest
+
+    try:
+        return sdk_build_digest()
+    except Exception:  # noqa: BLE001 - an identity it cannot tell is said as that
+        return "unidentified"
+
+
+def _undo_of(path: Path, store=None):
+    """What puts `path` back as it is now, file or none, and has `store` read it again: an action's undo where its
+    entry cannot be appended."""
+    from onetrace_console.store import _atomic_write
+
+    before = path.read_bytes() if path.is_file() else None
+
+    def undo() -> None:
+        if before is None:
+            path.unlink(missing_ok=True)
+        else:
+            _atomic_write(path, before)
+        if store is not None:
+            store._forget()
+
+    return undo
+
+
+def _sent_detail(store, key: str) -> dict:
+    """`explain.sent`'s detail: the address it goes to, the kinds of item that address is sent, and whether
+    the texts go. The packet is never kept. Recorded before the send, so the explanation's chain head is the
+    explanation record's own, not the entry's."""
+    from onetrace_console import explain
+
+    where = explain.endpoint(explain.model_config())
+    return {
+        "endpoint": where,
+        "kinds": sorted(explain.sent_kinds(where)),
+        "include_text": explain.include_text(store, key),
+    }
+
+
+def session_store_for(config: Config, accounts, *, store_root: Path | None = None, on_ended=None, on_end=None):
     """The console's sessions, as its configuration bounds them: the idle and absolute timeouts,
-    `max_sessions_per_account`, and the end time `admin sessions end` writes beside the accounts."""
+    `max_sessions_per_account`, and the end time `admin sessions end` writes (`session_ends`, under `store_root`;
+    0.8.0's, beside the accounts, is read too). `on_ended` is told how many sessions an end time ended."""
+    from onetrace_console.session_ends import DIRNAME, EndTimes
     from onetrace_console.sessions import SessionStore
+
+    #: The accounts folder is `<store_root>/accounts/`, so its parent where no root is given.
+    times = EndTimes((store_root if store_root is not None else Path(accounts.root).parent) / DIRNAME)
+
+    def ended(principal: str) -> int | None:
+        found = [accounts.sessions_ended_at(principal), times.read(principal)]
+        return max((t for t in found if t is not None), default=None)
 
     return SessionStore(
         idle_timeout_seconds=config.sign_in["session_idle_timeout_seconds"],
         absolute_timeout_seconds=config.sign_in["session_absolute_timeout_seconds"],
         max_per_account=config.sign_in.get("max_sessions_per_account", 3),
-        ended=accounts.sessions_ended_at,
+        ended=ended,
+        on_ended=on_ended,
+        on_end=on_end,
     )
 
 
@@ -2561,6 +3530,17 @@ def _public_store(store_root: Path):
     from onetrace_console.public import StdoutAccessLog
 
     return Store(store_root / "store"), StdoutAccessLog()
+
+
+def start_forwarding(store_root: Path, store: Store, config: Config):
+    """Trace forwarding's sender, started; None on a public console, which forwards nothing."""
+    if config.public:
+        return None
+    from onetrace_console import forwarding
+
+    sender = forwarding.Forwarder(store_root, store)
+    sender.start()
+    return sender
 
 
 def main(
@@ -2670,6 +3650,10 @@ def main(
         if refused is not None:
             print(f"refusing to start: {refused.message}\nfix: {refused.fix}", file=sys.stderr)
             return 1
+        #: The banner speaks for the store its build record names: the demo's, or the capture store's.
+        from onetrace_console.public import recorded_builder, speaks_for
+
+        speaks_for(recorded_builder(Path(config.trust_file).parent))  # type: ignore[arg-type]  # start_refusal above refuses a public console with no trust_file
         #: The demo's own example inputs, which its build record (checked above) vouches for, are
         #: the one kind of input from outside a pipeline this console may hand out.
         from onetrace_console.demo_store import serve_examples
@@ -2740,6 +3724,73 @@ def main(
             wait_seconds=config.compare_wait_seconds,
         )
 
+    #: SCIM: only beside sign-in through Entra ID, on a console that is neither local nor
+    #: public.
+    from onetrace_console import scim
+
+    scim_refused = scim.start_refusal(config, local=local)
+    if scim_refused is not None:
+        print(f"refusing to start: {scim_refused[0]}\nfix: {scim_refused[1]}", file=sys.stderr)
+        return 1
+    if config.scim.get("enabled"):
+        on, since = scim.enforcement(store_root)
+        if not on:
+            #: Said at every start, on the error stream, until it is on again.
+            print(
+                f"WARNING: SCIM's enforcement of sign-in is off, since {since}: an Entra ID sign-in is admitted on "
+                "its app roles alone, with no team from SCIM. Turn it on with onetrace-console scim enforcement on.",
+                file=sys.stderr,
+            )
+
+    #: The audit log: on, it needs its head's second location, off the store's volume.
+    from onetrace_console import audit as audit_log
+
+    audit_refused = audit_log.required_refusal(config) or audit_log.start_refusal(config, store_root)
+    if audit_refused is not None:
+        print(f"refusing to start: {audit_refused[0]}\nfix: {audit_refused[1]}", file=sys.stderr)
+        return 1
+    Handler.audit = audit_log.audit_for(config, store_root)
+    try:
+        said_audit = audit_log.start_line(Handler.audit)
+    except (OSError, ValueError, audit_log.AuditUnavailable) as e:
+        from onetrace_console.oserror import said
+
+        why = said(e) if isinstance(e, OSError) else str(e)
+        print(
+            f"refusing to start: the audit log's head could not be read: {why}\nfix: restore audit_log/HEAD.json "
+            "from a backup, or check the log with onetrace-console audit verify.",
+            file=sys.stderr,
+        )
+        return 1
+    if said_audit:
+        print(said_audit, file=sys.stderr)
+    try:
+        audit_log.at_start(Handler.audit, config, os.environ.get(ENV_VAR) or None, store_root)
+    except audit_log.AuditRefused as e:
+        print(
+            f"refusing to start: {e}\nfix: free the audit log's volume or its head location, then start again.",
+            file=sys.stderr,
+        )
+        return 1
+
+    #: With teams, every run has one team, and nothing the uploader writes picks it: a live token
+    #: bound to none, a held run with none, a folder console with no `folder_team`, each refuses start, before
+    #: anything is drawn.
+    from onetrace_console import team_assign
+
+    team_refused = (
+        team_assign.sign_in_refusal(config)
+        or team_assign.open_ingest_refusal(config, store_root, folder=prepare is not None)
+        or team_assign.token_refusal(config, store_root)
+        or (team_assign.folder_refusal(config) if prepare is not None else None)
+        or team_assign.run_refusal(config, store)
+    )
+    if team_refused is not None:
+        print(f"refusing to start: {team_refused.message}\nfix: {team_refused.fix}", file=sys.stderr)
+        return 1
+    if team_assign.sign_in_off(config):
+        print(team_assign.SIGN_IN_OFF, file=sys.stderr, flush=True)
+
     #: A warning at every start-up when a configuration file leaves sign-in off: the
     #: console is unauthenticated and every page is open, and an operator who did not mean
     #: that should see it the moment the process starts. Local mode says the same, and more,
@@ -2784,7 +3835,20 @@ def main(
 
         Handler.account_store = AccountStore(store_root / ACCOUNTS_DIRNAME)
         Handler.token_store = TokenStore(store_root / TOKENS_DIRNAME)
-        Handler.session_store = session_store_for(config, Handler.account_store)
+        from onetrace_console.audit import CONSOLE
+
+        #: A session's end is recorded, however it comes, and applies whatever the log says.
+        Handler.session_store = session_store_for(
+            config,
+            Handler.account_store,
+            store_root=store_root,
+            on_ended=lambda who, n: Handler.audit.record(
+                CONSOLE, "sessions.ended", who, {"count": n, "by": "admin sessions end"}, removes_access=True
+            ),
+            on_end=lambda session, how: Handler.audit.record(
+                CONSOLE, "signout", session.username, {"how": how}, removes_access=True
+            ),
+        )
         for name, limiter in signin_limiters(config).items():
             setattr(Handler, name, limiter)
         #: The device key, made at first start beside the accounts.
@@ -2948,12 +4012,16 @@ def main(
     if watcher is not None:
         Handler.watcher = watcher
         watcher.start()
+    #: Trace forwarding's sender (`forwarding`), on a thread of its own; never on a public console.
+    forwarder = start_forwarding(store_root, store, config)
     try:
         with _sigterm_as_interrupt():
             server.serve_forever()
     except KeyboardInterrupt:
         pass
     finally:
+        if forwarder is not None:
+            forwarder.stop()
         if watcher is not None:
             watcher.stop()
             Handler.watcher = None  # type: ignore[assignment]  # back to unset, as before main()

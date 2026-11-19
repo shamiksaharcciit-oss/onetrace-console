@@ -1,0 +1,1 @@
+{"content":"","tool_calls":[{"args":{"a":"1","b":"2"},"id":"call-1","name":"add","type":"tool_call"}],"type":"ai"}

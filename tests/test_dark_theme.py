@@ -54,6 +54,9 @@ def test_the_navigation_s_only_control_is_the_theme_switch_in_its_footer(examine
 
     examined(2, "the navigation, without and with its footer")
     nav = frame.nav("home.html", onedoor=False, foot="")
+    #: But the frame's folds below 600 px, each by its exact markup, which open a part of the frame and run nothing.
+    for tag in frame.FOLD_BUTTONS.values():
+        nav = re.sub(re.escape(tag) + r"[^<]*</button>", "", nav)
     assert not re.search(r"<(button|form|input|script)\b|theme", nav, re.I), nav
     foot = frame.footer(None)
     rest = foot.replace(frame.THEME_SWITCH, "", 1).replace(frame.THEME_SCRIPT, "", 1)

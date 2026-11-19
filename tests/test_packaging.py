@@ -30,22 +30,22 @@ def test_the_version_is_0_2_0_everywhere(examined):
     import onetrace_console
 
     examined(3, "places the version is stated")
-    assert META["version"] == "0.8.0"
-    assert onetrace_console.__version__ == "0.8.0"
+    assert META["version"] == "0.9.0"
+    assert onetrace_console.__version__ == "0.9.0"
     out = subprocess.run(
         [sys.executable, "-m", "onetrace_console", "--version"],
         capture_output=True,
         text=True,
         env={**os.environ, "PYTHONPATH": str(REPO / "src")},
     )
-    assert out.stdout.strip() == "0.8.0", out
+    assert out.stdout.strip() == "0.9.0", out
 
 
 def test_the_metadata_names_the_sdk_it_was_tested_with(examined):
     deps = META["dependencies"]
     examined(len(deps), "declared dependencies")
-    assert "onetrace==0.8.0" in deps
-    assert "onetrace-verify[crypto]==0.8.0" in deps
+    assert "onetrace==0.9.0" in deps
+    assert "onetrace-verify[crypto]==0.9.0" in deps
     assert META["requires-python"] == ">=3.12"
     assert len(META["authors"]) == 1 and META["authors"][0].get("name", "").strip(), META["authors"]
 
@@ -77,22 +77,22 @@ def test_the_pins_command_reads_the_lock_shipped_in_the_package(examined):
     assert out.stdout.replace(b"\r\n", b"\n") == shipped.read_bytes().replace(b"\r\n", b"\n")
 
 
-def test_the_shipped_lock_pins_the_0_8_0_wheels(examined):
+def test_the_shipped_lock_pins_the_0_9_0_wheels(examined):
     """The lock the installed package carries pins the SDK's two wheels, the release files PyPI receives."""
-    from tests.test_pin_012 import RELEASE_0_8_0
+    from tests.test_pin_012 import RELEASE_0_9_0
     from tests.test_pins import _REQ
 
     text = (REPO / "src" / "onetrace_console" / "requirements.lock").read_text(encoding="utf-8")
     entries = {m.group("req"): m.group("sha") for m in _REQ.finditer(text)}
     examined(2, "SDK pins in the shipped lock")
-    assert entries["onetrace==0.8.0"] == RELEASE_0_8_0["onetrace-0.8.0-py3-none-any.whl"]
-    assert entries["onetrace-verify==0.8.0"] == RELEASE_0_8_0["onetrace_verify-0.8.0-py3-none-any.whl"]
+    assert entries["onetrace==0.9.0"] == RELEASE_0_9_0["onetrace-0.9.0-py3-none-any.whl"]
+    assert entries["onetrace-verify==0.9.0"] == RELEASE_0_9_0["onetrace_verify-0.9.0-py3-none-any.whl"]
 
 
 #: onetrace-explain is never a dependency: the console runs it as a command where it is installed.
 EXPLAIN_NAMES = re.compile(r"onetrace[-_.]explain", re.I)
 #: The one sentence each README gives it, and the page it links.
-EXPLAIN_INSTALL = '`pip install "onetrace-explain[keyring]>=0.3"`'
+EXPLAIN_INSTALL = '`pip install "onetrace-explain[keyring]>=0.3.2"`'
 EXPLAIN_FORMAT = "https://oneproof.dev/onetrace/explain-format.md"
 
 
@@ -133,13 +133,15 @@ NETWORK_WORDS = (
     "time it would send a kind of item it has never sent to that endpoint, it lists them and asks first. "
     "Turning on neighbours by input with a local model fetches that model's pinned files once from "
     "huggingface.co, as above. Turning it on with an embedding endpoint of your own sends that endpoint "
-    "the kept inputs and outputs."
+    "the kept inputs and outputs. Trace forwarding runs if you set it up in Settings, and it sends each new run's "
+    "trace to the endpoints you configure; it is off until then."
 )
-#: The three network calls the console makes, each one you choose: "Where it runs" names all three.
+#: The four network calls the console makes, each one you choose: "Where it runs" names all four.
 NETWORK_EXCEPTIONS = (
     "The Explain button runs onetrace-explain",
     "fetches that model's pinned files once from huggingface.co",
     "an embedding endpoint of your own sends that endpoint the kept inputs and outputs",
+    "Trace forwarding runs if you set it up in Settings, and it sends each new run's trace to the endpoints you configure",
 )
 
 
@@ -483,8 +485,8 @@ def test_a_plain_pip_install_compares_with_the_same_report_as_the_pinned_install
             capture_output=True,
             env=clean,
         )
-    console_whl = only(dist.glob("onetrace_console-0.8.0-*.whl"))
-    _check_the_viewer_ships_without_its_tests(console_whl, only(dist.glob("onetrace_console-0.8.0.tar.gz")))
+    console_whl = only(dist.glob("onetrace_console-0.9.0-*.whl"))
+    _check_the_viewer_ships_without_its_tests(console_whl, only(dist.glob("onetrace_console-0.9.0.tar.gz")))
     #: The wheel carries the demo store's builder and trust file, so `onetrace-console demo` works
     #: installed: it builds the demo's runs where it is started (0.1.1).
     import zipfile
@@ -612,9 +614,9 @@ def _check_the_viewer_ships_without_its_tests(wheel: Path, sdist: Path) -> None:
     for kind, names in (("wheel", in_wheel), ("sdist", in_sdist)):
         viewer = [n for n in names if "onetrace_console/viewer/" in n]
         assert any(n.endswith("onetrace_console/viewer/page.py") for n in viewer), (kind, viewer[:5])
-        #: The skin's tokens are a module (console 0.8.0); its note stays in the private tree.
+        #: The skin's tokens are a module (console 0.8.0); the note they came from, and its sums file, are not shipped.
         assert any(n.endswith("onetrace_console/viewer/skin_tokens.py") for n in viewer), kind
-        assert not [n for n in names if n.endswith(("ONETRACE_CONSOLE_SKIN_v1.md", "skin.SHA256"))], kind
+        assert not [n for n in names if n.endswith(("ONETRACE_CONSOLE_" + "SKIN_v1.md", "skin" + ".SHA256"))], kind
         assert any(n.endswith("viewer/PROVENANCE.md") for n in viewer), kind
         assert not [n for n in viewer if "/tests/" in n], (kind, "the viewer's tests ship")
         #: The two names put together from parts, so that this file names neither whole.

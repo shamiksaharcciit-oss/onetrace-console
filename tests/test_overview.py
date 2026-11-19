@@ -1,4 +1,4 @@
-"""The Overview (v6 board 1), on Home.
+"""The Overview, as its design draws it, on Home.
 
 The Overview has no permit or decision figures; its cards are runs, records agree, changed
 vs baseline, and open incidents. It orders what needs attention by a rule stated on the
@@ -529,7 +529,7 @@ def test_a_run_recording_another_value_is_not_matched_and_an_unread_one_is_said(
 
 
 def test_the_overview_carries_the_evidence_ladder_across_runs(ten_runs, examined):
-    """v6 board 1: each rung a separate question over the stored runs, counts with their
+    """The Overview's design: each rung a separate question over the stored runs, counts with their
     denominators, and release 1's authorization rung in its own words -- never a count."""
     from onetrace_console.home import tallies
 
@@ -550,7 +550,7 @@ def test_the_overview_carries_the_evidence_ladder_across_runs(ten_runs, examined
     ]
     by = {k: _text(v) for k, v in rows}
     t = {x.slug: x for x in tallies(store)}
-    #: As the confirmation review held it: only a check with the output files required counts as
+    #: Only a check with the output files required counts as
     #: agreeing. Each other state of rung 1 beside the count, in its own words, as each run's page
     #: reads it; held without the output files required is the reason under not checked.
     from onetrace_console import records

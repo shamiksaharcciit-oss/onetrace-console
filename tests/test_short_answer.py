@@ -211,15 +211,21 @@ def test_every_comparison_page_opens_with_its_strip_in_order_and_in_words(demo, 
     assert strip_problems(store, pages) == []
 
 
-def test_the_short_answer_is_first_and_the_sections_below_keep_their_order(demo, examined):
-    """At the top: after the page's heading and the line naming its runs, nothing else before it;
-    the sections the page had stay after it in their order."""
+def test_the_first_difference_leads_and_the_short_answer_opens_the_kind_of_change(demo, examined):
+    """The page leads with the first difference (`compare_view`), after its heading and the line naming its runs; the
+    short answer opens the Kind of change tab, before anything else there."""
     _, pages = demo
     examined(len(pages), "comparison pages")
     for pair, (_, page) in pages.items():
         main = page[page.index('<div class="cp">') :]
-        first = re.search(r'<(section|details|table|div) data-section="([^"]+)"', main)
-        assert first and first.group(2) == "short-answer", (pair, first and first.group(2))
+        first = re.search(r'<(section|details|table|div) [^>]*data-section="([^"]+)"', main)
+        #: The header: the pair line, or, on a graph-shaped pair whose A/B line names the runs, the header alone.
+        assert first and first.group(2) in ("pair", "compare-head"), (pair, first and first.group(2))
+        after = re.search(r'<(section|details|table|div) [^>]*data-section="([^"]+)"', main[first.end() :])
+        assert after and after.group(2) == "compare-first", (pair, after and after.group(2))
+        kind = main[main.index('data-tab-panel="kind"') :]
+        opens = re.search(r'<(section|details|table|div|p) [^>]*data-section="([^"]+)"', kind)
+        assert opens and opens.group(2) in ("first-kind", "chosen", "short-answer"), (pair, opens and opens.group(2))
 
 
 def test_the_short_answer_is_the_same_every_time(demo, examined):

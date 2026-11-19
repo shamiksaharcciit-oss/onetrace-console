@@ -1,4 +1,4 @@
-"""Compare on the graph (board 6), on the compare page of two graph-shaped runs.
+"""Compare on the graph, on the compare page of two graph-shaped runs.
 
 One graph over the union of both runs' nodes, matched by node id, in the SDK's own order (the
 rows of its `diff` report, which `topology.order` wrote); its links the union of both runs'

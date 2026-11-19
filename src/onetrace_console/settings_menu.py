@@ -137,8 +137,43 @@ def tokenizers_row(store) -> Row:
     return Row("tokenizers", words, f"/{token_upload.PATH}", "on" if n else "off")
 
 
+FORWARDING_OFF = "Forwarding: off"
+FORWARDING_ON = "Forwarding: {n} on"
+FORWARDING_BROKEN = "Forwarding: {n} on, {why}"
+
+
+def forwarding_row(store) -> Row:
+    """Trace forwarding's row (`forwarding`): how many destinations are on, or off; broken, with the gear's dot, where a
+    destination that is on has a header whose variable is not set or whose value is not in the keychain, or whose last
+    attempt failed. Only a value's presence is read."""
+    from onetrace_console import forwarding as F
+    from onetrace_console.forward_pages import PATH, root_of
+
+    root = root_of(store)
+    try:
+        on = [d for d in F.read(root) if d.enabled]
+    except (OSError, ValueError):
+        return Row("forwarding", "Forwarding: the destinations file can't be read", PATH, "broken")
+    if not on:
+        return Row("forwarding", FORWARDING_OFF, PATH, "off")
+    n = f"{len(on)} destination" + ("s" if len(on) != 1 else "")
+    for d in on:
+        for h in d.headers:
+            state = F.key_state(d, h)
+            if state not in ("set", "stored"):
+                why = f"{d.name}: {h.name} " + (
+                    "not set" if h.key_env else "not stored" if state == "not stored" else state
+                )
+                return Row("forwarding", FORWARDING_BROKEN.format(n=n, why=why), PATH, "broken")
+        st = F.status(root, d.id)
+        if st.get("last_failure_at") and st.get("last_failure_at", "") >= st.get("last_send", ""):
+            why = f"{d.name}: the last attempt failed"
+            return Row("forwarding", FORWARDING_BROKEN.format(n=n, why=why), PATH, "broken")
+    return Row("forwarding", FORWARDING_ON.format(n=n), PATH, "on")
+
+
 def rows(store) -> list[Row]:
-    return [explain_row(store), neighbours_row(store), tokenizers_row(store)]
+    return [explain_row(store), neighbours_row(store), tokenizers_row(store), forwarding_row(store)]
 
 
 GEAR_SVG = (

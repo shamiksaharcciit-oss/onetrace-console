@@ -37,7 +37,8 @@ for the model-files question the value's state.
 ## Versions and refusals
 
 The interface is `onetrace-console-store-read/1`. Its answers are read from the run index, and it
-reads the index format `onetrace-console-run-index/0.2` only. Each refusal raises `Refused`, with the
+reads the index format `onetrace-console-run-index/0.3` only (0.3 adds each step's kind and agent, the run's
+agent, each step's store writes and each run's origin, none of which the three questions reads). Each refusal raises `Refused`, with the
 reason as its message:
 
 - the store root holds no run index (the console writes it when it draws its pages: start the console

@@ -190,6 +190,7 @@ with sync_playwright() as p:
 """
 
 
+@pytest.mark.browser
 @pytest.mark.skipif(
     not BROWSER_PYTHON, reason="ONETRACE_BROWSER_PYTHON names no Python with Playwright's Chromium (the gate sets it)"
 )

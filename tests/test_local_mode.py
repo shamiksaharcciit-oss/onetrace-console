@@ -6,7 +6,7 @@
 Loopback alone does not keep a browser out: a web page the local user opens can post to
 127.0.0.1, and a hostile name can be pointed at 127.0.0.1 (DNS rebinding). So local mode also
 refuses a request whose Host is not this listener's own loopback name, and a state-changing
-request from another origin. The independent review of the first version found both open.
+request from another origin. The first version was found to leave both open.
 
 Everything here runs `serve.main()` itself, or a real HTTP server with local mode on.
 """
@@ -139,7 +139,7 @@ def test_with_no_config_file_the_console_starts_in_local_mode(local_main, capsys
 
 
 def test_the_banner_says_the_address_and_the_store_after_binding(local_main, capsys, tmp_path):
-    """A review asked for the port and the store in the one message, printed once the socket
+    """The port and the store go in the one message, printed once the socket
     is bound -- not before, so a failed bind is never preceded by "listens on"."""
     _, run = local_main
     _, err, _ = run(capsys)
@@ -151,7 +151,7 @@ def test_the_banner_says_the_address_and_the_store_after_binding(local_main, cap
 
 
 def test_a_variable_set_but_blank_refuses_rather_than_falling_into_local_mode(local_main, capsys, monkeypatch):
-    """A review noted a blank value is a mistake by someone who meant to name a file."""
+    """A blank value is a mistake by someone who meant to name a file."""
     serve_module, _ = local_main
     for blank in ("", " "):
         monkeypatch.setenv(ENV_VAR, blank)
@@ -161,14 +161,14 @@ def test_a_variable_set_but_blank_refuses_rather_than_falling_into_local_mode(lo
 
 
 def test_unknown_arguments_are_refused_not_ignored(local_main, capsys):
-    """Review note 8: `serve --host 0.0.0.0` used to be silently ignored."""
+    """`serve --host 0.0.0.0` used to be silently ignored."""
     serve_module, _ = local_main
     assert serve_module.main(["--host", "0.0.0.0"]) == 2
     assert "takes no arguments" in capsys.readouterr().err
 
 
 def test_local_mode_refuses_a_store_that_was_set_up_with_sign_in(local_main, capsys, tmp_path):
-    """Review note 11: accounts in the store mean it was protected; local mode would serve it
+    """Accounts in the store mean it was protected; local mode would serve it
     open. Refused, with the way out named."""
     serve_module, _ = local_main
     accounts = tmp_path / "store" / serve_module.ACCOUNTS_DIRNAME
@@ -192,7 +192,7 @@ def _config_file(tmp_path, monkeypatch, **fields):
 def test_config_file_mode_still_refuses_plain_http_beyond_loopback_with_sign_in(
     local_main, capsys, tmp_path, monkeypatch
 ):
-    """A review found `refuse_if_insecure` inside `main()` was tested only on its own. Now
+    """`refuse_if_insecure` inside `main()` was once tested only on its own. Now
     the refusal is printed with its fix and exits 1, never a traceback."""
     serve_module, _ = local_main
     _config_file(tmp_path, monkeypatch, host="0.0.0.0", sign_in={"enabled": True})
@@ -282,7 +282,7 @@ def test_local_mode_serves_no_sign_in_and_sets_no_cookie(local_server):
 
 
 def test_a_file_in_accounts_that_is_not_an_account_does_not_refuse(local_main, capsys, tmp_path):
-    """Closing review A: `.gitkeep`, `desktop.ini`, `.DS_Store` are not accounts."""
+    """`.gitkeep`, `desktop.ini`, `.DS_Store` are not accounts."""
     serve_module, run = local_main
     accounts = tmp_path / "store" / serve_module.ACCOUNTS_DIRNAME
     accounts.mkdir(parents=True)
@@ -310,7 +310,7 @@ def _raw(base, lines: list[str], body: bytes = b"") -> tuple[int, bytes]:
 
 
 def test_duplicate_guard_headers_are_refused(local_server, examined):
-    """Closing review C: RFC 9112 says two Hosts is a 400; two Origins or two
+    """RFC 9112 says two Hosts is a 400; two Origins or two
     Sec-Fetch-Sites cannot be read as one."""
     base, _ = local_server
     port = base.rsplit(":", 1)[1]
@@ -348,7 +348,7 @@ def test_an_absolute_form_target_must_name_this_listener_too(local_server):
 
 
 def test_local_mode_pages_cannot_be_framed_or_sniffed(local_server):
-    """Closing review E: a cross-site page can embed a local page even if it cannot read it."""
+    """A cross-site page can embed a local page even if it cannot read it."""
     base, _ = local_server
     _, _, headers = _call(base, "/health")
     assert headers.get("X-Frame-Options") == "DENY"
@@ -357,7 +357,7 @@ def test_local_mode_pages_cannot_be_framed_or_sniffed(local_server):
 
 
 def test_a_refused_host_is_told_the_address_that_works(local_server):
-    """Closing review F: an ssh tunnel on another port gets 421 -- and the address to use."""
+    """An ssh tunnel on another port gets 421 -- and the address to use."""
     base, _ = local_server
     port = base.rsplit(":", 1)[1]
     status, body, _ = _call(base, "/", headers={"Host": "127.0.0.1:9000"})

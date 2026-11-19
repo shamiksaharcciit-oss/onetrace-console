@@ -34,7 +34,7 @@ NAMES = ("ingest-day1", "ingest-day2", "query-day1", "query-day2")
 #: sets another, so these are the English names on every host. No month is written out here.
 MONTHS = re.compile(r"\b(" + "|".join(calendar.month_name[1:]) + r")\b")
 #: Words no page may show: internal vocabulary, process ids and places, and personal names.
-#: The review party's word, in two parts (`NOT_ON_A_PAGE`).
+#: An internal party's name, in two parts (`NOT_ON_A_PAGE`).
 REVIEW_WORD = "co" + "re"
 NOT_ON_A_PAGE = {
     "AADP": re.compile(r"\bAADP\b"),
@@ -42,7 +42,7 @@ NOT_ON_A_PAGE = {
     #: written: `onedoor-decision-ref/1` and `onedoor-issuer-trust/1` (onetrace 0.5.0).
     "onedoor": re.compile(r"onedoor(?!-(?:decision-ref|issuer-trust)/1)", re.I),
     "canary": re.compile(r"\bcanary\b", re.I),
-    #: The review party's word, put together from two parts so that this file names it only through `REVIEW_WORD`.
+    #: An internal party's name, put together from two parts so that this file names it only through `REVIEW_WORD`.
     REVIEW_WORD: re.compile(r"\bco" r"re\b"),
     "pod": re.compile(r"\bpod\b"),
     "a ruling id": re.compile(r"\bR-20\d\d-\d\d-\d\d"),
@@ -90,11 +90,25 @@ _ENGINE_CORE_ROW = re.compile(
 )
 
 
+#: The same setting's field name, as the model-call record writes it and a step page shows it (the record's fields
+#: and its JSON): `engine.settings.engine_core`, vLLM's setting, whole. Not the word the scan guards, though a reading
+#: that splits words at "_" and "." finds it there, as the capture store's post-deploy check does; the check allows
+#: the same field name by the same pattern.
+ENGINE_CORE_FIELD = re.compile(r"(?<![A-Za-z0-9_.])engine\.settings\.engine_core(?![A-Za-z0-9_]|\.[A-Za-z0-9_])")
+
+
 def scanned_text(html: str) -> str:
     """A page's text as the word scan reads it (`NOT_ON_A_PAGE`): `_text`, less exactly the verifier's own
-    engine-setting label in a row of the verifier's output the page quotes as written. Nowhere else is the word
-    passed over."""
-    return _text(_VERIFIER_OUTPUT.sub(lambda m: m[1] + _ENGINE_CORE_ROW.sub(r"\1\2", m[2]) + m[3], html))
+    engine-setting label in a row of the verifier's output the page quotes as written, and less that setting's field
+    name whole (`ENGINE_CORE_FIELD`). Nowhere else is the word passed over."""
+    text = _text(_VERIFIER_OUTPUT.sub(lambda m: m[1] + _ENGINE_CORE_ROW.sub(r"\1\2", m[2]) + m[3], html))
+    return ENGINE_CORE_FIELD.sub(" ", text)
+
+
+def split_words(text: str) -> list[str]:
+    """`text`'s words as the capture store's post-deploy check splits them: at every character not a letter or a
+    digit, "_" and "." among them."""
+    return [w for w in re.split(r"[^A-Za-z0-9]+", text) if w]
 
 
 def _section(html: str, name: str) -> str:
@@ -499,3 +513,39 @@ def test_sabotage_the_word_in_a_row_that_is_not_the_verifier_s_still_fails(exami
     other_row = _verifier_output("[PASS   ] receipts/01-call.json: the co" + "re of the record")
     assert NOT_ON_A_PAGE[REVIEW_WORD].search(scanned_text(other_pre))
     assert NOT_ON_A_PAGE[REVIEW_WORD].search(scanned_text(other_row))
+
+
+# ------------------------------------------------------------- the record's field name for the setting, as written
+#: A step page shows a model-call record's fields by name, and quotes the record's JSON: both hold
+#: `engine.settings.engine_core` as the record writes it.
+FIELD_PAGE = (
+    "<main><table><tr><td>engine.settings.engine_core</td><td>observed</td><td>in the calling process</td></tr></table>"
+    '<pre data-section="record">{"engine.settings.engine_core": {"status": "observed"}}</pre></main>'
+)
+
+
+def test_the_record_s_field_name_for_the_engine_setting_passes(examined):
+    examined(2, "places the field name is shown: the record's fields and its JSON")
+    text = scanned_text(FIELD_PAGE)
+    assert "engine.settings.engine_core" not in text and "in the calling process" in text
+    assert not NOT_ON_A_PAGE[REVIEW_WORD].search(text)
+    assert REVIEW_WORD not in split_words(text)
+    #: Read with the words split at "_" and ".", the field name holds the word: the allowance is what passes it.
+    assert REVIEW_WORD in split_words(_text(FIELD_PAGE))
+
+
+@pytest.mark.parametrize(
+    "planted",
+    [
+        f"The engine {REVIEW_WORD} of this console.",
+        f"engine_{REVIEW_WORD}",
+        f"settings.engine_{REVIEW_WORD}",
+        f"engine.settings.engine_{REVIEW_WORD}_kept",
+        f"x.engine.settings.engine_{REVIEW_WORD}",
+        f"engine.settings.engine_{REVIEW_WORD}.mode",
+    ],
+)
+def test_sabotage_the_word_beside_the_field_name_or_in_another_still_fails(planted, examined):
+    examined(1, "planted text")
+    text = scanned_text(FIELD_PAGE.replace("</main>", f"<p>{planted}</p></main>"))
+    assert REVIEW_WORD in split_words(text), planted

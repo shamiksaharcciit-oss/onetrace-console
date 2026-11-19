@@ -1,7 +1,7 @@
 """The follow-up's item 2 residue. A verifier row a page quotes is capped as a
 record word is.
 
-The limited review found the display caps partly closed: the verifier's own rows quote the
+The display caps were found partly closed: the verifier's own rows quote the
 record's names -- `[FAIL] receipts/03-join.json: 'complete' is consistent with the stage lists --
 declared but not emitting: ['000nnnn…` -- and the pages drew them whole, in the check lines, the
 report block and the incident quotes. 100 declared names of 50,000 characters, a 19 KB upload,
@@ -30,7 +30,7 @@ PAGE_BOUND = 400_000
 
 
 def _long_names(files) -> bytes:
-    """A review's probe_longnames_all.py: 97 names of 50,000 characters added to every
+    """A probe's long names: 97 names of 50,000 characters added to every
     receipt's declared stages -- 100 declared -- as a gzip upload of about 19 KB."""
     out = _renamed(files)
     manifest = json.loads(out["MANIFEST.json"].decode("utf-8"))

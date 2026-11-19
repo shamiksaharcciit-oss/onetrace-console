@@ -89,7 +89,7 @@ QUALIFIED = re.compile(
 WHOLE_SENTENCE_QUALIFIED = re.compile(r"\bit would read:", re.I)
 
 
-#: The run receipt's "What this receipt does not say" is the specification's fixed
+#: The run receipt's "What this receipt does not say" is a fixed
 #: list of what the receipt does NOT claim, and one line says what an anchor would show ("the record
 #: existed by then") in order to deny more. Under that heading the proof-of-time claim is qualified,
 #: and only that one: every other claim is still read there.

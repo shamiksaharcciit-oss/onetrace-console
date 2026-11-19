@@ -27,14 +27,18 @@ TRACES = "traces"
 GIVEN, EXPORT = "given", "export"
 
 
-def _path(store, key: str) -> Path:
-    return Path(store.root) / FOLDER / f"{key}.json"
+def _path(store, key: str) -> Path | None:
+    """What was kept beside a run, by its key (`Store.kept_path`); None for a run a team's view does not hold."""
+    return store.kept_path(FOLDER, key, f"{key}.json")
 
 
 def read(store, key: str) -> dict:
     """{name: object key}, and "trace_source"; {} where nothing is kept."""
+    path = _path(store, key)
+    if path is None:
+        return {}
     try:
-        got = load_json_bounded(_path(store, key).read_text(encoding="utf-8"), FOLDER)
+        got = load_json_bounded(path.read_text(encoding="utf-8"), FOLDER)
     except (OSError, ValueError, RecursionError):
         return {}
     return got if isinstance(got, dict) else {}
@@ -46,6 +50,8 @@ def keep(store, key: str, **items) -> None:
     for name, value in items.items():
         held[name] = value if isinstance(value, str) else store.put(value)
     p = _path(store, key)
+    if p is None:
+        raise ValueError(f"no run {key!r} is held")
     p.parent.mkdir(parents=True, exist_ok=True)
     tmp = p.with_suffix(".tmp")
     tmp.write_text(json.dumps(held, sort_keys=True), encoding="utf-8")

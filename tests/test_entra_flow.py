@@ -116,10 +116,13 @@ def test_the_sign_in_page_offers_microsoft_and_no_password(entra, examined):
     status, body, _h, _ = _get(base, "/signin?next=%2Fcomparisons.html")
     page = body.decode()
     assert status == 200 and "Sign in with Microsoft" in page
+    #: A link drawn as a button, not a form: `form-action 'self'` would block a form's redirect to the issuer
+    #: (`tests/test_signin_link.py`).
     assert (
-        'action="/signin/oidc/start"' in page and '<input type="hidden" name="next" value="/comparisons.html">' in page
-    )
-    assert '<button class="btn-primary" data-busy="Signing in…" type="submit">Sign in with Microsoft</button>' in page
+        '<a class="btn-primary" href="/signin/oidc/start?next=%2Fcomparisons.html" data-busy="Signing in…">'
+        "Sign in with Microsoft</a>"
+    ) in page
+    assert "<form" not in page
     assert 'type="password"' not in page
 
 

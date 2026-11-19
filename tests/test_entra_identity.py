@@ -183,7 +183,7 @@ def test_sign_out_ends_the_session_and_offers_entra_s_own_sign_out(oidc_console,
     )
     page = body.decode()
     assert status == 200 and "signed out of onetrace" in page
-    assert f'action="{fake.endpoint("logout")}"' in page and "Sign out of Microsoft too" in page
+    assert f'href="{fake.endpoint("logout")}"' in page and "Sign out of Microsoft too" in page
     assert Handler.session_store.get(s.session_id) is None
     assert "onetrace_session=;" in str(headers.get("Set-Cookie"))
     status, _b, headers, _ = _get(base, "/", headers={"Cookie": cookie})

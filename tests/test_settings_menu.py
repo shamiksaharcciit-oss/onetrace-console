@@ -214,13 +214,17 @@ with sync_playwright() as p:
     gear.click(); out.append(menu.is_visible())
     page.mouse.click(400, 600); out.append(menu.is_visible())
     page.set_viewport_size({"width": 390, "height": 800})
-    box = gear.bounding_box(); out.append(box is not None and box["y"] < 60 and box["x"] > 300)
+    #: At the top, in the bar, beside the menu button and never on it.
+    box = gear.bounding_box(); fold = page.locator('[popovertarget="frame-menu"]').bounding_box()
+    out.append(box is not None and fold is not None and box["y"] < 60 and box["x"] > 200
+               and box["x"] + box["width"] <= fold["x"])
     gear.focus(); page.keyboard.press("Enter"); out.append(menu.is_visible())
     print(out)
     b.close()
 """
 
 
+@pytest.mark.browser
 @pytest.mark.skipif(
     not BROWSER_PYTHON, reason="ONETRACE_BROWSER_PYTHON names no Python with Playwright's Chromium (the gate sets it)"
 )

@@ -43,6 +43,9 @@ class Identity:
     role: str
     #: time.time() at which the session ends.
     expires_at: float
+    #: The `roles` claim's values as the token gave them, each text: read against each team's `role_claim`,
+    #: at sign-in only.
+    app_roles: tuple[str, ...] = ()
 
 
 def role_of(claims: dict) -> str:
@@ -71,4 +74,5 @@ def identity(claims: dict, *, session_max_hours: int, now: float) -> Identity:
         display_name=shown if isinstance(shown, str) else "",
         role=role,
         expires_at=expires_at,
+        app_roles=tuple(r for r in claims.get("roles") or () if isinstance(r, str)),
     )

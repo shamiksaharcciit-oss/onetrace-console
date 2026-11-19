@@ -9,6 +9,7 @@ import ssl
 from html import escape
 from http.cookies import SimpleCookie
 from pathlib import Path
+from urllib.parse import quote
 
 SESSION_COOKIE = "onetrace_session"
 CSRF_COOKIE = "onetrace_csrf"
@@ -158,7 +159,7 @@ def render_signed_out_page(entra_sign_out: str | None) -> str:
     """After sign-out through Entra ID: the console's session is ended; Entra's own sign-out is offered
     (its end-session endpoint), as signing out of the console does not sign anyone out of Microsoft."""
     if entra_sign_out:
-        offer = "<p>You are still signed in to Microsoft in this browser.</p>\n" + _button_to(
+        offer = "<p>You are still signed in to Microsoft in this browser.</p>\n" + _link_to(
             entra_sign_out, "Sign out of Microsoft too", busy="Signing out of Microsoft…", section="entra-sign-out"
         )
     else:
@@ -193,41 +194,31 @@ def _frame(title: str, body: str) -> str:
 """
 
 
-def _button_to(
-    action: str,
-    words: str,
-    *,
-    busy: str,
-    primary: bool = False,
-    fields: dict[str, str] | None = None,
-    section: str = "",
-) -> str:
-    """A button that goes somewhere: a GET form, in the console's button styles (`frame.BUTTON_CSS`), whose press
-    starts work and says so (`busy_script`)."""
-    hidden = "".join(
-        f'<input type="hidden" name="{escape(k, quote=True)}" value="{escape(v, quote=True)}">'
-        for k, v in (fields or {}).items()
-    )
+def _link_to(href: str, words: str, *, busy: str, primary: bool = False, section: str = "") -> str:
+    """A control that goes somewhere: a link, drawn in the console's button styles (`frame.BUTTON_CSS`), whose press
+    says it is working (`busy_script`). Never a form: every response carries `form-action 'self'`, and a
+    Chromium-based browser applies it to the redirect a form's submission is answered with, so a form that leads to
+    the identity provider, even through this console's own address, is blocked there."""
     marked = f' data-section="{section}"' if section else ""
-    if primary:
-        button = f'<button class="btn-primary" data-busy="{escape(busy, quote=True)}" type="submit">'
-    else:
-        button = f'<button class="btn-secondary" data-busy="{escape(busy, quote=True)}" type="submit">'
-    return f'<form method="get" action="{escape(action, quote=True)}"{marked}>{hidden}{button}{escape(words)}</button></form>'
+    kind = "btn-primary" if primary else "btn-secondary"
+    return (
+        f'<p{marked}><a class="{kind}" href="{escape(href, quote=True)}" data-busy="{escape(busy, quote=True)}">'
+        f"{escape(words)}</a></p>"
+    )
 
 
 def render_oidc_signin_page(next_path: str) -> str:
-    """Sign-in through Entra ID: one button, to the flow's start, carrying where to return."""
+    """Sign-in through Entra ID: one link drawn as a button, to the flow's start, carrying where to return (checked
+    there again: a same-origin path only)."""
     return _frame(
         "Sign in",
         "<h1>Sign in</h1>\n"
         "<p>This console signs you in with your organisation's Microsoft account.</p>\n"
-        + _button_to(
-            "/signin/oidc/start",
+        + _link_to(
+            "/signin/oidc/start?next=" + quote(next_path or "/", safe=""),
             "Sign in with Microsoft",
             busy="Signing in…",
             primary=True,
-            fields={"next": next_path or "/"},
             section="oidc-start",
         ),
     )
@@ -242,7 +233,7 @@ def render_oidc_refused_page(reason: str, *, no_role: bool = False) -> str:
         title,
         f"<h1>{escape(title)}</h1>\n"
         f'<p data-section="{section}">{escape(reason)}</p>\n'
-        + _button_to("/signin", "Start again", busy="Opening the sign-in page…"),
+        + _link_to("/signin", "Start again", busy="Opening the sign-in page…"),
     )
 
 

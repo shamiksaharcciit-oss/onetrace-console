@@ -28,6 +28,11 @@ def test_the_layout_check_names_the_three_kinds(examined):
         "signin-no-role": "signin/no-role",
         "settings-sign-out": "settings-sign-out",
         "signin-local": "signin/local",
+        "admin-people": "admin/people",
+        "admin-teams": "admin/teams",
+        "admin-audit": "admin/audit",
+        "forwarding-setup": "forwarding/setup",
+        "settings-forwarding": "settings-forwarding",
     }
     assert set(layout_check.SIGNIN_KINDS) <= set(layout_check.KINDS)
 

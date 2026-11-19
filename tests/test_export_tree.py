@@ -3,7 +3,7 @@ in a public export they skip, saying the export leaves the tool out; in this rep
 failure, named, never a skip. A public export is told by the export's own signal: it holds no `tools/export_public.py`
 (`tests/export_tree.py`), as the tests that read the export tool's never-ship list already take it.
 
-Shown on two trees built here: a fake export (no export tool, no rendered-check tools) and a fake private tree (the
+Shown on two trees built here: a fake export (no export tool, no rendered-check tools) and a fake repository tree (the
 export tool present, the rendered-check tools absent). The nine tests run in each, in a process of their own.
 """
 
@@ -124,7 +124,7 @@ def _module_reason(module: str) -> str:
 def expected(tree: str, key: tuple, outcome: str, said: str, platform: str = sys.platform) -> bool:
     """Whether one of the nine read as it should in a fake `tree`: on Windows, skipped in either tree for the reason
     its own module states (the nine come from two modules, each with its own); elsewhere, in an export skipped saying
-    the export leaves its tool out, and in a private tree failed naming the missing tool."""
+    the export leaves its tool out, and in the repository's tree failed naming the missing tool."""
     if platform == "win32":
         return outcome == "skipped" and _module_reason(key[0]) in said
     if tree == "export":
@@ -146,7 +146,7 @@ def test_in_a_public_export_the_nine_skip_saying_the_export_leaves_their_tool_ou
 
 def test_in_the_private_tree_a_missing_tool_fails_named_never_skips(trees, examined):
     got = trees["private"]
-    examined(len(got), "tests in a fake private tree")
+    examined(len(got), "tests in a fake repository tree")
     assert set(got) == NINE
     for key, (outcome, said) in got.items():
         assert expected("private", key, outcome, said), (key, outcome, said)

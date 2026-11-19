@@ -1,0 +1,180 @@
+# Item 8's candidates: onetrace 0.8.0's own vectors
+
+`accept/` holds seventeen of onetrace 0.8.0's own accept vectors, copied byte for byte from its release sdist
+(`onetrace-0.8.0.tar.gz`, `sha256:57e5f8e3c1ff825f11d0554debae336da7477b728b72c3bf3c91d6f0324b3fb3`), folder
+`tests/format_0_4/`. onetrace's `tests/format_0_4/INDEX.json` gives each file's sha256, and these are the same. Each is
+invented example data, written by onetrace's own `make_vectors.py`; no model was called.
+
+What each is, after INDEX.json's own words (A17's shortened):
+
+- `accept/A02-closed-recorder`: a Recorder run, closed by exit: its close receipt last
+- `accept/A03-rerun-stopped-labelled`: a twin stopped before b, a step labelled write: onetrace.ended_by 're-run stopped before b: effect write (declared on the stage)'
+- `accept/A04-rerun-stopped-not-recorded`: a twin stopped before b, a step with no label: onetrace.ended_by 're-run stopped before b: effect not recorded'
+- `accept/A05-auto-run`: an auto run recorded by this release's onetrace-auto (httpx 0.28.1, openai 1.109.1), its output files kept: an httpx GET and an openai chat completion, each answered by httpx.MockTransport; the hooked steps with their auto blocks, effect_label and outputs (status and response; the model-call record), the manifest's auto block, the open boundary
+- `accept/A06-twin`: a twin of vector-base with vector-other's configuration
+- `accept/A07-counterfactual`: vector-base with vector-other's output put in at b
+- `accept/A08-reproduce`: a plain reproduce of vector-base, writes not allowed
+- `accept/A09-check-run`: a check's own run: the reserved onetrace.check stage
+- `accept/A10-check-produced-run`: the run a reproduce check produced, from b
+- `accept/A11-empty-config-expectations`: outputs[].empty on every output (c's is empty), config_kept on a, expectations on b
+- `accept/A13-model-call-1-1`: a model-call-record/1.1 of each hosted level, with its steps file (hosted_l2.md 2): L1-hosted with log probabilities none; L2-hosted with 3 asked, 3 and 2 returned, rounded-2
+- `accept/A17-model-call-1-1-self-hosted`: a model-call-record/1.1 of each self-hosted level, written with its steps file by onetrace's capture.vllm over a fake shaped as vLLM 0.30.0's engine: L1 token ids; L2 the top-16 ids; L3 the top-16 ids and one digest per delivered token, the request ended by a stop string. The L3 digests are stand-ins over stand-in rows.
+- `accept/A18-config-kept-partial`: config_kept on a with overlap left out: partial 'true', the kept bytes' digest, not instrument.config_digest
+- `accept/A204-model-call-attempts`: minor 5: two attempts through the client's post, and the one retry they make
+- `accept/A205-model-call-failed`: minor 5: a call that failed after post: outcome error, its /1.1 record's output.* not observed
+- `accept/A208-framework-graph`: minor 5: nodes, a chat model, a tool asked for by the model, and a retriever, on a stand-in model
+- `accept/A32-state-read-write`: minor 5: one entry of each digest_form, recorded through ot.state.*: sql-rows/1 and sql-rows-ordered/1, bytes/1 (a write, the step labelled write), json/1, docs/1, vector-query/1, vector-change/1 and checkpoint/1 (digest_status)
+
+## The files
+
+- `accept/A02-closed-recorder/MANIFEST.json`: `sha256:dc372d7a3cfdf51572f81c07f8ca920d2e1ca7a9b31a9a476b63ef98c16414f6`
+- `accept/A02-closed-recorder/artifacts/01-a/out.json`: `sha256:3649771a8092b11d7dfa7ce387cbaccec8dbb7a733917ab682b3e3893adb34a5`
+- `accept/A02-closed-recorder/artifacts/02-b/out.json`: `sha256:10b3cf7aadb15b907075f5d7bff8ef7cfa858c395cb9fb6f729f57313e14cd69`
+- `accept/A02-closed-recorder/artifacts/03-c/out.json`: `sha256:821dbaa636e40990919f3a40495daef63aeadf7af7599006e9b4624f8e744028`
+- `accept/A02-closed-recorder/receipts/01-a.json`: `sha256:5b02272b49481cda5ed24be2375b05b80fc2a05116f30e40b0c8039671024964`
+- `accept/A02-closed-recorder/receipts/02-b.json`: `sha256:7ce726d468d0fd904ad1e0b511121e01c0000b2ee863aeca2589d418bdf2f0d5`
+- `accept/A02-closed-recorder/receipts/03-c.json`: `sha256:015d8de3b02433f5cf2257e8d76c4a68575bb9ae90bc10640b70da7ead44f0fe`
+- `accept/A02-closed-recorder/receipts/04-onetrace-close.json`: `sha256:2a7226d66754eb2e566f9673d7ed5e9c5f676b31dee6ab1ef65b0f9516081de8`
+- `accept/A03-rerun-stopped-labelled/MANIFEST.json`: `sha256:d676eaaa36db9351cf306602348f67d5aebfc37c132684e8e9c5a8df78cbc2b2`
+- `accept/A03-rerun-stopped-labelled/artifacts/01-a/out.json`: `sha256:3649771a8092b11d7dfa7ce387cbaccec8dbb7a733917ab682b3e3893adb34a5`
+- `accept/A03-rerun-stopped-labelled/receipts/01-a.json`: `sha256:01c7a187a5174a5b436de1593adcdea6d1cbd939a6ad1b75d9671e22d7bb9c47`
+- `accept/A03-rerun-stopped-labelled/receipts/02-onetrace-close.json`: `sha256:80a1c400dd2d155c3e9f9449dccbd6fe3b1a4f8e559e84ab0737f5028a00b5cd`
+- `accept/A04-rerun-stopped-not-recorded/MANIFEST.json`: `sha256:eab389d1f2152213d0f3174ae3d4f7fe2b656fbf4ba7f43785cf5563c8fb85d7`
+- `accept/A04-rerun-stopped-not-recorded/artifacts/01-a/out.json`: `sha256:3649771a8092b11d7dfa7ce387cbaccec8dbb7a733917ab682b3e3893adb34a5`
+- `accept/A04-rerun-stopped-not-recorded/receipts/01-a.json`: `sha256:45e58b27985e8e4b16317fc4c923fd2f28aa98b14c8ceb39205dc6430b752aa3`
+- `accept/A04-rerun-stopped-not-recorded/receipts/02-onetrace-close.json`: `sha256:0e1960e61f2837e1a66181eb09cffeebf13440b7506a8002a2029c61b676721a`
+- `accept/A05-auto-run/MANIFEST.json`: `sha256:d4f63b6a1fd4dfc03374116de2f96ac4c2bd44a3fa861af7885d95b95ef3486f`
+- `accept/A05-auto-run/artifacts/01-httpx-send_1/response`: `sha256:3b9de8f3bb4d65ebe964703b38c9ce2f3b40a58b33484e6eed8f92bbd5f10a4f`
+- `accept/A05-auto-run/artifacts/01-httpx-send_1/status`: `sha256:3d2e31593aa639799db53c6825b15a48325afb87dcf9e64e98e7e1118bcbf10f`
+- `accept/A05-auto-run/artifacts/02-openai-chat-completions-create_1/model_call.json`: `sha256:91f0983ba82a1ee88073e62e799ca8a8b50597938edad966eaf170dec281be97`
+- `accept/A05-auto-run/artifacts/02-openai-chat-completions-create_1/response`: `sha256:7d3c125f2e165ce391bbaa5a79319556779e0535dd3e9c18d5bc424b9934a57f`
+- `accept/A05-auto-run/receipts/01-httpx-send_1.json`: `sha256:8ac20cce9f1f133f14fcdacbd17ca8e834661e7dbfa6d0ffdf97db5926887ccd`
+- `accept/A05-auto-run/receipts/02-openai-chat-completions-create_1.json`: `sha256:51b1f4de053cdef62bf64cfe9fa472cba8f36a17d3ae54c42bd678040a45328c`
+- `accept/A05-auto-run/receipts/03-onetrace-close.json`: `sha256:5de41735409a696ff5a4ad2c214646d15d6e790160884ee047dbd1c7091a3e6b`
+- `accept/A06-twin/MANIFEST.json`: `sha256:0f2994833e8274b8f15124eaa003a3c5195876d972699fa8100c498880bdd9d8`
+- `accept/A06-twin/artifacts/01-a/out.json`: `sha256:3649771a8092b11d7dfa7ce387cbaccec8dbb7a733917ab682b3e3893adb34a5`
+- `accept/A06-twin/artifacts/02-b/out.json`: `sha256:10b3cf7aadb15b907075f5d7bff8ef7cfa858c395cb9fb6f729f57313e14cd69`
+- `accept/A06-twin/artifacts/03-c/out.json`: `sha256:821dbaa636e40990919f3a40495daef63aeadf7af7599006e9b4624f8e744028`
+- `accept/A06-twin/receipts/01-a.json`: `sha256:fb1dbf0fc3d29d92ff4c798f2bd835d0a2956dabea8f55318db8474c0760942e`
+- `accept/A06-twin/receipts/02-b.json`: `sha256:23f876ebbbf46a9881c898dee3138889ffd278bd4316f0bfafd715ce6a8e7f2c`
+- `accept/A06-twin/receipts/03-c.json`: `sha256:a46849a73816758fcdbeba19583c5f478bc8588a4219162525ffc082d83d7b69`
+- `accept/A06-twin/receipts/04-onetrace-close.json`: `sha256:ebc5e61d823234ec308f51762a8e66b1bc8b7d11ac93da9fe371b3169ab2590f`
+- `accept/A07-counterfactual/MANIFEST.json`: `sha256:64d09cf6c202befca04878b576c5bcea680982181e2a46d9f0b3944145c92244`
+- `accept/A07-counterfactual/artifacts/01-a/out.json`: `sha256:3649771a8092b11d7dfa7ce387cbaccec8dbb7a733917ab682b3e3893adb34a5`
+- `accept/A07-counterfactual/artifacts/02-b/out.json`: `sha256:e14a877b81dddc03c32c744ad7921539776a12950b7599f98201941db322003c`
+- `accept/A07-counterfactual/artifacts/03-c/out.json`: `sha256:821dbaa636e40990919f3a40495daef63aeadf7af7599006e9b4624f8e744028`
+- `accept/A07-counterfactual/receipts/01-a.json`: `sha256:0e7706c49b185dcc56bf901e2a14216cfb7fad3300540f7a4569199351ab1305`
+- `accept/A07-counterfactual/receipts/02-b.json`: `sha256:14453df4faf2c7846b96b9f7a534082fe3e7342520bfbfaa8e856c0d1d238644`
+- `accept/A07-counterfactual/receipts/03-c.json`: `sha256:0446006ba28fd0825e0e197416ef5723d35e0375b174295148b6a041216f585e`
+- `accept/A07-counterfactual/receipts/04-onetrace-close.json`: `sha256:3fae3cde3f824b637c55bbc65fada48bca6948d39c77b3644a90d205f45e0e30`
+- `accept/A08-reproduce/MANIFEST.json`: `sha256:951fad6600926f3239b70d4000ff88ae38acdcf790e977a9f0ba69cc2e0dd0d9`
+- `accept/A08-reproduce/artifacts/01-a/out.json`: `sha256:3649771a8092b11d7dfa7ce387cbaccec8dbb7a733917ab682b3e3893adb34a5`
+- `accept/A08-reproduce/artifacts/02-b/out.json`: `sha256:10b3cf7aadb15b907075f5d7bff8ef7cfa858c395cb9fb6f729f57313e14cd69`
+- `accept/A08-reproduce/artifacts/03-c/out.json`: `sha256:821dbaa636e40990919f3a40495daef63aeadf7af7599006e9b4624f8e744028`
+- `accept/A08-reproduce/receipts/01-a.json`: `sha256:aff4ee4efdbd93dc065ecd331e2e146b0cf271a1592689c7159e33b6c07ddf47`
+- `accept/A08-reproduce/receipts/02-b.json`: `sha256:5c01c6b2d2d89a3846487a120dc9ac80e3eb676a04e00140fef14d175113ecc3`
+- `accept/A08-reproduce/receipts/03-c.json`: `sha256:a39c5f71c072445f9ab850dbe81cefeaad272baa1dc0f208aff4771113654113`
+- `accept/A08-reproduce/receipts/04-onetrace-close.json`: `sha256:6e57b77755c9d9656db985e742fb20c76050293e601abbb185e599c0c51ed6f0`
+- `accept/A09-check-run/MANIFEST.json`: `sha256:9d3619db10576aeff42092e1b597a514762464cb7b39ddf0d716c715b672b89a`
+- `accept/A09-check-run/artifacts/01-onetrace-check/report.json`: `sha256:d737fb92f3a97d9ed1b5d0b8ef377993f42510d9ea0e82f0d74a329785ab0151`
+- `accept/A09-check-run/artifacts/01-onetrace-check/stderr_tail.txt`: `sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855`
+- `accept/A09-check-run/artifacts/01-onetrace-check/stdout.txt`: `sha256:e2e7317f77e18b8748a9d599c319923436cc39e578b2f26d578e859a147b9f49`
+- `accept/A09-check-run/receipts/01-onetrace-check.json`: `sha256:7d36208330a7c6336d8620c368f8eb359a17e734ef7088db300cfce5bf3018af`
+- `accept/A09-check-run/receipts/02-onetrace-close.json`: `sha256:edc18f30365991d2559464fb4826bf6f17b1d62dbabee8a144ee3a3e076eb36c`
+- `accept/A10-check-produced-run/MANIFEST.json`: `sha256:7f7119ae238c538ceb6d37d5208680a3986cf567d21de835e5b80219413db7ed`
+- `accept/A10-check-produced-run/artifacts/01-a/out.json`: `sha256:3649771a8092b11d7dfa7ce387cbaccec8dbb7a733917ab682b3e3893adb34a5`
+- `accept/A10-check-produced-run/artifacts/02-b/out.json`: `sha256:e14a877b81dddc03c32c744ad7921539776a12950b7599f98201941db322003c`
+- `accept/A10-check-produced-run/artifacts/03-c/out.json`: `sha256:821dbaa636e40990919f3a40495daef63aeadf7af7599006e9b4624f8e744028`
+- `accept/A10-check-produced-run/receipts/01-a.json`: `sha256:e11a25d0c75f3b35977f80946a8aa17f94c0cc5a0a990a80055df838f0aa9cb4`
+- `accept/A10-check-produced-run/receipts/02-b.json`: `sha256:bc9bdd560a8316c26fd256bfd577a009895b9535dbaee87acf28ef0f1abd39d6`
+- `accept/A10-check-produced-run/receipts/03-c.json`: `sha256:1a6e706bf33f048aaa4fb274ae2ab51ce6a158c653de8506e94f90cf182efb34`
+- `accept/A10-check-produced-run/receipts/04-onetrace-close.json`: `sha256:8280a7f87275c65767628cce42737128736144cb8a04e5367ea05dffe93eef9b`
+- `accept/A11-empty-config-expectations/MANIFEST.json`: `sha256:6cbd2d9f738deac62ca03fd8c6114c83a6893fa771d842197c3722e47403c06a`
+- `accept/A11-empty-config-expectations/artifacts/01-a/out.json`: `sha256:3649771a8092b11d7dfa7ce387cbaccec8dbb7a733917ab682b3e3893adb34a5`
+- `accept/A11-empty-config-expectations/artifacts/02-b/out.json`: `sha256:6b7754e5d18700b6d1474f3b3d9245366372a82698484c98149faf12b22762f1`
+- `accept/A11-empty-config-expectations/artifacts/03-c/out.json`: `sha256:4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945`
+- `accept/A11-empty-config-expectations/config/01-a/config.json`: `sha256:a034738a4cba13157b75e97e84345b2eef08cb70ed9bf6464ee524c044d22df4`
+- `accept/A11-empty-config-expectations/receipts/01-a.json`: `sha256:cdc142de228b2795bb403877ccfd5322e3311048af8722728f8f94642924a419`
+- `accept/A11-empty-config-expectations/receipts/02-b.json`: `sha256:b4a5c7ba3abd1e2face4924aafd81c7d784d0eda9f21842d4f55e10f61961135`
+- `accept/A11-empty-config-expectations/receipts/03-c.json`: `sha256:613371e186153efb83f42ad4e3649bd7b0a997c37250581d2e147dd6f7d0f273`
+- `accept/A11-empty-config-expectations/receipts/04-onetrace-close.json`: `sha256:acecf9fd72b27caf83e1b83be9003557fc188f9ba05e3880b23c2639270828fd`
+- `accept/A13-model-call-1-1/MANIFEST.json`: `sha256:f101ac2442e74833ab366caab958b3b83f842d87e8cb4948aa5e3526afe8499a`
+- `accept/A13-model-call-1-1/artifacts/01-answer-l1/answer.json`: `sha256:dff0e62dc87e0b230e7bbe55f37d82dc0465180f96919d559fef1fad9a8ad0fe`
+- `accept/A13-model-call-1-1/artifacts/01-answer-l1/model_call.json`: `sha256:b547f092ff93b2b1821cbb8efba1bae66abece14117fae2464cae88075f6ff93`
+- `accept/A13-model-call-1-1/artifacts/01-answer-l1/model_call.steps.json`: `sha256:4dc781a1d58367d42adb74480653560ae5f36b84e41068ee398174d663703008`
+- `accept/A13-model-call-1-1/artifacts/02-answer-l2/answer.json`: `sha256:dff0e62dc87e0b230e7bbe55f37d82dc0465180f96919d559fef1fad9a8ad0fe`
+- `accept/A13-model-call-1-1/artifacts/02-answer-l2/model_call.json`: `sha256:eb1bb23c2681ce561304f3ee9361af14e71bb4226b473ccd60136fcc6024eb56`
+- `accept/A13-model-call-1-1/artifacts/02-answer-l2/model_call.steps.json`: `sha256:5e63a276abff7e77ca9bd88e56bf7240fe07c8e7af3fdffd2744f5a2c8e9c5e7`
+- `accept/A13-model-call-1-1/receipts/01-answer-l1.json`: `sha256:bc83deccd34d890a9452bd6ff14a53f3649ecf7874f167bf5bb631b0815894bc`
+- `accept/A13-model-call-1-1/receipts/02-answer-l2.json`: `sha256:76763a461d9428cfa0f371c147e59c1906f17833c72d0c5031807c4125dfb041`
+- `accept/A13-model-call-1-1/receipts/03-onetrace-close.json`: `sha256:9e4b7f9a58d44344afedcf3a1135c73239e1821c9e5e9332d06d765cd92194a3`
+- `accept/A17-model-call-1-1-self-hosted/MANIFEST.json`: `sha256:5b97f5995926ac62bde3a122eaa7e821d8a5e5639c5da4f96af42b1ff1591645`
+- `accept/A17-model-call-1-1-self-hosted/artifacts/01-generate-l1/answer.json`: `sha256:1e3fd606cdc9604d8ff67d38fc186f7d52e88f276244070267dbcb4b67dbdda9`
+- `accept/A17-model-call-1-1-self-hosted/artifacts/01-generate-l1/model_call.json`: `sha256:8558f03b36a2919dc53c8e87f294301fe0ca98cdccba3faa650e8ead806d9781`
+- `accept/A17-model-call-1-1-self-hosted/artifacts/01-generate-l1/model_call.steps.json`: `sha256:bb8c79a99685ab1c89673971d3d05dbe38bb0857eb3498dd6b3018d10fa4eb88`
+- `accept/A17-model-call-1-1-self-hosted/artifacts/02-generate-l2/answer.json`: `sha256:1e3fd606cdc9604d8ff67d38fc186f7d52e88f276244070267dbcb4b67dbdda9`
+- `accept/A17-model-call-1-1-self-hosted/artifacts/02-generate-l2/model_call.json`: `sha256:9858514906f0bd65055a772a9e51b11c182b733d22b6d53d9f517058b26e0bc6`
+- `accept/A17-model-call-1-1-self-hosted/artifacts/02-generate-l2/model_call.steps.json`: `sha256:5ac241d6dafa562341afe1cf57c45377b43689b7a2fd0e87c60d682d18c5a674`
+- `accept/A17-model-call-1-1-self-hosted/artifacts/03-generate-l3/answer.json`: `sha256:1e3fd606cdc9604d8ff67d38fc186f7d52e88f276244070267dbcb4b67dbdda9`
+- `accept/A17-model-call-1-1-self-hosted/artifacts/03-generate-l3/model_call.json`: `sha256:46a04575c7c6b2a01b8a71d8ccac9b66fa8c1f2cd203f52677efede05c1be661`
+- `accept/A17-model-call-1-1-self-hosted/artifacts/03-generate-l3/model_call.steps.json`: `sha256:01f312227caf09d24168d32e8496ca270b39817ed5cb47f3b7d48eb5d2ac2b03`
+- `accept/A17-model-call-1-1-self-hosted/receipts/01-generate-l1.json`: `sha256:dce0744a3f01230bbe9404ad11617d4866debc0f62f7ab199dacec23fae826a9`
+- `accept/A17-model-call-1-1-self-hosted/receipts/02-generate-l2.json`: `sha256:04cb64ffe745ef678971546333863b25e3b6defff79d013e6bd35294fb48816d`
+- `accept/A17-model-call-1-1-self-hosted/receipts/03-generate-l3.json`: `sha256:1402a5c94e42800b374eaa3b7cbc6c4d1e679caa07359f30c02e4aa4dfc3c05d`
+- `accept/A17-model-call-1-1-self-hosted/receipts/04-onetrace-close.json`: `sha256:de13043ef5f5594565a26e1f51c655a4fed4e6fdce212b9572be1e09fcd01b2e`
+- `accept/A18-config-kept-partial/MANIFEST.json`: `sha256:c439cb76d1c077671ea8758ccfac07649a5eb033a524fe82b629fbb6beb95ff0`
+- `accept/A18-config-kept-partial/artifacts/01-a/out.json`: `sha256:3649771a8092b11d7dfa7ce387cbaccec8dbb7a733917ab682b3e3893adb34a5`
+- `accept/A18-config-kept-partial/artifacts/02-b/out.json`: `sha256:6b7754e5d18700b6d1474f3b3d9245366372a82698484c98149faf12b22762f1`
+- `accept/A18-config-kept-partial/artifacts/03-c/out.json`: `sha256:4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945`
+- `accept/A18-config-kept-partial/config/01-a/config.json`: `sha256:507e1f40a656c0b44426ad279e2472193fb9b2e8b7fc2bfd30537c7a33866e77`
+- `accept/A18-config-kept-partial/receipts/01-a.json`: `sha256:6da3acb83d7e4eeef419c6e7c991583ba6502306c026a9b0bab61ccec43c01dd`
+- `accept/A18-config-kept-partial/receipts/02-b.json`: `sha256:7f4e0bdfb8b4228aaa8a8543610b143414ac3ec4662be799a339248cec09e250`
+- `accept/A18-config-kept-partial/receipts/03-c.json`: `sha256:42ecda910b4da91fd23762518bdb506ab8e4c1ea00d42a8fb839e9816e1b78f6`
+- `accept/A18-config-kept-partial/receipts/04-onetrace-close.json`: `sha256:35cc2b0de366b423505ca65a4fcb475cd4a3f04f7db22692a7a9dd5edd002fd0`
+- `accept/A204-model-call-attempts/MANIFEST.json`: `sha256:694ab6a596bee36ba3323dc21ea8d770c8582969b904214192d85ece34cc22d0`
+- `accept/A204-model-call-attempts/artifacts/01-answer-l1/answer.json`: `sha256:dff0e62dc87e0b230e7bbe55f37d82dc0465180f96919d559fef1fad9a8ad0fe`
+- `accept/A204-model-call-attempts/artifacts/01-answer-l1/model_call.json`: `sha256:b547f092ff93b2b1821cbb8efba1bae66abece14117fae2464cae88075f6ff93`
+- `accept/A204-model-call-attempts/artifacts/01-answer-l1/model_call.steps.json`: `sha256:4dc781a1d58367d42adb74480653560ae5f36b84e41068ee398174d663703008`
+- `accept/A204-model-call-attempts/receipts/01-answer-l1.json`: `sha256:1868ade8a0d3f8eda7ac254d421c86e5bd3ab06ad2f4d2272061994235d30c06`
+- `accept/A204-model-call-attempts/receipts/02-onetrace-close.json`: `sha256:9d8da10aac618fa01d7a69928f81b5c20a5d3fa687f047274aa17065656070ab`
+- `accept/A205-model-call-failed/MANIFEST.json`: `sha256:5c80d3edbebd62556803aaaf3ed44a62786108f35073403f984172d9f3997dff`
+- `accept/A205-model-call-failed/artifacts/01-answer-l1/answer.json`: `sha256:dff0e62dc87e0b230e7bbe55f37d82dc0465180f96919d559fef1fad9a8ad0fe`
+- `accept/A205-model-call-failed/artifacts/01-answer-l1/model_call.json`: `sha256:575bd3292555c94d61031bb6599518583413be44735f53a6a0fb470bfce256a3`
+- `accept/A205-model-call-failed/artifacts/01-answer-l1/model_call.steps.json`: `sha256:4dc781a1d58367d42adb74480653560ae5f36b84e41068ee398174d663703008`
+- `accept/A205-model-call-failed/receipts/01-answer-l1.json`: `sha256:f0875c39faa1cdf046659c25673f4877c140ac824711991011e844105bb13e9e`
+- `accept/A205-model-call-failed/receipts/02-onetrace-close.json`: `sha256:e52a916cfd2c25f25cf2064907472bc2319ad3b4c407365a039345ba7ccbda12`
+- `accept/A208-framework-graph/MANIFEST.json`: `sha256:c4091d339bf190fd6717a1f54a4c1afd306df2642b318fc9a085f116d96ca3ba`
+- `accept/A208-framework-graph/artifacts/01-langchain-retriever_1/output`: `sha256:f14d3be04afe12c156299fb64163b63eb5297de2f171ab28aa0cb86467de364e`
+- `accept/A208-framework-graph/artifacts/02-langgraph-node_look-1/output`: `sha256:44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a`
+- `accept/A208-framework-graph/artifacts/03-langchain-chat-model_1/model_call.json`: `sha256:a5e13edcbca2919daaf3f111165856786f86b4c62e3186cfaf151c8730e053e8`
+- `accept/A208-framework-graph/artifacts/03-langchain-chat-model_1/response`: `sha256:791f79bdbe17bd2ed7ca082034e157f405bae2e89b53d58bc625219e5f348dd9`
+- `accept/A208-framework-graph/artifacts/04-langgraph-node_agent-1/output`: `sha256:ac3be9a9ed313b370f4ae12af0252ba2d863191ce56ab862fc196f8b2c30bddc`
+- `accept/A208-framework-graph/artifacts/05-langchain-tool_add-1/result.json`: `sha256:a4aab3f1f08004e907d2357fafe74cab56359bcb32e23f52e7eb1d3a9c0a2ad3`
+- `accept/A208-framework-graph/artifacts/06-langgraph-node_tools-1/output`: `sha256:6f78dcd23e62d61b508f8dbac9bf43b504854a22ac90b3a82f0d1d1530e6f42d`
+- `accept/A208-framework-graph/messages/03-langchain-chat-model_1/1`: `sha256:42d2f469062d09f81e6d65141f0cb81919262bb19451562bbf4896cdb580eb77`
+- `accept/A208-framework-graph/messages/04-langgraph-node_agent-1/1`: `sha256:1cd8c630fab358e916a25fc99090fa4056e9dea63608eb6592d40e6e697ff939`
+- `accept/A208-framework-graph/messages/05-langchain-tool_add-1/1`: `sha256:05298c26c63e511c960d46e1a963ee5098210b619ba6e7e42922004f164c9418`
+- `accept/A208-framework-graph/messages/06-langgraph-node_tools-1/1`: `sha256:05298c26c63e511c960d46e1a963ee5098210b619ba6e7e42922004f164c9418`
+- `accept/A208-framework-graph/receipts/01-langchain-retriever_1.json`: `sha256:fc094963d83db919be754580aad5d23701739ebdc74bb3fa1ec71d315fe7deed`
+- `accept/A208-framework-graph/receipts/02-langgraph-node_look-1.json`: `sha256:78d6c3a7ff327842d3628594e99f0e9eb47d5bdfc293c566ec7e4ba1595554cc`
+- `accept/A208-framework-graph/receipts/03-langchain-chat-model_1.json`: `sha256:5dc3a1d26df47a46ebb937d1da3f9a2e9bbd2d447125e3f558757f440f1d9250`
+- `accept/A208-framework-graph/receipts/04-langgraph-node_agent-1.json`: `sha256:d1e39d3ff6a157ea34c202d0a155468ba34c8d15d462380914d5599e5bd8a286`
+- `accept/A208-framework-graph/receipts/05-langchain-tool_add-1.json`: `sha256:1f7d908c8cdb96ca3580ce338b0f0af33f05e5d0aed87d8b872751c2c2bde761`
+- `accept/A208-framework-graph/receipts/06-langgraph-node_tools-1.json`: `sha256:fbf0d1fd8740f7d6cde54e8c371fe6099fcfeccd60b65dbd91cba6459b1e449e`
+- `accept/A208-framework-graph/receipts/07-onetrace-close.json`: `sha256:b8217dfa8f7ca0503cd3a40ea68d3ef52928860de7ad83c5bc0a38e73cd40c1c`
+- `accept/A32-state-read-write/MANIFEST.json`: `sha256:551a0b167cc7df7551788c570aafa6a0ff62a8c5994d471aadf2d065f5ccaa7f`
+- `accept/A32-state-read-write/artifacts/01-sql/out.json`: `sha256:b8513f1a0c28d8dd9b3b175bee09eabca97c4819614ec9a2df7442a5b4eff8d7`
+- `accept/A32-state-read-write/artifacts/02-object/out.json`: `sha256:b8513f1a0c28d8dd9b3b175bee09eabca97c4819614ec9a2df7442a5b4eff8d7`
+- `accept/A32-state-read-write/artifacts/03-kv/out.json`: `sha256:b8513f1a0c28d8dd9b3b175bee09eabca97c4819614ec9a2df7442a5b4eff8d7`
+- `accept/A32-state-read-write/artifacts/04-docs/out.json`: `sha256:b8513f1a0c28d8dd9b3b175bee09eabca97c4819614ec9a2df7442a5b4eff8d7`
+- `accept/A32-state-read-write/artifacts/05-vector-query/out.json`: `sha256:b8513f1a0c28d8dd9b3b175bee09eabca97c4819614ec9a2df7442a5b4eff8d7`
+- `accept/A32-state-read-write/artifacts/06-vector-change/out.json`: `sha256:b8513f1a0c28d8dd9b3b175bee09eabca97c4819614ec9a2df7442a5b4eff8d7`
+- `accept/A32-state-read-write/artifacts/07-checkpoint/out.json`: `sha256:b8513f1a0c28d8dd9b3b175bee09eabca97c4819614ec9a2df7442a5b4eff8d7`
+- `accept/A32-state-read-write/receipts/01-sql.json`: `sha256:ed451ad90adc89e171802b115e555813b111ce9041da42e2bed065e7c350a7d6`
+- `accept/A32-state-read-write/receipts/02-object.json`: `sha256:e05206883b1c5052469bad35cc9bd0b127f37efbc4255a5a9a94a0acb0ecead2`
+- `accept/A32-state-read-write/receipts/03-kv.json`: `sha256:060e55dbec256436eddd2fd57f6399009f224d980be7f87f78375c97b7b33d1f`
+- `accept/A32-state-read-write/receipts/04-docs.json`: `sha256:ed343d4f2791ea4d0e33497c45eab3dbe59c59b017b0f85507aaa715c73116af`
+- `accept/A32-state-read-write/receipts/05-vector-query.json`: `sha256:c2ff033232520fce253f2a8756133378c25301bd8c55d8c621deb48a19e37769`
+- `accept/A32-state-read-write/receipts/06-vector-change.json`: `sha256:7e77dde67476018867977e27cb5b063bceede5185130088f847d4cec0095f858`
+- `accept/A32-state-read-write/receipts/07-checkpoint.json`: `sha256:0b6e5dd919c93ba92c324b6ca53491abacbfe8292876bc1611b6eb5c8e3450fd`
+- `accept/A32-state-read-write/receipts/08-onetrace-close.json`: `sha256:089e0301a560b810467fe3468674718424f21c106223bd1d3aa773ad952fe9dd`

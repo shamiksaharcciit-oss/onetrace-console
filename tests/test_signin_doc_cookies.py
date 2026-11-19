@@ -1,4 +1,4 @@
-"""The sign-in design note says what each cookie is: the session cookie is `HttpOnly`, and the CSRF cookie
+"""The sign-in document says what each cookie is: the session cookie is `HttpOnly`, and the CSRF cookie
 is readable by the page, by design (a page's script sends it back as `X-CSRF-Token`). Held against the
 `Set-Cookie` headers a sign-in answers with. The note is read only where it is (the public export leaves
 docs/design/ out)."""
@@ -11,6 +11,7 @@ import pytest
 
 from tests.test_signin_flow import _get_signin_form, _post, signin_enabled  # noqa: F401
 
+#: The sign-in and roles design document, named from parts.
 NOTE = Path(__file__).resolve().parent.parent / "docs" / "design" / "signin-and-roles.md"
 SESSION_LINE = "The session cookie is `Secure`, `HttpOnly` and `SameSite=Strict`."
 CSRF_LINE = (
@@ -22,7 +23,7 @@ CSRF_LINE = (
 @pytest.mark.skipif(not NOTE.is_file(), reason="the public export leaves docs/design/ out")
 def test_the_note_says_the_session_cookie_is_httponly_and_the_csrf_cookie_readable(examined):
     text = " ".join(NOTE.read_text(encoding="utf-8").split())
-    examined(1, "design note")
+    examined(1, "sign-in document")
     assert text.count(SESSION_LINE) == 2 and text.count(CSRF_LINE) == 2
     assert "Cookies are `Secure`, `HttpOnly`" not in text and "Cookies carry `Secure`, `HttpOnly`" not in text
 

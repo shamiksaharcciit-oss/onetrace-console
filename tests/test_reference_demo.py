@@ -237,7 +237,7 @@ def _verifier() -> str:
 
     found = console_script("onetrace-verify")
     if found is None:
-        pytest.fail("onetrace-verify is not installed; see PINS.md")
+        pytest.fail("onetrace-verify is not installed; see the repository's record of its pins")
     return str(found)
 
 
@@ -377,8 +377,8 @@ def test_each_run_page_renders_with_its_ladder_and_no_records(loaded):
         case = unescape(re.sub(r"<[^>]+>", " ", whole_folds(pages[CASE])))
         assert "No records · This console does not record authorization." in re.sub(r"\s+", " ", case)
         #: The check holds, and was run without `--require-artifacts` (the pinned verifier
-        #: has no such flag), so rung 1 is "not checked", never yes, as the confirmation review
-        #: held it.
+        #: has no such flag), so rung 1 is "not checked", never yes, as it was confirmed
+        #: earlier.
         assert 'data-rung="records-agree" data-state="not-checked"' in pages[CASE]
         assert "did not require the run's output files" in case
         assert "No authorization records for this run" in pages[AUTHORIZATION]
@@ -456,9 +456,9 @@ def test_files_beside_the_chain_are_accepted_kept_and_not_the_chain(tmp_path):
     assert 'data-state="contradicts"' in case, "the page reads the anchor row and contradicts"
 
 
-# ------------------------------------------------------- item 5: the demo as a graph (board 2)
+# ------------------------------------------------------------------------ the demo as a graph
 
-#: Board 2's approved graph, over stage names.
+#: The approved graph, over stage names, as the run page's design draws it.
 APPROVED = {
     ("request", "context"),
     ("request", "tests"),

@@ -48,7 +48,10 @@ class ExpectationsError(ValueError):
 def _path(store, key: str) -> Path:
     if not _KEY.fullmatch(key or ""):
         raise ExpectationsError(f"not a run key: {key!r}")
-    return Path(store.root) / FOLDER / f"{key}.json"
+    path = store.kept_path(FOLDER, key, f"{key}.json")
+    if path is None:
+        raise ExpectationsError(f"no run {key!r} is held")
+    return path
 
 
 def kept(store, key: str) -> dict | None:

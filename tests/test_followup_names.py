@@ -39,7 +39,7 @@ def _outside_verbatim(page: str) -> str:
     return re.sub(r"<pre[^>]*>.*?</pre>", "", page, flags=re.S)
 
 
-# ------------------------------------------------------------------------------- §5
+# --------------------------------------------------------------------- long names, capped
 
 
 def test_a_long_run_id_is_capped_on_every_page_with_its_record_offered(files, store):
@@ -107,8 +107,8 @@ def test_a_runs_list_row_and_digests_are_kept_when_it_is_checked(checked):  # no
 
 
 def test_lists_and_home_read_no_receipt_of_a_checked_run(checked, store, monkeypatch):  # noqa: F811
-    """Every later render read every stored run's receipts again (the fourth review's
-    probe_after: one upload of three 14 MB receipts made every later ingest take 40 s)."""
+    """Every later render read every stored run's receipts again (a probe found
+    it: one upload of three 14 MB receipts made every later ingest take 40 s)."""
     import onetrace_console.checks as checks
     import onetrace_console.viewer.record as record
 
@@ -159,7 +159,7 @@ def test_a_run_stored_before_this_batch_is_re_derived_at_start_up(
     )
 
 
-# ------------------------------------------------------------------------------- §7
+# ---------------------------------------------------------- a lone surrogate in the identity
 
 
 def test_a_lone_surrogate_in_the_run_id_is_still_refused(files, store):

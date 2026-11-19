@@ -10,7 +10,10 @@ name, outcome, instrument (its id, version and configuration digest), settings
 (`assertions.constants`, by recorded name and value), inputs and outputs (name and digest); the
 manifest's declarations; the verifier's verdict and the names of its
 rows that read FAIL or NOT-RUN; the model-call records' fields where a step's output holds one; and
-whether a person marked the run as a benchmark (`benchmarks`). Per held comparison: the first
+whether a person marked the run as a benchmark (`benchmarks`); and each step's store writes in format 0.5 (the store,
+the key's digest or the key where the record keeps it in plain, the version and the digest), for lineage
+(`store_state`); the run's origin, where its record names one (`service_link`); and each step's tokens and cost as
+its model-call records hold them (`usage`). Per held comparison: the first
 differing step and what differed there, from the comparison's own short answer data. No text is
 indexed and no kept input is read.
 
@@ -23,13 +26,34 @@ from __future__ import annotations
 
 import json
 import re
+from contextlib import contextmanager
+from contextvars import ContextVar
 from dataclasses import dataclass
+from datetime import UTC
 from pathlib import Path
 
 from onetrace_console.bounded_json import load_json_bounded
 
-#: 0.2 adds each step's `instrument.config_digest` (`store_read` reads runs by it).
-FORMAT = "onetrace-console-run-index/0.2"
+#: 0.2 adds each step's `instrument.config_digest` (`store_read` reads runs by it); 0.3 each step's kind and own
+#: agent, and the run's agent, as a format 0.5 record holds them (`step_kinds`); and each step's store writes
+#: (`state_writes`), for lineage. 0.3 had not been released when it gained the writes, so it is still 0.3: an index
+#: written before it did lacks `LINEAGE`, and a page that would read lineage from one says so.
+FORMAT = "onetrace-console-run-index/0.3"
+#: The index's own member saying it holds each step's store writes: an index without it was written before it did.
+LINEAGE = "lineage"
+#: The index's own member saying it holds each step's tokens and cost (`usage`): an index without it was written
+#: before it did.
+USAGE = "usage"
+#: The index's own member saying each run holds its list entry (`LIST`): the words the runs list shows of it, which the
+#: Runs page (`runs_page`) draws and the terms `agree:`, `word:`, `after:` and `before:` read. An index without it was
+#: written before it did.
+LIST = "list"
+#: The terms that read a run's list entry.
+LIST_TERMS = ("agree", "word", "after", "before")
+#: "Records agree", as every page reads it (`records.state`).
+AGREE_STATES = ("yes", "no", "couldnt-check", "not-checked")
+#: The verifier's rows on a receipt whose writes are not indexed where they FAIL (`store_state`).
+WRITE_ROWS = ("state entries", "state_writes against effect_label")
 #: The derived file, beside the store's own folder under the store root.
 FILE_NAME = "run_index.json"
 #: The manifest's declarations the index keeps, each as written.
@@ -74,6 +98,12 @@ GRAMMAR = (
     ("pipeline:<id>", "the console's pipeline, P1, P2, ..."),
     ("since:<run>", "runs that arrived after that run"),
     ("benchmark:yes|no", "marked as a benchmark, or not"),
+    ("kind:<kind>", "a step's recorded kind, format 0.5: a hyphen for a space, as kind:tool-call"),
+    ("agent:<name>", "the run's agent, or a step's own, format 0.5"),
+    ("agree:yes|no|couldnt-check|not-checked", "whether the records agree, as every page reads it"),
+    ("word:<word>", "the run's verdict against its pipeline's reference, in onetrace's word"),
+    ("after:<date or time>", "runs whose record starts after that time, or on or after that day"),
+    ("before:<date or time>", "runs whose record starts before that time, or before that day"),
 )
 
 
@@ -162,13 +192,17 @@ def _run_entry(run, order: int, label: str, store) -> dict:
         steps = _steps(run, store)
     except Exception:  # noqa: BLE001 - a record that can't be read is indexed by its ids alone
         steps = []
+    verdict, rows = _check(run, store)
+    failing = set(rows.get("FAIL", []))
+    from onetrace_console import step_kinds, usage
+
     entries = []
     for s in steps:
         receipt = s["receipt"]
         stage = _stage if isinstance(_stage := receipt.get("stage"), dict) else {}
         instrument = _instrument if isinstance(_instrument := receipt.get("instrument"), dict) else {}
         outcome = _outcome if isinstance(_outcome := receipt.get("outcome"), dict) else {}
-        entry = {
+        entry: dict = {
             "name": str(stage.get("name", "")),
             "index": str(s["index"]),
             "outcome": str(outcome.get("class", "")),
@@ -184,8 +218,38 @@ def _run_entry(run, order: int, label: str, store) -> dict:
         calls = _model_calls(receipt, s["file"], files, store)
         if calls:
             entry["model_calls"] = calls
+        if step_kinds.holds_members(receipt):
+            kind = (receipt.get("step") or {}).get("kind") if isinstance(receipt.get("step"), dict) else None
+            if isinstance(kind, str) and not failing & {f"{s['file']}: {n}" for n in step_kinds.KIND_ROWS}:
+                entry["kind"] = kind
+            agent = receipt.get("agent")
+            if isinstance(agent, dict) and isinstance(agent.get("name"), str) and f"{s['file']}: agent" not in failing:
+                entry["agent"] = agent["name"]
+            #: Each model-call record's tokens and cost, as recorded, with its model (`usage`); none where the
+            #: verifier FAILs the step's `model_usage`.
+            if f"{s['file']}: model_usage" not in failing:
+                models = {
+                    c["file"]: c["fields"]["model"]["value"]
+                    for c in calls
+                    if isinstance(c.get("fields"), dict)
+                    and c["fields"].get("model", {}).get("status") == "observed"
+                    and isinstance(c["fields"]["model"].get("value"), str)
+                }
+                used = [{**e, "model": models.get(e["record"])} for e in usage.entries(receipt)]
+                if used:
+                    entry["usage"] = used
+            writes = _writes(receipt)
+            if writes and not failing & {f"{s['file']}: {n}" for n in WRITE_ROWS}:
+                entry["state_writes"] = writes
         entries.append(entry)
-    verdict, rows = _check(run, store)
+    run_agent = next(
+        (
+            r["receipt"]["run_agent"].get("name")
+            for r in steps
+            if step_kinds.holds_members(r["receipt"]) and isinstance(r["receipt"].get("run_agent"), dict)
+        ),
+        None,
+    )
     from onetrace_console.benchmarks import mark_of
 
     return {
@@ -200,7 +264,26 @@ def _run_entry(run, order: int, label: str, store) -> dict:
         "verdict": verdict,
         "rows": rows,
         "benchmark": mark_of(store, run.key),
+        LIST: _list_entry(run, store),
+        **({"run_agent": run_agent} if isinstance(run_agent, str) and step_kinds.RUN_AGENT_ROW not in failing else {}),
+        **({"origin": origin} if isinstance(origin := _origin(run, store), str) else {}),
     }
+
+
+def _gated(run, store) -> int:
+    from onetrace_console.authorization_list import gated_count
+
+    return gated_count(run, store)
+
+
+def _origin(run, store) -> str | None:
+    """The run's origin, as its record names it (`service_link.origin_of`); None where it can't be said."""
+    from onetrace_console import service_link
+
+    try:
+        return service_link.index_origin(run, store)
+    except Exception:  # noqa: BLE001 - a record that can't be read names no origin
+        return None
 
 
 def first_difference(comparison, store) -> dict | None:
@@ -266,6 +349,7 @@ def build(store) -> dict:
             _run_entry(r, i, label.get(r.key, ""), store)
             for i, r in enumerate(arrival_order(store.runs(), newest_first=False))
         ]
+        _with_drift(runs, store)
         comparisons = []
         for c in sorted(store.comparisons(), key=lambda c: c.key):
             try:
@@ -280,20 +364,244 @@ def build(store) -> dict:
                     **({"first_diff": first} if first is not None else {"unread": True}),
                 }
             )
-    return {"format": FORMAT, "runs": runs, "comparisons": comparisons}
+    return {
+        "format": FORMAT,
+        LINEAGE: "state_writes",
+        USAGE: "model_usage",
+        LIST: "runs_list",
+        "runs": runs,
+        "comparisons": comparisons,
+    }
+
+
+def _with_drift(runs: list[dict], store) -> None:
+    """Each run's place in its pipeline's kept drift report against the first run (`drift_strip.kept`), in its list
+    entry: the report made where none is kept on a local console, never on a public one, as the drift page makes it.
+    A pipeline whose report can't be read or made leaves its runs with none: not compared."""
+    from onetrace_console import drift, drift_strip
+    from onetrace_console.frame import rendering_public
+    from onetrace_console.overview import pipelines
+
+    by_key = {r["key"]: r for r in runs}
+    for p in pipelines(store):
+        try:
+            rec = drift.drift_record(store, p, "first", compute=not rendering_public())
+            rep = drift.report_of(rec, store) if rec is not None else None
+        except Exception:  # noqa: BLE001 - a report that can't be read or made leaves each run not compared
+            rep = None
+        if rep is None:
+            continue
+        for key, entry in drift_strip.kept(rep, list(p.runs)).items():
+            if key in by_key:
+                by_key[key][LIST]["drift"] = entry
+
+
+def _list_entry(run, store) -> dict:
+    """What the runs list shows of a run, by the rules it draws them by (`pages.runs_table`, `pages.verdict_pill`), as
+    states and recorded values, never as a page's markup: so the Runs page draws from the index alone."""
+    from onetrace_console import overview, rerun_label, verdicts
+    from onetrace_console.frame import rendering_public
+    from onetrace_console.pages import run_answers
+
+    try:
+        row = load_json_bounded(run.list_row, "the run's list row") if run.list_row else {}
+    except ValueError:
+        row = {}
+    ran = row.get("case_ran") if isinstance(row, dict) else None
+    #: As the runs list's pill: made where none is kept on a local console, never on a public one.
+    try:
+        verdicts.verdict_record(run, store, compute=not rendering_public())
+    except Exception:  # noqa: BLE001 - a verdict that cannot be made is not listed; the run's page says why
+        pass
+    try:
+        pipeline = verdicts.pipeline_of(run, store)
+        unchecked = bool(
+            verdicts.unchecked(run, store)
+            and pipeline is not None
+            and verdicts.reference_record(pipeline, store, compute=False) is not None
+        )
+        got = None if unchecked else verdicts.word_of(run, store)
+        seal = verdicts.seal_of(run, store) if got else None
+    except Exception:  # noqa: BLE001 - as above
+        unchecked, got, seal = False, None, None
+    declined = overview.declined(run)
+    return {
+        "ran": ran if isinstance(ran, str) else "",
+        "received": run.received_at,
+        "delivered": run.delivered_stages,
+        "stages": run.stage_count,
+        "retries": run.retries,
+        "declined": str(declined["stage"]) if declined else "",
+        "ending": run.ending,
+        "kinds": run.kinds,
+        #: How many gated steps the record names (`authorization_list`): the runs list's mark. An index written before
+        #: this field marks none until it is built again, as a console does when it next draws its pages.
+        "gated": _gated(run, store),
+        "steps": _steps_kept(run),
+        "rerun": rerun_label.of_run(run),
+        **run_answers(run, store),
+        "unchecked": unchecked,
+        "word": got[0] if got else "",
+        "word_at": got[1] if got else "",
+        "seal": seal or "",
+    }
+
+
+def _steps_kept(run) -> list | None:
+    """The run's kept steps (`step_marks`), or None where none are kept or they don't read."""
+    try:
+        got = load_json_bounded(run.steps, "the run's steps") if run.steps else None
+    except ValueError:
+        return None
+    return got if isinstance(got, list) else None
+
+
+def _writes(receipt: dict) -> list[dict]:
+    """A step's store writes as the index keeps them: store, the key's digest or the key in plain, version, digest."""
+    out = []
+    for e in receipt.get("state_writes") or [] if isinstance(receipt.get("state_writes"), list) else []:
+        if not isinstance(e, dict) or not isinstance(e.get("store"), str):
+            continue
+        w = {"store": e["store"]}
+        for k in ("key_digest", "key", "version", "digest"):
+            if isinstance(e.get(k), str):
+                w[k] = e[k]
+        out.append(w)
+    return out
+
+
+#: The index a drawing of the store's pages reads (`drawing`), so a page asks the index, never the store's records; and
+#: when that index was written, so a page drawn from it says so.
+_DRAWING: ContextVar[dict | None] = ContextVar("run_index_drawing", default=None)
+_WRITTEN: ContextVar[str] = ContextVar("run_index_written", default="")
+FROM_INDEX = "Read from the run index ({format}), written {written}."
+
+
+@contextmanager
+def drawing(index: dict, written: str = ""):
+    """Pages drawn inside read `index` (`drawn_with`), written at `written` (`index_note`)."""
+    token, wtoken = _DRAWING.set(index), _WRITTEN.set(written)
+    try:
+        yield index
+    finally:
+        _DRAWING.reset(token)
+        _WRITTEN.reset(wtoken)
+
+
+def drawn_with() -> dict | None:
+    """The index the pages being drawn read; None outside a drawing."""
+    return _DRAWING.get()
+
+
+def drawn_written() -> str:
+    """When the index the pages being drawn read was written; "" outside a drawing, or where it isn't known."""
+    return _WRITTEN.get()
+
+
+def index_note() -> str:
+    """On a page drawn from the index: its format and when it was written, so a page drawn from an index written
+    before the store last changed reads as such. Nothing outside a drawing."""
+    from onetrace_console.words import escape
+
+    index = _DRAWING.get()
+    if index is None:
+        return ""
+    said = FROM_INDEX.format(format=str(index.get("format", "")), written=_WRITTEN.get() or "at a time not known")
+    return f'<p class="note" data-section="from-index">{escape(said)}</p>'
+
+
+def written_at(store_root: Path) -> str:
+    """When the index beside the store was last written, from its file; "" where there is none."""
+    from datetime import datetime
+
+    try:
+        stamp = (Path(store_root) / FILE_NAME).stat().st_mtime
+    except OSError:
+        return ""
+    return datetime.fromtimestamp(stamp, UTC).isoformat(timespec="seconds")
+
+
+def key_digest(key: str) -> str:
+    """A key kept in plain, as its digest: onetrace's own rule, sha256 over the key's UTF-8 (`onetrace.state.key_bytes`;
+    a key kept in plain is a string)."""
+    import hashlib
+
+    return "sha256:" + hashlib.sha256(key.encode("utf-8")).hexdigest()
+
+
+def key_match(a: dict, b: dict) -> str | None:
+    """How two entries' keys match: "exact" where both are kept alike and equal; "digest" where one is kept in plain and
+    the other as a digest, and the plain key's digest is the other's; None where they don't. A plain key is never
+    compared with a digest as text."""
+    pa, pb = a.get("key"), b.get("key")
+    da, db = a.get("key_digest"), b.get("key_digest")
+    if isinstance(pa, str) and isinstance(pb, str):
+        return "exact" if pa == pb else None
+    if isinstance(da, str) and isinstance(db, str):
+        return "exact" if da == db else None
+    if isinstance(pa, str) and isinstance(db, str):
+        return "digest" if key_digest(pa) == db else None
+    if isinstance(da, str) and isinstance(pb, str):
+        return "digest" if da == key_digest(pb) else None
+    return None
+
+
+def wrote(index: dict, run_key: str, read: dict) -> list[tuple[dict, dict, dict, str, str]]:
+    """Each (run, step, write, how) of another run in `index` whose write holds, for the read's store and key, an equal
+    version (not `not observed`) or an equal digest; `how` is "version" or "digest". Lineage is that equality alone."""
+    out = []
+    for run in index.get("runs") or []:
+        if run.get("key") == run_key:
+            continue
+        for step in run.get("steps") or []:
+            for w in step.get("state_writes") or []:
+                keyed = key_match(read, w) if w.get("store") == read.get("store") else None
+                if keyed is None:
+                    continue
+                if (
+                    isinstance(read.get("version"), str)
+                    and read["version"] != "not observed"
+                    and read["version"] == w.get("version")
+                ):
+                    out.append((run, step, w, "version", keyed))
+                elif isinstance(read.get("digest"), str) and read["digest"] == w.get("digest"):
+                    out.append((run, step, w, "digest", keyed))
+    return out
 
 
 def encode(index: dict) -> bytes:
     return (json.dumps(index, indent=1, sort_keys=True, ensure_ascii=False) + "\n").encode("utf-8")
 
 
-def write(store, store_root: Path) -> Path:
-    """Build the index and write it beside the store, replacing the last one whole."""
+def write(store, store_root: Path, index: dict | None = None) -> Path:
+    """Write the index beside the store (`index`, where the drawing built it, or built now), replacing the last one
+    whole."""
+    from onetrace_console import forwarding
     from onetrace_console.store import _atomic_write
 
     path = Path(store_root) / FILE_NAME
-    _atomic_write(path, encode(build(store)))
+    written = index if index is not None else build(store)
+    #: Trace forwarding (`forwarding`): the runs this index holds that the one it replaces did not, each queued once.
+    #: Read only where a destination is kept; an index there that cannot be read is taken to have held every run, so
+    #: nothing is sent twice because of it.
+    forwards = forwarding.wanted(store_root)
+    before = _held(path, written) if forwards else None
+    _atomic_write(path, encode(written))
+    if forwards:
+        forwarding.enqueue_new(store_root, written, before)
     return path
+
+
+def _held(path: Path, written: dict) -> set[str] | None:
+    """The run keys the index at `path` holds: None where there is none yet; every key of `written` where it cannot be
+    read."""
+    if not path.is_file():
+        return None
+    try:
+        doc = load_json_bounded(path.read_text(encoding="utf-8"), "the run index")
+        return {r["key"] for r in doc.get("runs", []) if isinstance(r, dict) and isinstance(r.get("key"), str)}
+    except (OSError, ValueError, RecursionError, AttributeError):
+        return {r["key"] for r in written.get("runs", [])}
 
 
 def format_of(store_root: Path) -> str | None:
@@ -395,11 +703,49 @@ def parse(query: str) -> list[Term]:
             if rest.lower() not in ("yes", "no"):
                 raise QueryError(f"{token!r}: benchmark takes yes or no")
             terms.append(Term(field, rest.lower()))
-        elif field in ("verdict", "engine", "gated", "pipeline", "since"):
+        elif field == "kind":
+            from onetrace_console.step_kinds import STEP_KINDS
+
+            kind = rest.strip('"').replace("-", " ").replace("_", " ").lower()
+            if kind not in STEP_KINDS:
+                raise QueryError(f"{token!r}: kind takes one of " + ", ".join(k.replace(" ", "-") for k in STEP_KINDS))
+            terms.append(Term(field, kind))
+        elif field == "agree":
+            if rest.lower() not in AGREE_STATES:
+                raise QueryError(f"{token!r}: agree takes " + ", ".join(AGREE_STATES[:-1]) + " or " + AGREE_STATES[-1])
+            terms.append(Term(field, rest.lower()))
+        elif field in ("after", "before"):
+            if _instant(rest) is None:
+                raise QueryError(f"{token!r}: {field} takes a date or a time, as 2026-11-12 or 2026-11-12T09:30:00Z")
+            terms.append(Term(field, rest))
+        elif field in ("verdict", "engine", "gated", "pipeline", "since", "agent", "word"):
             terms.append(Term(field, rest.strip('"')))
         else:
             raise QueryError(f"{token!r}: the index has no field {field!r}")
     return terms
+
+
+def started(run: dict) -> str:
+    """A run's recorded start, from its list entry, as written; "" where its record gives none."""
+    ran = (run.get(LIST) or {}).get("ran") or ""
+    return ran.split(" \u2192 ", 1)[0].strip()
+
+
+_DAY = re.compile(r"[0-9]{4}-[0-9]{2}-[0-9]{2}")
+
+
+def _instant(text: str):
+    """A date (its start, UTC) or a time as written (UTC where it gives no offset); None where it reads as neither."""
+    from datetime import datetime
+
+    text = text.strip()
+    if not re.fullmatch(r"[0-9]{4}-[0-9]{2}-[0-9]{2}([T ][0-9:.]+(Z|[+-][0-9]{2}:?[0-9]{2})?)?", text):
+        return None
+    try:
+        at = datetime.fromisoformat(text.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    return at if at.tzinfo is not None else at.replace(tzinfo=UTC)
 
 
 def find_run(index: dict, said: str) -> dict:
@@ -503,6 +849,27 @@ def _match(term: Term, run: dict, index: dict, runs: dict, diffs: dict) -> list[
     if f == "since":
         other = find_run(index, term.arg)
         return [f"arrived after {other['run_id']}"] if run["order"] > other["order"] else []
+    if f == "kind":
+        return [f"kind {s['kind']} at {s['name']}" for s in run["steps"] if s.get("kind") == term.arg]
+    if f == "agent":
+        of_run = [f"the run's agent {term.arg}"] if run.get("run_agent") == term.arg else []
+        return of_run + [f"agent {s['agent']} at {s['name']}" for s in run["steps"] if s.get("agent") == term.arg]
+    if f == "agree":
+        said = run[LIST]["records-agree"]
+        return [f"records agree: {said}"] if said == term.arg else []
+    if f == "word":
+        word = run[LIST]["word"]
+        return [f"verdict against the reference {word}"] if word and word.lower() == term.arg.lower() else []
+    if f in ("after", "before"):
+        said = started(run)
+        start = _instant(said) if said else None
+        at = _instant(term.arg)
+        if start is None or at is None:
+            return []
+        day = _DAY.fullmatch(term.arg) is not None
+        if f == "after" and (start >= at if day else start > at) or f == "before" and start < at:
+            return [f"started {said}"]
+        return []
     if f == "benchmark":
         marked = run.get("benchmark") is not None
         return (
@@ -518,6 +885,12 @@ def query(index: dict, text: str) -> list[Result]:
     terms = parse(text)
     if not terms:
         return []
+    if index.get(LIST) is None and any(t.field in LIST_TERMS for t in terms):
+        field = next(t.field for t in terms if t.field in LIST_TERMS)
+        raise QueryError(
+            f"{field}: this index was written before it held each run's list words; the console writes it again when "
+            "it next draws its pages"
+        )
     runs = {r["key"]: r for r in index.get("runs") or []}
     diffs = _differences(index)
     out = []

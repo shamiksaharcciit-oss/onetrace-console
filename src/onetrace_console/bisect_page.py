@@ -265,7 +265,9 @@ class Walk:
 
 
 def read_time(said: str) -> tuple[datetime | None, bool]:
-    """(the time asked, whether it was read as UTC for want of an offset); (None, False) where unread."""
+    """(the time asked, whether it was read as UTC for want of an offset); (None, False) where unread: a time not in
+    ISO 8601, or one that is not an instant in UTC's range (before year 1 or after 9999 once its offset is taken away),
+    which the page could not place."""
     text = said.strip().replace(" ", "T", 1).replace("Z", "+00:00")
     try:
         got = datetime.fromisoformat(text)
@@ -273,6 +275,10 @@ def read_time(said: str) -> tuple[datetime | None, bool]:
         return None, False
     if got.tzinfo is None:
         return got.replace(tzinfo=UTC), True
+    try:
+        got.astimezone(UTC)
+    except OverflowError:
+        return None, False
     return got, False
 
 
@@ -489,15 +495,7 @@ def _window(walk: Walk, said: str | None, label: str, held: dict, *, form: bool)
     answer beside it on the page the console answers (each row's time is a link into it). `form` is
     whether the page is the console's answer, kept for its callers."""
     store = walk.store
-    shown = escape(said or "")
-    #: One plain GET form, on the built page and the page the console answers alike: it reads what is
-    #: kept, and runs nothing.
-    drawn = (
-        f'<form method="get" action="{PATH}" data-bisect-window><input type="hidden" name="p" '
-        f'value="{escape(label)}"><label>{escape(WINDOW_LABEL)} <input type="text" name="after" '
-        f'value="{shown}" maxlength="{MOST_CHARS}"></label> <button class="btn-primary" data-busy="Finding…" type="submit">{escape(WINDOW_BUTTON)}'
-        f"</button></form><p>{escape(WINDOW_HINT)}</p>"
-    )
+    drawn = window_form(label, said or "")
     if not form_result(said):
         return drawn
     when, utc = read_time(said)  # type: ignore[arg-type]  # form_result(said): said is a string
@@ -537,6 +535,17 @@ def _window(walk: Walk, said: str | None, label: str, held: dict, *, form: bool)
                 + "</p>"
             )
     return drawn + "".join(out)
+
+
+def window_form(label: str, said: str = "") -> str:
+    """One plain GET form, on the built page, the page the console answers and the Runs page alike: it reads what is
+    kept, and runs nothing."""
+    return (
+        f'<form method="get" action="{PATH}" data-bisect-window><input type="hidden" name="p" '
+        f'value="{escape(label)}"><label>{escape(WINDOW_LABEL)} <input type="text" name="after" '
+        f'value="{escape(said)}" maxlength="{MOST_CHARS}"></label> <button class="btn-primary" data-busy="Finding…" type="submit">{escape(WINDOW_BUTTON)}'
+        f"</button></form><p>{escape(WINDOW_HINT)}</p>"
+    )
 
 
 def form_result(said: str | None) -> bool:

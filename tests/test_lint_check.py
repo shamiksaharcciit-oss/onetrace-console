@@ -8,6 +8,7 @@ The public export leaves the tool out: there these tests skip; here a missing on
 
 from __future__ import annotations
 
+import re
 import shutil
 import subprocess
 import sys
@@ -29,6 +30,15 @@ SKIP = {
     ".ruff_cache",
     ".mypy_cache",
 }
+
+
+def printed(output: str, rel: str) -> bool:
+    """Whether `output` names the file `rel` (a path with forward slashes), each path in it read as a path with its
+    own platform's separator: ruff prints `tools\\visible_text.py` on Windows."""
+    from pathlib import PureWindowsPath
+
+    found = re.findall(r"[\w./\\-]+\.py\b", output)
+    return any(PureWindowsPath(p).as_posix() == rel for p in found)
 
 
 def _run(root: Path) -> subprocess.CompletedProcess:
@@ -74,7 +84,7 @@ def test_sabotage_each_kind_of_finding_fails_the_stage_by_name(tmp_path, plant, 
     examined(1, f"planted: {stage}")
     assert got.returncode == 1, got.stdout + got.stderr
     assert f"{stage} FAILED" in got.stdout, got.stdout
-    assert rel in got.stdout, got.stdout
+    assert printed(got.stdout, rel), got.stdout
 
 
 def test_the_linux_check_runs_the_stage_after_the_pins_and_before_the_suite(examined):
@@ -97,3 +107,33 @@ def test_the_linux_check_runs_the_stage_after_the_pins_and_before_the_suite(exam
     }
     assert order["The test tools"] < at and order["The console's pins"] < at < order["The full suite"]
     assert "continue-on-error" not in steps[at]
+
+
+# ------------------------------------------------------------------ on every platform the stage runs on
+
+
+def test_mypy_passes_for_windows_and_macos_too(examined):
+    """mypy checks against the platform it runs on: a call that exists on Linux only (`os.sched_getaffinity`) failed
+    the stage on Windows. Checked here for both other platforms, as `tools/lint_check.py` checks for this one."""
+    got = {}
+    for platform in ("win32", "darwin"):
+        done = subprocess.run(
+            [sys.executable, "-m", "mypy", "--platform", platform, "src/onetrace_console"],
+            cwd=REPO,
+            capture_output=True,
+            text=True,
+            timeout=600,
+        )
+        got[platform] = (done.returncode, [ln for ln in done.stdout.splitlines() if ": error:" in ln])
+    examined(len(got), "platforms")
+    assert got == {"win32": (0, []), "darwin": (0, [])}, got
+
+
+def test_a_path_the_stage_prints_is_read_as_a_path_on_any_platform(examined):
+    """ruff prints a finding's path with the platform's separator: `tools\\visible_text.py` on Windows. The sabotage
+    test reads it as a path, not as text with forward slashes."""
+    examined(4, "printed lines")
+    assert printed("tools\\visible_text.py:3:1: F401 [*] `os` imported but unused", "tools/visible_text.py")
+    assert printed("tools/visible_text.py:3:1: F401", "tools/visible_text.py")
+    assert printed("Would reformat: src\\onetrace_console\\words.py", "src/onetrace_console/words.py")
+    assert not printed("src/onetrace_console/words_other.py:1: error", "src/onetrace_console/words.py")

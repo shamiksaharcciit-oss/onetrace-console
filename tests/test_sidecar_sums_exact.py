@@ -1,4 +1,4 @@
-"""Two notes from the pin re-check's review, on the onedoor side-car's sums.
+"""Two findings from the pin re-check, on the onedoor side-car's sums.
 
 1. The onedoor side-car's sums name exactly the delivered file, and nothing else. It used to look up
    only the delivered file's own name, so a second digest under another spelling -- `./x`, another

@@ -1,4 +1,4 @@
-"""What the tests of the Set up Explain form share: keyring and onetrace-explain 0.3.1, each installed from
+"""What the tests of the Set up Explain form share: keyring and onetrace-explain 0.3.2, each installed from
 the local wheel cache by its pinned hash into a folder of its own (never this environment, never a
 dependency of the console); a keychain in a folder of the test's own (`keychain_stub`), never the
 machine's; and a model server on this machine's loopback that keeps every request it is sent and answers
@@ -69,7 +69,7 @@ def keyring_lib(tmp_path_factory) -> Path:
 
 @pytest.fixture(scope="session")
 def explain03(tmp_path_factory) -> tuple[Path, Path]:
-    """onetrace-explain 0.3.1, from the wheel cache by its pinned hash (`ONE_ENVIRONMENT`, as on PyPI), in a
+    """onetrace-explain 0.3.2, from the wheel cache by its pinned hash (`ONE_ENVIRONMENT`, as on PyPI), in a
     folder of its own: (its command, its library folder)."""
     from onetrace_console import explain as e
     from tools import fetch_wheel_cache as w
@@ -119,7 +119,7 @@ def keychain(keyring_lib, tmp_path, monkeypatch) -> Path:
 
 @pytest.fixture
 def explain03_installed(explain03, keychain, monkeypatch) -> Path:
-    """The console finds onetrace-explain 0.3.1: its library folder first on the command's import path,
+    """The console finds onetrace-explain 0.3.2: its library folder first on the command's import path,
     keyring and the test keychain after it."""
     from onetrace_console import explain as e
 

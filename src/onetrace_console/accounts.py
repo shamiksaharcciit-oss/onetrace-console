@@ -196,6 +196,11 @@ class AccountStore:
         _atomic_write(self._path(username), account.to_json().encode("utf-8"))
         return account
 
+    def forget(self, username: str) -> None:
+        """Take back an account just made: its making could not be recorded (`audit`)."""
+        if _USERNAME_RE.match(username):
+            self._path(username).unlink(missing_ok=True)
+
     def get(self, username: str) -> Account | None:
         path = self._path(username)
         if not path.is_file():

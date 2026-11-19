@@ -1,4 +1,4 @@
-"""Board 4: a stage's inputs and outputs.
+"""The stage page: a stage's inputs and outputs.
 
     Inputs: an upstream stage's stored output is shown as text only after its bytes match that
     stage's receipt, with a Verified badge. Each input from outside the run is shown by name, trust

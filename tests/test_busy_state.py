@@ -30,7 +30,16 @@ from onetrace_console.busy_script import BUSY_SCRIPT
 SRC = Path(__file__).resolve().parent.parent / "src" / "onetrace_console"
 _BUTTON = re.compile(r"<button\b[^>]*>", re.S)
 #: The instant presses: nothing waits on the console.
-INSTANT = ("data-theme-switch", "data-theme-system", "data-copy=", 'class="gear ')
+#: The frame's folds below 600 px open a part of the frame (`frame.FOLD_BUTTONS`).
+INSTANT = (
+    "data-theme-switch",
+    "data-theme-system",
+    "data-copy=",
+    'class="gear ',
+    'class="frame-fold ',
+    #: A comparison's text diff switch, side by side or inline: it shows one view, and waits on nothing.
+    "data-view=",
+)
 #: A static export's disabled stand-ins: no press at all.
 NEITHER = ("data-compare-needs-console", 'type="button" \'\n')
 BROWSER_PYTHON = os.environ.get("ONETRACE_BROWSER_PYTHON", "")
@@ -166,11 +175,14 @@ with sync_playwright() as p:
         path = "/send" if name == "send" else "/compare-page"
         hold.update(ms=800, status=200); posts.clear(); page.goto(ORIGIN + path)
         out[name + " busy at 100 ms"] = busy_at(page, sel)
+        out[name + " said at 100 ms"] = page.evaluate('''() => { const s = document.querySelector("[data-busy-said]");
+          return s ? [s.getAttribute("role"), s.getAttribute("aria-live"), s.textContent] : null }''')
         page.goto(ORIGIN + path); posts.clear(); hold.update(ms=800, status=200)
         page.dblclick(sel); page.wait_for_timeout(1200)
         out[name + " requests from a double click"] = len(posts)
         hold.update(ms=300, status=500); page.goto(ORIGIN + path)
         page.click(sel); page.wait_for_timeout(1200)
+        out[name + " said after an error"] = page.evaluate('() => document.querySelectorAll("[data-busy-said]").length')
         out[name + " after an error"] = page.evaluate('''(sel) => { const b = document.querySelector(sel);
           return [b.disabled, b.getAttribute("aria-busy"), b.textContent] }''', sel)
     # the 5 s line, on a Compare held for 6.5 s
@@ -218,6 +230,7 @@ with sync_playwright() as p:
 """
 
 
+@pytest.mark.browser
 @pytest.mark.skipif(
     not BROWSER_PYTHON, reason="ONETRACE_BROWSER_PYTHON names no Python with Playwright's Chromium (the gate sets it)"
 )
@@ -233,6 +246,10 @@ def test_in_a_browser_each_press_is_busy_at_once_counts_once_and_always_ends(tmp
     assert got["send busy at 100 ms"] == [True, "true", "Sending…"], got
     assert got["compare busy at 100 ms"] == [True, "true", "Comparing…"], got
     assert got["send requests from a double click"] == 1 and got["compare requests from a double click"] == 1, got
+    #: Said at once in a polite live region, in the button's own busy words; gone when the busy state ends.
+    assert got["send said at 100 ms"] == ["status", "polite", "Sending…"], got
+    assert got["compare said at 100 ms"] == ["status", "polite", "Comparing…"], got
+    assert got["send said after an error"] == 0 and got["compare said after an error"] == 0, got
     assert got["send after an error"] == [False, None, "Send to 127.0.0.1"], got
     assert got["compare after an error"] == [False, None, "Compare"], got
     assert re.fullmatch(r"Waiting for the comparison: [56] s", got["the waiting line"]), got

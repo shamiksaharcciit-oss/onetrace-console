@@ -6,17 +6,17 @@
 # console name the exact SDK build a comparison ran with (`onetrace_console.compare.sdk_build_digest()`).
 # A plain `pip install` works as well: the console then names the build from the installed files.
 #
-# onetrace 0.8.0 and onetrace-verify 0.8.0, each pinned by the sha256 of both its release files, its
-# wheel's then its sdist's: the files PyPI receives for 0.8.0, as their build gave them. onetrace 0.8.0
-# asks for onetrace-verify >=0.8.0,<0.9. No credentials are needed to install them.
-onetrace==0.8.0 \
-    --hash=sha256:a2072c5e6c97843cd4a8915b5392dbde696d3a5d59531b0c666473a794760214 \
-    --hash=sha256:b9887f201a5a037a3691cc2bcb424b28f8a951efed52417332694429e7901028
-onetrace-verify==0.8.0 \
-    --hash=sha256:5a2a60387fb25f35d67fdc0f2d6195d2b11465f4adc20465697574409bdef82d \
-    --hash=sha256:883db2fea3bcb9b57facb8f2a7bd27abb084a7d6e5a89b81862d25361f091edc
+# onetrace 0.9.0 and onetrace-verify 0.9.0, each pinned by the sha256 of both its release files, its
+# wheel's then its sdist's, as PyPI serves them. onetrace 0.9.0 asks for onetrace-verify >=0.9.0,<0.10.
+# No credentials are needed to install them.
+onetrace==0.9.0 \
+    --hash=sha256:585b69e001dba2c65d64f3c882d4e2410e04835bdaddfda79aaef9cf274f304a \
+    --hash=sha256:8d4702cd4ccf83bd5b4302910563899b9ecc6ae1dea0c53c82d440fb41467daf
+onetrace-verify==0.9.0 \
+    --hash=sha256:109d79e0c7b105ad8ceb4e8f806a0fdb9b495affcc74efa9db854554fa5b25a6 \
+    --hash=sha256:77c9a988a8660f5f9fc8767d9cc378492eee02593c3e241d384bf9e123d07b9d
 
-# onetrace-verify's crypto extra, which checks signatures: exactly the versions 0.8.0 pins in its
+# onetrace-verify's crypto extra, which checks signatures: exactly the versions 0.9.0 pins in its
 # own metadata (Provides-Extra: crypto), each with the hash of every wheel of that version a CPython
 # 3.12 or 3.13 install on Linux x86_64 or Windows x64 can select, from PyPI's JSON. pip installs its
 # platform's file and refuses any other. typing-extensions is needed below Python 3.11 only.

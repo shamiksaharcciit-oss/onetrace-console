@@ -324,8 +324,9 @@ def test_a_public_consoles_output_is_its_access_log_and_nothing_else(built, monk
 
 def test_a_request_that_raises_is_one_json_error_line_and_the_console_serves_on(built, monkeypatch, examined):
     """In-process, on the console's own server class, with its output caught: a page whose drawing
-    raises inside the handler. The output holds exactly one line that is not an access-log entry:
-    one JSON error line -- when, "error", the exception's type, the traceback -- naming no client
+    raises inside the handler. The request is answered with the 500 line and a reference; the output
+    holds exactly one line that is not an access-log entry: one JSON error line -- when, "error", that
+    reference, the request's method and path, the exception's type, the traceback -- naming no client
     address or port. The console then answers the next request."""
     import io
     import threading
@@ -360,8 +361,11 @@ def test_a_request_that_raises_is_one_json_error_line_and_the_console_serves_on(
     thread.start()
     base = f"http://127.0.0.1:{port}"
     try:
-        with pytest.raises((urllib.error.URLError, ConnectionError, OSError)):
+        #: Answered, never dropped: the 500 line, with the reference the log line names.
+        with pytest.raises(urllib.error.HTTPError) as answered:
             urllib.request.urlopen(base + "/home.html", timeout=limit(30)).read()
+        said = answered.value.read().decode("utf-8")
+        status = answered.value.code
         after = container_check.fetch(base, "/health")[0]
     finally:
         httpd.shutdown()
@@ -378,8 +382,11 @@ def test_a_request_that_raises_is_one_json_error_line_and_the_console_serves_on(
     assert after == 200, "the console stopped serving after the error"
     assert len(others) == 1, (others, lines)
     error = json.loads(next(l for l in lines if '"event": "error"' in l))
-    assert set(error) == {"at", "event", "exception", "traceback"}, error
+    assert set(error) == {"at", "event", "reference", "method", "path", "exception", "traceback"}, error
     assert error["event"] == "error" and error["exception"] == "RuntimeError", error
+    assert (error["method"], error["path"]) == ("GET", "/home.html"), error
+    assert status == 500 and f"under reference {error['reference']}" in said, said
+    assert "page could not be filled" not in said and "Traceback" not in said, said
     assert "the page could not be filled" in error["traceback"]
     assert not any("127.0.0.1" in l or str(port) in l for l in lines), lines
     assert "Exception occurred" not in out.getvalue()
@@ -526,7 +533,7 @@ def test_no_public_page_shows_a_word_no_page_may_show(served, examined):
 
 
 @pytest.mark.parametrize(
-    "path", ["/runs", "/runs/", "/diff", "/diff/", "/static/", "/static/fonts/", "/store/", "/pages/", "/access_log/"]
+    "path", ["/runs/", "/diff", "/diff/", "/static/", "/static/fonts/", "/store/", "/pages/", "/access_log/"]
 )
 def test_a_folder_is_never_listed(served, path, examined):
     base, _folder, _c = served
@@ -534,6 +541,15 @@ def test_a_folder_is_never_listed(served, path, examined):
     examined(1, path)
     assert status in (400, 404), (path, status)
     assert b"<a " not in body and "content-security-policy" in headers
+
+
+def test_runs_is_the_runs_page_drawn_from_the_index_never_a_folder_listing(served, examined):
+    """`/runs` is the Runs page (`runs_page`), read from the build's run index; `/runs/` stays unlisted, above."""
+    base, _folder, _c = served
+    status, headers, body = container_check.fetch(base, "/runs")
+    examined(1, "/runs")
+    assert status == 200 and b"<h1>Runs</h1>" in body and b'data-runs="count"' in body
+    assert b'href="runs/' in body and b"Index of" not in body and "content-security-policy" in headers
 
 
 # ------------------------------------------------------------------ 7. the built store is the demo

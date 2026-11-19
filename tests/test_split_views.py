@@ -167,16 +167,24 @@ def test_every_run_and_comparison_has_both_views(built, examined):
     pages = folder / "store" / "pages"
     runs, comparisons = store.runs(), store.comparisons()
     examined(len(runs) + len(comparisons), "runs and comparisons")
+    from onetrace_console import authorization_list
+
     for run in runs:
         what = (pages / "runs" / run.key / "case.html").read_text(encoding="utf-8")
         proof = (pages / "runs" / run.key / "proof.html").read_text(encoding="utf-8")
-        assert _views_of(what) == [("What changed", True), ("Proof", False)], run.run_id
-        assert _views_of(proof) == [("What changed", False), ("Proof", True)], run.run_id
+        #: Then the run's Authorization page, its third tab, with the count of its gated steps where it has any.
+        gated = authorization_list.gated_count(run, store)
+        auth = "Authorization" + (f" · {authorization_list.gated_words(gated)}" if gated else "")
+        assert _views_of(what) == [("What changed", True), ("Proof", False), (auth, False)], run.run_id
+        assert _views_of(proof) == [("What changed", False), ("Proof", True), (auth, False)], run.run_id
     for c in comparisons:
         what = (pages / "diff" / f"{c.key}.html").read_text(encoding="utf-8")
         proof = (pages / "diff" / f"{c.key}-proof.html").read_text(encoding="utf-8")
-        assert _views_of(what) == [("What changed", True), ("Proof", False)], c.key
-        assert _views_of(proof) == [("What changed", False), ("Proof", True)], c.key
+        #: Then Investigate's other tabs: the text diff where the comparison has one shown, and Authorization.
+        more = [("Text diff", False)] if (pages / "diff" / f"{c.key}-text.html").exists() else []
+        more += [("Authorization", False)]
+        assert _views_of(what) == [("What changed", True), ("Proof", False), *more], c.key
+        assert _views_of(proof) == [("What changed", False), ("Proof", True), *more], c.key
         assert 'href="' + c.key + '-proof.html"' in what
 
 
@@ -186,7 +194,7 @@ def test_the_tabs_are_plain_links(built, examined):
     nav = re.search(r'<nav data-section="views"[^>]*>.*?</nav>', page, re.S).group(0)
     examined(1, "tabs")
     assert "<script" not in nav and "onclick" not in nav and "<button" not in nav
-    assert re.findall(r'href="([^"]+)"', nav) == ["case.html", "proof.html"]
+    assert re.findall(r'href="([^"]+)"', nav) == ["case.html", "proof.html", "authorization.html"]
 
 
 # ------------------------------------------------------------------ 2. every part on one view

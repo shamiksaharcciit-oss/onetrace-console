@@ -1,6 +1,6 @@
 Synthetic until the SDK records decision references.
 
-The "Decisions cited" panel is built to its specified shape now, but the SDK does
+The "Decisions cited" panel is built to its intended shape now, but the SDK does
 not emit `decision_refs` yet (out of scope: `ctx.decision` and `gated_stages` come
 from the SDK after 0.1.1). Everything in this folder is **hand-made**, not
 SDK output, so that the join and panel can be built and tested against that shape

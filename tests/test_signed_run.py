@@ -1,10 +1,10 @@
-"""The console's `[crypto]` pins (§1) and its trust file (§2), on a run the SDK really
+"""The console's `[crypto]` pins (part 1) and its trust file (part 2), on a run the SDK really
 signed: the demo pipeline recorded by onetrace, then signed with a test-only key `keygen` made in a
 folder outside the run. Nothing here hand-writes a signature record.
 
-§1  With the extra installed, the pinned verifier checks the signature: its row is the signature's
+1.  With the extra installed, the pinned verifier checks the signature: its row is the signature's
     result, never "install onetrace-verify[crypto] to check signatures".
-§2  `trust_file`, an operator setting, none by default. Absent: a valid signature reads "Signed, key
+2.  `trust_file`, an operator setting, none by default. Absent: a valid signature reads "Signed, key
     not trusted", never Yes. Naming the key: Yes. A file the verifier can't read: its own `--trust`
     FAIL row, shown as it is. Each stored check records the trust file it ran with (its sha256, or
     "none"), and a change of trust file checks the run again, said, never silently.
@@ -82,7 +82,7 @@ def _trust(tmp_path, key_id: str, label: str, name: str = "trust.json"):
     return path
 
 
-# ------------------------------------------------------------------- §1: the extra is installed
+# --------------------------------------------------------------- part 1: the extra is installed
 
 
 def test_the_pinned_verifier_checks_a_signature_rather_than_asking_for_the_extra(signed, tmp_path):
@@ -92,7 +92,7 @@ def test_the_pinned_verifier_checks_a_signature_rather_than_asking_for_the_extra
     assert f"[SIGNED-UNTRUSTED] signatures/1.json: signature -- signed by an untrusted key {signed[1]}" in out
 
 
-# ------------------------------------------------------------------- §2: the trust file
+# --------------------------------------------------------------- part 2: the trust file
 
 
 def test_without_a_trust_file_a_valid_signature_is_signed_key_not_trusted(signed, tmp_path):
@@ -158,7 +158,7 @@ def test_the_setting_is_absent_by_default_and_a_path_or_null(tmp_path):
 
 
 def test_the_lock_pins_the_sdks_crypto_versions_by_hash():
-    """§1: exactly the versions the SDK's crypto extra pins at 0.2.0, each with hashes."""
+    """Part 1: exactly the versions the SDK's crypto extra pins at 0.2.0, each with hashes."""
     from pathlib import Path
 
     lock = (Path(__file__).resolve().parent.parent / "requirements.lock").read_text(encoding="utf-8")

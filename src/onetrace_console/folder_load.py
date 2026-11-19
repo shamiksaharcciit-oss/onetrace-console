@@ -179,7 +179,15 @@ def deliver_one(
         from onetrace_console.oserror import said
 
         return LoadedRun(run_dir.name, None, f"not loaded: cannot read it: {said(e)}")
-    accepted = accept(data, store, limits=config, run_folder=run_dir.name, shared_head=run_dir.name in shared)
+    #: With teams, every run a folder console reads is its `folder_team`'s.
+    accepted = accept(
+        data,
+        store,
+        limits=config,
+        run_folder=run_dir.name,
+        shared_head=run_dir.name in shared,
+        team=(config.folder_team or "") if config.teams else "",
+    )
     if isinstance(accepted, Rejection):
         return LoadedRun(run_dir.name, None, "refused: " + "; ".join(r.strip() for r in accepted.rows))
     #: The files the worked examples keep beside a run (the decision export, the permit issuers,
@@ -380,6 +388,28 @@ def demo_folder(cwd: Path) -> Path:
 
 
 def build_public(
+    folder: Path,
+    *,
+    runs_from: Path | None = None,
+    explanations: Path | None = None,
+    site_links: Path | None = None,
+    builder=None,
+) -> tuple[list[tuple[str, str | None]], str]:
+    """`_build_public`, its pages' banner speaking for the store being built (`public.speaks_for`), the demo's again
+    after."""
+    from onetrace_console import demo_store
+    from onetrace_console.public import speaks_for
+
+    speaks_for((demo_store if builder is None else builder).NAME)
+    try:
+        return _build_public(
+            folder, runs_from=runs_from, explanations=explanations, site_links=site_links, builder=builder
+        )
+    finally:
+        speaks_for(demo_store.NAME)
+
+
+def _build_public(
     folder: Path,
     *,
     runs_from: Path | None = None,
@@ -740,7 +770,7 @@ class _Watching:
             if not self.serving:
                 return  # at start: the start-up drawing draws everything
             if self.compared is not None and before is None:
-                _render_diff_page(self.compared, self.store, self.root, public=self.config.public)
+                _render_diff_page(self.compared, self.store, self.root, public=self.config.public, config=self.config)
             _render_all_pages(self.store, self.root, self.config)
 
     def prepare(self, store: Store, config: Config):

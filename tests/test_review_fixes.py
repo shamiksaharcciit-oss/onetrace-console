@@ -1,6 +1,6 @@
-"""A confirmation review's console findings, each with the probe that found it.
+"""Console findings, each with the probe that found it.
 
-The review (a fresh one, of the console and the viewer as they then were) confirmed each of these by
+A fresh look at the console and the viewer as they then were confirmed each of these by
 running it. The viewer's halves are in its commit 5f4f06c, re-vendored here.
 
 1. Blocker: a record the viewer cannot show -- nesting deeper than its encoder reaches, or a
@@ -32,7 +32,7 @@ from tests.test_unreadable import RUN_ID, _renamed, _resummed, _stored, _text
 
 def _planted(files, raw_value: str) -> dict[str, bytes]:
     """The clean fixture, renamed, with `assertions.constants` of one receipt replaced by raw
-    JSON text -- `json.dumps` cannot write either input the review used."""
+    JSON text -- `json.dumps` cannot write either input the probe used."""
     out = _renamed(files)
     rel = json.loads(out["MANIFEST.json"].decode("utf-8"))["chain"][1]["file"]
     data = json.loads(out[rel].decode("utf-8"))
@@ -54,7 +54,7 @@ SURROGATE = '"\\ud800"'
 #: all: ingest now refuses it first, in the fixed words, with nothing stored
 #: (tests/test_bounded_json.py holds the limit at 256 and 257 on every reader).
 def test_a_record_the_viewer_cannot_show_is_refused_at_ingest_in_words(files, store):
-    """The review's probe: `render_execution` raised RecursionError on this record."""
+    """The probe: `render_execution` raised RecursionError on this record."""
     from onetrace_console.bounded_json import ingest_refusal
     from onetrace_console.ingest import accept
     from onetrace_console.viewer.depth import MAX_JSON_DEPTH
@@ -69,7 +69,7 @@ def test_a_record_the_viewer_cannot_show_is_refused_at_ingest_in_words(files, st
 
 @pytest.mark.parametrize("raw,first", [(DEEP, 422), (SURROGATE, 200)], ids=["deep", "lone-surrogate"])
 def test_ingesting_it_and_then_a_clean_run_both_answer_200(server, files, raw, first):
-    """The review: POST it -> 500, POST a clean run afterwards -> 500. Neither is a 500 now: the
+    """Found earlier: POST it -> 500, POST a clean run afterwards -> 500. Neither is a 500 now: the
     lone surrogate is taken, and a record nested past 256 levels
     is refused as a damaged upload (422), in the fixed words; the clean run after it is taken."""
     from onetrace_console.viewer.depth import MAX_JSON_DEPTH
@@ -126,7 +126,7 @@ def test_one_runs_unforeseen_failure_is_that_runs_page_and_nothing_more(files, s
 
     monkeypatch.setattr(model, "list_row", row_fails_on_one)
     page = render_execution(bad, store, generated_at=GENERATED_AT).pages[CASE]
-    #: Not the viewer's refusal, so not in its words (the second review, S1).
+    #: Not the viewer's refusal, so not in its words.
     assert RUN_FAILED in _text(page) and "RuntimeError: an unforeseen failure" in _text(page)
     assert "Traceback" in capsys.readouterr().err, "the operator's log has the traceback"
     listed = render_executions([checked, bad], store, generated_at=GENERATED_AT)
@@ -237,7 +237,7 @@ def _as(verb, mode, **more):
     ],
 )
 def test_the_diff_page_states_what_it_cannot_draw(diverging, change, why):
-    """The review's probe_diff_page.py: each of these crashed `render_diff` (ValueError,
+    """A probe of the diff page: each of these crashed `render_diff` (ValueError,
     TypeError, AttributeError), or drew a string's characters as digests."""
     from onetrace_console.render import render_diff
 
@@ -275,7 +275,7 @@ def _refused_in_words(capsys, says: str) -> str:
 
 
 def test_a_store_root_that_cannot_be_made_is_refused_in_words(tmp_path, monkeypatch, capsys):
-    """The review's probe_config.py: a store_root that is a file ended in FileExistsError."""
+    """A probe of the configuration: a store_root that is a file ended in FileExistsError."""
     blocker = tmp_path / "a-file"
     blocker.write_text("not a folder", encoding="utf-8")
     for root in (blocker, blocker / "under-a-file"):
@@ -292,7 +292,7 @@ def test_a_store_root_that_cannot_be_made_is_refused_in_words(tmp_path, monkeypa
     ids=["missing", "not-pem"],
 )
 def test_tls_files_it_cannot_load_are_refused_before_anything_is_drawn(tmp_path, monkeypatch, capsys, content, says):
-    """The review: missing or non-PEM TLS files ended in a traceback, after every page had been
+    """Found earlier: missing or non-PEM TLS files ended in a traceback, after every page had been
     rendered and the port bound."""
     cert, key = tmp_path / "cert.pem", tmp_path / "key.pem"
     if content is not None:
@@ -315,7 +315,7 @@ def test_tls_files_it_cannot_load_are_refused_before_anything_is_drawn(tmp_path,
 
 
 def test_a_second_console_refuses_before_it_draws_over_the_firsts_pages(tmp_path, monkeypatch, capsys):
-    """Review note 9: the pages were rendered before the bind, so a second console on the same
+    """Found earlier: the pages were rendered before the bind, so a second console on the same
     store rewrote the first's pages and only then found its port taken."""
     from onetrace_console.serve import ConsoleServer, Handler
 
@@ -337,7 +337,7 @@ def test_a_second_console_refuses_before_it_draws_over_the_firsts_pages(tmp_path
 
 
 def test_a_host_that_does_not_resolve_is_not_called_a_busy_port(tmp_path, monkeypatch, capsys):
-    """Review note 8: an unresolvable host was reported as another process on the port."""
+    """Found earlier: an unresolvable host was reported as another process on the port."""
     assert (
         _serve_with(
             tmp_path,
@@ -351,7 +351,7 @@ def test_a_host_that_does_not_resolve_is_not_called_a_busy_port(tmp_path, monkey
 
 
 def test_a_configuration_saved_with_a_byte_order_mark_is_read(tmp_path, monkeypatch):
-    """Review note 8: Notepad's UTF-8 saves a BOM, and the file was refused as bad JSON."""
+    """Found earlier: Notepad's UTF-8 saves a BOM, and the file was refused as bad JSON."""
     from onetrace_console.config import ENV_VAR, load_from_env
 
     path = tmp_path / "config.json"
@@ -361,7 +361,7 @@ def test_a_configuration_saved_with_a_byte_order_mark_is_read(tmp_path, monkeypa
 
 
 def test_the_release1_extension_refusal_has_its_fix_line(tmp_path, monkeypatch, capsys):
-    """Review note 8: the fixed wording, and a `fix:` line after it."""
+    """Found earlier: the fixed wording, and a `fix:` line after it."""
     assert (
         _serve_with(
             tmp_path,
@@ -378,7 +378,7 @@ def test_the_release1_extension_refusal_has_its_fix_line(tmp_path, monkeypatch, 
 
 
 def test_nothing_in_the_source_reads_the_stored_pipeline_field():
-    """Leave it unread. Review note 10: partners.py still named it."""
+    """Leave it unread. Found earlier: partners.py still named it."""
     from pathlib import Path
 
     src = Path(__file__).resolve().parent.parent / "src" / "onetrace_console"

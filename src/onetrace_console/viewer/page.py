@@ -148,14 +148,14 @@ svg.graph text.chip{fill:var(--neu-ink);font-family:var(--font-sans);font-weight
 #: The console's frame -- a shell holding the navigation beside the page. Only
 #: the console's stylesheet (/static/console.css) carries these rules; the free file never has a
 #: frame, so its embedded stylesheet does not either.
-#: Board 1's navigation and boards 2 and 3's pages, for pages drawn inside the
-#: console's frame only (the free file never carries FRAME_CSS): the nav at board 1's sizes; the
-#: page at the board's width and padding, not the free file's 920px column; each section a panel;
-#: the tables as board 1's. Each rung's state is a chip of the console's one chip family
+#: The Overview design's navigation and the run and authorization pages' designs, for pages drawn inside
+#: the console's frame only (the free file never carries FRAME_CSS): the nav at the Overview design's sizes;
+#: the page at the design's width and padding, not the free file's 920px column; each section a panel;
+#: the tables as the Overview design's. Each rung's state is a chip of the console's one chip family
 #: (`frame.CHIP_CSS`), coloured by its state (`tones.RUNG`). The
 #: brand's 20px is a token, `--nav-brand-size`, defined once on the frame's navigation:
 #: the skin's own block is the sealed v1, which the viewer does not edit.
-#: Board 1's 15px headings stay a literal, as accepted.
+#: The Overview design's 15px headings stay a literal, as accepted.
 FRAME_CSS = """
 .shell{display:flex;min-height:100vh}
 .shell>main{flex:1 1 auto;min-width:0}
@@ -621,7 +621,7 @@ def _rung(r: Rung) -> str:
 
 
 def _ladder(m: PageModel) -> str:
-    """v6 board 2's "What the evidence establishes": seven separate questions, no single verdict."""
+    """The run page design's "What the evidence establishes": seven separate questions, no single verdict."""
     return (f'<section data-section="ladder"><h2>{_t("section.ladder")}</h2>'
             f"<p>{_t('ladder.intro')}</p>"
             + _region(f'<table class="timeline"><tbody>{"".join(_rung(r) for r in m.ladder)}</tbody></table>',

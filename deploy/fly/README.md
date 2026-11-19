@@ -85,14 +85,20 @@ comparisons page has the line "Token-level examples (L2 and L3): <the capture st
 (`ONETRACE_CONSOLE_CAPTURES_URL`), and the capture store's Overview one line back to the demo
 (`ONETRACE_CONSOLE_DEMO_URL`). Without its address, an app draws no line.
 
+Search engines are asked to index each app's Overview only: every other page it serves carries
+`noindex`, and `/robots.txt` lets them crawl so they can read it. A run page's address changes with
+each new build, so an old one answers 404 and drops out of search; nothing is redirected. Given its
+own address (`ONETRACE_CONSOLE_PUBLIC_URL`), an app's Overview names it as its canonical address;
+without it, no canonical is drawn.
+
 Deploy the capture store's app first, then the demo, so the demo's line answers once it is drawn.
 From the repository root:
 
 ```
 fly apps create <captures-app-name>
-fly deploy --config deploy/fly/captures/fly.toml --dockerfile deploy/fly/Dockerfile -a <captures-app-name> --env ONETRACE_CONSOLE_DEMO_URL=https://<the demo's address>
+fly deploy --config deploy/fly/captures/fly.toml --dockerfile deploy/fly/Dockerfile -a <captures-app-name> --env ONETRACE_CONSOLE_DEMO_URL=https://<the demo's address> --env ONETRACE_CONSOLE_PUBLIC_URL=https://<the capture store's address>
 .\deploy\fly\captures\postdeploy_080_captures.ps1 -Base https://<the capture store's address> -Demo https://<the demo's address>
-fly deploy --config deploy/fly/fly.toml --dockerfile deploy/fly/Dockerfile -a <app-name> --env ONETRACE_CONSOLE_CAPTURES_URL=https://<the capture store's address>
+fly deploy --config deploy/fly/fly.toml --dockerfile deploy/fly/Dockerfile -a <app-name> --env ONETRACE_CONSOLE_CAPTURES_URL=https://<the capture store's address> --env ONETRACE_CONSOLE_PUBLIC_URL=https://<the demo's address>
 fly ssh sftp get /srv/onetrace-demo/BUILD_RECORD.json .\BUILD_RECORD.json -a <app-name>
 .\deploy\fly\postdeploy_080.ps1 -Base https://<the demo's address> -BuildRecord .\BUILD_RECORD.json -SiteLinks .\deploy\fly\site_links.txt -Captures https://<the capture store's address>
 ```

@@ -69,7 +69,7 @@ def test_what_was_stored_is_what_arrived(delivery, files, store):
 
 
 def test_the_index_fields_are_recorded_even_though_nothing_reads_them_yet(delivery, files, store):
-    """DESIGN_GAPS.md §4: cheap now, expensive to backfill.
+    """The index fields: cheap now, expensive to backfill.
 
     The stages are asserted exactly, in order. The first version of this test read
     `== () or set(...) == {...}`, which passes when the field is EMPTY -- a guard that
@@ -96,7 +96,7 @@ def test_tampering_with_one_byte_is_rejected_and_nothing_is_stored(files, store,
     """One byte, not one field: the check is over bytes, so the smallest change must fail.
 
     Both halves asserted. "Rejected" alone would pass for an implementation that rejected
-    the delivery after writing half of it to disk, which is the failure the design note's
+    the delivery after writing half of it to disk, which is the failure the rule
     "nothing partial is ever stored" is about.
     """
     raw = bytearray(files[target])
@@ -225,7 +225,7 @@ def test_sending_the_same_run_twice_stores_one_copy(delivery, store):
 
 
 def test_a_reused_run_id_with_a_different_chain_head_is_stored_and_flagged(files, store):
-    """ "two chains under one name is itself a finding" -- the design note, §1."""
+    """Two chains under one name is itself a finding: the second is stored, and flagged."""
     first = accept(make_tar(files), store)
     assert isinstance(first, Accepted) and first.run.flags == ()
 

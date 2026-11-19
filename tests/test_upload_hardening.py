@@ -148,7 +148,7 @@ def test_item2_sabotage_disabling_the_type_checks_lets_a_symlink_through_to_the_
     """Sabotage: two things independently keep a symlink out today -- the NAMED,
     explicit `_is_link_or_special` check, and the pre-existing generic "archive holds
     only regular files" fallback (`not member.isfile()`, which was already false for a
-    symlink before this specification's work added the explicit check). Disabling only the
+    symlink before the explicit check was added). Disabling only the
     named check is not enough to observe an unconditional acceptance, because the
     generic fallback still catches it -- so both are disabled together here, which is
     what it actually takes to reach `tarfile.data_filter` with a symlink at all. What

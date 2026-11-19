@@ -36,6 +36,9 @@ AT, PAST = RULED, RULED + 1
 #: One call stays bare for good: the measurement of where json.loads itself fails.
 ALLOWED: dict[tuple[str, int], str] = {
     ("viewer/depth.py", 99): "a measurement of where json.loads itself fails; it must call it bare",
+    #: The audit log's verifier runs alone, copied out with the standard library only, so it
+    #: cannot import the helper; it counts a line's nesting against the same depth before it parses it.
+    ("audit_verify.py", 68): "the stand-alone verifier, which bounds the depth itself first (_too_deep)",
     #: The reference demo's pipeline, run by the demo store as P2: byte for byte
     #: examples/reference-demo/demo.py, so it can't be edited. It parses two
     #: files it wrote itself a moment before, at build time; nothing it reads was received.

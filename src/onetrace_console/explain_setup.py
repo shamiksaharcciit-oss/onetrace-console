@@ -64,7 +64,7 @@ BUTTON_USES = (
 )
 #: The install line beside the console (console 0.7.0): onetrace-explain 0.3, which reads the key from the
 #: keychain, with its keyring extra. Never a dependency of the console.
-INSTALL = 'pip install "onetrace-explain[keyring]>=0.3"'
+INSTALL = 'pip install "onetrace-explain[keyring]>=0.3.2"'
 #: Where the key is (console 0.7.0): the keychain or the variable; the console reads the keychain only to
 #: say whether a key is stored.
 WHERE_THE_KEY_IS = (
@@ -287,6 +287,32 @@ def save(form: dict) -> tuple[int, str, list[str] | None]:
     except OSError as e:
         return 400, NOT_SAVED.format(why=os_said(e)), None
     return 200, SAVED.format(path=path), lines
+
+
+def change_of(form: dict) -> dict | None:
+    """What a press of the setup form would change, for the audit log's `setting.changed`: the
+    provider, model and address, never the key; for Replace and Remove, that the key was. None where the press is
+    refused before anything is written, or changes nothing (Remove's first press asks)."""
+    import re as _re
+
+    action = form.get("action", "save")
+    if action == "remove-confirmed":
+        return {"setting": "explain key", "action": "removed"}
+    if action == "remove":
+        return None
+    if action == "replace":
+        key = form.get("key", "")
+        return {"setting": "explain key", "action": "replaced"} if key and not unsendable(key) else None
+    provider = form.get("provider", "")
+    name = form.get("name", "").strip()
+    base_url = form.get("base_url", "").strip()
+    if provider not in dict(PROVIDERS) or not name:
+        return None
+    if (base_url and not _re.match(r"https?://[^\s]+$", base_url)) or (provider == "openai" and not base_url):
+        return None
+    if form.get("key") and unsendable(form["key"]):
+        return None
+    return {"setting": "explain setup", "provider": provider, "model": name, "address": base_url}
 
 
 def unsendable(key: str) -> bool:

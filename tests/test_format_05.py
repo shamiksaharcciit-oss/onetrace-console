@@ -37,9 +37,23 @@ def _installed():
     _require_installed()
 
 
+#: What a 0.5 run's pages draw of format 0.5's own members, which its 0.4 twin cannot hold: held by
+#: `tests/test_step_kinds.py`, set aside here.
+_FORMAT_05_ONLY = re.compile(
+    r'<section data-section="step-kind".*?</section>|<p class="sub" data-section="run-agent".*?</p>'
+    r'|<div data-section="run-agent".*?</div>|<div class="step" data-step-kind[^>]*>.*?</div>'
+    r'|<span[^>]* data-kinds="[^"]*">.*?</span>'
+    r'|<section data-section="store-state">.*?</section>|<p class="sub" data-section="state-at-open".*?</p>'
+    r'|<div data-section="state-at-open".*?</div>'
+    r'|<section data-section="code">.*?</section>|<p class="sub" data-section="rerun-parts".*?</p>',
+    re.S,
+)
+
+
 def _text(page: str) -> list[str]:
     """`test_format_04`'s reading of a page, with onetrace 0.8.0's version and format 0.5's minor said as 0.7.1's
-    and 0.4's are."""
+    and 0.4's are, and what is drawn of format 0.5's own members set aside."""
+    page = _FORMAT_05_ONLY.sub("", page)
     page = re.sub(r"0\.8\.0", "0.7.1", page)
     page = re.sub(r"(stage-receipt(?:-chain)?)/0\.5\b", r"\1/0.4", page)
     return _text_0_4(page)

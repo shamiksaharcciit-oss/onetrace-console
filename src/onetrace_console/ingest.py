@@ -428,7 +428,7 @@ def parse_sums(text: bytes, *, name: str = SUMS_NAME) -> dict[str, str]:
     """`<sha256>  <path>` or `<sha256> *<path>` per line: the two forms `sha256sum` writes.
 
     `name` is the sums file's own name, for the rows a refusal gives: a run's `SHA256SUMS`,
-    or the onedoor side-car's `<export>.sha256` (the pin re-check, note 4).
+    or the onedoor side-car's `<export>.sha256` (where the pin re-check reads it).
     """
     sums: dict[str, str] = {}
     #: Which line first named each path: a path listed twice, with the same
@@ -606,6 +606,7 @@ def accept(
     limits=None,
     run_folder: str = "",
     shared_head: bool = False,
+    team: str = "",
 ) -> Accepted | Rejection:
     """Validate a delivery completely, then store it completely, or store nothing.
 
@@ -622,6 +623,10 @@ def accept(
     `run_folder`: the run folder a folder load read the delivery from, kept on the run. With
     `shared_head` -- another folder carries the same run and chain head -- the run is stored under
     its folder's own key (`store.folder_key`), so neither folder's run stands in for the other's.
+
+    `team`: the team the delivery is the run of, with teams configured: its token's, or the watched
+    folder's. The run is keyed with it, and "already held" and "run_id reused" are read within it alone, so neither
+    answer tells one team that another holds the run.
     """
     headers = {k.lower(): v for k, v in (headers or {}).items()}
     try:
@@ -838,7 +843,11 @@ def accept(
 
     #: No row refused them: each is a non-empty string, the format one this store implements.
     run_id, chain_head, fmt = cast(str, run_id), cast(str, chain_head), cast(str, fmt)
-    key = folder_key(run_id, chain_head, run_folder) if run_folder and shared_head else run_key(run_id, chain_head)
+    key = (
+        folder_key(run_id, chain_head, run_folder, team)
+        if run_folder and shared_head
+        else run_key(run_id, chain_head, team)
+    )
     try:
         stored = store.get_run(key)
     except StoreError as e:
@@ -858,7 +867,7 @@ def accept(
         return Accepted(run=stored, created=False, status=200)
 
     flags: list[str] = []
-    if any(r.chain_head != chain_head for r in store.runs_with_id(run_id)):
+    if any(r.chain_head != chain_head and r.team == team for r in store.runs_with_id(run_id)):
         # "two chains under one name is itself a finding" -- two chains: a run folder copied
         # under another name carries the same chain, which `twins` reads instead.
         flags.append(RUN_ID_REUSED)
@@ -891,6 +900,7 @@ def accept(
         recorded_count=len(receipts),
         **delivered_and_retries(attempts, seen_declared),
         folder=run_folder,
+        team=team,
     )
     store.put_run(run)
     return Accepted(run=run, created=True)

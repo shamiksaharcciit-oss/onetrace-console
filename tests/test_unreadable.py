@@ -102,7 +102,7 @@ def test_a_run_the_viewer_refuses_gets_a_page_that_says_so(files, store, build, 
         assert TITLE in text and RUN_ID in text and reason in text, name
         assert 'data-section="ladder"' not in page, "no page is drawn from the record"
         assert_the_prohibitions(name, page)
-    assert "No authorization records" in _text(pages[AUTHORIZATION]), "its board 3 page too"
+    assert "No authorization records" in _text(pages[AUTHORIZATION]), "its authorization page too"
 
 
 def test_the_stated_page_claims_nothing_about_the_record(files, store):

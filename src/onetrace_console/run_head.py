@@ -11,6 +11,7 @@ domain counts ("chunks", "vectors") never appear. The answer page draws the same
 from __future__ import annotations
 
 import re
+from contextvars import ContextVar
 
 from onetrace_console import tones, twins
 from onetrace_console.store import Store, StoredRun
@@ -30,18 +31,26 @@ HEAD_RUNGS = ("records-agree", "approved", "signed", "anchored")
 HEAD_FROM_CONTENTS = {"approved"}
 FROM_CONTENTS = ' data-from="contents"'
 
+#: The run being drawn's authorization facts (`authorization_list.Facts`), set while its pages are drawn
+#: (`pages.render_execution`): where it names a gated step, the head's tabs end with its Authorization page.
+AUTH_FACTS: ContextVar = ContextVar("onetrace_console_auth_facts", default=None)
 #: The tabs: each a page this run already has, or a place on this page.
 TAB_GRAPH, TAB_TABLE, TAB_IO, TAB_RECEIPT, TAB_COMPARE = ("Graph", "Table", "Inputs & outputs", "Receipt", "Compare")
 #: The run's page as run A, the baseline: the pipeline's other runs as run B (`choose_pages`).
 TAB_CHOOSE = "Choose as run A"
 
 HEAD_CSS = """
+:is(.shell .page,.cp) [data-section=run-head] .plain{margin:0;font-size:var(--fs-body);color:var(--ink);max-width:80ch}
+:is(.shell .page,.cp) [data-section=run-head] .plain-anchor{margin:0;font-size:var(--fs-small);color:var(--ink-muted);
+  max-width:80ch}
 :is(.shell .page,.cp) [data-section=run-head]{display:flex;flex-direction:column;gap:10px;margin:0 0 6px}
 :is(.shell .page,.cp) [data-section=run-head] .crumbs{margin:0;font-size:var(--fs-small);color:var(--ink-muted)}
 :is(.shell .page,.cp) [data-section=run-head] .title{display:flex;flex-wrap:wrap;align-items:center;gap:10px}
 :is(.shell .page,.cp) [data-section=run-head] .chips{display:contents}
 :is(.shell .page,.cp) [data-section=run-head] .run-title{margin:0;overflow-wrap:anywhere;
   font-size:var(--fs-h1);font-weight:600}
+@media (max-width:599px){:is(.shell .page,.cp) [data-section=run-head] .run-title{font-size:20px;line-height:1.3;
+  overflow-wrap:break-word}}
 :is(.shell .page,.cp) [data-section=run-head] .pill{display:inline-block;font-size:var(--fs-small);
   font-weight:500;padding:3px 8px;border-radius:var(--r-pill);text-decoration:none}
 :is(.shell .page,.cp) [data-section=run-head] .ok{background:var(--ok-bg);color:var(--ok-ink)}
@@ -114,15 +123,21 @@ def declined_chip(run) -> str:
     """ "Declined at <step>" where the run stopped at a step's own rule, in the declined outline;
     nothing otherwise. From the run's stored reading, as the runs list and the Overview read it."""
     from onetrace_console.overview import declined
-    from onetrace_console.viewer.model import name_shown
-    from onetrace_console.viewer.sentences import template
 
     found = declined(run)
     if found is None:
         return ""
+    return declined_pill(found["stage"])
+
+
+def declined_pill(stage: str) -> str:
+    """ "Declined at <step>", in the declined outline, for the step a run stopped at by its own rule."""
+    from onetrace_console.viewer.model import name_shown
+    from onetrace_console.viewer.sentences import template
+
     return (
         f'<span class="pill {tones.tone(tones.STOPPED, "declined")}" data-declined="true">'
-        f"{escape(template('declined.chip').format(stage=name_shown(found['stage'])))}</span>"
+        f"{escape(template('declined.chip').format(stage=name_shown(stage)))}</span>"
     )
 
 
@@ -178,6 +193,11 @@ def run_head(
     #: Whether the run closed and how it ended, in the words of onetrace-verify's own row: read from
     #: the record's contents, with the count.
     ending = f'<span data-ending="{closing.state(run.ending)}">{closing.html(run.ending)}</span>'
+    #: A run a later process recovered reads so, beside the check's own row on its close (`closing.recovered`).
+    from onetrace_console import service_link
+
+    receipts, _, rows = service_link.context(run, store)
+    ending = closing.recovered(receipts, rows) or ending
     sub = [
         f'recorded in the format <span class="mono">{escape(run.format)}</span>' if run.format else "",
         f"ran {_time(ran)}" if ran else "the record gives no time it ran",
@@ -188,6 +208,12 @@ def run_head(
     tabs = [(TAB_GRAPH, f"{page}#graph"), (TAB_TABLE, f"{page}#timeline")]
     tabs += [(TAB_IO, stage_page)] if stage_page else []
     tabs += [(TAB_RECEIPT, receipt)] if receipt else []
+    #: Every run with a gated step: its Authorization page, with the count, whether its record holds up or not.
+    auth = AUTH_FACTS.get()
+    if auth is not None and auth.gated:
+        from onetrace_console.authorization_list import TAB, gated_words
+
+        tabs += [(f"{TAB} · {gated_words(auth.gated)}", "authorization.html")]
     tabs += [(TAB_COMPARE, source[1])] if source else []
     if label:
         from onetrace_console.choose_pages import pair_href
@@ -215,6 +241,14 @@ def run_head(
         #: Another folder carrying the same run and chain head: each is read on its own, and
         #: the page says which folder this is and how the other's files compare.
         + "".join(f'<p class="sub" data-twin="true">{escape(t)}</p>' for t in twins.sentences(run, store))
+        #: Format 0.5's run agent, as the record holds it (`step_kinds`); nothing for an earlier format.
+        + _run_agent_line(run, store)
+        #: Format 0.5's stores' revisions at open (`store_state`), only where the first receipt holds them.
+        + _state_at_open_line(run, store)
+        #: Format 0.5's re-run parts (`code_line`): what a re-run took, and from which run.
+        + _rerun_label_line(run, store)
+        + _check_lines(run, store)
+        + _rerun_parts_line(run, store)
         #: Without its four answers on the authorization page, which must never read as a
         #: pass: "Ran as approved: Yes" there would read as the action approved.
         + (_rungs(model) if rungs else "")
@@ -222,6 +256,50 @@ def run_head(
         + " ".join(f'<a href="{escape(h)}">{escape(t)}</a>' for t, h in tabs)
         + "</nav></section>"
     )
+
+
+def _run_agent_line(run: StoredRun, store: Store) -> str:
+    from onetrace_console import step_kinds
+    from onetrace_console.home import _envelope
+    from onetrace_console.info_mark import rows_of
+    from onetrace_console.stage_pages import _receipts
+
+    line = step_kinds.head_line([r["receipt"] for r in _receipts(run, store)], rows_of(_envelope(run, store)))
+    return line.replace('data-section="run-agent"', f'data-section="run-agent"{FROM_CONTENTS}', 1) if line else ""
+
+
+def _state_at_open_line(run: StoredRun, store: Store) -> str:
+    from onetrace_console import store_state
+    from onetrace_console.home import _envelope
+    from onetrace_console.info_mark import rows_of
+    from onetrace_console.stage_pages import _receipts
+
+    line = store_state.head_line([r["receipt"] for r in _receipts(run, store)], rows_of(_envelope(run, store)))
+    return (
+        line.replace('data-section="state-at-open"', f'data-section="state-at-open"{FROM_CONTENTS}', 1) if line else ""
+    )
+
+
+def _check_lines(run: StoredRun, store: Store) -> str:
+    """A check's own run: what it ran, predicted and got; a run a stored check names: what came back (`check_results`)."""
+    from onetrace_console import check_results
+
+    return check_results.check_line(run, store, "../../") + check_results.checked_line(run, store, "../../")
+
+
+def _rerun_label_line(run: StoredRun, store: Store) -> str:
+    from onetrace_console import rerun_label, service_link
+
+    line = rerun_label.head_line(rerun_label.of_run(run), service_link.held_runs(store), store, "../../")
+    return line.replace('data-section="rerun-label"', f'data-section="rerun-label"{FROM_CONTENTS}', 1) if line else ""
+
+
+def _rerun_parts_line(run: StoredRun, store: Store) -> str:
+    from onetrace_console import code_line, service_link
+
+    receipts, _, rows = service_link.context(run, store)
+    line = code_line.parts_line(receipts, rows, service_link.held_runs(store), store, "../../")
+    return line.replace('data-section="rerun-parts"', f'data-section="rerun-parts"{FROM_CONTENTS}', 1) if line else ""
 
 
 _TOP = re.compile(r'<header class="top">.*?</header>', re.S)

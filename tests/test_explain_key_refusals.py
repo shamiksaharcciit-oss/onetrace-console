@@ -1,4 +1,4 @@
-"""Two things onetrace-explain 0.3.1 refuses or withholds, held for the console's Set up Explain form.
+"""Two things onetrace-explain 0.3.2 refuses or withholds, held for the console's Set up Explain form.
 
 - The form refuses to keep a key that no request can carry, as onetrace-explain 0.3 refuses to send one:
   a line end, another control character, or a character outside ASCII (a zero-width space, a no-break
@@ -115,8 +115,8 @@ def test_a_stored_key_is_never_in_the_panel_the_log_or_an_attempt_record(
         *[(str(p.name), p.read_text(encoding="utf-8", errors="replace")) for p in logs],
     ]:
         assert not any(r in text for r in runs), where
-    #: onetrace-explain 0.3 says it: an error by its status alone, a reply holding the key not kept. 0.3.1 says the
-    #: reason as it is, with no "the reply was not kept:" before it.
+    #: onetrace-explain 0.3 says it: an error by its status alone, a reply holding the key not kept. Since 0.3.1
+    #: it says the reason as it is, with no "the reply was not kept:" before it.
     said = attempts[-1]["stderr"]
     if answer == "an error echoing it":
         assert "HTTPError: 401" in said, said

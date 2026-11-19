@@ -1,6 +1,6 @@
-"""The Overview in v6 board 1's look, and the All counts page.
+"""The Overview in its design's look, and the All counts page.
 
-Board 1's source HTML is the authority for the look. What these tests hold is what the look must
+The design's source HTML is the authority for the look. What these tests hold is what the look must
 not change and what it must carry: the four cards in one grid; what the evidence establishes beside
 what needs attention first; each pill's colour from the state it stands for, never from its
 words; the large figure being the count its sentence opens with, inside that same sentence; and
@@ -55,7 +55,7 @@ def test_each_card_leads_with_one_short_line_and_keeps_its_denominator(ten_runs,
     home = pages[HOME]
     leads = dict(
         re.findall(
-            r'<div data-card="([^"]+)"><h3>[^<]*</h3><p class="lead"><a [^>]*>'
+            r'<div data-card="([^"]+)"><h2>[^<]*</h2><p class="lead"><a [^>]*>'
             r"(.*?)</a>",
             home,
             re.S,
@@ -165,7 +165,7 @@ def test_the_console_page_rules_reach_only_the_pages_that_carry_cp():
             selector = selector.strip()
             assert selector.startswith(".cp") or selector.startswith(".shell>main:has(>.cp)"), selector
     sizes = set(re.findall(r"font-size:([^;}]+)", PAGE_CSS))
-    #: Board 1's sizes: its tokens, and 15px (the panels' headings and "of N"), which the skin
+    #: The design's sizes: its tokens, and 15px (the panels' headings and "of N"), which the skin
     #: has no token for.
     assert sizes <= {"var(--fs-h1)", "var(--fs-kpi)", "var(--fs-nav)", "var(--fs-body)", "var(--fs-small)", "15px"}, (
         sizes
@@ -208,7 +208,7 @@ def test_every_page_the_console_draws_carries_the_skin_and_no_viewer_page_does(t
 
     checked = next(r for r in store.runs() if r.check_report)
     run_pages = render_execution(checked, store, generated_at=GENERATED_AT).pages
-    #: The authorization page and the notices are the console's own (board 3).
+    #: The authorization page and the notices are the console's own.
     pages = {
         **pages,
         "authorization": run_pages[AUTHORIZATION],
@@ -216,8 +216,8 @@ def test_every_page_the_console_draws_carries_the_skin_and_no_viewer_page_does(t
         "unchecked": render_unchecked_run(checked, generated_at=GENERATED_AT),
         "failed": render_failed_page("a reason", generated_at=GENERATED_AT),
     }
-    #: Each stage page (board 4) is the console's own too.
-    #: And the run receipt (board 5).
+    #: Each stage page is the console's own too.
+    #: And the run receipt.
     from onetrace_console.receipt_page import RECEIPT
 
     stages = sorted(n for n in run_pages if n.startswith("stage-")) + [RECEIPT]

@@ -106,6 +106,8 @@ def pages(shared_cli_demo) -> dict[str, str]:
 
 #: A comparison page's "Proof" view, beside it.
 PROOF_PAGE = "-proof.html"
+#: A comparison's Authorization tab, beside it: the pair's gated steps, with no graph and no changes table.
+AUTHORIZATION_PAGE = "-authorization.html"
 _REGION = re.compile(r'<div class="graph-box" tabindex="0" role="region" aria-label="([^"]+)">')
 
 
@@ -118,6 +120,7 @@ def test_each_graph_panel_is_a_named_region_a_keyboard_reaches(pages, examined):
         if rel.startswith("diff/")
         and not rel.endswith(TEXT_PAGE)  # a Diff page, not its text diff's own
         and not rel.endswith(PROOF_PAGE)
+        and not rel.endswith(AUTHORIZATION_PAGE)
     ]  # its "What changed" view, which holds the graph
     runs = [h for rel, h in pages.items() if rel.endswith(("/case.html", "/proof.html"))]
     examined(len(compare) + len(runs), "pages with a graph")
@@ -143,7 +146,7 @@ def test_the_changes_table_scrolls_in_its_own_named_region(pages, examined):
     compare = [
         h + pages.get(rel[: -len(".html")] + PROOF_PAGE, "")
         for rel, h in pages.items()
-        if rel.startswith("diff/") and not rel.endswith((TEXT_PAGE, PROOF_PAGE))
+        if rel.startswith("diff/") and not rel.endswith((TEXT_PAGE, PROOF_PAGE, AUTHORIZATION_PAGE))
     ]
     examined(len(compare), "comparison pages")
     for html in compare:

@@ -63,11 +63,13 @@ $Shapes = @('\bR-20\d\d-\d\d-\d\d', '\bWO-C\d', '(?i)until\s+onetrace')
 function Words-Seen([string]$Html) {
     # The page's visible text, as the scan reads it: scripts and styles out, tags out; onetrace's own format names
     # (`<name>-decision-ref/1`, `<name>-issuer-trust/1`) as a record writes them, out; the verifier's own row label
-    # for a model call's engine setting, inside its quoted output and nowhere else, out.
+    # for a model call's engine setting, inside its quoted output and nowhere else, out; and that setting's field
+    # name as the model-call record writes it, `engine.settings.engine_core` whole (a vLLM setting's name), out.
     $t = [regex]::Replace($Html, '(?s)<(script|style)\b.*?</\1>', ' ')
     $t = [regex]::Replace($t, '(?s)<(?:section[^>]*data-section="verifier-output"|div[^>]*data-layer="3")[^>]*>.*?</(?:section|div)>',
         { param($m) [regex]::Replace($m.Value, '(\[(?:PASS|FAIL|WARN)\s*\][^<\n]*?) engine core -- ', '$1 -- ') })
     $t = [regex]::Replace($t, '<[^>]+>', ' ')
+    $t = [regex]::Replace($t, '(?<![A-Za-z0-9_.])engine\.settings\.engine_core(?![A-Za-z0-9_]|\.[A-Za-z0-9_])', ' ')
     $t = [regex]::Replace($t, '[A-Za-z]+-(?:decision-ref|issuer-trust)/1', ' ')
     $found = @()
     foreach ($w in ($t -split '[^A-Za-z0-9]+' | Where-Object { $_ })) {
@@ -103,10 +105,13 @@ $all = @{ "/" = $front.Body; "/comparisons.html" = $comps.Body; "/executions-all
 foreach ($k in $pages.Keys) { $all[$k] = $pages[$k].Body }
 foreach ($k in $stepPages.Keys) { $all[$k] = $stepPages[$k].Body }
 $refused = @($all.Keys | Where-Object { @(Words-Seen $all[$_]).Count -gt 0 })
-Check "C4 the public scan's words hold on its $($all.Count) pages (the verifier's own engine-setting row allowed, nothing else)" ($refused.Count -eq 0) ($refused -join ", ")
+Check "C4 the public scan's words hold on its $($all.Count) pages (the verifier's own engine-setting row and the record's field name for it allowed, nothing else)" ($refused.Count -eq 0) ($refused -join ", ")
 $r = Get-Page "/ingest" "POST"
 Check "C5 a write is refused: POST /ingest answers 403" ($r.Status -eq 403) "$($r.Status)"
-Check "C6 / answers 200 with the read-only banner" ($front.Status -eq 200 -and $front.Body.Contains('data-frame="banner"')) "$($front.Status)"
+# The banner's sentence on what this store holds, as its build draws it (`public.CAPTURES_RUNS`): an image built with
+# the demo's words in its place (0.8.0's said the demo's 11 pipelines) has the banner and still fails here.
+$Holds = "It holds six runs from two small example pipelines whose model calls were captured"
+Check "C6 / answers 200 with the read-only banner, saying what this store holds" ($front.Status -eq 200 -and $front.Body.Contains('data-frame="banner"') -and $front.Body.Contains($Holds)) "$($front.Status)"
 if ($Demo) {
     $back = [regex]::Escape("The onetrace-console demo: <a href=`"$($Demo.TrimEnd('/'))")
     Check "C7 the Overview links back to the demo" ([regex]::IsMatch($front.Body, $back)) "$($front.Status)"

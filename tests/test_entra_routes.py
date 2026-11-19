@@ -24,6 +24,7 @@ POST = {
     "/v1/runs": (ING, ING),
     "/v1/decisions": (ING, ING),
     "/compare": (V, I),
+    "/compare/check": (V, I),
     "/text-diff/more": (V, I),
     "/explain": (V, I),
     "/explain/packet": (V, I),
@@ -38,6 +39,7 @@ POST = {
     "/neighbours/on": (A, A),
     "/neighbours/off": (A, A),
     "/explain/setup": (A, A),
+    "/forwarding/setup": (A, A),
 }
 #: The pages that need more than viewer with Entra ID: rendered path -> role.
 GET_ABOVE_VIEWER = {"explain/setup": A, "neighbours/setup": A, "bisect": I}

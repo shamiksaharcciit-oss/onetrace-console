@@ -454,6 +454,14 @@ def pytest_terminal_summary(terminalreporter, exitstatus, config):
 # `pytest_testnodedown` exists only where xdist is installed.
 
 
+def pytest_configure(config):
+    """A passing suite keeps no temporary folders (`tests/basetemp_cleanup.py`)."""
+    from tests import basetemp_cleanup
+
+    if not config.pluginmanager.has_plugin("basetemp-cleanup"):
+        config.pluginmanager.register(basetemp_cleanup, "basetemp-cleanup")
+
+
 def pytest_sessionfinish(session, exitstatus):
     workeroutput = getattr(session.config, "workeroutput", None)
     if workeroutput is not None:  # this process is an xdist worker

@@ -15,6 +15,7 @@ from pathlib import Path
 
 import pytest
 
+from onetrace_console import run_index
 from tests.test_neighbours import _absent, held, needs_extra, on, recorded  # noqa: F401 - fixtures
 
 REPO = Path(__file__).resolve().parent.parent
@@ -193,7 +194,7 @@ def test_an_index_in_an_earlier_format_is_refused_with_who_writes_it_again(tmp_p
     examined(1, "planted index in an earlier format")
     said = _refused(tmp_path, {"format": EARLIER, "runs": []})
     assert _earlier_reason_held(said), said
-    assert "reads onetrace-console-run-index/0.2 only" not in said
+    assert f"reads {run_index.FORMAT} only" not in said
 
 
 @pytest.mark.parametrize(
@@ -215,8 +216,7 @@ def test_a_store_whose_index_is_not_one_this_version_reads_is_refused(tmp_path, 
     examined(1, "planted index")
     said = _refused(tmp_path, body)
     assert said.endswith(
-        f"run_index.json is {found}, and this interface (onetrace-console-store-read/1) reads "
-        f"onetrace-console-run-index/0.2 only"
+        f"run_index.json is {found}, and this interface (onetrace-console-store-read/1) reads {run_index.FORMAT} only"
     ), said
     assert "earlier format" not in said
 
@@ -230,7 +230,7 @@ def test_sabotage_an_earlier_format_given_the_generic_message_is_caught(tmp_path
     examined(1, "planted interface")
     said = _refused(tmp_path, {"format": EARLIER, "runs": []})
     assert not _earlier_reason_held(said)
-    assert said.endswith("reads onetrace-console-run-index/0.2 only")
+    assert said.endswith(f"reads {run_index.FORMAT} only")
 
 
 def test_an_index_that_cannot_be_read_is_refused_with_the_error_s_reason_and_path_as_written(

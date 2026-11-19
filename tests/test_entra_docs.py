@@ -49,7 +49,7 @@ def test_it_names_every_app_role_and_every_key_the_console_reads(examined):
         "**A role removed in Entra takes effect at the next sign-in**",
         "within `session_max_hours`",
         "**Entra's audit log is the record of sign-ins.**",
-        "**Every role reads every run.**",
+        "**Without `teams`, every role reads every run.**",
         "Only `login.microsoftonline.com`",
     ],
 )

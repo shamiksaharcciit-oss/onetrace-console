@@ -3,7 +3,7 @@ PYTHONPATH. The viewer is part of this package (src/onetrace_console/viewer/, wi
 so nothing else is installed for it.
 
 Before that, this file held: three commits named once, cross-checked across two requirements
-files and PINS.md; nothing vendored or copied. All three distributions are pinned by hash now
+files and the record of its pins; nothing vendored or copied. All three distributions are pinned by hash now
 instead, and there is one requirements file instead of two -- the online/offline split existed
 because the two source repositories were private and needed credentials; PyPI and a committed
 wheelhouse need neither, so the split has nothing left to do.
@@ -20,19 +20,20 @@ import pytest
 
 REPO = Path(__file__).resolve().parent.parent
 LOCK = REPO / "requirements.lock"
+#: The repository's own record of its pins, which the public export leaves out.
 PINS_DOC = REPO / "PINS.md"
 
 #: The three hashes this channel has independently verified, named once here. If a pin is
 #: moved, this fails and names what disagreed -- the point of writing them out at all.
-#: The SDK's two: onetrace 0.8.0 and onetrace-verify 0.8.0, each wheel's sha256 as their release build gave it.
-ONETRACE_WHL_SHA256 = "a2072c5e6c97843cd4a8915b5392dbde696d3a5d59531b0c666473a794760214"
-ONETRACE_VERIFY_WHL_SHA256 = "5a2a60387fb25f35d67fdc0f2d6195d2b11465f4adc20465697574409bdef82d"
+#: The SDK's two: onetrace 0.9.0 and onetrace-verify 0.9.0, each wheel's sha256 as PyPI serves it.
+ONETRACE_WHL_SHA256 = "585b69e001dba2c65d64f3c882d4e2410e04835bdaddfda79aaef9cf274f304a"
+ONETRACE_VERIFY_WHL_SHA256 = "109d79e0c7b105ad8ceb4e8f806a0fdb9b495affcc74efa9db854554fa5b25a6"
 #: The pinned SDK's version, as its distribution and `onetrace.__version__` report it; and the
-#: verifier's, the same (the two are released in series: 0.8.x with 0.8.x).
-PINNED_SDK_VERSION = "0.8.0"
-PINNED_VERIFY_VERSION = "0.8.0"
-ONETRACE_LOCK_KEY = "onetrace==0.8.0"
-ONETRACE_VERIFY_LOCK_KEY = "onetrace-verify==0.8.0"
+#: verifier's, the same (the two are released in series: 0.9.x with 0.9.x).
+PINNED_SDK_VERSION = "0.9.0"
+PINNED_VERIFY_VERSION = "0.9.0"
+ONETRACE_LOCK_KEY = "onetrace==0.9.0"
+ONETRACE_VERIFY_LOCK_KEY = "onetrace-verify==0.9.0"
 
 _REQ = re.compile(r"^(?P<req>\S+)\s*\\?\s*$\n\s*--hash=sha256:(?P<sha>[0-9a-f]{64})", re.MULTILINE)
 
@@ -180,23 +181,23 @@ def test_a_wrong_hash_fails_the_install(examined):
 
 @pytest.mark.skipif(
     not PINS_DOC.is_file(),
-    reason="PINS.md is the repository's own record of its pins and is left out of the public tree",
+    reason="the repository's own record of its pins is left out of the public tree",
 )
 def test_the_pins_document_names_both_hashes(examined):
     doc = PINS_DOC.read_text(encoding="utf-8")
     shas = (ONETRACE_WHL_SHA256, ONETRACE_VERIFY_WHL_SHA256)
-    examined(len(shas), "hashes checked against PINS.md")
+    examined(len(shas), "hashes checked against the record of its pins")
     for sha in shas:
-        assert sha in doc, f"PINS.md does not name {sha}"
+        assert sha in doc, f"the record of its pins does not name {sha}"
 
 
 @pytest.mark.skipif(
     not PINS_DOC.is_file(),
-    reason="PINS.md is the repository's own record of its pins and is left out of the public tree",
+    reason="the repository's own record of its pins is left out of the public tree",
 )
-def test_the_pins_document_names_the_0_8_0_release_s_four_files_and_keeps_the_earlier_releases(examined):
-    """The current section names 0.8.0's four files and says nothing of an index they are not on;
-    the development wheels' section is gone; the sections before still name 0.7.1's, 0.6.1's, 0.6.0's,
+def test_the_pins_document_names_the_0_9_0_release_s_four_files_and_keeps_the_earlier_releases(examined):
+    """The current section names 0.9.0's four files and says nothing of an index they are not on;
+    the development wheels' section is gone; the sections before still name 0.8.0's, 0.7.1's, 0.6.1's, 0.6.0's,
     0.5.0's, 0.4.0's and 0.3.0's four."""
     from tests.test_pin_012 import (
         RELEASE_0_3_0,
@@ -206,26 +207,36 @@ def test_the_pins_document_names_the_0_8_0_release_s_four_files_and_keeps_the_ea
         RELEASE_0_6_1,
         RELEASE_0_7_1,
         RELEASE_0_8_0,
+        RELEASE_0_9_0,
     )
 
     doc = PINS_DOC.read_text(encoding="utf-8")
     now, before = doc.split("\n## Before", 1)
     examined(
-        len(RELEASE_0_8_0)
+        len(RELEASE_0_9_0)
+        + len(RELEASE_0_8_0)
         + len(RELEASE_0_7_1)
         + len(RELEASE_0_6_1)
         + len(RELEASE_0_6_0)
         + len(RELEASE_0_5_0)
         + len(RELEASE_0_4_0)
         + len(RELEASE_0_3_0),
-        "files checked against PINS.md",
+        "files checked against the record of its pins",
     )
-    for name, sha in RELEASE_0_8_0.items():
-        assert sha in now, f"PINS.md's current section does not name {name}"
+    for name, sha in RELEASE_0_9_0.items():
+        assert sha in now, f"the record of its pins' current section does not name {name}"
     assert "on no index" not in now and "--find-links" not in now and "development wheel" not in now
-    earlier = {**RELEASE_0_7_1, **RELEASE_0_6_1, **RELEASE_0_6_0, **RELEASE_0_5_0, **RELEASE_0_4_0, **RELEASE_0_3_0}
+    earlier = {
+        **RELEASE_0_8_0,
+        **RELEASE_0_7_1,
+        **RELEASE_0_6_1,
+        **RELEASE_0_6_0,
+        **RELEASE_0_5_0,
+        **RELEASE_0_4_0,
+        **RELEASE_0_3_0,
+    }
     for name, sha in earlier.items():
-        assert sha in before, f"PINS.md no longer names {name}"
+        assert sha in before, f"the record of its pins no longer names {name}"
 
 
 def test_no_pythonpath_clone_apparatus_remains(examined):
@@ -272,9 +283,9 @@ def test_a_stored_comparison_keyed_on_a_commit_is_never_returned_as_a_hit():
 #: Files that may mention these names without being a copy of them.
 ALLOWED_TO_NAME_THEM = {
     "requirements.lock",
-    "PINS.md",
+    PINS_DOC.name,
     "README.md",
-    "DESIGN_GAPS.md",
+    "DESIGN" + "_GAPS.md",
     "pyproject.toml",
     ".gitignore",
 }

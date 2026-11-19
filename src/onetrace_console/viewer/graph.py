@@ -413,7 +413,7 @@ def table(layout: Layout, esc=escape) -> str:
             f'<tbody>{node_rows}</tbody></table>'
             f'<table class="timeline" data-section="graph-links"><thead><tr>'
             f'<th>{escape(template("graph.col_from"))}</th>'
-            f'<th>{escape(template("graph.col_to"))}</th><th></th></tr></thead>'
+            f'<th>{escape(template("graph.col_to"))}</th><th scope="col"><span class="visually-hidden">Note</span></th></tr></thead>'
             f'<tbody>{link_rows}</tbody></table>')
 
 

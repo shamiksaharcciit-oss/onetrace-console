@@ -50,6 +50,7 @@ from onetrace_console.words import (
     RELATIVE_TIME_SCRIPT,
     escape,
     generated_footer,
+    hidden_header,
     named,
     record_href,
     rest,
@@ -89,18 +90,32 @@ def _limit_sentence() -> str:
     )
 
 
-def _document(title: str, body: str) -> str:
+def _document(title: str, body: str, *, skip: tuple[str, str] | None = None) -> str:
     """A page in the console's frame: the viewer's head linking the console's
-    one stylesheet, and an empty frame the server fills as it serves the page. No external asset."""
+    one stylesheet, and an empty frame the server fills as it serves the page. No external asset.
+    `skip`: (words, id) of a skip link, the page's first focusable item, to the part it names."""
     from onetrace_console.frame import STYLESHEET
     from onetrace_console.viewer.page import FRAME_NAV, _head, framed
 
     with framed(STYLESHEET):
         head = _head(title)
+    first = f'<a class="skip-link" href="#{escape(skip[1])}">{escape(skip[0])}</a>' if skip else ""
     return (
-        f'{head}<body>\n<div class="shell"><nav class="frame" data-frame>{FRAME_NAV}</nav>'
+        f'{head}<body>\n{first}<div class="shell"><nav class="frame" data-frame>{FRAME_NAV}</nav>'
         f"<main>\n{body}\n</main></div>\n</body>\n</html>\n"
     )
+
+
+#: Investigate's skip link, on its What changed tab, to the short answer.
+SKIP_TO_FIRST = ("Skip to the first difference", "first-difference")
+
+
+def with_skip(page: str, skip: tuple[str, str]) -> str:
+    """`page` with a skip link to `skip`'s id as its first focusable item, where the page holds that id."""
+    if f'id="{skip[1]}"' not in page or "<body>\n" not in page:
+        return page
+    link = f'<a class="skip-link" href="#{escape(skip[1])}">{escape(skip[0])}</a>'
+    return page.replace("<body>\n", "<body>\n" + link, 1)
 
 
 def _tag(text: str) -> str:
@@ -109,7 +124,7 @@ def _tag(text: str) -> str:
 
 # --------------------------------------------------------------------- the Diff page
 
-#: The SDK's ladder verdicts, worded for a reader (board 6). "downstream" is "changed after
+#: The SDK's ladder verdicts, worded for a reader, as the Compare page's design words them. "downstream" is "changed after
 #: it", never "changed as a result": the ladder establishes the order of the differences,
 #: not that the first one caused the rest.
 _RESULT_WORDS = {
@@ -456,7 +471,7 @@ def _first_difference_summary(
     variance: str = "",
     inputs: list[str] | None = None,
 ) -> str:
-    """Board 6's stage-level summary of where two runs first differ, and what that leaves open,
+    """The Compare page design's stage-level summary of where two runs first differ, and what that leaves open,
     as the Compare page's headline card: where (the stage, and the stages identical before it)
     beside what (its settings and output, the stages after it, what is not established) and the
     command that repeats it.
@@ -1202,7 +1217,7 @@ def _graph_caveat(report, comparison=None, store: Store | None = None) -> str:
 
 #: The frames 0.2.0 fills, each reading its placeholder
 #: until then. They state nothing about the pair: no field, count or state of their own.
-#: Board 7 has no frame before 0.2.0: it is shown only where the
+#: Where the change started has no frame before 0.2.0: it is shown only where the
 #: first difference sits at a node whose corpus link changed, which only 0.2.0 can say, and a
 #: frame on every diverged pair would suggest a source change that may not exist.
 TEXT_DIFF_HEADING = "The text diff"
@@ -1216,7 +1231,7 @@ TEXT_DIFF_NOT_KEPT = "This comparison was made before the text diff was kept. Co
 TEXT_DIFF_UNREADABLE = "This console can't read this text diff: {why}"
 
 
-#: The text diff section's id, which a check the page already ran links to (console 0.6.1 item 11).
+#: The text diff section's id, which a check the page already ran links to (console 0.6.1).
 TEXT_DIFF_ANCHOR = "text-diff"
 
 
@@ -1747,6 +1762,29 @@ def _compared_again_line(comparison: StoredComparison, store: Store) -> str:
     )
 
 
+#: Investigate's way to another pair: the Runs page with the pair's pipeline chosen, at its picker.
+ANOTHER_PAIR = "Compare another pair"
+
+
+def another_pair(comparison: StoredComparison, store: Store, public: bool | None = None) -> str:
+    """Under a comparison's head, where both runs are of one pipeline: a link to the Runs page with that pipeline
+    chosen, at the picker a public or a local console draws there; "" otherwise."""
+    from urllib.parse import urlencode
+
+    from onetrace_console.frame import rendering_public
+    from onetrace_console.verdicts import pipeline_of
+
+    try:
+        pa, pb = (pipeline_of(store.get_run(k), store) for k in (comparison.run_a, comparison.run_b))
+    except Exception:  # noqa: BLE001 - a run that can't be read has no pipeline to offer
+        return ""
+    if pa is None or pb is None or pa.label != pb.label:
+        return ""
+    at = "visitor-compare" if (rendering_public() if public is None else public) else "local-compare"
+    href = "/runs?" + urlencode([("pipeline", pa.label)]) + "#" + at
+    return f'<p data-investigate="another"><a href="{escape(href)}">{escape(ANOTHER_PAIR)}</a></p>'
+
+
 def render_diff(comparison: StoredComparison, store: Store, *, generated_at: str, public: bool | None = None) -> str:
     """One pair's Diff page: the SDK's changes table, its localized set, and the command.
 
@@ -1763,15 +1801,26 @@ def render_diff(comparison: StoredComparison, store: Store, *, generated_at: str
         {r.key: r for r in (_held(store, comparison.run_a), _held(store, comparison.run_b)) if r is not None}.values()
     )
 
+    from onetrace_console import compare_view
+    from onetrace_console.frame import rendering_public
     from onetrace_console.unreadable import report_refused
+    from onetrace_console.views import investigate_title
 
-    blocks: list[str] = [
-        f'<h1>Diff</h1><p data-section="pair">baseline '
-        f"{run_named(store, comparison.run_a)} against candidate "
-        f"{run_named(store, comparison.run_b)}</p>"
-    ]
+    #: Explain's panel decides for itself where it was not told (`explain._public`), as before.
+    asked_public = public
+    public = rendering_public() if public is None else public
+    title = investigate_title(comparison, store)
+    #: The page's head: the title, then the header line (`compare_view.head`), which is its pair line. A static export
+    #: takes out what only a console can send (`export_static.without_run_tools`).
+    blocks: list[str] = [f"<h1>{escape(title)}</h1>", compare_view.head(comparison, store, public=public, export=False)]
+    head_names = True
+    #: The parts the tabs hold (`compare_view.tabs`), drawn below where they were and gathered here by tab.
+    moved: dict[str, list[str]] = {k: [] for k in ("text", "kind", "nearness", "spans", "model")}
+    found_diff = None
     #: Under the pair's line: this page is an earlier console's, and the pair has a newer one.
     blocks.append(_compared_again_line(comparison, store))
+    #: The way to another pair of the same pipeline: the Runs page's picker (a static export takes it out).
+    blocks.append(another_pair(comparison, store, public))
     #: First, when the two runs come from different pipelines.
     blocks.append(_different_pipelines(pair))
     #: The short answer goes here, first: drawn once diff's report is read below (`short_answer`).
@@ -1795,6 +1844,12 @@ def render_diff(comparison: StoredComparison, store: Store, *, generated_at: str
             + UNCHECKED_SIDE.format(name=run_named(store, side.key), role=role)
             + "</p>"
         )
+    #: Each run's tokens and cost, side by side, as recorded (`usage`): no verdict on them.
+    from onetrace_console import usage
+
+    usage_a, usage_b = _held(store, comparison.run_a), _held(store, comparison.run_b)
+    if usage_a is not None and usage_b is not None:
+        blocks.append(usage.comparison_section(usage_a, usage_b, store))
 
     for verb in (DIFF, LOCALIZE):
         run = comparison.verb(verb)
@@ -1905,7 +1960,9 @@ def render_diff(comparison: StoredComparison, store: Store, *, generated_at: str
                 dag = dag or verb == DIFF
                 ab = _runs_ab(comparison, store)
                 if ab not in blocks:
-                    blocks[0] = "<h1>Diff</h1>" + ab
+                    #: Who A and B are, once, in the A/B line: the header line then names them not again.
+                    blocks[0] = f"<h1>{escape(title)}</h1>" + ab
+                    head_names = False
                 graph = _compare_graph(report, comparison, store)
                 blocks.append(graph)
                 from onetrace_console.nesting_ladder import diff_ladder
@@ -1924,7 +1981,7 @@ def render_diff(comparison: StoredComparison, store: Store, *, generated_at: str
                     #: is installed on a local console, neighbours are on, and the runs are neighbours.
                     from onetrace_console.neighbours.pages import ladder_section
 
-                    blocks += [x for x in (ladder_section(comparison, store),) if x]
+                    moved["nearness"] += [x for x in (ladder_section(comparison, store),) if x]
                 blocks.append(_graph_caveat(report, comparison, store))
             #: One summary per page, from diff's report: localize's ladder is the same walk,
             #: and its own contribution is the localized set below.
@@ -1940,8 +1997,10 @@ def render_diff(comparison: StoredComparison, store: Store, *, generated_at: str
             no_cause = sdk_no_cause(comparison, store).get(found[0], "") if found else ""
             later = found[1].index if no_cause and found[1] is not None else ""  # type: ignore[index]  # no_cause is set only where found is
             text_block = _text_diff_section(comparison, store) if verb == DIFF else ""
+            if verb == DIFF and getattr(report, "ladder", None):
+                found_diff = (report, annotations)
             if identical is not None:
-                blocks.append(
+                moved["kind"].append(
                     _first_difference_summary(
                         report,
                         annotations,
@@ -1954,14 +2013,14 @@ def render_diff(comparison: StoredComparison, store: Store, *, generated_at: str
                 )
             if verb == DIFF and getattr(report, "ladder", None):
                 #: The app's spans at the first difference, from each run's kept trace (onetrace 0.5).
-                blocks.append(trace_panel_for(report, comparison, store))
-                blocks.append(span_differences_for(report, comparison, store))
+                moved["spans"].append(trace_panel_for(report, comparison, store))
+                moved["spans"].append(span_differences_for(report, comparison, store))
                 #: The model's rows and choices at the first difference, from the two captures (onetrace 0.7's
                 #: model-call record 1.1): nothing where no record there kept an L2 or L3 capture.
                 from onetrace_console import token_levels
 
                 #: The page's own public flag decides what it shows: the console draws it with no render around it.
-                blocks.append(token_levels.section(report, comparison, store, public=public))
+                moved["model"].append(token_levels.section(report, comparison, store, public=public))
             if verb == DIFF and getattr(report, "ladder", None):
                 if not isinstance(report, TwoRunDag):
                     #: The line drawn as the stage table is: the same stages, joined where the
@@ -1975,7 +2034,7 @@ def render_diff(comparison: StoredComparison, store: Store, *, generated_at: str
                             recorded_change=later,
                         )
                     )
-                blocks.append(_settings_changed(annotations, first=later))
+                moved["kind"].append(_settings_changed(annotations, first=later))
             if getattr(report, "ladder", None) and not isinstance(report, TwoRunDag):
                 #: Steps inside steps: each child under its calling step, each nested run a row
                 #: under it, for each run (`nesting_ladder`); a table with neither as it was.
@@ -2000,16 +2059,16 @@ def render_diff(comparison: StoredComparison, store: Store, *, generated_at: str
                 if verb == DIFF:
                     from onetrace_console.neighbours.pages import ladder_section
 
-                    blocks += [x for x in (ladder_section(comparison, store),) if x]
+                    moved["nearness"] += [x for x in (ladder_section(comparison, store),) if x]
             if not isinstance(report, TwoRunDag):
                 blocks.append(_localized(report))
             if verb == DIFF:
-                blocks.append(text_block)
-                #: Board 7, only where the comparison holds the trace run a
+                moved["text"].append(text_block)
+                #: Where the change started, only where the comparison holds the trace run a
                 #: changed corpus link made; elsewhere nothing, as before.
-                from onetrace_console.board7 import board7_section
+                from onetrace_console.corpus_trace import corpus_trace_section
 
-                blocks.append(board7_section(comparison, store))
+                blocks.append(corpus_trace_section(comparison, store))
 
         #: The SDK's own words, in its own layout, one layer down: the table above is a
         #: rendering OF this. The words it copies from the records are shown escaped inside it,
@@ -2045,7 +2104,7 @@ def render_diff(comparison: StoredComparison, store: Store, *, generated_at: str
     if short:
         from onetrace_console.what_changed import chosen_line
 
-        blocks.insert(top, kind + chosen_line(comparison, store) + short)
+        moved["kind"].insert(0, kind + chosen_line(comparison, store) + short)
     same = "" if unchecked else _same_change(comparison, store)
     if dag and 'data-state="graph"' in same:
         hidden.append(("same-change", []))
@@ -2063,11 +2122,42 @@ def render_diff(comparison: StoredComparison, store: Store, *, generated_at: str
     #: its one line stays at the foot, and "What changed" follows the short answer.
     from onetrace_console.explain import panel as explain_panel
 
-    panel = explain_panel(comparison, store, public=public, steps=node_steps, facts=chip_facts)
-    if "<article data-explanation=" not in panel and re.search(r'data-explain="(none-kept|not-set-up)"', panel):
-        blocks.append(panel)
-    else:
-        blocks.insert(top + bool(short), panel)
+    panel = explain_panel(comparison, store, public=asked_public, steps=node_steps, facts=chip_facts)
+    #: Under the head: the first difference and What changed here, the steps, the tabs with Explain beside them,
+    #: and the runs with near inputs (`compare_view`). Only from diff's report where it was read, and never where a
+    #: side couldn't be checked.
+    facts = (
+        compare_view.facts(found_diff[0], found_diff[1], comparison, store) if found_diff and not unchecked else None
+    )
+    text_html = "".join(moved["text"])
+    panels = [
+        (
+            "text",
+            compare_view.text_panel(comparison, store, facts, text_html, local=not public)
+            if facts is not None and text_html
+            else text_html,
+        ),
+        ("kind", "".join(moved["kind"])),
+        ("reference", "" if unchecked else compare_view.reference_panel(comparison, store)),
+        ("nearness", "".join(moved["nearness"])),
+        ("spans", "".join(moved["spans"])),
+        ("model", "".join(moved["model"])),
+    ]
+    tabs_html = compare_view.tabs(panels)
+    laid = [
+        compare_view.first_card(facts, comparison, store, text_tab='id="compare-tab-text"' in tabs_html)
+        if facts is not None
+        else "",
+        compare_view.step_cards(facts, comparison, store) if facts is not None and facts.steps else "",
+        compare_view.main_row(tabs_html, compare_view.explain_aside(panel, public=public)),
+        "" if public else compare_view.near_runs(comparison, store),
+    ]
+    blocks[top:top] = [x for x in laid if x]
+    #: The header again, now that diff's report is read: a setting the report names as differing is a difference of
+    #: configuration, as the badge says it.
+    blocks[1] = compare_view.head(
+        comparison, store, public=public, export=False, names=head_names, settings=facts.annotations if facts else None
+    )
     build = comparison.sdk_build_digest or "unknown"
     blocks.append(
         f'<p data-section="sdk">Compared with onetrace {escape(comparison.sdk_version)}, '
@@ -2083,9 +2173,9 @@ def render_diff(comparison: StoredComparison, store: Store, *, generated_at: str
     every = derive(store)
     keys = {r.key for r in pair}
     raised = tuple(i for i in every if i.subject in keys)
-    blocks = ['<div class="cp">', *blocks, "</div>"]  # the console's page skin (item 12)
-    #: The Diff page lives at diff/<key>.html: one folder down.
-    page = incidents_block(_document("Diff", "\n".join(blocks)), raised, len(every), store, up="../")
+    blocks = ['<div class="cp">', *blocks, "</div>"]  # the console's page skin
+    #: Investigate's first two tabs live at diff/<key>.html and beside it: one folder down.
+    page = incidents_block(_document(title, "\n".join(blocks)), raised, len(every), store, up="../")
     return label(page, pair)
 
 
@@ -2101,7 +2191,7 @@ def _card(name: str, title: str, lead: str, href: str, line: str, definition: li
     folded, never left out."""
     told = "".join(f"<p>{d}</p>" for d in definition)
     return (
-        f'<div data-card="{_tag(name)}"><h3>{escape(title)}</h3>'
+        f'<div data-card="{_tag(name)}"><h2>{escape(title)}</h2>'
         f'<p class="lead"><a href="{_tag(href)}">{_kpi(lead)}</a></p>{line}'
         f'<details class="def"><summary title="{DEFINITION_SUMMARY}" '
         f'aria-label="{DEFINITION_SUMMARY}">?</summary>{told}</details></div>'
@@ -2124,7 +2214,7 @@ def _states_line(states) -> str:
 
 
 def _kpi(lead: str) -> str:
-    """Board 1's large figure: the count a card's sentence opens with, set large, and the rest of
+    """The Overview design's large figure: the count a card's sentence opens with, set large, and the rest of
     the same sentence beside it -- inline, so the sentence is still one sentence, word for word."""
     import re
 
@@ -2280,7 +2370,7 @@ def _preview_runs_line(store: Store) -> str:
 
 
 def _needs_attention(store: Store) -> str:
-    """v6 board 1's "Needs attention first": the count with its denominator, the ordering rule
+    """The Overview design's "Needs attention first": the count with its denominator, the ordering rule
     in words, the first few runs in that order, and all of them one link away.
     Never blank: a store the rule finds nothing in says so."""
     from onetrace_console.overview import ATTENTION_RULE, ATTENTION_WORDS, needs_attention
@@ -2294,7 +2384,7 @@ def _needs_attention(store: Store) -> str:
             f'<section data-section="needs-attention"><div class="head">{heading}</div>'
             f"{rule}<p>No run needs attention by this rule.</p></section>"
         )
-    #: Board 1: the kind as a pill and the run on the left, the time on the right. The words
+    #: The Overview's design: the kind as a pill and the run on the left, the time on the right. The words
     #: and their " · " stay in one item, so the item reads as it did.
     items = "".join(
         f'<li data-attention="{_tag(kind)}"><span>'
@@ -2330,7 +2420,7 @@ def _recorded_of_declared(run) -> str:
 
 
 def _recent_runs(store: Store) -> str:
-    """v6 board 1's "Recent runs": newest arrival first, each with what its record says --
+    """The Overview design's "Recent runs": newest arrival first, each with what its record says --
     its pipeline (declared stage list), its receipts against its declared stages, how it
     compares with the baseline it was compared against, and its "Records agree" as its own page
     reads it (`records.said`)."""
@@ -2485,7 +2575,7 @@ def _by_day(store: Store) -> str:
 #: The Overview's banner states a fact about the stored runs, from each run's own
 #: "Signed by a known recorder?" rung -- shown only when none of them reads Yes, and then in
 #: these words. With a run signed by a trusted key there is no banner; the Signed row gives the counts.
-#: (It replaced board 1's "Records are unsigned in this release ...", false once signing shipped.)
+#: (It replaced the Overview design's "Records are unsigned in this release ...", false once signing shipped.)
 BANNER = "None of these runs is signed by a key you trust: nothing here shows who wrote them."
 
 
@@ -2520,7 +2610,7 @@ def _anchoring(by_slug: dict) -> str:
 
 
 def _evidence(store: Store, by_slug: dict) -> str:
-    """v6 board 1's "What the evidence establishes", over every stored run: each rung a
+    """The Overview design's "What the evidence establishes", over every stored run: each rung a
     separate question with its own count and denominator. This console runs no re-check; and
     release 1 has no authorization records -- never a count, never a pass. The
     signing and anchoring rungs count each run's own page's reading of this console's check."""
@@ -2718,7 +2808,7 @@ def _way_in(store: Store) -> str:
 
 
 def render_home(store: Store, *, generated_at: str) -> str:
-    """Board 1: the cards, with how the counts work, first; then a public demo's way in (its two guide
+    """The Overview's design: the cards, with how the counts work, first; then a public demo's way in (its two guide
     blocks); then what the evidence establishes beside what needs attention, the recent runs, the
     pipelines and the verdicts by day. Every count carries its denominator
     and links to exactly what it counted; the full list of counts is the All counts page."""
@@ -2845,7 +2935,7 @@ def render_comparisons(store: Store, *, generated_at: str) -> str:
         )
         listing = scroll_region(
             '<table class="timeline" data-section="comparisons"><thead><tr>'
-            "<th>Compared at</th><th>Baseline</th><th>Candidate</th><th></th></tr>"
+            "<th>Compared at</th><th>Baseline</th><th>Candidate</th>" + hidden_header("Action") + "</tr>"
             f"</thead><tbody>{rows}</tbody></table>",
             "Comparisons, scrolls sideways",
             "comparisons",
@@ -2928,6 +3018,10 @@ def render_all(store: Store, *, generated_at: str, marked: tuple[str, frozenset]
         )
     if marked is None:
         pages[COMPARISONS] = drawn(lambda: render_comparisons(store, generated_at=generated_at))
+        #: Every run with a gated step, the console's Authorization page (a team's own in a team's set).
+        from onetrace_console import authorization_list
+
+        pages[authorization_list.PAGE] = drawn(lambda: authorization_list.render(store, generated_at=generated_at))
     #: Choose two runs: a page per pipeline, and one per run as run A.
     from onetrace_console.choose_pages import choose_href, held_comparisons, pair_href, render_choose, render_pair
     from onetrace_console.overview import pipelines
@@ -2973,6 +3067,21 @@ def render_all(store: Store, *, generated_at: str, marked: tuple[str, frozenset]
         pages[MONITOR] = drawn(lambda: render_monitor(store, generated_at=generated_at))
     if marked is not None:
         return pages
+    #: One page per origin a linked run names: every run from that request (`service_link`), from the run index.
+    from onetrace_console import run_index, service_link
+
+    index = run_index.drawn_with()
+    try:
+        pages.update(
+            service_link.origin_pages(
+                index if index is not None else run_index.build(store), generated_at, run_index.drawn_written()
+            )
+        )
+    except Exception as e:  # noqa: BLE001 - the runs' own pages say what is linked; this is logged
+        import sys
+        import traceback
+
+        traceback.print_exception(e, file=sys.stderr)
     #: The Incidents page and one list per rule, so every count on Home opens.
     pages[INCIDENTS] = drawn(lambda: render_incidents(store, generated_at=generated_at))
     for rule in RULES:

@@ -299,7 +299,7 @@ RULED: dict[str, tuple[str, str]] = {
     # offered under. It was first offered as that source's own sentence, needing nothing new; it
     # is not in that source's text, which says a recorded rationale renders verbatim, set as
     # quoted and labelled as recorded, with the label provisional until the reader settles it —
-    # the opposite of already agreed. The sealed text was rechecked, the error recorded, and the
+    # the opposite of already agreed. The source's text was rechecked, the error recorded, and the
     # sentence agreed on its own terms.
     #
     # So the citation names what made it: an agreed sentence is checkable against the source it
@@ -561,7 +561,7 @@ RULED: dict[str, tuple[str, str]] = {
 #: "no authorization records", in `policy.none` below. Incidents is unchanged.
 #:
 #: The run ladder's words. The release design canvas is the target, and it words the ladder;
-#: the canvas is not a sealed text, so the words are provisional here until they are fixed, and
+#: the canvas is not a fixed text, so the words are provisional here until they are fixed, and
 #: each entry names the part of the canvas it is taken from.
 PROVISIONAL: dict[str, tuple[str, str]] = {
     "rung.approved.no_paths": (

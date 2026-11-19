@@ -41,9 +41,8 @@ INSTRUMENT_ID = "onetrace-console-neighbours"
 
 
 def _root(store) -> Path:
-    from onetrace_console.neighbours import FOLDER
-
-    return Path(store.root) / FOLDER
+    """Where the batches are kept (`Store.neighbours_root`): a team's view keeps its own apart."""
+    return store.neighbours_root()
 
 
 def identity_bytes(embedder) -> bytes:

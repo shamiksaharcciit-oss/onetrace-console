@@ -1,6 +1,6 @@
-"""The third confirmation review's console findings, the 422 set among them.
+"""Console findings found earlier by running the console, the 422 set among them.
 
-A third fresh review confirmed the second review's fixes, then found these by running them.
+Earlier fixes were confirmed, then these were found by running them.
 The viewer's halves are the viewer's, re-vendored here.
 
 - A small upload whose steps named one receipt thousands of times drew pages of hundreds

@@ -48,7 +48,7 @@ def _save(path, record) -> None:
 
 def edit_stored_line(store, request_id: str, change) -> int:
     """Edit the stored copy of `request_id`'s line and return its index. The delivery (the
-    content-addressed object) is untouched, which is exactly the case §2 is about."""
+    content-addressed object) is untouched, which is exactly the case this file is about."""
     path, record = _record(store)
     i = next(n for n, r in enumerate(record["rows"]) if request_id in r["raw_line"])
     before = record["rows"][i]["raw_line"]
@@ -139,7 +139,7 @@ def test_the_filters_read_couldnt_check_for_the_edited_row_and_nothing_else_chan
     """A verdict or issuer filter would reveal the row's value, so an edited row is on
     none of them. It is on a "couldn't check" filter of its own, and every filter page
     names it. The one page that disappears is the one whose only member was that row:
-    keeping it would place the row by the verdict §2 says not to show."""
+    keeping it would place the row by the verdict an edited row must not show."""
     import html
 
     from onetrace_console.onedoor_ext.policy_pages import render_policy_pages

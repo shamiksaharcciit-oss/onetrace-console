@@ -59,7 +59,8 @@ def test_the_console_stacks_regions_on_a_narrow_screen(examined):
     from onetrace_console.frame import stylesheet
 
     css = stylesheet().decode("utf-8")
-    blocks = re.findall(r"@media \(max-width:760px\)\{\n(.*?)\n\}\n", css, re.S)
+    #: Tables stack below 1024 px: at 768 the navigation is still beside the page (`frame.NARROW_CSS`).
+    blocks = re.findall(r"@media \(max-width:1023px\)\{\n(.*?)\n\}\n", css, re.S)
     examined(1, "stylesheet")
     rules = next((b for b in blocks if ".shell .scroll-x" in b), "")
     assert rules, "the narrow-screen rules"

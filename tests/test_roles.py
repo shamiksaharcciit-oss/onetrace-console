@@ -1,4 +1,4 @@
-"""Role enforcement, from one place, per the design note §3 table."""
+"""Role enforcement, from one place, per the table of which role each request needs."""
 
 from __future__ import annotations
 
@@ -36,7 +36,7 @@ def test_health_and_signin_and_signout_need_no_principal(examined):
     ],
 )
 def test_every_rendered_page_shape_is_viewer(rel, examined):
-    """One sub-case per GET row of the design note's own table."""
+    """One sub-case per GET row of that table: every rendered page is a viewer's."""
     examined(1, f"GET against the rendered path {rel!r}")
     assert roles.required_role("GET", "/" + rel, rel_for_get=rel) == roles.VIEWER
 

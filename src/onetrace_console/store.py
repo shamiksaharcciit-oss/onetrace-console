@@ -96,15 +96,22 @@ def arrival_order(runs, *, newest_first: bool) -> list:
     return out
 
 
-def run_key(run_id: str, chain_head: str) -> str:
-    return digest(run_id.encode("utf-8") + _KEY_SEPARATOR + chain_head.encode("utf-8"))
+def _team_part(team: str) -> bytes:
+    """The team's part of a run's key: with teams, every run is keyed by its team, whether or not
+    another team holds the run, so a key's shape tells no team that another holds it. Empty without a team."""
+    return _KEY_SEPARATOR + b"team:" + team.encode("utf-8") if team else b""
 
 
-def folder_key(run_id: str, chain_head: str, folder: str) -> str:
+def run_key(run_id: str, chain_head: str, team: str = "") -> str:
+    """A run's key: the digest of its run id and chain head, and, with teams, its team's name."""
+    return digest(run_id.encode("utf-8") + _KEY_SEPARATOR + chain_head.encode("utf-8") + _team_part(team))
+
+
+def folder_key(run_id: str, chain_head: str, folder: str, team: str = "") -> str:
     """The key of a run read from the run folder `folder`, where another run folder carries the
     same run and chain head: runs are folders, not chain heads, so each such folder is a run of
     its own, read on its own, and its key -- the address of its pages -- is its folder's. The same
-    folder gets the same key whichever of the two is read first."""
+    folder gets the same key whichever of the two is read first. With teams, the team's part follows the folder's."""
     return digest(
         run_id.encode("utf-8")
         + _KEY_SEPARATOR
@@ -112,6 +119,7 @@ def folder_key(run_id: str, chain_head: str, folder: str) -> str:
         + _KEY_SEPARATOR
         + b"folder:"
         + folder.encode("utf-8")
+        + _team_part(team)
     )
 
 
@@ -162,6 +170,15 @@ class StoredRun:
     #: "last"}: its close receipt's own `onetrace.ended_by`, or the last step where it has none.
     #: Derived with the fields above.
     ending: str = ""
+    #: The kinds and agents a format 0.5 run's steps record (`step_kinds.summary`), as JSON {"kinds", "agents"},
+    #: or "" for a run in an earlier format. Derived with the fields above.
+    kinds: str = ""
+    #: Each step's mark and recorded times (`step_marks.of_attempts`), as JSON [{"step", "mark", "retries", "started",
+    #: "ended"}, ...] in recorded order, or "" where not yet derived. Derived with the fields above.
+    steps: str = ""
+    #: What the run is where it is a re-run or a check's run (`rerun_label.kept`), as JSON, or "" for neither, or
+    #: where not yet derived. Derived with the fields above.
+    rerun: str = ""
     declared_digest: str = ""
     #: Rung 3, "nothing missing", as the run's own page decides it (`viewer.model.
     #: nothing_missing`), recorded when the run is checked: yes, no, couldnt-check or
@@ -218,9 +235,14 @@ class StoredRun:
     #: for a run delivered any other way. Where two folders carry the same run and chain head,
     #: each is stored under its own folder's key (`folder_key`) and pages name the folder.
     folder: str = ""
+    #: The team the run belongs to, where `teams` is configured (`team_view`); empty for none. Written only
+    #: when set, so a record made before teams reads, and is written back, as it was.
+    team: str = ""
 
     def to_json(self) -> str:
         d = asdict(self)
+        if not d["team"]:
+            del d["team"]
         d["listing"] = [list(pair) for pair in self.listing]
         d["declared_stages"] = list(self.declared_stages)
         d["flags"] = list(self.flags)
@@ -252,6 +274,11 @@ _COUNTS = ("stage_count", "recorded_count", "delivered_stages", "retries")
 _LISTS = ("flags", "declared_stages")
 
 
+#: A team's name, as `teams` gives it: lower-case letters, digits and hyphens, starting with a letter. A name a path
+#: may be built from, so nothing else is one.
+TEAM_NAME = re.compile(r"^[a-z][a-z0-9-]{0,62}$")
+
+
 def _check_fields(d: dict) -> None:
     for name, value in d.items():
         if name == "listing":
@@ -274,6 +301,8 @@ def _check_fields(d: dict) -> None:
     #: folder its pages are written under), each listing path (where the run is laid out) and
     #: each object key. Probed: `..\\..\\..\\escaped_key` once wrote pages
     #: outside the pages folder, and `../../escaped.txt` a file outside the store.
+    if d.get("team") and not TEAM_NAME.match(d["team"]):
+        raise ValueError(f"`team` is {_shown(d['team'])}, not a team's name")
     if "key" in d and not _SHA256.match(d["key"]):
         raise ValueError(f"`key` is {_shown(d['key'])}, not a sha256 run key")
     for path, key in d.get("listing", ()):
@@ -538,6 +567,22 @@ class Store:
         _atomic_write(self._comparison_path(comparison.key), comparison.to_json().encode("utf-8"))
         self._forget()
 
+    def comparison_names(self) -> set[str]:
+        """The keys of the comparisons held, from their files' names alone."""
+        d = self.root / "comparisons"
+        return {p.name[: -len(".json")] for p in d.glob("*.json")} if d.is_dir() else set()
+
+    def withdraw_comparison(self, key: str) -> None:
+        """Take back a comparison's record just written: its making could not be recorded (`audit`)."""
+        self._comparison_path(key).unlink(missing_ok=True)
+        self._forget()
+
+    def withdraw_run(self, key: str) -> None:
+        """Take back a run's record just written: its delivery could not be recorded (`audit`). Its objects stay, as
+        any object does, kept by their digest."""
+        self._run_path(key).unlink(missing_ok=True)
+        self._forget()
+
     def get_comparison(self, key: str):
         from onetrace_console.compare import StoredComparison
 
@@ -607,7 +652,7 @@ class Store:
 
     #: What `onetrace reference make`, `onetrace verdict` and `onetrace profile` wrote over stored runs
     #: (`verdicts`), each kind in its own directory, as drift reports are: `runs()` never counts them.
-    KEPT_KINDS = ("references", "verdicts", "profiles")
+    KEPT_KINDS = ("references", "verdicts", "profiles", "linked_checks")
 
     def _kept_path(self, kind: str, key: str) -> Path:
         if kind not in self.KEPT_KINDS:
@@ -617,6 +662,104 @@ class Store:
         d = self.root / kind
         d.mkdir(parents=True, exist_ok=True)
         return d / f"{key}.json"
+
+    #: The folders beside the store that hold one file or folder per run or per comparison, by its key, and whose:
+    #: a benchmark's mark (`benchmarks`), what was kept beside a run (`beside`), expectations declared after a run
+    #: (`expectations-after`), and a comparison's explanation (`x`). A module reaches them only through
+    #: `kept_path` and `kept_owners`, which a team's view (`team_view.TeamView`) answers for its own keys alone.
+    OWNED_FOLDERS = {"benchmarks": "run", "beside": "run", "expectations-after": "run", "x": "comparison"}
+
+    def kept_path(self, folder: str, owner: str, name: str | None = None, *, kind: str | None = None) -> Path | None:
+        """Where `owner`'s (a run's or a comparison's key) record is kept under `folder`: at `name`, or at the
+        owner's key itself. A store answers for any owner; a team's view for its own alone, else None. `kind`
+        ("run" or "comparison") names whose a folder not in `OWNED_FOLDERS` is, where its module names it."""
+        if folder not in self.OWNED_FOLDERS and kind not in ("run", "comparison"):
+            raise StoreError(f"{folder!r} is not a folder kept per run or per comparison")
+        return self.root / folder / (name if name is not None else owner)
+
+    def kept_names(self, folder: str) -> list[str]:
+        """The names of what is kept under `folder`, sorted: each a run's key with its suffix, for a run's
+        folder. A team's view lists its own owners' alone."""
+        if folder not in self.OWNED_FOLDERS:
+            raise StoreError(f"{folder!r} is not a folder kept per run or per comparison")
+        where = self.root / folder
+        return sorted(p.name for p in where.iterdir()) if where.is_dir() else []
+
+    #: Where a run's old key is kept, by that key, once `run assign` gave the run a team's key: the
+    #: map from old key to new, beside the runs, which a page's old address is redirected by.
+    MOVED = "moved"
+
+    def moved_to(self, key: str) -> str | None:
+        """The key the run once keyed `key` has now, or None for a key no run was moved from."""
+        if not _SHA256.match(key):
+            return None
+        path = self.root / self.MOVED / f"{key}.json"
+        try:
+            got = load_json_bounded(path.read_text(encoding="utf-8"), "a moved run's key")
+        except (OSError, ValueError, UnicodeDecodeError):
+            return None
+        new = got.get("key") if isinstance(got, dict) else None
+        return new if isinstance(new, str) and _SHA256.match(new) else None
+
+    def put_moved(self, old: str, new: str) -> None:
+        """Keep that the run keyed `old` is now keyed `new`; every old key that led to `old` now leads to `new`."""
+        if not (_SHA256.match(old) and _SHA256.match(new)):
+            raise StoreError(f"not a pair of run keys: {old!r}, {new!r}")
+        d = self.root / self.MOVED
+        d.mkdir(parents=True, exist_ok=True)
+        for path in sorted(d.glob("*.json")):
+            if self.moved_to(path.stem) == old:
+                _atomic_write(path, json.dumps({"key": new}).encode("utf-8"))
+        if new != old:
+            _atomic_write(d / f"{old}.json", json.dumps({"key": new}).encode("utf-8"))
+        (d / f"{new}.json").unlink(missing_ok=True)
+
+    def rekey(self, run: StoredRun, new: str, team: str) -> None:
+        """`run`, given `team` and the key `new` (`team_assign.assign`): its record, what is kept by its key under
+        `OWNED_FOLDERS`, the comparisons and kept records that name it, and the map from its old key to the new. A
+        pair's linked check is kept by both runs' keys, so one naming it is let go, to be checked again when next
+        drawn."""
+        old = run.key
+        self.put_run(replace(run, key=new, team=team))
+        if new == old:
+            return
+        self._run_path(old).unlink()
+        for folder in ("comparisons", "drift", *self.KEPT_KINDS):
+            where = self.root / folder
+            for path in sorted(where.glob("*.json")) if where.is_dir() else ():
+                text = path.read_text(encoding="utf-8")
+                if old not in text:
+                    continue
+                if folder == "linked_checks":
+                    path.unlink()
+                else:
+                    _atomic_write(path, text.replace(old, new).encode("utf-8"))
+        for folder, whose in self.OWNED_FOLDERS.items():
+            where = self.root / folder
+            if whose != "run" or not where.is_dir():
+                continue
+            for path in sorted(where.iterdir()):
+                if path.name.split(".", 1)[0] != old:
+                    continue
+                target = where / (new + path.name[len(old) :])
+                if path.is_file():
+                    _atomic_write(target, path.read_text(encoding="utf-8").replace(old, new).encode("utf-8"))
+                    path.unlink()
+                else:
+                    path.replace(target)
+        self.put_moved(old, new)
+        self._forget()
+
+    def neighbours_root(self) -> Path:
+        """Where the neighbours' batches are kept: the embeddings of runs' kept inputs. A team's view keeps its own
+        under a folder of its own, so no team's inputs are embedded beside another's."""
+        from onetrace_console.neighbours import FOLDER
+
+        return self.root / FOLDER
+
+    def has_decision_exports(self) -> bool:
+        """Whether any decision export is held."""
+        return (self.root / "decision_exports").is_dir()
 
     def put_kept(self, kind: str, key: str, record: dict) -> None:
         _atomic_write(

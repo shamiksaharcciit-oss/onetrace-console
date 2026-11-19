@@ -127,7 +127,7 @@ def test_an_unknown_username_still_computes_a_dummy_hash_with_the_same_parameter
 
 
 def test_sabotage_replacing_compare_digest_with_equality_fails_the_spy_test(tmp_path, examined):
-    """The sabotage named in the specification: `==` instead of `hmac.compare_digest`. Run
+    """The sabotage this test must catch: `==` instead of `hmac.compare_digest`. Run
     for real -- never against the real source -- on a copy of `accounts.py` with the
     one line changed, imported fresh under its own module name, then the identical
     spy assertion from the test above is run against the copy and must fail (its own

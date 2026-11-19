@@ -84,7 +84,7 @@ def _unlabelled(html: str) -> str:
 
 
 def test_the_first_difference_is_marked_in_the_table(diverging, examined):
-    """Board 6: the first differing stage is marked in the table itself, not only in a
+    """The Compare page's design: the first differing stage is marked in the table itself, not only in a
     sentence under it. Later rows say they changed AFTER it -- the ladder establishes the
     order, not that the first difference caused them."""
     comparison, store = diverging
@@ -110,7 +110,7 @@ def _settings_cell(cells: str) -> str:
 
 
 def test_the_settings_column_names_each_changed_setting(diverging, compared, examined):
-    """Board 6's settings column, from the report's own annotations: each changed field by its
+    """The Compare page design's settings column, from the report's own annotations: each changed field by its
     short name (its whole path in its tooltip), as "old → new", the values verbatim and whole. A stage whose output is the same but whose settings
     changed carries it too (the poppler pair). A compared stage with no annotation says no
     recorded setting differs -- not "same", because the SDK also annotates nothing when a
@@ -206,7 +206,7 @@ def _summary(page: str) -> str | None:
 
 
 def test_the_summary_names_the_first_difference_and_what_is_not_established(diverging, examined):
-    """Board 6's stage-level summary: where the first difference is, how many stages were
+    """The Compare page design's stage-level summary: where the first difference is, how many stages were
     identical before it (with its denominator), one plain sentence of what differs (each setting
     by its short name with both values, how many stages after it changed). With a setting
     recorded as differing at the stage, it no longer adds that why its output differs is not
@@ -776,6 +776,23 @@ def test_the_new_pages_pass_the_five_prohibitions(new_pages, examined):
             r'<form method="get" action="bisect" data-bisect-window><input type="hidden" name="p" '
             r'value="[^"]*"><label>find the first run to leave after: <input type="text" name="after" '
             r'value="[^"]*" maxlength="64"></label> <button class="btn-primary" data-busy="finding…" type="submit">find</button></form>',
+            #: A comparison page's Swap runs where the reverse comparison is not held: Compare's own request, one
+            #: pair, reversed, to /compare (a local console's with its CSRF slot).
+            r'<form method="post" action="/compare" data-swap="ask" class="swap">'
+            r'(?:<input type="hidden" name="csrf_token" value="" data-csrf-slot>)?'
+            r'<input type="hidden" name="a" value="[0-9a-f]{64}"><input type="hidden" name="b" value="[0-9a-f]{64}">'
+            r'<button class="btn-secondary" type="submit" data-busy="comparing…" data-busy-wait="the comparison">'
+            r"swap runs</button></form>",
+            #: Its checks' "Run on this page", a local console's: the comparison and which check, nothing else.
+            r'<form method="post" action="/compare/check" class="run-here" data-check="(?:text|for)">'
+            r'<input type="hidden" name="csrf_token" value="" data-csrf-slot>'
+            r'<input type="hidden" name="key" value="[0-9a-f]{64}"><input type="hidden" name="check" value="(?:text|for)">'
+            r'<button class="btn-secondary" type="submit" data-busy="running…" data-busy-wait="the check">'
+            r"run on this page</button></form>",
+            #: Its text diff's switch, side by side or inline: two buttons that show one view, and send nothing.
+            r'<div class="view-switch" data-diff-views hidden role="group" aria-label="text diff">'
+            r'<button type="button" class="btn-secondary" data-view="side" aria-pressed="true">side by side</button>'
+            r'<button type="button" class="btn-secondary" data-view="inline" aria-pressed="false">inline</button></div>',
             r'<label hidden data-benchmark-note>note \(optional\) <input type="text" maxlength="280" '
             r"data-benchmark-note-input></label>",
             r'<button class="btn-secondary" data-busy="[^"]*" type="button" hidden data-benchmark-post="/benchmark\?run=[0-9a-f]{64}&amp;'

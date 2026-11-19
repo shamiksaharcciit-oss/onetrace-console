@@ -68,6 +68,7 @@ with sync_playwright() as p:
 """
 
 
+@pytest.mark.browser
 @pytest.mark.skipif(
     not BROWSER_PYTHON, reason="ONETRACE_BROWSER_PYTHON names no Python with Playwright's Chromium (the gate sets it)"
 )
@@ -75,6 +76,7 @@ def test_nothing_runs_past_its_card_at_any_width(local, keychain, tmp_path, exam
     _check(local, tmp_path, examined)
 
 
+@pytest.mark.browser
 @pytest.mark.skipif(
     not BROWSER_PYTHON, reason="ONETRACE_BROWSER_PYTHON names no Python with Playwright's Chromium (the gate sets it)"
 )
@@ -107,6 +109,7 @@ def _check(local, tmp_path, examined, keychain: bool = True):
         assert 'data-setup="no-keychain"' in page
 
 
+@pytest.mark.browser
 @pytest.mark.skipif(
     not BROWSER_PYTHON, reason="ONETRACE_BROWSER_PYTHON names no Python with Playwright's Chromium (the gate sets it)"
 )

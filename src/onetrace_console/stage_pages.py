@@ -211,7 +211,7 @@ def chunk_list(blob: bytes, media_type: str) -> list[dict] | None:
 
 
 def _chunk_view(chunks: list[dict], raw: str, n: int) -> str:
-    """Board 4's three tabs over a verified chunk list: its index (each chunk's id, document and
+    """The stage page design's three tabs over a verified chunk list: its index (each chunk's id, document and
     length in characters, with the list's counts), each chunk's text, and the raw output -- plain
     links to the three parts, no script. Chunks past CHUNKS_SHOWN are counted, not drawn."""
     from onetrace_console.viewer.page import _t
@@ -270,7 +270,7 @@ def _output(step: dict, out: dict, files, store, href: str, n: int = 1) -> str:
     media = str(out.get("media_type", ""))
     blob = _read(files, store, _artifact_path(step["file"], name))
     head = f'<span class="mono">{named(name)}</span> · {_fingerprint(out)}'
-    #: A model-call record's output links to the record as this page's panel reads it (board 7).
+    #: A model-call record's output links to the record as this page's panel reads it.
     from onetrace_console import model_call
 
     if model_call.NAME.fullmatch(name):
@@ -649,6 +649,20 @@ def render_stage_pages(run: StoredRun, store: Store, *, generated_at: str, ancho
         return found[value]
 
     unlisted = kept_inputs.unlisted_count(files, steps)
+    #: Format 0.5's kinds and agents, read once for every step's page (`step_kinds`).
+    from onetrace_console import step_kinds
+
+    _k_steps, k_rows, k_agent, k_pages = step_kinds.context(run, store)
+    from onetrace_console import service_link, verifier_notes
+
+    kinds = (
+        k_rows,
+        k_agent,
+        k_pages,
+        run.key,
+        (service_link.held_runs(store), store),
+        verifier_notes.of_run(run, store),
+    )
     #: The inputs each step's decoded words are searched for in (`token_text`).
     #: Read only where a local console names a tokenizer: elsewhere no word is decoded to search for.
     from onetrace_console import token_text
@@ -695,6 +709,7 @@ def render_stage_pages(run: StoredRun, store: Store, *, generated_at: str, ancho
                 same_files,
                 spans,
                 searched.get(position),
+                kinds,
             )
             + '<div class="io">'
             + _inputs(inputs, upstream, href, receipts, kept, unlisted, inputs_note)

@@ -8,8 +8,8 @@ anyone, no data that leaves the machine it runs on.
 - **One organisation per install.** One running container is one installation, full stop. It
   has people, from its own accounts (local sign-in) or from one Microsoft Entra ID tenant
   (`sign_in.oidc.tenant_id`), and with Entra ID three console roles (`viewer`, `investigator`,
-  `admin`); it has no teams and no tenants beyond that one, so every person signed in sees every
-  run. This is not a setting you turn on; it is what the code does not yet have. (There is
+  `admin`); it has no tenants beyond that one. Without `teams`, every person signed in sees every
+  run; with `teams` ("Teams", below), each team's runs are its own people's. (There is
   exactly one configuration FILE, below.)
 - **Sign-in is on by default, and a fresh install serves nothing until you
   create an account.** Local mode, with no configuration file named, has no sign-in: see
@@ -19,7 +19,7 @@ anyone, no data that leaves the machine it runs on.
   - **Never expose it directly to the internet without TLS.** Passwords and session
     cookies must never cross the network in clear text; the console refuses to start
     a non-loopback, plain-HTTP listener with sign-in on.
-- **Signatures and anchors are checked as `onetrace-verify` 0.8.0 checks them.** A valid signature
+- **Signatures and anchors are checked as `onetrace-verify` 0.9.0 checks them.** A valid signature
   reads as trusted only for a key in the trust file you configure (`trust_file`, below); without
   one, it reads "Signed, key not trusted". The console never makes, edits or guesses a trust file.
   An anchor shows that the record existed by the anchored time, not that the run was correct.
@@ -107,7 +107,8 @@ the network only for what you turn on:** sign-in through Microsoft Entra ID (its
 document, signing keys and token endpoint, "Signing in through Microsoft Entra ID," below);
 neighbours, when you turn them on (the embedder's files from huggingface.co, each checked
 against its pinned sha256, and an embedding endpoint you name); and Explain, whose
-`onetrace-explain` sends a packet to the model you name when you press Send. With none of them
+`onetrace-explain` sends a packet to the model you name when you press Send; and trace forwarding,
+which sends each new run's trace to the endpoints an admin adds ("Forwarding traces," below). With none of them
 on, nothing at runtime reaches the network — see "No shared back end," below, and its proof.
 
 ## Configuration
@@ -169,6 +170,7 @@ means:
     }
   },
   "trust_file": null,
+  "recipients_file": null,
   "tsa_cert": null,
   "tsa_roots": [],
   "public": false,
@@ -181,7 +183,11 @@ means:
   "compare_verb_seconds": 30,
   "tracing": {},
   "tokenizers": [],
-  "close_call_margin": 1.0
+  "close_call_margin": 1.0,
+  "teams": {},
+  "folder_team": null,
+  "audit": {"enabled": false, "head_location": null, "max_segment_bytes": 1048576},
+  "scim": {"enabled": false, "tenant_id": "", "required_for_sign_in": true, "token_max_days": 180, "allowed_sources": [], "max_body_bytes": 1048576, "max_results": 200}
 }
 ```
 
@@ -196,6 +202,7 @@ means:
 | `access_log_max_segment_bytes` | the console's own access log rotates to a new chained segment once the current one would exceed this many bytes |
 | `sign_in.enabled` | **on by default.** Every route except those that need no principal ("Signing in," below) requires a principal: a browser session (`viewer`) or a bearer token (`ingester`, see "Ingester tokens," below). Turning it off is an explicit choice a config file must make, and the console logs a warning at every start-up while it is off. Local mode has none. |
 | `trust_file` | a path to an `onetrace-trust/0.1` file listing the signing keys you trust; absent by default. Set, every check runs the verifier with `--trust` and that file; absent, a valid signature reads "Signed, key not trusted". A file the verifier can't read is shown as its own FAIL row. |
+| `recipients_file` | a path to an `onetrace-recipient-trust/1` file listing the recipients you trust to confirm an action, as `trust_file` lists the signing keys; absent by default. Set, every check runs the verifier with `--recipients` and that file, and a recipient's confirmation's key row reads as the verifier reads it; absent, that row reads NOT-RUN, and the Authorization page says what a match beside it does not show. A changed file checks every run again, as a changed trust file does. A file the verifier can't read is shown as its own row. |
 | `tokenizers` | a local console's tokenizers, for showing a model step's token as text: a list of `{"folder": "<path>", "files": ["tokenizer.json", ...]}`, each a folder you name and the files in it that make the tokenizer; a relative folder is read from this file's folder. Empty by default. A step's token ids are decoded only where the named files, hashed as named, give the record's `tokenizer.digest` exactly; named files that hash to another digest are refused. The console never downloads a tokenizer, and a public console reads none. |
 | `public` | `false` by default. `true` makes a read-only public demo: every write is refused before its body is read, the pages are served as they were built and never drawn again, and every page carries a banner. It refuses to start beside sign-in, the decisions extension (configuration key `extensions.onedoor`), a trust file other than the demo's, or a store holding accounts or tokens. Its store is built with `onetrace-console demo --public --build <folder>`; `deploy/fly/` serves one. |
 | `sign_in.tls_cert_path`, `sign_in.tls_key_path` | a PEM certificate and key. **Required together if `host` is not loopback** -- the console refuses to start otherwise, rather than serve sign-in over plain HTTP on a non-loopback listener |
@@ -216,6 +223,10 @@ means:
 | `compare_cache`, `compare_client_header` | a public console's Compare: the folder its comparisons are kept in (default: `compared` under the store root), and the request header naming the client's address where a proxy in front of the console sets one (on Fly.io, `Fly-Client-IP`; default: the connection's own address) |
 | `compare_per_minute`, `compare_running`, `compare_queue`, `compare_wait_seconds`, `compare_verb_seconds` | a public console's Compare bounds, each at most its default (20, 2, 2, 20.0, 30) so every page's "at most" stays true: new comparisons started a minute for the whole console, comparisons running at once, comparisons waiting per address, how long one waits in seconds, and each verb's time in seconds |
 | `close_call_margin` | default 1.0, in nats, above zero: on a model step whose capture holds candidates with log-probabilities (onetrace's hosted form), a position whose chosen token leads the runner-up by at most this much is flagged as a close call, with the first such position and a count. A close call is not an error, and a wide margin is not correctness. |
+| `teams` | empty by default: the teams this console scopes runs to, each a name and how people join it, `{"<team>": {"role_claim": "<an app role's value>"}}`. With teams, the pages are drawn once per team, beside the all-teams set an `admin` reads, and each person is served their own team's; a run, a comparison or a page of another team answers as one that does not exist. A public console refuses it. 0.9 is building this; the guide's section on teams comes with it. |
+| `folder_team` | none by default: with `teams`, the team a folder console (`onetrace-console <runs folder>` with this file named) takes every run it reads into. A folder console with `teams` and no `folder_team` refuses to start, as does a `folder_team` that names no team in `teams`. 0.9 is building this. |
+| `audit` | off by default: the audit log, `{"enabled": true, "head_location": "<a file on a second mounted volume>"}`. With it on, who did what is kept as a hash-chained log under `audit_log/` beside the access log, and each entry's head is also written to `head_location`, which must not lie on the store's volume: the console refuses to start with it on and no `head_location`, or with one on the store's volume. `max_segment_bytes`, 1048576 by default, is where a segment is closed. `onetrace-console audit verify <folder>` checks it. 0.9 is building this. |
+| `scim` | off by default: SCIM 2.0 provisioning from Microsoft Entra ID, served under `/scim/v2` to the token `onetrace-console scim token create [--days <n>]` makes (printed once, kept as its sha256, 90 days by default). It needs `sign_in.enabled` true and `sign_in.method` `oidc`, and refuses to start in local or public mode. `tenant_id`, `sign_in.oidc.tenant_id`'s where empty; `token_max_days`, 180 by default and at most 365; `allowed_sources`, address ranges that may reach `/scim/v2`, any where empty; `max_body_bytes`, 1048576; `max_results`, a list's largest page, 200. 0.9 is building this. |
 | `tracing` | empty by default: a local console's link to your own tracing tool, `{"link": "<http(s) address with {trace_id} and, optionally, {span_id}>"}`. Each recorded trace id becomes "Open in your tracing tool"; the console builds the link and never calls it. A public console shows none. |
 
 **Creating the first (and every) account.** There is no web sign-up page — "whoever
@@ -517,11 +528,207 @@ every session, as before. Every route declares the role it needs; one with none 
 - **The console trusts Entra for who someone is.** It checks the ID token's signature against your
   tenant's published keys and its claims (issuer, audience, tenant, times, nonce); who the person is,
   and whether they should have the role, is Entra's word.
-- **A role removed in Entra takes effect at the next sign-in**, so within `session_max_hours` at most,
-  until the console reads changes as they happen (SCIM, not in this release).
+- **A role removed in Entra takes effect at the next sign-in**, so within `session_max_hours` at most. SCIM
+  (below) ends a deprovisioned person's sessions as its write arrives.
 - **Entra's audit log is the record of sign-ins.** The console's access log names each request's account
   (its tenant id and object id); it is not an audit of sign-ins.
-- **Every role reads every run.** Scoping runs to teams is not in this release.
+- **Without `teams`, every role reads every run.** With it, a person reads their teams' runs (below).
+
+## Teams
+
+With `teams` in the configuration file, every run is one team's, and a person reads their teams' runs alone; an
+`admin` reads every team's, and each team's through `/t/<team>/`. A team is a name, a lower-case letter then up to
+62 lower-case letters, digits or hyphens, and how people join it:
+
+```json
+"teams": {
+  "payments": {"scim_group": "<an Entra ID group's object id>", "role_claim": "Team.Payments"},
+  "search-eu": {"scim_group": "<another group's object id>"}
+}
+```
+
+- **What a console with teams needs to start.** Sign-in through Microsoft Entra ID: with the console's own accounts
+  (`sign_in.method` `local`) it refuses to start, as a local account cannot be in a team. The audit log on
+  (`audit.enabled`, "The audit log", below): without it, a console with `teams` or with SCIM refuses to start. A live
+  ingester token bound to a team, or a folder console's `folder_team`: with neither, delivery would be open to any
+  caller, and the console refuses to start. With sign-in off it starts, and says at every start that teams scope
+  nothing: this machine's user reads every team.
+- **A person in no team** sees one page, whatever they ask for: "You are in no team. Ask your administrator to add
+  you." It names no team.
+- **A run's team is its delivering token's.** Make each ingester token for one team,
+  `onetrace-console token create <principal> --team <team>`. With `teams`, the console refuses to start while a live
+  token is bound to no team, or to one `teams` does not hold, and names each token and the commands that replace it.
+- **A folder console's runs are its `folder_team`'s.** `onetrace-console <runs folder>` with a configuration file
+  that names `teams` refuses to start without `folder_team`.
+- **Runs held from before.** A console with `teams` refuses to start while it holds a run with no team, and says how
+  many. Stop it and give them one with `onetrace-console run assign --unassigned <team>`; move one run with
+  `onetrace-console run assign <run key> <team>`. Each run is keyed anew with its team, and its old address leads
+  to the new one for a person who can see it. `run assign` takes the console as stopped when nothing answers on its configured host and port; that
+  is all it checks, so a console started on another address is not seen.
+- **Decision exports** (the decisions extension) are drawn in the all-teams set only, for `admin`s: an export names
+  no team.
+- **Who is in a team.** With SCIM on, the members of the Entra ID group `scim_group` names, read on each request; a
+  role claim grants no team. With SCIM off, the people whose app roles hold `role_claim`, read at sign-in.
+
+## SCIM provisioning from Entra ID
+
+With `scim.enabled`, Entra ID's provisioning service keeps the console's people and groups as the directory has
+them: who may sign in, who is in which team, and who has left. It needs `sign_in.method` `oidc`; the console refuses
+to start with SCIM on and local sign-in, with sign-in off, or in local or public mode.
+
+```json
+"scim": {"enabled": true, "token_max_days": 180, "allowed_sources": []}
+```
+
+### Setting it up in Entra ID
+
+1. **Assignment required.** Under **Enterprise applications**, the app, **Properties**, set **Assignment
+   required?** to *Yes*, and check it reads *Yes* there after every change to the app. This is required: SCIM's
+   token can give any identity that can complete sign-in every team's runs, so only the assigned people may.
+2. **The tenant URL.** Under **Provisioning**, mode *Automatic*: the **Tenant URL** is
+   `<sign_in.public_url>/scim/v2`, and the **Secret Token** is one made on the console's machine (below).
+3. **The object id as `externalId`.** Under **Mappings**, map the user's `objectId` to `externalId`. Entra ID's
+   documentation has described its default as mapping `mailNickname`, which the console refuses for a User: check
+   the app's mapping; the People page flags any `externalId` that is not
+   an object id.
+4. **Groups.** Provision the groups each team's `scim_group` names, with their members.
+
+A User Entra ID creates with no `active` is taken as active, as Entra ID always sends it; refusing it would refuse
+Entra ID's own requests.
+
+Entra ID reaches the endpoint from its own network, so the console needs an inbound HTTPS path from it, or Entra
+ID's on-premises provisioning agent; a container run with `--network none` has neither. Where Entra ID reaches it
+directly, `scim.allowed_sources` can hold the address ranges of the `AzureActiveDirectory` service tag, which change
+over time: keep the list current with Microsoft's published ranges. A request from outside the list is answered as
+a route the console does not have, and counted on the People page.
+
+### The SCIM token
+
+`onetrace-console scim token create [--days <n>]`, on the console's machine, prints a token once: paste it into
+the **Secret Token** field. It is kept as its sha256 only, lasts 90 days by default, and may not be made for more
+than `scim.token_max_days` (180 by default, at most 365). The People page warns from 14 days before a token
+expires; once expired, a token reads as unknown. At most two are live, so one replaces the other without a gap:
+
+1. make the second token with `onetrace-console scim token create`;
+2. paste it into Entra ID's **Secret Token** field, and save;
+3. see a provisioning cycle succeed with the new token's id in the access log, as `scim:<token id>`;
+4. revoke the first with `onetrace-console scim token revoke <id>`.
+
+### The way back in
+
+If the token's holder sets every User inactive, nobody can sign in through Entra ID, `admin`s included. Two
+commands on the console's machine let people back in, each recorded in the audit log:
+
+- `onetrace-console scim user activate <externalId>` sets that User active again, as the directory would; the
+  directory's next write about that User is still the directory's word.
+- `onetrace-console scim enforcement off` admits an Entra ID sign-in on its app roles alone, with no team from
+  SCIM, until `onetrace-console scim enforcement on`. Every admin page and every start says it is off and since
+  when.
+
+Both need shell access to the console's machine: hold it only among the people who already administer that
+machine. For the image that access is `docker exec` into the container, so whoever may run it, a member of the
+host's container-engine group among them, holds the way back in.
+
+### When access ends
+
+| A change in Entra ID | When the console acts |
+|---|---|
+| A person disabled, removed from the app, or out of scope | At Entra ID's next provisioning cycle, which its documentation puts at about 40 minutes after the change, longer while Entra ID retries a failed write, and up to a day while the app is in quarantine. The console ends every session of that person when the write arrives. |
+| A person deleted | Entra ID first sends `active` false, as above; the delete itself comes 30 days after a soft delete, and only where the app's Delete action is selected. |
+| A person removed from a mapped group | At the next cycle, as above; the team goes at the person's next request. |
+| A console role removed (app roles) | At the person's next sign-in, or when the session ends: the ID token's expiry, `sign_in.session_max_hours` or 30 minutes idle, whichever comes first. |
+| Any of these, now | `onetrace-console admin sessions end <tenant id>/<object id>` ends every session of that person at once. Pair it with the change in Entra ID, as a person still signed in to Microsoft can sign in again. |
+
+## The audit log
+
+With `audit.enabled`, who did what is kept under `audit_log/` beside the access log: deliveries, comparisons,
+marks, settings, sign-ins and sign-outs, SCIM's writes, tokens and accounts made, runs assigned. Each entry is one
+line of JSON, chained to the one before by its sha256, and never a password, a token, a session id, a search term
+or a page's contents.
+
+```json
+"audit": {"enabled": true, "head_location": "/mnt/audit-heads/heads.jsonl"}
+```
+
+- **`audit.head_location`, off the store's volume.** Every append also writes the log's head to this file, which
+  must lie on a second mounted volume, not the store's: the console refuses to start with the log on and none, or
+  with one on the store's device. A different device protects the log only where whoever can edit the store's
+  volume cannot also write this one, so give it other write access too.
+- **An action it cannot record is refused**, and said on the error stream and the next start. A removal of access
+  (a sign-out, a revoked token, a deprovisioning, `admin sessions end`, `scim enforcement on`) is applied anyway; the
+  next append that succeeds records what went unrecorded, by kind and count.
+- **Checking it.** `onetrace-console audit verify <folder> [--heads <file>] [--checkpoint <seq>:<digest>]` checks
+  the chain, `HEAD.json`, the heads from the second volume and a checkpoint. `onetrace-console audit checkpoint`
+  prints the head to keep elsewhere. `onetrace-console audit export <new folder>` copies the log out with its
+  verifier, one file of the standard library, and a `SHA256SUMS` over it all: run
+  `python audit_verify.py <export>` anywhere, with nothing installed.
+- **Run it with `--heads`.** Without `--heads`, `audit verify` reads the log against its own `HEAD.json`, which lies
+  beside it on the store's volume: entries cut off the end, with `HEAD.json` rewritten to agree, pass. Only the heads
+  on the second volume catch that, since whoever can rewrite the store's volume cannot rewrite them: that is what
+  keeping them on another device is for.
+
+## Forwarding traces
+
+**A trace is a view of a record, never evidence.** A collector or a tracing tool may drop, sample, rewrite and re-time
+what it is sent; whether a run's records agree is answered by the check reading the records. Forwarding sends each run
+out as a trace for the tools you already look at, and reads nothing back.
+
+**What is sent, and when.** Each run the console takes in is sent once, when its run index first holds it, to each
+destination that is on: one trace, the bytes of onetrace's own export of the run (the same as `onetrace export otel`,
+from the onetrace the console pins), with one attribute added to its root span, `onetrace.console.check`: the console's
+result for the run as the runs list words it ("records agree", "not checked", "couldn't check", or how many rows
+failed). Every id comes from the record, so the same run is always the same trace. No input or output value, error
+text or path is sent; no record is written. A run checked again later is not sent again.
+
+**Setting it up.** From the Settings gear, **Forwarding**, or `/forwarding/setup`: an admin's, with the console's own
+sign-in or through Entra ID; a public console and a static export have no such page. Each destination has a name, its
+endpoint (`https://`, or `http://` only for an address on this machine), its encoding, its headers, which runs it takes
+(all, or only runs whose records agree), and is on or off. The console sends `POST <endpoint>/v1/traces`. **Send a test
+trace** sends one span named `onetrace console test`, with no run data, and shows the status the destination answered.
+The gear's row says how many destinations are on, and shows its dot where a destination that is on has a header whose
+value is not there, or whose last attempt failed. Destinations are kept under the store's root, in `forwarding/`.
+Every change is recorded in the audit log, where it is on: the destination and the fields, never a value.
+
+**Encodings.** JSON, with the standard library alone, by default. Protobuf where a destination asks for it and the
+`[otlp]` extra is installed beside the console:
+
+```
+pip install "onetrace-console[otlp]"
+```
+
+Where protobuf is chosen and the extra is missing, the page says so with that line, and nothing is sent.
+
+**The keys.** A header's value is never written to the destinations file, never shown after it is saved, never logged
+and never in an export. Each header says where its value is: an environment variable (the page says only "set" or
+"not set"), or this user's keychain, where the value is typed once into a write-only field (the page says "stored"
+or "not stored", with Replace and Remove). A variable's name starts with `ONETRACE_FORWARD_`: the console reads no
+other variable for forwarding, so none of its own settings (the sign-in's client secret, say) can be sent, and a
+destination naming another is refused when it is set. A value holding a control character (a line break pasted
+with it, say) is not sent, and the page names the destination and the header, never the value. An answer from the destination is shown by its status and a short reason,
+with every header's value taken out.
+
+**Delivery.** A queue on disk, under `forwarding/`: one entry per run and destination, kept across a restart. A network
+error, a 429 or a 5xx is tried again after a wait that doubles from 2 seconds to at most 10 minutes, up to 8 tries in
+all; any other answer that is not a success stops that entry, and the page shows why. Sending never waits in a
+delivery, and a destination that is down changes no check. A resend is the same trace, with the same ids; what a
+destination does with a trace it has had before is its own (below).
+
+**Worked examples.** Each from its own documentation, read on 15 November 2026; check them against the pages as they
+stand.
+
+- **LangSmith.** Endpoint `https://api.smith.langchain.com/otel` (its documentation lists the address for each region).
+  Header `x-api-key`, its value your LangSmith API key, from a variable (as `ONETRACE_FORWARD_LANGSMITH_KEY`) or the keychain; a
+  project-based workspace may add `Langsmith-Project`. Its documentation's examples send protobuf and do not say
+  whether JSON is taken: choose protobuf. It says nothing of a trace sent twice with the same ids.
+- **Langfuse.** Endpoint `https://cloud.langfuse.com/api/public/otel` (EU; `https://us.cloud.langfuse.com/api/public/otel`
+  for the US). Header `Authorization`, its value `Basic ` and the base64 of your public and secret keys joined by a
+  colon (`pk-lf-...:sk-lf-...`), kept in the keychain or a variable; its documentation also sends
+  `x-langfuse-ingestion-version` with the value `4`, which here, as every header's value, comes from a variable (as
+  `ONETRACE_FORWARD_LANGFUSE_VERSION`, set to `4`) or the keychain. It takes OTLP over HTTP in JSON and in protobuf. It says
+  nothing of a trace sent twice with the same ids.
+- **An OpenTelemetry Collector on this machine.** Endpoint `http://127.0.0.1:4318`, the OTLP receiver's default port,
+  with no header; its documentation names JSON for OTLP over HTTP. It says nothing of a span sent twice; a Collector
+  passes on what its pipeline is set to pass on.
 
 ## Using it
 
@@ -667,7 +874,8 @@ take longer as the store grows.
 
 No telemetry, no update check, no call to anything outside the container at runtime, but one you
 configure: with sign-in through Microsoft Entra ID, the calls to your tenant's sign-in endpoints that
-"Sign-in through Microsoft Entra ID" lists. Every
+"Sign-in through Microsoft Entra ID" lists; and, where an admin adds a destination, each new run's trace, sent
+to that destination's endpoint ("Forwarding traces"). Every
 subprocess this console starts (the verifier, the SDK's own `diff`/`localize` verbs) runs
 locally against files already on disk; none of them opens a network connection, and
 `--network none` above is the proof that nothing could even if something tried to.

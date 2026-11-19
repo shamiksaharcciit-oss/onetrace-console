@@ -71,8 +71,9 @@ def _listed(doc: dict) -> list[tuple[str, str, dict]]:
     return out
 
 
-def render_text_diff_page(comparison, store: Store, *, generated_at: str) -> str | None:
-    """The page, or None where the comparison has no shown text diff."""
+def render_text_diff_page(comparison, store: Store, *, generated_at: str, tabs: str = "") -> str | None:
+    """The page, or None where the comparison has no shown text diff. `tabs`: Investigate's row of tabs, under the
+    page's title; the page is titled with the pair, as each of them is."""
     from onetrace_console.render import _document, _limit_sentence
     from onetrace_console.textdiff_view import _is_fingerprint, _render_output, _settings_line
     from onetrace_console.words import generated_footer, run_named
@@ -95,6 +96,7 @@ def render_text_diff_page(comparison, store: Store, *, generated_at: str) -> str
         f'<p class="crumbs" data-section="crumbs"><a href="../comparisons.html">Comparisons</a> / '
         f'<a href="{escape(comparison.key)}.html">{pair}</a> / {escape(TITLE)}</p>',
         f'<div class="title"><h1>{escape(TITLE)}' + (f" · {escape(first['node'])}" if first else "") + "</h1></div>",
+        tabs,
     ]
     if "first_line" in doc:
         parts.append(f"<p data-first-line>{escape(doc['first_line'])}</p>")
@@ -137,4 +139,8 @@ def render_text_diff_page(comparison, store: Store, *, generated_at: str) -> str
     parts.append(f'<div class="io">{left}{right}</div>')
     parts.append(f'<p class="limit" data-section="limit">{escape(_limit_sentence())}</p>')
     parts.append(generated_footer(generated_at))
-    return _document(TITLE, '<div class="cp" data-view="text-diff">' + "".join(parts) + "</div>")
+    from onetrace_console.views import investigate_title
+
+    return _document(
+        investigate_title(comparison, store), '<div class="cp" data-view="text-diff">' + "".join(parts) + "</div>"
+    )

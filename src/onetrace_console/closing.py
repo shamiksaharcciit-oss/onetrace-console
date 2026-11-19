@@ -87,3 +87,25 @@ def html(kept: str) -> str:
 def _marked(words: str, slot: str, value: str) -> str:
     before, after = words.split(slot, 1)
     return f'{escape(before)}<span class="mono" data-words="record">{escape(value)}</span>{escape(after)}'
+
+
+#: A run a later process recovered (format 0.5: its last receipt's instrument is `onetrace.close` of kind
+#: `close-recovered`, written from the journal of a run that never closed itself). The console's own words; the
+#: check's row `the close receipt` stands beside them, as onetrace-verify wrote it, and is the authority.
+RECOVERED = "recovered by a later process"
+RECOVERED_KIND = "close-recovered"
+CLOSE_ROW = "the close receipt"
+
+
+def recovered(receipts: list[dict], rows: list[dict]) -> str:
+    """A recovered run's ending, for its head: "recovered by a later process", and beside it the check's own row on
+    the close receipt, quoted. "" for a run whose last receipt is not a recovered close."""
+    from onetrace_console.step_kinds import _line
+
+    last = receipts[-1] if receipts and isinstance(receipts[-1], dict) else {}
+    instrument: dict = given if isinstance(given := last.get("instrument"), dict) else {}
+    if instrument.get("kind") != RECOVERED_KIND:
+        return ""
+    row = next((_line(r) for r in rows if r.get("name") == CLOSE_ROW), "")
+    quoted = f' (<span class="mono" data-words="check" data-check-row="quoted">{escape(row)}</span>)' if row else ""
+    return f'<span data-ending="recovered">{escape(RECOVERED)}</span>{quoted}'

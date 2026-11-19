@@ -47,7 +47,7 @@ from dataclasses import dataclass, field
 from datetime import UTC
 
 from onetrace_console.json_diff import LIMIT, MAX_MEMBERS, Number, parse
-from onetrace_console.words import escape
+from onetrace_console.words import escape, hidden_header
 
 #: The most spans an export holds and still gets a view.
 MOST_SPANS = 10_000
@@ -70,6 +70,8 @@ UNJOINED_STEP = (
 )
 UNREADABLE = "The trace file cannot be read, so there is no span view: {reason}."
 COLUMNS = ("Span", "What", "Start", "Took", "", "Model", "Tokens in / out", "Retries", "Status")
+#: The bar's column, named for a screen reader only.
+BAR_COLUMN = "Time, as a bar"
 MORE = "… {n} more spans"
 NAMED = "Each attribute shown is one of the names this view shows; a name shaped like a credential never is."
 CHECKED_HEAD = "Checked against the record"
@@ -586,7 +588,8 @@ def step_section(spans, receipt: dict, receipt_file: str, read_file) -> str:
         )
     origin, total = tree.root.start, max(tree.root.took, 1)
     shown, more = tree.rows[:MAX_MEMBERS], len(tree.rows) - MAX_MEMBERS
-    heads = "".join(f"<th>{escape(c)}</th>" for c in COLUMNS)
+    #: The unnamed column is the span's bar in time: its words are kept for a screen reader, not drawn.
+    heads = "".join(f"<th>{escape(c)}</th>" if c else hidden_header(BAR_COLUMN) for c in COLUMNS)
     table = scroll_region(
         f'<table class="board" data-span-tree="waterfall"><thead><tr>{heads}</tr></thead><tbody>'
         + "".join(_row(s, d, origin, total) for s, d in shown)
