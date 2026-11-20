@@ -37,8 +37,8 @@ REFUSAL = (
 #: The banner every page carries in public mode, in the release's own wording.
 BANNER = "A read-only demo of onetrace-console. Install it:"
 BANNER_COMMAND = "pip install onetrace-console"
-#: What the demo's runs are: said on every page, as the README says it. The count is the
-#: builder's own pipeline list, never a typed word (`banner_runs`).
+#: What the demo's runs are: said on every page, as the README says it. The count is of what the build serves, its
+#: run folders (`served`), and the builder's own pipeline list only where no build is named; never a typed word.
 BANNER_RUNS = (
     "Its runs come from {count} small example pipelines, recorded when this demo "
     "was built, with no network calls and no hosted model."
@@ -66,14 +66,39 @@ CAPTURES_RUNS = (
     "built, with no network calls and no hosted model."
 )
 #: The store a public console's banner speaks for, by its builder's name: the demo's unless the store being built or
-#: served is another's (`speaks_for`).
-_SPEAKS_FOR = {"name": "demo"}
+#: served is another's (`speaks_for`); and the build's folder, whose runs the banner counts.
+_SPEAKS_FOR: dict = {"name": "demo", "folder": None}
 
 
-def speaks_for(name: str) -> None:
-    """Make the banner speak for the store whose builder is `name` ("demo" or "captures"): set where a public store is
-    built (`folder_load.build_public`) and where a public console starts, from its build record."""
-    _SPEAKS_FOR["name"] = name
+def speaks_for(name: str, folder: Path | None = None) -> None:
+    """Make the banner speak for the store whose builder is `name` ("demo" or "captures"), built in `folder`: set where
+    a public store is built (`folder_load.build_public`) and where a public console starts, from its build record. With
+    no folder, the banner counts the builder's own list."""
+    _SPEAKS_FOR["name"], _SPEAKS_FOR["folder"] = name, (Path(folder) if folder is not None else None)
+
+
+#: The last build's run folders, by its runs folder and that folder's modification time: every page draws the banner.
+_SERVED: dict = {}
+
+
+def served(folder: Path, specs) -> tuple[int, int] | None:
+    """(runs, pipelines) a build in `folder` serves: each run folder under its `runs/` (one holding a MANIFEST.json),
+    its pipeline the builders' spec names for its folder (`specs`), else its name up to the first hyphen. None where the
+    folder holds no runs yet (a build still recording)."""
+    runs_dir = Path(folder) / "runs"
+    try:
+        stamp = (str(runs_dir), runs_dir.stat().st_mtime_ns)
+        if _SERVED.get("stamp") == stamp:
+            names = _SERVED["names"]
+        else:
+            names = sorted(p.name for p in runs_dir.iterdir() if (p / "MANIFEST.json").is_file())
+            _SERVED.update(stamp=stamp, names=names)
+    except OSError:
+        return None
+    if not names:
+        return None
+    pipeline = {s.folder: s.pipeline for s in specs}
+    return len(names), len({pipeline.get(n, n.split("-", 1)[0]) for n in names})
 
 
 def recorded_builder(folder: Path) -> str:
@@ -92,16 +117,18 @@ def recorded_builder(folder: Path) -> str:
 def banner_runs() -> str:
     """The banner's sentence on the runs: the demo's, its count read from the demo's builder; or, for the capture store,
     what it holds, its counts read from its own builder."""
+    from onetrace_console import demo_store
+    from onetrace_console.demo_store import captures
+
+    folder = _SPEAKS_FOR["folder"]
     if _SPEAKS_FOR["name"] == "captures":
-        from onetrace_console.demo_store import captures
-
         specs = captures.runs()
-        return CAPTURES_RUNS.format(
-            runs=count_word(len(specs)), count=count_word(len(dict.fromkeys(s.pipeline for s in specs)))
-        )
-    from onetrace_console.demo_store import pipeline_names
-
-    return BANNER_RUNS.format(count=count_word(len(pipeline_names())))
+        counted = served(folder, specs) if folder is not None else None
+        runs, pipelines = counted or (len(specs), len(dict.fromkeys(s.pipeline for s in specs)))
+        return CAPTURES_RUNS.format(runs=count_word(runs), count=count_word(pipelines))
+    #: What the build serves, counted from its runs: a build from kept runs serves what they hold.
+    counted = served(folder, demo_store.runs()) if folder is not None else None
+    return BANNER_RUNS.format(count=count_word(counted[1] if counted else len(demo_store.pipeline_names())))
 
 
 def banner_compare() -> str:

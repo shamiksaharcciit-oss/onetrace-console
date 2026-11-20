@@ -577,5 +577,87 @@
     }
    }
   }
+ },
+ "pzz-66-invoice-agent-good -> pzz-67-invoice-agent-misread": {
+  "diff": {
+   "exit": "1",
+   "refused": true,
+   "reports": {
+    "diff.json": {
+     "envelope": "diverged",
+     "exit": "1",
+     "reason": null,
+     "identical_before": "0",
+     "first_difference": {
+      "index": "1",
+      "stage": "read_invoice"
+     },
+     "cause": null
+    }
+   }
+  },
+  "localize": {
+   "exit": "1",
+   "refused": true,
+   "reports": {
+    "localize.json": {
+     "envelope": "diverged",
+     "exit": "1",
+     "reason": null,
+     "identical_before": "0",
+     "first_difference": {
+      "index": "1",
+      "stage": "read_invoice"
+     },
+     "cause": null
+    }
+   }
+  },
+  "diff --text": {
+   "exit": "1",
+   "refused": false,
+   "reports": {}
+  }
+ },
+ "pzz-66-invoice-agent-good -> pzz-68-invoice-agent-fingerprint-changed": {
+  "diff": {
+   "exit": "1",
+   "refused": true,
+   "reports": {
+    "diff.json": {
+     "envelope": "diverged",
+     "exit": "1",
+     "reason": null,
+     "identical_before": "0",
+     "first_difference": {
+      "index": "1",
+      "stage": "read_invoice"
+     },
+     "cause": null
+    }
+   }
+  },
+  "localize": {
+   "exit": "1",
+   "refused": true,
+   "reports": {
+    "localize.json": {
+     "envelope": "diverged",
+     "exit": "1",
+     "reason": null,
+     "identical_before": "0",
+     "first_difference": {
+      "index": "1",
+      "stage": "read_invoice"
+     },
+     "cause": null
+    }
+   }
+  },
+  "diff --text": {
+   "exit": "1",
+   "refused": false,
+   "reports": {}
+  }
  }
 }

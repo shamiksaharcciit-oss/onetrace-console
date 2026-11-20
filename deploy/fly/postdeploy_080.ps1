@@ -70,6 +70,13 @@ Check "A1 /health answers 200 ok" ($r.Status -eq 200 -and $r.Body.Trim() -eq "ok
 $front = Get-Page "/"
 Check "A2 / answers 200 with the read-only banner" ($front.Status -eq 200 -and $front.Body.Contains('data-frame="banner"')) "$($front.Status)"
 Check "A3 / names onetrace-console $Version" ($front.Body.Contains("onetrace-console $Version"))
+# The banner's count of pipelines is what this build serves: the Overview's own pipelines, counted on the same page.
+$CountWords = @{ "no" = 0; "one" = 1; "two" = 2; "three" = 3; "four" = 4; "five" = 5; "six" = 6; "seven" = 7; "eight" = 8; "nine" = 9; "ten" = 10 }
+$said = [regex]::Match($front.Body, 'Its runs come from (\S+) small example pipelines')
+$cards = @([regex]::Matches($front.Body, 'data-pipeline-card="([^"]+)"') | ForEach-Object { $_.Groups[1].Value } | Select-Object -Unique).Count
+$n = -1
+if ($said.Success) { $w = $said.Groups[1].Value; if ($CountWords.ContainsKey($w)) { $n = $CountWords[$w] } elseif ($w -match '^\d+$') { $n = [int]$w } }
+Check "A3b the banner's count of pipelines is the Overview's, $cards" ($said.Success -and $cards -gt 0 -and $n -eq $cards) "$($said.Groups[1].Value)"
 $csp = "$($front.Headers['Content-Security-Policy'])"
 Check "A4 headers: CSP default-src 'none', frame DENY, nosniff, HSTS" ($csp.Contains("default-src 'none'") -and
     $front.Headers['X-Frame-Options'] -eq "DENY" -and $front.Headers['X-Content-Type-Options'] -eq "nosniff" -and

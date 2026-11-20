@@ -124,7 +124,16 @@ def members(a, b, path: str = "") -> list[tuple[str, str, object, object]]:
 def _shown(v) -> str:
     from onetrace.escaping import escaped
 
+    from onetrace_console.viewer.page import _FINGERPRINT, fingerprint_html
+
     said = text(v)
+    if isinstance(v, str) and _FINGERPRINT.fullmatch(v):
+        return fingerprint_html(v)
+    from onetrace_console.words import _instant, time_html
+
+    if isinstance(v, str) and _instant(v) is not None:
+        #: A time, as every page shows one: in `<time>`, the value as recorded in its `datetime`.
+        return time_html(v)
     if len(said) <= LIMIT:
         return f"<code>{escape(escaped(said))}</code>"
     d = hashlib.sha256(said.encode("utf-8")).hexdigest()

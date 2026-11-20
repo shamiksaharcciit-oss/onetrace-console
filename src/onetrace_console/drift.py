@@ -246,6 +246,11 @@ def render_drift(
             href = f"diff/{found.key}.html" if found is not None else f"{pair_href(label, a.key)}#{b_anchor(b.key)}"
             return f'<a href="{_tag(href)}">{escape(text)}</a>'
 
+        from onetrace_console import fingerprint_change
+
+        #: The runs where the model identity their model-call records state changed, marked with the day
+        #: (`fingerprint_change`).
+        changed = fingerprint_change.changed_on(runs, store)
         rows = []
         for r in rep["runs"]:
             run = by_index.get(r["index"])
@@ -257,7 +262,9 @@ def render_drift(
             )
             rows.append(
                 f'<tr data-run="{_tag(r["index"])}"><td{GAP}>{escape(r["index"])}</td><td{GAP}>{name}</td>'
-                f"<td data-line>{pair_link(c, _line(c)) if c else escape(_line(c))}</td></tr>"
+                f"<td data-line>{pair_link(c, _line(c)) if c else escape(_line(c))}"
+                + (fingerprint_change.mark(changed[run.key]) if run is not None and run.key in changed else "")
+                + "</td></tr>"
             )
         body.append(
             scroll_region(

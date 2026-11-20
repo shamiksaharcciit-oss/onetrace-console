@@ -7,6 +7,9 @@
   under the same per-input opt-in, so a run that kept nothing has nothing embedded at all.
 - **An input read from an earlier step's output** is that output, by its digest, kept or not as it is.
 
+Each output says how it is held (`Part.held`): kept and read; not kept; kept, but its bytes do not match the digest
+its receipt gives, and so not read; or kept but not text.
+
 Never a digest, a setting, a receipt, a manifest or any other part of a record: the texts are the kept
 files' own words. Each is keyed by its recorded digest, so equal digests are equal by the record and
 need no embedding.
@@ -21,6 +24,9 @@ from onetrace_console.bounded_json import load_json_bounded
 INPUT, OUTPUT = "input", "output"
 #: What a part reads where it has no text to embed.
 NOT_KEPT = "not kept"
+#: How an output is held (`Part.held`): its text read; no bytes kept; bytes kept that do not match the receipt's
+#: digest; bytes that match but are not text.
+KEPT, ABSENT, MISMATCH, NOT_TEXT = "kept", "not kept", "digest differs", "not text"
 
 
 @dataclass(frozen=True)
@@ -37,6 +43,8 @@ class Part:
     #: an embedding batch reads, so its run records the same digest. Never shown.
     data: bytes | None = field(default=None, repr=False, compare=False)
     trust_class: str = ""
+    #: An output's: how it is held (`KEPT`, `ABSENT`, `MISMATCH`, `NOT_TEXT`). "" for an input.
+    held: str = field(default="", compare=False)
 
 
 def _version(steps):
@@ -131,6 +139,7 @@ def parts(run, store) -> list[Part]:
             if keeps and outputs_kept:
                 blob = read(_artifact_path(s["file"], name))
                 text = _output_text(blob, digest, str(item.get("media_type", "")))
+            held = _held(blob, digest, text)
             part = Part(
                 stage,
                 str(s["index"]),
@@ -140,10 +149,22 @@ def parts(run, store) -> list[Part]:
                 text,
                 blob if text is not None else None,
                 str(item.get("trust_class", "")),
+                held,
             )
             produced.setdefault(digest, part)
             out.append(part)
     return out
+
+
+def _held(blob: bytes | None, digest: str, text: str | None) -> str:
+    """How an output is held: read, absent, kept with other bytes than its digest names, or not text."""
+    from onetrace_console.stage_pages import _verified
+
+    if text is not None:
+        return KEPT
+    if blob is None:
+        return ABSENT
+    return NOT_TEXT if _verified(blob, digest) else MISMATCH
 
 
 def _later(q: Part, p: Part) -> bool:

@@ -53,6 +53,7 @@
   "compare_wait_seconds": 20.0,
   "compare_verb_seconds": 30,
   "tracing": {},
+  "forwarding": {"console_url": ""},
   "tokenizers": [],
   "close_call_margin": 1.0,
   "teams": {},

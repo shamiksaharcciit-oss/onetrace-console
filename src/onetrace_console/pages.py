@@ -302,6 +302,10 @@ def _with_node_facts(model):
     from onetrace_console.viewer.page import _line
 
     steps = {s.index: s for s in model.steps}
+    #: The reason every step shares, said once above the step table and not in each row (`viewer.page._is_shared`).
+    from onetrace_console.viewer.page import _is_shared
+
+    every = bool(model.steps) and all(any(_is_shared(x) for x in s.check) for s in model.steps)
     order = sorted(model.graph_nodes, key=lambda n: n.index)
     failed: set[str] = set()
     retried: set[str] = set()
@@ -322,7 +326,11 @@ def _with_node_facts(model):
         else:
             count = len(step.outputs) + step.outputs_more
             fact = NODE_OUTPUTS[count != 1].format(n=count)
-        check = " ".join(unescape(_re.sub(r"<[^>]+>", " ", _line(step.check[0]))).split()) if step.check else ""
+        #: The step's check as its row in the step table says it (`viewer.page._render_case`): every line, but the
+        #: reason every step shares, which the table says once above it. A step that holds and has a row the check
+        #: could not run says both, never the first alone.
+        shown = [c for c in step.check if not (every and _is_shared(c))]
+        check = " ".join(unescape(_re.sub(r"<[^>]+>", " ", " ".join(_line(c) for c in shown))).split())
         tags = (n.tags + (fact,)) if n.tags else ((fact, check) if check else (fact,))
         #: A step with steps inside it says how many, after the record's fact (a box's first line
         #: after its chip); its box opens its step's page, which lists them (onetrace 0.5's `children`).
@@ -457,6 +465,14 @@ def refusal(e: Exception, *, log: bool = True) -> tuple[str, bool]:
 
         traceback.print_exception(e, file=sys.stderr)
     return f"{type(e).__name__}: {e}", False
+
+
+def _memory_page(run: StoredRun, store: Store, generated_at: str, label) -> dict[str, str]:
+    """{memory.html: page} where the run's record holds store reads or writes; {} otherwise (`memory_view`)."""
+    from onetrace_console import memory_view
+
+    page = memory_view.render_memory(run, store, generated_at=generated_at, links=memory_view.links(run, store))
+    return {memory_view.PAGE: label(page, [run])} if page is not None else {}
 
 
 def render_execution(run: StoredRun, store: Store, *, generated_at: str) -> RenderedExecution:
@@ -698,6 +714,8 @@ def render_execution(run: StoredRun, store: Store, *, generated_at: str) -> Rend
                 ),
                 [run],
             ),
+            #: The run's memory, where its record holds store reads or writes (`memory_view`).
+            **_memory_page(run, store, generated_at, label),
             #: Labelled like the run's other pages: every page that shows a preview run says so.
             **{
                 name: label(page, [run])

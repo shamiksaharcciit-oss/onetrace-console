@@ -40,6 +40,7 @@ POST = {
     "/neighbours/off": (A, A),
     "/explain/setup": (A, A),
     "/forwarding/setup": (A, A),
+    "/noise": (A, A),
 }
 #: The pages that need more than viewer with Entra ID: rendered path -> role.
 GET_ABOVE_VIEWER = {"explain/setup": A, "neighbours/setup": A, "bisect": I}

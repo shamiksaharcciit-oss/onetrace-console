@@ -287,8 +287,12 @@ def test_the_demo_s_agent_step_shows_its_two_1_0_records_with_nothing_observed(s
         assert "data-refused" not in page and 'data-state="observed"' not in page, name
         assert re.findall(r'data-model-call-steps="([^"]+)"', page) == ["not-taken", "not-taken"], name
         assert ex.SOURCE in _text(page), name
-    #: No other run's step writes one.
-    others = [r for n, r in runs.items() if n not in ("pz-51-agent-baseline", "pz-53-agent-amount-changed")]
+    #: No other run's step writes one, but P12's model call (`invoice_agent`, a 1.1 record of its own).
+    others = [
+        r
+        for n, r in runs.items()
+        if n not in ("pz-51-agent-baseline", "pz-53-agent-amount-changed") and not n.startswith("pzz-")
+    ]
     assert not any(
         'data-section="model-call"' in p.read_text(encoding="utf-8")
         for r in others

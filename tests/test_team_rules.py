@@ -40,6 +40,7 @@ def _sample(pattern: str) -> str:
         r"^drift-p[0-9]+(-previous)?\.html$": "drift-p1.html",
         r"^bisect-p[0-9]+\.html$": "bisect-p1.html",
         r"^choose-p[0-9]+\.html$": "choose-p1.html",
+        r"^pipelines/p[0-9]+/noise$": "pipelines/p1/noise",
         r"^choose-p[0-9]+-[0-9a-f]{64}\.html$": "choose-p1-" + "a" * 64 + ".html",
         r"^policy/[^/]+\.html$": "policy/x.html",
         r"^policy-verdict-[\w-]+\.html$": "policy-verdict-x.html",

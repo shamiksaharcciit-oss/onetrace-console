@@ -22,7 +22,19 @@ NOT_EVIDENCE = "A trace is a view of a record, never evidence."
 INTRO = (
     "Each run this console takes in is sent once, as one trace, to each destination that is on: onetrace's own export "
     "of the run, the same as onetrace export otel, with one attribute, onetrace.console.check, the console's result "
-    "for it. No input or output value, error text or path is sent. Nothing a destination answers is used."
+    "for it, and, where the link back to this console is on, onetrace.console_url. No input or output value, error "
+    "text or path is sent. Nothing a destination answers is used."
+)
+#: The link back to the console (`forwarding.console_url`), off and on.
+LINK_OFF = (
+    "The link back to this console is off: no trace carries onetrace.console_url. To turn it on, set "
+    "forwarding.console_url in the configuration file to the address people open this console at, such as "
+    "https://onetrace.example.org, and start the console again."
+)
+LINK_ON = (
+    "The link back to this console is on: each trace's root span carries onetrace.console_url, the run's page, "
+    "{page}. It is a pointer, never a claim: the record is checked by onetrace-verify, not by the tool that shows "
+    "the link."
 )
 RETRIES = (
     "A network error, a 429 or a 5xx is tried again after a wait that doubles, up to {n} tries in all; "
@@ -270,7 +282,15 @@ def _add_form(refused: Change | None = None) -> str:
     )
 
 
-def body(store_root, said: str = "", refused: Change | None = None) -> str:
+def link_line(console_url: str) -> str:
+    """Whether each trace links back to this console, and how to turn the link on where it is off."""
+    if not console_url:
+        return f'<p data-forwarding="link">{escape(LINK_OFF)}</p>'
+    page = F.run_page(console_url, "RUN").replace("/RUN/", "/<run key>/")
+    return f'<p data-forwarding="link" data-link="on">{escape(LINK_ON.format(page=page))}</p>'
+
+
+def body(store_root, said: str = "", refused: Change | None = None, console_url: str = "") -> str:
     try:
         dests = F.read(store_root)
         unreadable = ""
@@ -282,7 +302,7 @@ def body(store_root, said: str = "", refused: Change | None = None) -> str:
     lead = (
         f'<p class="lead" data-forwarding="not-evidence"><strong>{escape(NOT_EVIDENCE)}</strong></p>'
         f"<p>{escape(INTRO)}</p><p>{escape(RETRIES.format(n=F.MAX_ATTEMPTS))}</p>"
-        f'<p data-forward="variables">{escape(VARIABLES_NAMED)}</p>'
+        f'<p data-forward="variables">{escape(VARIABLES_NAMED)}</p>{link_line(console_url)}'
     )
     #: Where a refusal is about one field, the line says so and links to it; the field says it too.
     at = ""
@@ -294,12 +314,14 @@ def body(store_root, said: str = "", refused: Change | None = None) -> str:
     return f"<h1>{escape(TITLE)}</h1>{lead}{told}{unreadable}{listed}{_add_form(refused)}"
 
 
-def page(store_root, said: str = "", refused: Change | None = None) -> str:
+def page(store_root, said: str = "", refused: Change | None = None, console_url: str = "") -> str:
     """The page, saying `said`; with `refused`, a refused press: its form drawn again as it was sent (but a keychain
-    value), the message by its field."""
+    value), the message by its field. `console_url`: `forwarding.console_url`, for the link's line."""
     from onetrace_console.render import _document
 
-    return _document(TITLE, f'<div class="cp" data-page="forwarding">{body(store_root, said, refused)}</div>')
+    return _document(
+        TITLE, f'<div class="cp" data-page="forwarding">{body(store_root, said, refused, console_url)}</div>'
+    )
 
 
 # ------------------------------------------------------------------------------------------------- the changes

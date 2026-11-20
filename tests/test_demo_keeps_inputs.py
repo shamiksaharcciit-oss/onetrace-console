@@ -11,11 +11,13 @@ Held here, on the public demo built once a session (`shared_demo`):
 - every kept input is the builder's own invented example data (`example_input_digests`), so a public
   console may show it;
 - a run of each pipeline but P2 opens its step page with the kept text shown (the input view);
-- the 15 comparisons the build stores give the verdicts and first differences they gave before
-  (`tests/fixtures/demo_070/verdicts.json`, from 0.7.0's demo build), row for row; the 16th, beside the
+- the comparisons the build stores give the verdicts and first differences they gave before
+  (`tests/fixtures/demo_070/verdicts.json`, from 0.7.0's demo build; P12's two from its first build, console
+  0.9.1), row for row; the 16th, beside the
   kept runs of the hosted demo, is built from those kept runs, which this change does not touch;
-- `onetrace-verify` gives every run the exit it gave before (`verify.tsv`, from the same build): every
-  run passes but the five the demo breaks on purpose.
+- `onetrace-verify` gives every run the exit it gave before (`verify.tsv`, from the same build; P12's four lines
+  from its first build, console 0.9.1): every run passes but the five the demo breaks on purpose. P12's run broken on
+  purpose fails only a decision row, which this check, given no decision files, does not run.
 """
 
 from __future__ import annotations
@@ -152,8 +154,10 @@ def test_a_run_of_each_pipeline_but_p2_opens_its_step_page_with_the_kept_text(sh
             if n.startswith("stage-")
         ):
             missing.append(f"{p.label} ({run.run_id})")
+    from onetrace_console.demo_store import pipeline_names
+
     examined(len(seen), "pipelines")
-    assert len(seen) == 10 and missing == [], missing
+    assert len(seen) == len(pipeline_names()) - 1 and missing == [], missing
 
 
 def verdicts(root: Path) -> dict:
@@ -185,11 +189,13 @@ def verdicts(root: Path) -> dict:
     return out
 
 
-def test_the_15_comparisons_give_the_verdicts_they_gave_before_row_for_row(shared_demo, examined):
+def test_the_demo_s_comparisons_give_the_verdicts_they_gave_before_row_for_row(shared_demo, examined):
+    from onetrace_console.demo_store import COMPARISONS
+
     before = json.loads((FIXTURES / "verdicts.json").read_text(encoding="utf-8"))
     now = verdicts(shared_demo["folder"])
     examined(len(now), "comparisons")
-    assert sorted(now) == sorted(before) and len(now) == 15
+    assert sorted(now) == sorted(before) and len(now) == len(COMPARISONS)
     assert [k for k in before if now[k] != before[k]] == []
 
 

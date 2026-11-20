@@ -130,6 +130,11 @@ class TeamView:
     def neighbours_root(self) -> Path:
         return self._store.neighbours_root().parent / "neighbours-by-team" / self.team
 
+    def noise_folder(self) -> Path:
+        """The whole console's noise fields: an admin marks a pipeline's for every team, and a field names a step and
+        a path, never a run."""
+        return self._store.noise_folder()
+
     def has_decision_exports(self) -> bool:
         return self._store.has_decision_exports()
 

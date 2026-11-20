@@ -83,6 +83,9 @@ _SLOT = re.compile(r"(<!--fingerprint-->)[0-9a-f]{64}(<!--/fingerprint-->)")
 #: (`verdicts`), each copied where every run it covers is listed.
 _STORE_PARTS = {
     "objects",
+    #: Each pipeline's noise fields (`noise`), copied where a listed run is of that pipeline: an export's comparisons
+    #: set them aside as the console's do. The noise page itself is a console's, and its links are taken out.
+    "noise",
     "runs",
     "comparisons",
     "drift",
@@ -171,10 +174,15 @@ _LOCAL_PICKER = re.compile(r'<section id="local-compare" data-section="local-com
 #: Investigate's way to another pair: the Runs page's picker, which a file has none of.
 _ANOTHER_PAIR = re.compile(r'<p data-investigate="another">.*?</p>', re.S)
 #: A comparison page's requests: Swap's ask for the reverse comparison, the checks' "Run on this page", and the runs
-#: with near inputs (a local console's feature). A held reverse comparison's Swap is a link, and stays.
+#: with near inputs and near outputs (a local console's feature). A held reverse comparison's Swap is a link, and stays.
 _SWAP_ASK = re.compile(r'<form method="post" action="/compare" data-swap="ask"[^>]*>.*?</form>', re.S)
 _RUN_HERE = re.compile(r' ?<form method="post" action="/compare/check" class="run-here"[^>]*>.*?</form>', re.S)
-_NEAR_RUNS = re.compile(r'<section class="near-runs" data-section="near-runs"[^>]*>.*?</section>', re.S)
+#: A pipeline's noise page is drawn as asked, by a console: the pipeline page's link to it and a comparison's "See the
+#: list" are taken out of a file, the fields the comparison names kept.
+_NOISE_LINKS = re.compile(
+    r' · <a href="pipelines/p[0-9]+/noise" data-link="noise">[^<]*</a>| <a href="\.\./pipelines/p[0-9]+/noise" data-noise="list">[^<]*</a>'
+)
+_NEAR_RUNS = re.compile(r'<section class="near-runs" data-section="near-(?:runs|outputs)"[^>]*>.*?</section>', re.S)
 
 
 def without_run_tools(page: str) -> str:
@@ -186,7 +194,7 @@ def without_run_tools(page: str) -> str:
     from onetrace_console.benchmark_script import BENCHMARK_SCRIPT
 
     page = _ANOTHER_PAIR.sub("", _LOCAL_PICKER.sub("", _SAME_INPUTS.sub("", _RUN_SEARCH.sub("", page))))
-    page = _NEAR_RUNS.sub("", _RUN_HERE.sub("", _SWAP_ASK.sub("", page)))
+    page = _NOISE_LINKS.sub("", _NEAR_RUNS.sub("", _RUN_HERE.sub("", _SWAP_ASK.sub("", page))))
 
     def mark(m) -> str:
         sec = m.group(0)
@@ -279,6 +287,11 @@ def _scratch(source: Path, keys: list[str], into: Path):
             (into / "store" / "benchmarks").mkdir(exist_ok=True)
             shutil.copy2(mark, into / "store" / "benchmarks" / mark.name)
     listed = set(keys)
+    digests = {source_store.get_run(k).declared_digest for k in keys}  # type: ignore[union-attr]  # each is held, above
+    for p in sorted((store_dir / "noise").glob("*.json")) if (store_dir / "noise").is_dir() else ():
+        if p.stem in digests:
+            (into / "store" / "noise").mkdir(exist_ok=True)
+            shutil.copy2(p, into / "store" / "noise" / p.name)
     for comparison in source_store.comparisons():
         if comparison.run_a in listed and comparison.run_b in listed:
             target = into / "store" / "comparisons"

@@ -368,6 +368,11 @@ class Config:
     #: tracing tool"; the console builds the link and never calls it. A public console shows no
     #: link. Empty: no link.
     tracing: dict = field(default_factory=dict)
+    #: Trace forwarding: `console_url`, this console's address as people reach it, such as
+    #: https://onetrace.example.org (https, or http for an address on this machine only, as a destination's endpoint;
+    #: a path allowed). Set, each forwarded trace's root span carries `onetrace.console_url`, the run's page under it
+    #: (`forwarding.run_page`). Empty: no link.
+    forwarding: dict = field(default_factory=lambda: {"console_url": ""})
     #: A local console's tokenizers, each a folder the person names and the files in it that make the
     #: tokenizer: [{"folder": "<path>", "files": ["tokenizer.json", ...]}]. A model step's token ids are
     #: decoded only where the named files, hashed as named, give the record's `tokenizer.digest`
@@ -598,6 +603,29 @@ def _validate_audit(value: object, *, source: str) -> dict:
             f"{source}: audit.max_segment_bytes must be a whole number of at least 4096, got {size!r}", fix=fix
         )
     return merged
+
+
+def _validate_forwarding(value: object, *, source: str) -> dict:
+    """`forwarding`: an object whose one key, `console_url`, is empty or the console's address, by
+    `forwarding.console_url_problem`."""
+    from onetrace_console.forwarding import console_url_problem
+
+    fix = (
+        f'give forwarding as {{"console_url": "https://onetrace.example.org"}} in {source}: the address people open '
+        f"this console at, or leave it out for no link"
+    )
+    if not isinstance(value, dict):
+        raise ConfigError(f"{source}: forwarding must be an object with one key, console_url, got {value!r}", fix=fix)
+    unknown = sorted(set(value) - {"console_url"})
+    if unknown:
+        raise ConfigError(f"{source}: unknown forwarding key(s) {unknown}. Known keys: ['console_url'].", fix=fix)
+    url = value.get("console_url", "")
+    if not isinstance(url, str):
+        raise ConfigError(f"{source}: forwarding.console_url must be a string, got {url!r}", fix=fix)
+    why = console_url_problem(url) if url else None
+    if why:
+        raise ConfigError(f"{source}: forwarding.console_url: {why}, got {url!r}", fix=fix)
+    return {"console_url": url}
 
 
 def _validate_tracing(value: object, *, source: str) -> dict:
@@ -876,6 +904,8 @@ def _from_mapping(data: dict, *, source: str) -> Config:
         )
     if "tracing" in data:
         data = {**data, "tracing": _validate_tracing(data["tracing"], source=source)}
+    if "forwarding" in data:
+        data = {**data, "forwarding": _validate_forwarding(data["forwarding"], source=source)}
     if "tokenizers" in data:
         data = {**data, "tokenizers": _validate_tokenizers(data["tokenizers"], source=source)}
     if "teams" in data:

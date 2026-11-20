@@ -473,6 +473,7 @@ def calls_section(
 def origin_pages(index: dict, generated_at: str, written: str = "") -> dict[str, str]:
     """`origin-<run id>.html` for each origin a linked run names: every run in the index with that origin."""
     from onetrace_console.render import _document
+    from onetrace_console.run_index import from_index_html
     from onetrace_console.words import generated_footer
 
     by_origin: dict[str, list[dict]] = {}
@@ -495,17 +496,11 @@ def origin_pages(index: dict, generated_at: str, written: str = "") -> dict[str,
             f'<p data-section="what">{escape(ORIGIN_WHAT.format(origin=origin))}</p>'
             f'<ul class="plain" data-section="origin-runs">{items}</ul>'
             f'<p class="note" data-section="origin-non-claims">{prose(NON_CLAIMS)}</p>'
-            f'<p class="note" data-section="from-index">{escape(_from_index(index, written))}</p>'
+            f'<p class="note" data-section="from-index">{from_index_html(index, written)}</p>'
             f"{generated_footer(generated_at)}</div>"
         )
         pages[origin_href(origin)] = _document(ORIGIN_TITLE, body)
     return pages
-
-
-def _from_index(index: dict, written: str) -> str:
-    from onetrace_console.run_index import FROM_INDEX
-
-    return FROM_INDEX.format(format=str(index.get("format", "")), written=written or "at a time not known")
 
 
 def index_origin(run, store) -> str | None:

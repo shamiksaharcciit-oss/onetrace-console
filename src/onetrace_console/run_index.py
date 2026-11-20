@@ -501,13 +501,20 @@ def drawn_written() -> str:
 def index_note() -> str:
     """On a page drawn from the index: its format and when it was written, so a page drawn from an index written
     before the store last changed reads as such. Nothing outside a drawing."""
-    from onetrace_console.words import escape
 
     index = _DRAWING.get()
     if index is None:
         return ""
-    said = FROM_INDEX.format(format=str(index.get("format", "")), written=_WRITTEN.get() or "at a time not known")
-    return f'<p class="note" data-section="from-index">{escape(said)}</p>'
+    return f'<p class="note" data-section="from-index">{from_index_html(index, _WRITTEN.get())}</p>'
+
+
+def from_index_html(index: dict, written: str) -> str:
+    """FROM_INDEX as a page says it: the time the index was written in the page's one form, inside `<time>`."""
+    from onetrace_console.words import escape, time_html
+
+    before, after = FROM_INDEX.split("{written}")
+    shown = time_html(written) if written else escape("at a time not known")
+    return escape(before.format(format=str(index.get("format", "")))) + shown + escape(after)
 
 
 def written_at(store_root: Path) -> str:

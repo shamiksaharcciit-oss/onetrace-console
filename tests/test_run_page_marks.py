@@ -210,7 +210,9 @@ def _titles(page: str) -> dict[str, str]:
 #: with the section's code and without it.
 #: Moved by the version, 0.8.0 to 0.9.0, from d248651c20b75b54811e63aa314932875ac456b5a99d37e6247435e8787bdca8.
 #: Measured by rendering it with the version alone set back to 0.8.0: the old digest.
-UNMARKED_R_CASE_SHA256 = "c0bbc8fd8e2906e6f1e672897a2abce366319c0782bca641585418ca51a9520e"
+#: Moved by the version, 0.9.0 to 0.9.1, from c0bbc8fd8e2906e6f1e672897a2abce366319c0782bca641585418ca51a9520e.
+#: Measured by rendering it with the version alone set back to 0.9.0: the old digest.
+UNMARKED_R_CASE_SHA256 = "5f8a2c0cb86b5ae170c4757bf2fb5ec46dec2972aad08162d2dd345706153f51"
 _VERIFIER_PATH = re.compile(r"\S*onetrace_verify[/\\]verify\.py")
 _FINGERPRINT = re.compile(r"<!--fingerprint-->[0-9a-f]{64}<!--/fingerprint-->")
 _VERIFIER_BLOCK = re.compile(r'(<pre data-layer="3">)(\[[A-Z][A-Z-]* *\] .*?)(</pre>)', re.S)

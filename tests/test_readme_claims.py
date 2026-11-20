@@ -21,7 +21,7 @@ import pytest
 from onetrace_console.config import Config
 
 REPO = Path(__file__).resolve().parent.parent
-RELEASE = "0.9.0"
+RELEASE = "0.9.1"
 #: The package's own version: the next release, whose heading says "(not released)" until the release
 #: step drops it. Every other version's heading is plain.
 VERSION = tomllib.loads((REPO / "pyproject.toml").read_text(encoding="utf-8"))["project"]["version"]
@@ -139,8 +139,33 @@ CLAIMS_050 = [
     ("A run's incident takes", "fix", "An incident's page has a new address; the old address no longer answers."),
 ]
 #: The earlier releases' tables, by release.
-#: This release's (0.9.0), under `## [Unreleased]` until its version was set.
+#: This release's (0.9.1), under `## [Unreleased]` until its version was set. A model call's pages, the fingerprint's
+#: line and the Memory tab are pages, as 0.9.0's configuration comparison was; near outputs are the neighbours extra's.
 CLAIMS: list = [
+    ("A model call's own pages", "page", None),
+    ("P12, an invoice agent, in the demo", "demo data", None),
+    ("The model fingerprint across runs", "page", None),
+    ("A run's memory", "page", None),
+    (
+        "A link back to the console in each forwarded trace",
+        "option",
+        "the run's page there, so a tracing tool links back to the record",
+    ),
+    (
+        "Runs with near outputs, beside runs with near inputs",
+        "extra",
+        "beside those, the runs whose kept output at the first difference is nearest to run A's",
+    ),
+    ("Fields marked as noise", "feature", "- **Noise fields:**"),
+    ("A public build's banner counts what it serves", "demo data", None),
+    ("A first start shows which runs wrote what a step read", "fix", None),
+    ("A step's box on a run's graph says all of its check", "fix", None),
+    ("A store read or write shows its digests short", "fix", None),
+    ("A near run's quote wraps on a narrow screen", "fix", None),
+    ("Two captures' settings are identical only where both state them", "fix", None),
+]
+#: 0.9.0's, held as they were.
+CLAIMS_090: list = [
     ("Trace forwarding, set up from the Settings gear", "feature", "- **Trace forwarding:**"),
     ("Runs, one page of runs across pipelines, with filters", "feature", "- **The Runs page:**"),
     ("Investigate: a comparison's pages, titled with the pair, as tabs", "feature", "- **Investigate:**"),
@@ -300,6 +325,7 @@ CLAIMS_070: list = [
     ("CSRF values are compared in constant time", "fix", None),
 ]
 EARLIER = {
+    "0.9.0": CLAIMS_090,
     "0.8.0": CLAIMS_080,
     "0.7.0": CLAIMS_070,
     "0.6.1": CLAIMS_061,
@@ -317,6 +343,7 @@ NEW_KEYS = [
     "compare_wait_seconds",
     "compare_verb_seconds",
     "tracing",
+    "forwarding",
     "tokenizers",
     "close_call_margin",
     "teams",

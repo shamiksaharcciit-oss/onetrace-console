@@ -52,3 +52,7 @@ pz-51-agent-baseline	0
 pz-52-agent-baseline-subagent	0
 pz-53-agent-amount-changed	0
 pz-54-agent-amount-changed-subagent	0
+pzz-65-invoice-agent-permit-other-amount	0
+pzz-66-invoice-agent-good	0
+pzz-67-invoice-agent-misread	0
+pzz-68-invoice-agent-fingerprint-changed	0

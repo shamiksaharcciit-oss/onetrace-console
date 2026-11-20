@@ -86,6 +86,8 @@ _VIEWER_GET_PATTERNS = tuple(
         r"^authorization\.html$",
         #: A pipeline's page, and its two filters.
         r"^pipeline-p[0-9]+(-agree|-attention)?\.html$",
+        #: A pipeline's noise fields (`noise_pages`), drawn as asked: the list a comparison links.
+        r"^pipelines/p[0-9]+/noise$",
         #: A pipeline's drift page, against the first run or each run's previous.
         r"^drift-p[0-9]+(-previous)?\.html$",
         #: A pipeline's first run to leave the reference (`bisect_page`), and its window form, drawn as asked.
@@ -185,6 +187,9 @@ _POST_ROLES: dict[str, tuple[str, str]] = {
     #: Trace forwarding's changes and test trace (`forward_pages`): a setting of the whole console, which sends each new
     #: run's trace out. A local console's only.
     "/forwarding/setup": (ADMIN, ADMIN),
+    #: A pipeline's noise fields marked or removed (`noise_pages`): a setting of a pipeline that changes what every
+    #: comparison of its runs points to first, so an admin's. A local console's only.
+    "/noise": (ADMIN, ADMIN),
 }
 
 #: Each POST row's team rule. A run's delivery and a decision export are scoped by the delivering token's team; the
@@ -198,6 +203,7 @@ _POST_TEAM_RULES: dict[str, str] = {
     "/model-tokenizers/remove": ADMIN_UNSCOPED,
     "/explain/setup": ADMIN_UNSCOPED,
     "/forwarding/setup": ADMIN_UNSCOPED,
+    "/noise": ADMIN_UNSCOPED,
 }
 
 #: With Entra ID, the flow's own routes need no principal (`oidc_flow`), and local sign-in's POST is gone.

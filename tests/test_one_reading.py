@@ -405,8 +405,9 @@ def test_the_demo_reads_as_its_table_says(demo, examined):
     by_id = {r.run_id: r.key for r in demo.runs}
     counts = {s: _count(demo, s) for s in COUNTED}
     examined(len(demo.runs), "runs read")
-    #: Since onetrace 0.5.0: P8 49 and 50 contradict their records; P10's and P11's four agree.
-    assert counts == {"yes": 48, "no": 5, "couldnt-check": 0, "not-checked": 1, "no-verdict": 0}
+    #: Since onetrace 0.5.0: P8 49 and 50 contradict their records; P10's and P11's four agree. P12: three agree,
+    #: and the planted run, whose permit names another amount, contradicts its record.
+    assert counts == {"yes": 51, "no": 6, "couldnt-check": 0, "not-checked": 1, "no-verdict": 0}
     key = by_id["p1-16-candidate-set5-no-artifacts"]
     assert (demo.state[key], demo.why[key]) == ("not-checked", "held without its output files required")
 

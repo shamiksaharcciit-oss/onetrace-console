@@ -2124,7 +2124,7 @@ def render_diff(comparison: StoredComparison, store: Store, *, generated_at: str
 
     panel = explain_panel(comparison, store, public=asked_public, steps=node_steps, facts=chip_facts)
     #: Under the head: the first difference and What changed here, the steps, the tabs with Explain beside them,
-    #: and the runs with near inputs (`compare_view`). Only from diff's report where it was read, and never where a
+    #: and the runs with near inputs and near outputs (`compare_view`). Only from diff's report where it was read, and never where a
     #: side couldn't be checked.
     facts = (
         compare_view.facts(found_diff[0], found_diff[1], comparison, store) if found_diff and not unchecked else None
@@ -2148,9 +2148,11 @@ def render_diff(comparison: StoredComparison, store: Store, *, generated_at: str
         compare_view.first_card(facts, comparison, store, text_tab='id="compare-tab-text"' in tabs_html)
         if facts is not None
         else "",
+        compare_view.noise_section(facts, comparison, store),
         compare_view.step_cards(facts, comparison, store) if facts is not None and facts.steps else "",
         compare_view.main_row(tabs_html, compare_view.explain_aside(panel, public=public)),
         "" if public else compare_view.near_runs(comparison, store),
+        "" if public else compare_view.near_outputs(comparison, store, facts),
     ]
     blocks[top:top] = [x for x in laid if x]
     #: The header again, now that diff's report is read: a setting the report names as differing is a difference of

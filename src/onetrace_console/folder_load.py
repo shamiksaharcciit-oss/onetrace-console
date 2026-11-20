@@ -400,7 +400,7 @@ def build_public(
     from onetrace_console import demo_store
     from onetrace_console.public import speaks_for
 
-    speaks_for((demo_store if builder is None else builder).NAME)
+    speaks_for((demo_store if builder is None else builder).NAME, folder)
     try:
         return _build_public(
             folder, runs_from=runs_from, explanations=explanations, site_links=site_links, builder=builder

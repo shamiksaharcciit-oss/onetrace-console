@@ -76,8 +76,9 @@ def test_every_request_to_a_started_console_takes_its_limit_from_the_helper(exam
     #: 2 (`test_entra_pages`). Sign out in the settings menu adds 2 (`test_signout_button`). The busy page's way back
     #: to its picker adds 1 (`test_pair_ways`). The audit log's actions add 3: 2 in `test_audit_events` and neighbours on
     #: and off in `test_neighbours`. The error pages add 2: a browser's request and another client's
-    #: (`test_error_pages`).
-    assert len(sites) == 85
+    #: (`test_error_pages`). The forwarding page's link back to the console adds 1 (`test_forwarding_console_link`), and
+    #: a pipeline's noise page 2: its page and a press (`test_noise_fields`).
+    assert len(sites) == 88
     assert [s for s in sites if not re.fullmatch(r"\{?limit\([0-9.]+\)\}?", s[2])] == []
 
 

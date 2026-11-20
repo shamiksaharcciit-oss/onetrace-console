@@ -291,6 +291,7 @@ def local_picker_of(runs: list[tuple[str, str, str]], chosen: tuple[str, str] = 
 
 def render_pipeline(pipeline, store: Store, *, generated_at: str, which: str = "all") -> str:
     """The pipeline's page, or one of its filters."""
+    from onetrace_console import fingerprint_change
     from onetrace_console.bisect_page import TITLE as BISECT
     from onetrace_console.bisect_page import page_href as bisect_href
     from onetrace_console.choose_pages import choose_href
@@ -325,9 +326,12 @@ def render_pipeline(pipeline, store: Store, *, generated_at: str, which: str = "
         f'<p data-section="compare"><a href="{_tag(choose_href(pipeline.label))}" '
         'data-link="compare">Compare two runs</a> · '
         f'<a href="{_tag(drift_href(pipeline.label))}" data-link="drift">Drift across its runs</a> · '
-        f'<a href="{_tag(bisect_href(pipeline.label))}" data-link="bisect">{escape(BISECT)}</a></p>',
+        f'<a href="{_tag(bisect_href(pipeline.label))}" data-link="bisect">{escape(BISECT)}</a> · '
+        f'<a href="pipelines/{_tag(pipeline.label.lower())}/noise" data-link="noise">Noise fields</a></p>',
         chain(pipeline, counts),
         f'<p data-section="first-differences">{escape(said)}</p>',
+        #: Where the model identity its runs' model-call records state changed, run to run (`fingerprint_change`).
+        fingerprint_change.section(pipeline.runs, store, lambda r: f"runs/{_tag(r.key)}/case.html"),
         _picker(pipeline),
         _local_picker(pipeline),
         f'<p data-section="filters">Show: {filters}</p>',

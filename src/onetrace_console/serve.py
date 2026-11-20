@@ -544,10 +544,17 @@ def _render_startup_pages_read(store: Store, root: Path, config: Config | None =
 
 def _render_startup_drawn(store: Store, root: Path, config: Config | None, runs, comparisons, step) -> None:
     """Each run's pages, each comparison's, and the pages over all of them: one step each, said as the
-    console starts (`startup_progress`)."""
-    for run in runs:
-        _render_run_pages(run, store, root, config)
-        step()
+    console starts (`startup_progress`). Each run's pages are drawn with the run index built now, as the pages over
+    all of them are (`_render_all_pages`), never with an index on disk from an earlier start, or none on a first one:
+    a step that read what another run wrote says so on the first start."""
+    from onetrace_console import run_index
+
+    with _rendering(config, root):
+        index = run_index.build(store)
+    with run_index.drawing(index, _now()):
+        for run in runs:
+            _render_run_pages(run, store, root, config)
+            step()
     for key in store.unreadable_run_keys:
         _render_unreadable_record_pages(store, root, key, kind="run")
     for comparison in comparisons:
@@ -1489,6 +1496,12 @@ class Handler(BaseHTTPRequestHandler):
         if record:
             self._handle_record(record.group(1))
             return
+        noise_page = _NOISE_PATH.fullmatch(rel)
+        if noise_page:
+            #: A pipeline's noise fields (`noise_pages`), drawn as asked from the store: a public console's read from
+            #: its build, with no form.
+            self._noise_page(noise_page.group(1))
+            return
         if rel in ("admin/people", "admin/teams", "admin/audit"):
             #: The admin pages (`admin_pages`): drawn as they are asked for, from SCIM's records, the configuration
             #: and the audit log's head, never from runs. A public console has none.
@@ -1536,7 +1549,9 @@ class Handler(BaseHTTPRequestHandler):
                 return
             from onetrace_console.forward_pages import page as forwarding_page
 
-            self._setup_page(200, forwarding_page(self.store_root), rel, self._signed_in_as())
+            self._setup_page(
+                200, forwarding_page(self.store_root, console_url=self._console_url()), rel, self._signed_in_as()
+            )
             return
         if rel == "neighbours/setup" and self._neighbours():
             self._handle_neighbours_setup()
@@ -1815,6 +1830,15 @@ class Handler(BaseHTTPRequestHandler):
                     self._respond(403, b"missing or mismatched CSRF token\n", "text/plain")
                     return
                 self._handle_explain_setup(body)
+            elif split.path == "/noise":
+                #: A pipeline's noise fields marked or removed (`noise_pages`). A public console refused every POST
+                #: above, this one included.
+                if not self._enforce_role("POST", split.path):
+                    return
+                if not self._check_action_csrf(body=body):
+                    self._respond(403, b"missing or mismatched CSRF token\n", "text/plain")
+                    return
+                self._handle_noise(body)
             elif split.path == "/forwarding/setup" and not self.config.public:
                 #: Trace forwarding's changes and its test trace (`forward_pages`): a local console's only.
                 if not self._enforce_role("POST", split.path):
@@ -2830,6 +2854,64 @@ class Handler(BaseHTTPRequestHandler):
 
         return done
 
+    def _noise_page(self, label: str, status: int = 200, said: str = "", refused: str = "") -> None:
+        """A pipeline's noise fields page, framed as every page is; 404 where no pipeline has that label."""
+        from onetrace_console import noise_pages
+        from onetrace_console.frame import fill
+
+        store = getattr(self, "_seen", None) or self.store
+        pipeline = noise_pages.pipeline_by_label(store, label)
+        if pipeline is None:
+            self._respond(404, f"no pipeline {label}\n".encode(), "text/plain")
+            return
+        drawn = noise_pages.page(store, pipeline, public=self.config.public, said=said, refused=refused)
+        framed = fill(
+            drawn.encode("utf-8"),
+            f"pipelines/{pipeline.label.lower()}/noise",
+            onedoor=bool(self.config.extensions.get("onedoor")),
+            user=self._signed_in_as(),
+            csrf=self._session_csrf(),
+            public=self.config.public,
+            setup_link=not self.config.public,
+            store=store,
+            team=self._team_frame(),
+        )
+        self._respond(status, framed, "text/html; charset=utf-8")
+
+    def _handle_noise(self, body: bytes) -> None:
+        """One press on a pipeline's noise page: checked, recorded in the audit log, made; then the pipeline's
+        comparison pages drawn again, and the page, saying what was done or why nothing was."""
+        from onetrace_console import noise_pages
+        from onetrace_console.signin import parse_signin_form
+
+        form = parse_signin_form(body) if body else {}
+        label = (form.get("pipeline") or "").lower()
+        pipeline = noise_pages.pipeline_by_label(self.store, label)
+        if pipeline is None:
+            self._respond(404, f"no pipeline {label}\n".encode(), "text/plain")
+            return
+        why = noise_pages.plan(self.store, pipeline, form)
+        if why:
+            self._noise_page(label, 400, refused=why)
+            return
+        detail = {
+            "action": form.get("action", ""),
+            "step": form.get("step", ""),
+            "path": (form.get("path") or "").strip(),
+        }
+        if not self._audited("noise.changed", label, detail):
+            return
+        status, said, refused = noise_pages.apply(self.store, pipeline, form)
+        keys = {r.key for r in pipeline.runs}
+        for c in self.store.comparisons():
+            if c.run_a in keys or c.run_b in keys:
+                _render_diff_page(c, self.store, self.store_root, public=self.config.public, config=self.config)
+        self._noise_page(label, status, said=said, refused=refused)
+
+    def _console_url(self) -> str:
+        """`forwarding.console_url`, this console's address for the link in each forwarded trace; empty: none."""
+        return self.config.forwarding.get("console_url", "")
+
     def _handle_forwarding(self, body: bytes) -> None:
         """One press on the forwarding page: recorded in the audit log first (the destination and the fields, never a
         value), then made; the page again, saying what was done or why nothing was. The test trace changes nothing
@@ -2842,7 +2924,7 @@ class Handler(BaseHTTPRequestHandler):
         if planned.status:
             self._setup_page(
                 planned.status,
-                forward_pages.page(self.store_root, planned.said, planned),
+                forward_pages.page(self.store_root, planned.said, planned, self._console_url()),
                 forward_pages.REL,
                 self._signed_in_as(),
             )
@@ -2854,7 +2936,7 @@ class Handler(BaseHTTPRequestHandler):
         done = forward_pages.apply(self.store_root, form)
         self._setup_page(
             done.status,
-            forward_pages.page(self.store_root, done.said, done if done.status >= 400 else None),
+            forward_pages.page(self.store_root, done.said, done if done.status >= 400 else None, self._console_url()),
             forward_pages.REL,
             self._signed_in_as(),
         )
@@ -3390,6 +3472,8 @@ _ENCODED_DOT_OR_BACKSLASH = re.compile(r"%(2e|5c)", re.IGNORECASE)
 #: A page of a run, by its key: what a run's old address, after `run assign`, is read by.
 _MOVED_RUN_PATH = re.compile(r"runs/([0-9a-f]{64})/(.*)")
 #: The run's own record: `runs/<key>/record.tar`, the key a sha256 run key.
+#: A pipeline's noise fields page (`noise_pages`), by the pipeline's label as its page's address has it.
+_NOISE_PATH = re.compile(r"pipelines/(p[0-9]+)/noise")
 _RECORD_PATH = re.compile(r"runs/([0-9a-f]{64})/record\.tar")
 #: `t/<team>/<page>`: a team's name (`store.TEAM_NAME`), then the page; `t/<team>/` alone is the team's Overview.
 _TEAM_PREFIX = re.compile(r"t/([a-z][a-z0-9-]{0,62})/(.*)", re.S)
@@ -3538,7 +3622,7 @@ def start_forwarding(store_root: Path, store: Store, config: Config):
         return None
     from onetrace_console import forwarding
 
-    sender = forwarding.Forwarder(store_root, store)
+    sender = forwarding.Forwarder(store_root, store, console_url=config.forwarding.get("console_url", ""))
     sender.start()
     return sender
 
@@ -3653,7 +3737,9 @@ def main(
         #: The banner speaks for the store its build record names: the demo's, or the capture store's.
         from onetrace_console.public import recorded_builder, speaks_for
 
-        speaks_for(recorded_builder(Path(config.trust_file).parent))  # type: ignore[arg-type]  # start_refusal above refuses a public console with no trust_file
+        #: The build's folder, whose runs the banner counts (`public.served`).
+        built = Path(config.trust_file).parent  # type: ignore[arg-type]  # start_refusal above refuses a public console with no trust_file
+        speaks_for(recorded_builder(built), built)
         #: The demo's own example inputs, which its build record (checked above) vouches for, are
         #: the one kind of input from outside a pipeline this console may hand out.
         from onetrace_console.demo_store import serve_examples

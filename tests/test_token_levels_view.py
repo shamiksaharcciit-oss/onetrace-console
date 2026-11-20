@@ -219,3 +219,24 @@ def test_in_a_browser_every_table_of_the_section_stays_inside_it(tmp_path, exami
     got = json.loads(done.stdout)
     examined(len(got), "widths")
     assert got == {"1440": [], "375": []}, got
+
+
+def test_the_capture_settings_are_identical_only_in_those_both_records_state(examined):
+    """Two L3 captures stating 2 of the 4 L3 settings are identical in those 2, and the line says so; a setting one
+    record lacks, or neither states, is not compared, never counted as identical nor as differing."""
+    from onetrace_console import token_levels as tl
+
+    def said(ra, rb) -> str:
+        block = tl._capture_rows(ra, rb, tl.L3_CAPTURE)
+        got = re.search(r"<summary>(.*?)</summary>", block) if "data-settings-said" not in block else None
+        return _text(got.group(1)) if got else _text(re.search(r"<p data-settings-said>(.*?)</p>", block).group(1))
+
+    ra, _ = _side()
+    rb, _ = _side()
+    runner = {**ra, "engine.settings.model_runner": {"status": "observed", "value": "example", "source": "x"}}
+    on = {**ra, "batch.batch_invariant": {"status": "observed", "value": "on", "source": "x"}}
+    off = {**rb, "batch.batch_invariant": {"status": "observed", "value": "off", "source": "x"}}
+    examined(3, "capture settings: 2 on both, one more on one side, one differing")
+    assert said(ra, rb) == "Capture settings: 2 recorded by both, all identical; 2 not recorded by both, not compared"
+    assert said(runner, rb) == said(ra, rb)
+    assert said(on, off) == ("Capture settings: 1 of the 3 recorded by both differ, shown here; the rest folded below.")

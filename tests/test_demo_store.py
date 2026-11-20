@@ -308,6 +308,13 @@ EXPECTED = {
     "pz-52-agent-baseline-subagent": ("holds", "yes", TRUSTED, None, "not-compared"),
     "pz-53-agent-amount-changed": ("holds", "yes", TRUSTED, "changed", "changed"),
     "pz-54-agent-amount-changed-subagent": ("holds", "yes", TRUSTED, None, "not-compared"),
+    #: P12, the invoice agent: its run broken on purpose (a permit for another amount) contradicts its record; the
+    #: good run; the model's misread, its payment refused at `pay` and its last step not reached, compared with the
+    #: good run; the provider's fingerprint changed, compared with the good run.
+    "pzz-65-invoice-agent-permit-other-amount": ("contradicts", "no", TRUSTED, "contradicts", "not-compared"),
+    "pzz-66-invoice-agent-good": ("holds", "yes", TRUSTED, None, "not-compared"),
+    "pzz-67-invoice-agent-misread": ("holds", "yes", TRUSTED, "stopped-at-a-step", "changed"),
+    "pzz-68-invoice-agent-fingerprint-changed": ("holds", "yes", TRUSTED, "changed", "changed"),
 }
 
 
@@ -342,12 +349,12 @@ def test_every_run_reads_as_the_stores_table_says(built, examined):
         )
         assert rungs["Committed by a known time"] == "not-anchored", (run.run_id, "every run")
     assert got == EXPECTED
-    #: 11 pipelines, labelled P1-P11 in order of first arrival. That order is read from
+    #: 12 pipelines, labelled P1-P12 in order of first arrival. That order is read from
     #: `received_at`, kept to the second, so two pipelines whose first runs arrive in the same
     #: second take their labels in key order -- which varies from build to build. The demo's
     #: pipelines are held by their stages and runs here, not by the label each one gets.
     found = {(p.stages[0], len(p.runs)) for p in pipelines(store)}
-    assert sorted(p.label for p in pipelines(store)) == sorted(f"P{n}" for n in range(1, 12))
+    assert sorted(p.label for p in pipelines(store)) == sorted(f"P{n}" for n in range(1, 13))
     assert found == {
         ("load_docs", 20),
         ("request", 2),
@@ -360,8 +367,9 @@ def test_every_run_reads_as_the_stores_table_says(built, examined):
         ("read_tool_log", 3),
         ("agent_step", 2),
         ("intake", 2),
+        ("read_invoice", 4),
     }
-    assert len(store.comparisons()) == 15
+    assert len(store.comparisons()) == 17
 
 
 def test_the_headline_comparison_moves_an_answer_at_split(built, examined):

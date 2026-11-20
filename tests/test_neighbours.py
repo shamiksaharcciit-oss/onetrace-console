@@ -37,7 +37,8 @@ ENDPOINT = {"kind": "endpoint", "base_url": "http://127.0.0.1:9/v1", "model": "b
 #: What names the feature on a page: its sections, its headings and label, its setup page. Not the word
 #: "embedder" alone, which a demo pipeline's own record holds as an instrument's kind.
 NAMES = re.compile(
-    r'data-section="(?:neighbours|nearness)"|data-neighbours|Runs with near inputs|Neighbours by input|'
+    r'data-section="(?:neighbours|nearness|near-outputs)"|data-neighbours|Runs with near (?:inputs|outputs)|'
+    r"Neighbours by input|"
     r"Nearness ladder|/?neighbours/(?:setup|on|off)|embedding model you turned on",
     re.I,
 )
@@ -455,7 +456,7 @@ def test_the_nearness_ladder_beside_the_exact_one(on, held):
     marked = re.search(r"<tr [^>]*data-largest-drop>.*?</tr>", section, re.S).group(0)
     assert "digest differs" in marked
     #: Nothing else on the page moved: without what neighbours add (the Nearness ladder's tab and its panel, and the
-    #: runs with near inputs), it is the page drawn with neighbours off.
+    #: runs with near inputs and near outputs), it is the page drawn with neighbours off.
     off_store, off_runs = held
     off = _diff(
         _comparison(off_store, off_runs["p7-39-cold-chain-baseline"], off_runs["p7-40-cold-chain-one-reading-changed"]),
@@ -470,7 +471,9 @@ def test_the_nearness_ladder_beside_the_exact_one(on, held):
     without = re.sub(
         r'<a href="#compare-tab-nearness" id="compare-tabbtn-nearness" data-tab="nearness">[^<]*</a>', "", without
     )
-    without = re.sub(r'\n?<section class="near-runs" data-section="near-runs".*?</section>', "", without, flags=re.S)
+    without = re.sub(
+        r'\n?<section class="near-runs" data-section="near-(?:runs|outputs)".*?</section>', "", without, flags=re.S
+    )
     assert without != page and without == off
     #: Two runs of another configuration each are not neighbours: no ladder.
     assert 'data-section="nearness"' not in _diff(

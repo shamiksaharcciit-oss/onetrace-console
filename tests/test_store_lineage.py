@@ -181,8 +181,9 @@ def test_a_page_drawn_from_the_index_names_its_format_and_when_it_was_written(st
     page = (root / PAGES_DIRNAME / "runs" / keys["followup"] / "stage-2.html").read_text(encoding="utf-8")
     without = _page(store, keys["followup"], "stage-2.html", None)
     examined(2, "a page drawn alone from the index last written, and one drawn with none")
-    said = run_index.FROM_INDEX.format(format=run_index.FORMAT, written="2025-11-12T00:00:00+00:00")
-    assert said in _text(_lineage(page))
+    said = run_index.FROM_INDEX.format(format=run_index.FORMAT, written="2025-11-12 00:00:00 UTC")
+    assert said in " ".join(_text(_lineage(page)).split()).replace(" .", ".")
+    assert '<time datetime="2025-11-12T00:00:00+00:00"' in _lineage(page)
     assert 'data-section="from-index"' not in without
 
 
@@ -218,3 +219,18 @@ def test_a_plain_key_is_never_compared_with_a_digest_as_text(examined):
     assert key_match({"key_digest": key_digest("A-1001/1")}, {"key": "A-1001/1"}) == "digest"
     assert key_match({"key": "A-1001/1"}, {"key": "A-1001/1"}) == "exact"
     assert key_match({"key": "A-1001/1"}, {"key": "A-1001/2"}) is None
+
+
+def test_a_first_start_draws_each_run_s_pages_with_the_index_it_builds(stored, tmp_path, examined):
+    """A console's first start (no index on disk yet, as a public build's or a new demo's) draws each run's pages with
+    the index it builds, so a step that read what another run wrote says so on the first start, not on the next."""
+    from onetrace_console.serve import PAGES_DIRNAME, _render_startup_pages
+
+    store, keys = stored
+    root = tmp_path / "first"
+    root.mkdir()
+    _render_startup_pages(store, root)
+    page = (root / PAGES_DIRNAME / "runs" / keys["followup"] / "stage-2.html").read_text(encoding="utf-8")
+    examined(1, "a step page drawn on a first start")
+    assert 'data-lineage="not-indexed"' not in page
+    assert f'href="../{keys["kept"]}/stage-5.html"' in _lineage(page)

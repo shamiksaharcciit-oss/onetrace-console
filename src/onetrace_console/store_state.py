@@ -23,6 +23,7 @@ import hashlib
 from pathlib import PurePosixPath
 
 from onetrace_console.step_kinds import _fail_block, failed, holds_members, prose
+from onetrace_console.viewer.page import fingerprint_html
 from onetrace_console.words import escape
 
 #: onetrace 0.8's `docs/format.md`, "Store data a step touched", "What it does not show".
@@ -76,7 +77,7 @@ def _value(e: dict) -> str:
         return _rec(e["digest_status"])
     if isinstance(e.get("digest"), str):
         form = e.get("digest_form")
-        return (f"{_rec(form)} · " if isinstance(form, str) else "") + _rec(e["digest"])
+        return (f"{_rec(form)} · " if isinstance(form, str) else "") + fingerprint_html(e["digest"], words="record")
     return ""
 
 
@@ -104,7 +105,7 @@ def _entry(e: dict, n: int, side: str, stem: str, kept_fails: list[str], read_fi
     if isinstance(e.get("key"), str):
         key = f"key {_rec(e['key'])}, kept in plain"
     else:
-        key = f"key {_rec(str(e.get('key_digest', '')))}"
+        key = f"key {fingerprint_html(str(e.get('key_digest', '')), words='record')}"
     lines = [said, key, "version " + _version(e), _value(e)]
     if isinstance(e.get("as_of"), dict):
         a = e["as_of"]
@@ -170,7 +171,7 @@ def _lineage(receipt: dict, run_key: str) -> str:
                 f'<li data-lineage-run="{escape(str(run["key"]), quote=True)}">'
                 f'<a href="{escape(href, quote=True)}">{_rec(str(run.get("run_id", "")))}</a>, step '
                 f"{_rec(str(step.get('name', '')))}, wrote {_rec(str(w.get('store', '')))} with an equal {how}: "
-                f"{_rec(str(said))}"
+                f"{fingerprint_html(str(said), words='record')}"
                 + (f' <span data-lineage-key="digest">({escape(BY_KEY_DIGEST)})</span>' if keyed == "digest" else "")
                 + "</li>"
             )

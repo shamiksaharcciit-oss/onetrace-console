@@ -121,9 +121,9 @@ _OS_ERRORS = {
 }
 #: (file relative to src/onetrace_console/, line) -> why the error is quoted whole there.
 ALLOWED: dict[tuple[str, int], str] = {
-    ("serve.py", 3890): "the TLS files: `load_cert_chain` raises with no file name, and an "
+    ("serve.py", 3976): "the TLS files: `load_cert_chain` raises with no file name, and an "
     "SSLError's own words are the only reason it gives",
-    ("serve.py", 3704): "the store at start: quoted whole only where the error has no reason of "
+    ("serve.py", 3790): "the store at start: quoted whole only where the error has no reason of "
     "the system's (the ValueError, KeyError or TypeError it also catches); "
     "an OSError's reason and file name are quoted apart, as written",
 }

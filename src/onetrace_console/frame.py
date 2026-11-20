@@ -406,10 +406,10 @@ PAGE_CSS = """
   border-radius:6px}
 @supports not selector(::-webkit-scrollbar){.cp [data-section^=where-started] table{
   scrollbar-width:auto;scrollbar-color:var(--line-strong) var(--surface-sunk)}}
-.cp[data-page=forwarding] label.field{display:block;margin:6px 0}
+.cp:is([data-page=forwarding],[data-page=noise]) label.field{display:block;margin:6px 0}
 .cp[data-page=forwarding] .field-error{display:block;margin-top:4px;color:var(--bad-ink);font-size:var(--fs-small)}
 .cp[data-page=forwarding] :is(input,select)[aria-invalid=true]{border-color:var(--bad-ink);outline:1px solid var(--bad-ink)}
-.cp[data-page=forwarding] label.field input:not([type=checkbox]),.cp[data-page=forwarding] label.field select{display:block;width:100%;max-width:44rem;box-sizing:border-box;margin-top:2px}
+.cp:is([data-page=forwarding],[data-page=noise]) label.field input:not([type=checkbox]),.cp:is([data-page=forwarding],[data-page=noise]) label.field select{display:block;width:100%;max-width:44rem;box-sizing:border-box;margin-top:2px}
 .cp[data-page=forwarding] code{overflow-wrap:anywhere}
 .cp[data-page=forwarding] .actions{display:flex;flex-wrap:wrap;gap:8px;align-items:flex-start;margin-top:8px}
 .cp[data-page=forwarding] .actions form{margin:0}
@@ -695,6 +695,7 @@ def stylesheet() -> bytes:
     from onetrace_console.explain import EXPLAIN_CSS
     from onetrace_console.explain_setup import SETUP_CSS
     from onetrace_console.info_mark import INFO_CSS
+    from onetrace_console.model_call_pages import MODEL_CALL_PAGES_CSS
     from onetrace_console.run_head import HEAD_CSS
     from onetrace_console.settings_menu import SETTINGS_CSS
     from onetrace_console.short_answer import SHORT_CSS
@@ -720,6 +721,7 @@ def stylesheet() -> bytes:
         + SKIP_CSS
         + FOLD_CSS
         + TOKEN_LEVELS_CSS
+        + MODEL_CALL_PAGES_CSS
         + COMPARE_CSS
         + COMPARE_PAGE_CSS
         + PUBLIC_CSS

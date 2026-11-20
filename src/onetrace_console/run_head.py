@@ -214,6 +214,12 @@ def run_head(
         from onetrace_console.authorization_list import TAB, gated_words
 
         tabs += [(f"{TAB} · {gated_words(auth.gated)}", "authorization.html")]
+    #: The run's memory, where any of its steps read or wrote a store (`memory_view`).
+    from onetrace_console import memory_view
+    from onetrace_console.stage_pages import _receipts
+
+    if memory_view.holds_state([r["receipt"] for r in _receipts(run, store)]):
+        tabs += [(memory_view.TAB, memory_view.PAGE)]
     tabs += [(TAB_COMPARE, source[1])] if source else []
     if label:
         from onetrace_console.choose_pages import pair_href

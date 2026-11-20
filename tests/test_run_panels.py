@@ -52,7 +52,14 @@ DECISION_ROWS = {
     "p8-45-invoice-over-limit-declined": ("PASS", "PASS", "NOT-RUN", "NOT-RUN", "PASS"),
     "p8-49-invoice-paid-on-deny": ("PASS", "PASS", "FAIL", "NOT-RUN", "PASS"),
     "p8-50-invoice-permit-other-amount": ("PASS", "PASS", "PASS", "FAIL", "PASS"),
+    #: P12's, as onetrace-verify 0.9.0 gives them: its pay step is gated (measured on its four runs).
+    "pzz-65-invoice-agent-permit-other-amount": ("PASS", "PASS", "PASS", "FAIL", "PASS"),
+    "pzz-66-invoice-agent-good": ("PASS", "PASS", "PASS", "PASS", "PASS"),
+    "pzz-67-invoice-agent-misread": ("PASS", "PASS", "NOT-RUN", "NOT-RUN", "PASS"),
+    "pzz-68-invoice-agent-fingerprint-changed": ("PASS", "PASS", "PASS", "PASS", "PASS"),
 }
+#: Each gated pipeline's gated step: P8's approve_payment, P12's pay.
+GATED_STEP = {"p8-": "approve_payment", "pzz-": "pay"}
 AGENT, SUB, AGENT_B, SUB_B = (
     "pz-51-agent-baseline",
     "pz-52-agent-baseline-subagent",
@@ -135,7 +142,7 @@ def test_sabotage_rows_about_the_whole_run_read_as_strays_make_the_report_unread
 
 
 def onedoor_problems(folder, runs) -> list[str]:
-    """P8's runs each show the gated step (on the case page, or on Proof where the record is in
+    """P8's and P12's runs each show the gated step (on the case page, or on Proof where the record is in
     question) and the verifier's decision rows as the table holds them; no other run shows either."""
     out = []
     for name, run in runs.items():
@@ -152,8 +159,9 @@ def onedoor_problems(folder, runs) -> list[str]:
             if tuple(rows) != tuple(zip(DECISION_ROWS[name], ROWS)):
                 out.append(f"{name}'s decision rows read {rows}")
             shown = " ".join(_text(_section(p, "onedoor")) for p in pages.values())
-            if "Gated step approve_payment" not in shown:
-                out.append(f"{name} does not name approve_payment as its gated step")
+            gated_step = next(s for p, s in GATED_STEP.items() if name.startswith(p))
+            if f"Gated step {gated_step}" not in shown:
+                out.append(f"{name} does not name {gated_step} as its gated step")
         elif gated or rows:
             out.append(f"{name} shows a gated step or decision rows, and records none")
     return out
@@ -215,7 +223,7 @@ def test_a_gated_step_with_no_decision_says_so_and_a_permit_shows_its_payload(ex
 
 
 def beside_problems(store, runs) -> list[str]:
-    """The decision files are given to the verifier for P8's gated runs only, named relative to the
+    """The decision files are given to the verifier for P8's and P12's gated runs only, named relative to the
     run's folder."""
     from onetrace_console.home import _envelope
 

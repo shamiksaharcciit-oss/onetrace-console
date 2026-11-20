@@ -750,6 +750,11 @@ class Store:
         self.put_moved(old, new)
         self._forget()
 
+    def noise_folder(self) -> Path:
+        """Where each pipeline's noise fields are kept (`noise`): a setting of the pipeline, by its stage list's digest,
+        for the whole console."""
+        return self.root / "noise"
+
     def neighbours_root(self) -> Path:
         """Where the neighbours' batches are kept: the embeddings of runs' kept inputs. A team's view keeps its own
         under a folder of its own, so no team's inputs are embedded beside another's."""

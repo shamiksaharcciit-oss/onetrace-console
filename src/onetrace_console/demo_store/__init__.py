@@ -167,6 +167,17 @@ def runs() -> list[RunSpec]:
         RunSpec("pz-52-agent-baseline-subagent", "p11", {"of": "pz-51-agent-baseline"}),
         RunSpec("pz-53-agent-amount-changed", "p10", {"inner": "pz-54-agent-amount-changed-subagent", "amount": "20"}),
         RunSpec("pz-54-agent-amount-changed-subagent", "p11", {"of": "pz-53-agent-amount-changed"}),
+        #: P12, the invoice agent (`invoice_agent`): a model call and a onedoor decision on one run. The run broken on
+        #: purpose first: its memory holds no note yet, and it writes the note each later run reads. Named `pzz-` so
+        #: that runs arriving in one second, ordered by name, keep P12 after P10's and P11's.
+        RunSpec(
+            "pzz-65-invoice-agent-permit-other-amount",
+            "p12",
+            {"variant": "permit-other-amount", "plant": "permit-other-amount"},
+        ),
+        RunSpec("pzz-66-invoice-agent-good", "p12", {"variant": "good"}),
+        RunSpec("pzz-67-invoice-agent-misread", "p12", {"variant": "misread"}),
+        RunSpec("pzz-68-invoice-agent-fingerprint-changed", "p12", {"variant": "fingerprint-changed"}),
     ]
     return out
 
@@ -177,7 +188,7 @@ def runs() -> list[RunSpec]:
 #: invents for them (`example_input_digests`), may be shown on a public console, and only for a
 #: demo whose build record vouches for every byte (`allowing_examples`). It lives here, in the
 #: builder's spec, and in no configuration: no setting can extend it to another store.
-EXAMPLE_DATA = ("p1", "p3", "p4", "p5", "p6", "p7", "p8", "p9", "p10", "p11")
+EXAMPLE_DATA = ("p1", "p3", "p4", "p5", "p6", "p7", "p8", "p9", "p10", "p11", "p12")
 
 
 #: Each pipeline's name, as its own module's first line gives it. A public demo shows it beside the
@@ -194,7 +205,35 @@ PIPELINE_NAMES = {
     "p9": "wheel-bolt torque check",
     "p10": "agent with a sub-agent",
     "p11": "sub-agent (called by the agent)",
+    "p12": "invoice agent",
 }
+
+
+#: The fields each demo pipeline marks as noise (`noise`), by step and path: P12's invoice says when it was read, which
+#: differs on every run and is no difference that matters. Marked as the demo's runs are delivered, where no field of
+#: the pipeline is marked yet.
+NOISE = {"p12": (("read_invoice", "read_at"),)}
+
+
+def mark_noise(store) -> list[str]:
+    """Mark each demo pipeline's noise fields in `store`, where it holds the pipeline's runs and has none marked; the
+    labels of the pipelines marked."""
+    from onetrace_console import noise
+    from onetrace_console.overview import pipelines
+
+    by_id = {spec.run_id or spec.folder: spec.pipeline for spec in runs()}
+    done = []
+    for p in pipelines(store):
+        found = {by_id.get(r.run_id) for r in p.runs}
+        name = found.pop() if len(found) == 1 else None
+        if name is None or name not in NOISE:
+            continue
+        digest = p.runs[0].declared_digest
+        if noise.read(store, digest):
+            continue
+        noise.write(store, digest, p.label, [noise.Field(s, f) for s, f in NOISE[name]])
+        done.append(p.label)
+    return done
 
 
 def name_of(run_ids) -> str | None:
@@ -212,6 +251,7 @@ def _module(pipeline: str):
         agent_settle,
         cold_chain,
         fill_inspection,
+        invoice_agent,
         invoice_match,
         pump_maintenance,
         refund_policy,
@@ -231,6 +271,7 @@ def _module(pipeline: str):
         "p9": torque_check,
         "p10": agent_settle,
         "p11": agent_settle,
+        "p12": invoice_agent,
     }[pipeline]
 
 
@@ -332,6 +373,11 @@ COMPARISONS = [
     #: The amount the sub-agent's step records changed, two levels down: the comparison descends
     #: into the sub-agent's run and names `settle`.
     ("pz-51-agent-baseline", "pz-53-agent-amount-changed"),
+    #: The model read the invoice's 40.00 as 4,000.00: the model call is the first difference, and the payment is
+    #: refused after it.
+    ("pzz-66-invoice-agent-good", "pzz-67-invoice-agent-misread"),
+    #: The provider's fingerprint changed, and the answer did not.
+    ("pzz-66-invoice-agent-good", "pzz-68-invoice-agent-fingerprint-changed"),
 ]
 
 
@@ -390,6 +436,12 @@ def _record(spec: RunSpec, run_dir: Path, issuer=None) -> None:
         )
     elif spec.pipeline == "p11":
         return  # recorded by its agent run, `p10`
+    elif spec.pipeline == "p12":
+        from onetrace_console.demo_store import invoice_agent
+
+        #: The vendor's note the first run writes (it paid 40.00), which each later run reads from memory.
+        note = None if spec.args["variant"] == "permit-other-amount" else invoice_agent.note_bytes("40.00")
+        invoice_agent.main(run_dir, run_id, spec.args["variant"], issuer, note)
     elif spec.pipeline == "p9":
         from onetrace_console.demo_store import torque_check
 
@@ -423,6 +475,8 @@ PLANTED = {
     "p8-49-invoice-paid-on-deny": "Its gated step paid on a decision that denied it.",
     "p8-50-invoice-permit-other-amount": "Its gated step carried a permit for another amount than the "
     "payment it recorded.",
+    "pzz-65-invoice-agent-permit-other-amount": "Its payment carried a permit for another amount than the one the "
+    "model proposed and it paid.",
 }
 
 
@@ -639,6 +693,7 @@ def deliver(folder: Path, store, config):
     from onetrace_console.folder_load import _compare, load_folder
 
     loaded = load_folder(Path(folder) / RUNS_DIRNAME, store, config)
+    mark_noise(store)
     first, note = None, ""
     #: The comparisons whose two runs are there: a build from an earlier build's runs
     #: (`--runs-from`) holds that build's pipelines only.

@@ -671,6 +671,13 @@ def render_stage_pages(run: StoredRun, store: Store, *, generated_at: str, ancho
     searched = (
         token_text.searched_inputs(steps, lambda path: _read(files, store, path), version) if tokenizers() else {}
     )
+    #: What every model-call page of the run says of the run (`model_call_pages`): records agree, and with what.
+    from onetrace_console import model_call_pages
+    from onetrace_console.receipt_page import _agree, _counts, _recorded_with
+
+    counts = _counts(run, store)
+    call_agree = _agree(run, store) + (f" · {counts[0]} of {counts[1]} checks" if counts else "")
+    call_recorded = _recorded_with(steps)
     for position, step in enumerate(steps):
         receipt, stage = step["receipt"], _stage_name(step["receipt"])
         inputs = [i for i in receipt.get("inputs") or [] if isinstance(i, dict)]
@@ -691,11 +698,42 @@ def render_stage_pages(run: StoredRun, store: Store, *, generated_at: str, ancho
             if words:
                 verdict = f'<p data-section="compared">{words.format(run=compared[0])}</p>'
         title = escape(TITLE).replace("{stage}", f'<span class="mono">{named(stage)}</span>')
+        io_html = (
+            '<div class="io">'
+            + _inputs(inputs, upstream, href, receipts, kept, unlisted, inputs_note)
+            + _outputs(step, outputs, files, store, href)
+            + "</div>"
+        )
+        #: The step's model calls, each with pages of its own (`model_call_pages`), linked from here.
+        calls = (
+            model_call_pages.pages_for_step(
+                run,
+                store,
+                step,
+                stage,
+                lambda path: _read(files, store, path),
+                io_html,
+                agree=call_agree,
+                signed=signed,
+                anchored=anchored,
+                document=_document,
+                footer=generated_footer(generated_at),
+                recorded_with=call_recorded,
+            )
+            if step["index"].isdigit()
+            else {}
+        )
+        call_links = "".join(
+            model_call_pages.step_link(step["index"], str(o["name"]))
+            for o in _mc.outputs(receipt)
+            if f"{model_call_pages.base_name(step['index'], str(o['name']))}.html" in calls
+        )
         body = (
             '<div class="cp" data-view="stage">' + _crumbs(run, store) + f"<h1>{title}</h1>"
             f'<p data-section="run">step {escape(step["index"])} of {len(steps)} · '
             f"{run_named(store, run.key)}</p>"
             + _instrument(receipt)
+            + (f'<p data-section="model-call-pages">{call_links}</p>' if call_links else "")
             + f'<p data-section="banner" class="notice"><strong>{escape(SHOWN)}</strong> '
             f"{escape(banner)}</p>"
             f"{verdict}"
@@ -711,10 +749,7 @@ def render_stage_pages(run: StoredRun, store: Store, *, generated_at: str, ancho
                 searched.get(position),
                 kinds,
             )
-            + '<div class="io">'
-            + _inputs(inputs, upstream, href, receipts, kept, unlisted, inputs_note)
-            + _outputs(step, outputs, files, store, href)
-            + "</div>"
+            + io_html
             + _in_other_runs(store, stage, receipt, label, others, total)
             + _badges(anchored, signed)
             + '<p data-section="back"><a href="case.html">The run, step by step</a></p>'
@@ -723,6 +758,7 @@ def render_stage_pages(run: StoredRun, store: Store, *, generated_at: str, ancho
         )
         if step["index"].isdigit():
             pages[stage_page(step["index"])] = _document(stage or "stage", body)
+            pages.update(calls)
         stored = _read(files, store, step["file"])
         if stored is not None:
             receipts.setdefault("sha256:" + hashlib.sha256(stored).hexdigest(), (stage, step["index"], stored))

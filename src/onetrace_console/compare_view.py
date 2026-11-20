@@ -17,7 +17,8 @@ Top to bottom:
    inline switch), the kind of change, each run against its pipeline's reference run, the nearness ladder, the spans,
    and the model's rows and choices. Under them, the checks on this pair as commands; a local console runs the two it
    can on the page. Beside the tabs, Explain.
-5. **Runs with near inputs,** where the neighbours extra is on (a local console only).
+5. **Runs with near inputs, and runs with near outputs** at the first difference, where the neighbours extra is on (a
+   local console only).
 
 Every value is read from the two runs' records, their kept files and the reports the comparison holds; none is
 inferred, no meaning is read into a field's name, and no cause is stated. Equal settings are not an equal environment.
@@ -544,6 +545,40 @@ def first_card(f: Facts, comparison, store, *, text_tab: bool) -> str:
     )
 
 
+def noise_section(f: Facts | None, comparison, store) -> str:
+    """Where the pair's pipeline marks fields as noise: which, linked to the list; and where the first difference that
+    matters is not the record's, both, each linked to its step's row. "" where no field is marked."""
+    from onetrace_console import noise
+
+    if f is None or f.first is None:
+        return ""
+    pipeline, fields = noise.fields_for(comparison, store)
+    if pipeline is None or not fields:
+        return ""
+    at = noise.first_that_matters(f, comparison, store, fields)
+    marked = ", ".join(f"<code>{escape(x.step)}</code> · <code>{escape(x.path)}</code>" for x in fields)
+    href = f"../pipelines/{escape(pipeline.label.lower())}/noise"
+
+    def linked(i: int) -> str:
+        s = f.steps[i]
+        return f'<a href="#step-{escape(s.index)}"><code>{escape(s.stage)}</code></a>'
+
+    if at == f.first:
+        moved = f'<p data-noise="not-moved">{escape(NOISE_MOVED_NOT)}</p>'
+    else:
+        aside = linked(at) if at is not None else escape(NOISE_NONE_LEFT)
+        moved = (
+            f'<p data-noise="set-aside"><strong>{escape(NOISE_SET_ASIDE)}</strong> {aside}</p>'
+            f'<p data-noise="in-record">{escape(NOISE_IN_RECORD)} {linked(f.first)}</p>'  # type: ignore[arg-type]  # a first difference is a position
+        )
+    return (
+        '<section class="noise-first" data-section="noise" aria-labelledby="noise-h">'
+        f'<h2 id="noise-h">{escape(NOISE_HEADING)}</h2>{moved}'
+        f'<p data-noise="marked">{escape(NOISE_MARKED)} {marked}. <a href="{href}" data-noise="list">{escape(NOISE_LIST)}</a></p>'
+        f'<p class="note">{escape(noise.NOT_THE_RECORD)}</p></section>'
+    )
+
+
 def _same_settings(f: Facts) -> str:
     """Where every step is the same, the settings diff's report names as differing, and at which steps; "" with none."""
     if not f.annotations:
@@ -648,6 +683,21 @@ NEAR_NOTE = "same configuration · the embedder's reading, not a verdict"
 NEAR_ONLY = "Only runs of the same configuration are listed."
 NEAR_ALL = "See all runs of this pipeline"
 SIMILARITY = "similarity"
+NOISE_HEADING = "Noise fields"
+NOISE_MARKED = "Marked noise for this pipeline:"
+NOISE_LIST = "See the list"
+NOISE_SET_ASIDE = "The first difference, noise fields set aside:"
+NOISE_IN_RECORD = "The first difference in the record:"
+NOISE_NONE_LEFT = "none: every difference is in a field marked noise"
+NOISE_MOVED_NOT = "The first difference is not in a field marked noise."
+NEAR_OUT_HEADING = "Runs with near outputs"
+NEAR_OUT_AT = "at {step}"
+NEAR_OUT_MINE = "Run A's output at {step} isn't kept, so no run is placed by it."
+NEAR_OUT_NONE = "No other run of this configuration kept an output at this step that could be read."
+NEAR_OUT_LEFT = (
+    "Left out: {not_kept} whose output at {step} isn't kept, and {mismatched} whose kept output there doesn't match "
+    "the digest its record gives."
+)
 COMPARE = "Compare"
 
 #: The tabs, the inline switch and the "See the text diff" button: a list of links to the panels, read without
@@ -868,9 +918,9 @@ def explain_aside(panel: str, *, public: bool) -> str:
     return f'<aside class="compare-explain" data-section="explain-aside">{panel}</aside>' if panel else ""
 
 
-def _near_quote(store, other, step: str, name: str) -> str:
-    """The near run's kept input `name` at `step`, as a short quote: a JSON object of one string value as that value,
-    else the text; "" where it was not kept or is not text."""
+def _near_quote(store, other, step: str, name: str, kind: str = "inputs") -> str:
+    """The near run's kept input (or, with `kind` "outputs", output) `name` at `step`, as a short quote: a JSON object of
+    one string value as that value, else the text; "" where it was not kept or is not text."""
     from onetrace_console.render import _stage_of
     from onetrace_console.stage_pages import _steps
 
@@ -880,7 +930,7 @@ def _near_quote(store, other, step: str, name: str) -> str:
         return ""
     if s is None:
         return ""
-    i = next((i for i in s["receipt"].get("inputs") or [] if isinstance(i, dict) and i.get("name") == name), None)
+    i = next((i for i in s["receipt"].get(kind) or [] if isinstance(i, dict) and i.get("name") == name), None)
     raw = _kept(store, other.key, (i or {}).get("digest"))
     if raw is None:
         return ""
@@ -947,6 +997,73 @@ def near_runs(comparison, store) -> str:
         '<section class="near-runs" data-section="near-runs" aria-labelledby="near-runs-h">'
         f'<h2 id="near-runs-h">{escape(NEAR_HEADING)} <span class="note">{escape(NEAR_NOTE)}</span></h2>'
         f'<ul class="cards">{"".join(cards)}</ul>{script}</section>'
+    )
+
+
+def _runs(n: int) -> str:
+    return f"{n} run" if n == 1 else f"{n} runs"
+
+
+def near_outputs(comparison, store, f) -> str:
+    """Run A's runs with near outputs at the first difference's step, as cards, with how many runs were left out:
+    where the neighbours extra is on (a local console) and the pair has a first difference; "" elsewhere."""
+    from onetrace_console import neighbours
+
+    if not neighbours.here() or f is None or f.first is None:
+        return ""
+    from onetrace_console.neighbours.nearness import near_outputs as nearest
+    from onetrace_console.render import _held
+
+    run = _held(store, comparison.run_a)
+    step = f.steps[f.first].stage
+    got = nearest(run, store, step) if run is not None else None
+    if got is None:
+        return ""
+    at = f"<code>{escape(step)}</code>"
+    head = (
+        '<section class="near-runs" data-section="near-outputs" aria-labelledby="near-outputs-h">'
+        f'<h2 id="near-outputs-h">{escape(NEAR_OUT_HEADING)} <span class="note">'
+        f"{escape(NEAR_NOTE.replace(' · ', ' · ' + NEAR_OUT_AT.format(step=step) + ' · ', 1))}</span></h2>"
+    )
+    if not got.mine:
+        return head + f'<p data-near-out="mine">{escape(NEAR_OUT_MINE).format(step=at)}</p></section>'
+    cards = [_near_card(store, run, r, "outputs") for r in got.rows[:3]]
+    from onetrace_console.compare_script import COMPARE_SCRIPT
+
+    script = COMPARE_SCRIPT if any("data-compare-post=" in c for c in cards) else ""
+    left = escape(NEAR_OUT_LEFT).format(not_kept=_runs(got.not_kept), mismatched=_runs(got.mismatched), step=at)
+    body = (
+        f'<ul class="cards">{"".join(cards)}</ul>' if cards else f'<p data-near-out="none">{escape(NEAR_OUT_NONE)}</p>'
+    )
+    return head + body + f'<p class="note" data-near-out="left-out">{left}</p>{script}</section>'
+
+
+def _near_card(store, run, r, kind: str) -> str:
+    """One near run's card: its name, a short quote of its kept part, its number and Compare."""
+    from onetrace_console.neighbours.pages import _number
+    from onetrace_console.what_changed import held
+    from onetrace_console.words import run_named
+
+    c = held(store, r.other.key, run.key) or held(store, run.key, r.other.key)
+    act = (
+        f'<a href="{escape(c.key)}.html" data-near="open">{escape(COMPARE)}</a>'
+        if c is not None
+        else (
+            f'<button class="btn-secondary" data-busy="Comparing…" data-busy-wait="the comparison" type="button" '
+            f'hidden data-compare-post="/compare?a={escape(run.key)}'
+            f'&amp;b={escape(r.other.key)}">{escape(COMPARE)}</button><span data-compare-said></span>'
+        )
+    )
+    quote = _near_quote(store, r.other, r.step, r.name, kind)
+    return (
+        f'<li data-near-run="{escape(r.other.key)}"><a href="../runs/{escape(r.other.key)}/case.html">'
+        f"{run_named(store, r.other.key)}</a>"
+        + (
+            f"<q>{escape(quote)}</q>"
+            if quote
+            else f'<p class="note"><code>{escape(r.step)}</code> · <code>{escape(r.name)}</code></p>'
+        )
+        + f'<p class="near-foot"><span class="note">{escape(SIMILARITY)}</span> <strong>{_number(r.near)}</strong> {act}</p></li>'
     )
 
 
@@ -1153,8 +1270,11 @@ COMPARE_PAGE_CSS = """
 .cp .checks code{overflow-wrap:anywhere}
 .cp .checks form.run-here{display:inline;margin:0}
 .cp .compare-explain>section{margin:0}
+.cp .noise-first{background:var(--surface);border:1px solid var(--line);border-radius:var(--r-card);padding:12px 16px;margin:0 0 12px}
+.cp .noise-first h2{font-size:var(--fs-body);margin:0 0 6px}
+.cp .noise-first p{margin:4px 0}
 .cp .near-runs li{padding:10px 12px;border:1px solid var(--line);border-radius:var(--r-ctl);min-width:0}
-.cp .near-runs li q{display:block;margin:4px 0;color:var(--ink-soft)}
+.cp .near-runs li q{display:block;margin:4px 0;color:var(--ink-soft);overflow-wrap:anywhere}
 .cp .near-runs .near-foot{display:flex;flex-wrap:wrap;align-items:baseline;gap:6px;margin:6px 0 0}
 .cp .near-runs li.near-all{display:flex;flex-direction:column;justify-content:center;align-items:center;
   text-align:center;color:var(--ink-muted)}

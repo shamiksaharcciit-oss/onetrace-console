@@ -1,4 +1,5 @@
-"""The two views: a run's neighbours (`suggestions`) and the nearness ladder of a comparison (`ladder`).
+"""The three views: a run's neighbours by input (`suggestions`), a comparison's runs with near outputs at its first
+difference (`near_outputs`), and the nearness ladder of a comparison (`ladder`).
 
 Both read the derived file of vectors for the embedder in use (`batches.current`) and embed nothing.
 Nearness is the cosine of two L2-normalised vectors. Where two digests are equal the nearness is 1.00 by
@@ -87,6 +88,74 @@ def suggestions(run, store) -> Suggestions | None:
                 continue
             out.rows.append(Row(other, p.step, p.name, n))
     out.rows.sort(key=lambda r: (-r.near.value, order.get(r.other.key, 0), r.step, r.name))
+    return out
+
+
+# ------------------------------------------------------------------------------ near outputs
+
+
+@dataclass
+class OutputNeighbours:
+    """The runs of a run's configuration whose kept output at `step` is near its own, nearest first, and the runs left
+    out: their output there not kept (`not_kept`), or kept with bytes that do not match its digest (`mismatched`).
+    `mine`: the run's own output there is kept and read; without it, no run is placed."""
+
+    step: str
+    mine: bool
+    rows: list = field(default_factory=list)
+    not_kept: int = 0
+    mismatched: int = 0
+    not_embedded: int = 0
+
+
+def near_outputs(run, store, step: str) -> OutputNeighbours | None:
+    """At `step`, the runs of `run`'s group whose kept outputs are near its own, by the embedder in use and its vectors,
+    as near inputs are read; None where neighbours are not on here. Only an output whose bytes match its receipt's
+    digest is read (`kept.Part.held`)."""
+    from onetrace_console.neighbours import active, batches, grouping, kept
+
+    if not active(store):
+        return None
+    got = batches.current(store)
+    if got is None:
+        return None
+    _who, vectors = got
+
+    def at(r) -> list:
+        return [p for p in kept.parts(r, store) if p.kind == kept.OUTPUT and p.step == step]
+
+    mine = [p for p in at(run) if p.text is not None]
+    out = OutputNeighbours(step, bool(mine))
+    if not mine:
+        return out
+    order = {k: i for i, k in enumerate(grouping.signatures(store))}
+    for key in grouping.group_of(store, run.key):
+        other = store.get_run(key)
+        if other is None:
+            continue
+        try:
+            theirs = at(other)
+        except Exception:  # noqa: BLE001 - a run that can't be read is not placed
+            continue
+        if not theirs:
+            continue
+        readable = {p.name: p for p in theirs if p.text is not None}
+        if not readable:
+            if any(p.held == kept.MISMATCH for p in theirs):
+                out.mismatched += 1
+            else:
+                out.not_kept += 1
+            continue
+        for p in mine:
+            q = readable.get(p.name)
+            if q is None:
+                continue
+            n = near(p, q, vectors)
+            if n is None:
+                out.not_embedded += 1
+                continue
+            out.rows.append(Row(other, step, p.name, n))
+    out.rows.sort(key=lambda r: (-r.near.value, order.get(r.other.key, 0), r.name))
     return out
 
 

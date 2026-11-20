@@ -13,6 +13,11 @@ failed). Every id comes from the record, so the same run is the same trace, howe
 never holds an input's or an output's value, an error's text or a path; nothing is added but the one attribute, and
 no record is written.
 
+Where the console's configuration names its own address (`forwarding.console_url`), the root span also carries
+`onetrace.console_url`: the run's page under that address, so a tracing tool can link back to the console. It is a
+pointer, never a claim: the record is checked by onetrace-verify, not by the tool that shows the link. Without the
+setting, nothing is added for it.
+
 WHEN
 ----
 Once, when the console's run index first holds the run (`enqueue_new`, called as the index is written): one queue
@@ -51,7 +56,7 @@ import threading
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
-from urllib.parse import urlsplit
+from urllib.parse import quote, urlsplit
 
 from onetrace_console.bounded_json import load_json_bounded
 
@@ -65,6 +70,8 @@ ENCODINGS = ("json", "protobuf")
 RUNS = ("all", "agree")
 #: The attribute added to each trace's root span: the console's own result for the run.
 CHECK_ATTRIBUTE = "onetrace.console.check"
+#: The run's page on this console, on the root span, where `forwarding.console_url` is set (`run_page`).
+CONSOLE_URL_ATTRIBUTE = "onetrace.console_url"
 #: The test trace's one span.
 TEST_SPAN = "onetrace console test"
 SERVICE = "onetrace-console"
@@ -209,6 +216,23 @@ def endpoint_problem(endpoint) -> str | None:
     if u.query or u.fragment:
         return "the endpoint has no query or fragment"
     return None
+
+
+def console_url_problem(url) -> str | None:
+    """Why `url` cannot be `forwarding.console_url`, or None: the endpoint's rule (https, or http only for an address
+    on this machine; a host; no user or password, query or fragment), where a path is allowed: the console may be
+    reached under one."""
+    why = endpoint_problem(url)
+    #: The endpoint's words, about the console's address; a key's hint (": give a key as a header") is not for it.
+    return why.split(": give")[0].replace("the endpoint", "the console's address") if why else None
+
+
+def run_page(console_url: str, run_key: str) -> str:
+    """The run's page under the console's address: `<console_url>/runs/<run key>/case.html`, the address's path kept
+    (its unsafe characters escaped) and the key escaped as one path segment."""
+    u = urlsplit(console_url)
+    path = quote(u.path.rstrip("/"), safe="/%")
+    return f"{u.scheme}://{u.netloc}{path}/runs/{quote(run_key, safe='')}/case.html"
 
 
 def _header(raw, kept: bool = False) -> Header:
@@ -395,8 +419,9 @@ def check_words(entry: dict) -> str:
     return f"{failed} rows failed" if failed != 1 else "1 row failed"
 
 
-def with_check(exported: bytes, check: str) -> bytes:
-    """onetrace's export with `onetrace.console.check` added to its root span, written as the export writes."""
+def with_check(exported: bytes, check: str, link: str = "") -> bytes:
+    """onetrace's export with `onetrace.console.check` added to its root span, and `onetrace.console_url` = `link`
+    where one is given, written as the export writes."""
     doc = load_json_bounded(exported.decode("utf-8"), "onetrace's export")
     roots = [
         s for rs in doc["resourceSpans"] for ss in rs["scopeSpans"] for s in ss["spans"] if not s.get("parentSpanId")
@@ -404,12 +429,14 @@ def with_check(exported: bytes, check: str) -> bytes:
     if len(roots) != 1:
         raise ValueError("onetrace's export has no single root span")
     roots[0].setdefault("attributes", []).append({"key": CHECK_ATTRIBUTE, "value": {"stringValue": check}})
+    if link:
+        roots[0]["attributes"].append({"key": CONSOLE_URL_ATTRIBUTE, "value": {"stringValue": link}})
     return (json.dumps(doc, ensure_ascii=False, separators=(",", ":")) + "\n").encode("utf-8")
 
 
-def trace_of(run, store, check: str) -> bytes:
+def trace_of(run, store, check: str, console_url: str = "") -> bytes:
     """The run's trace, in OTLP/JSON: onetrace's export of the run, written back to a folder byte for byte, with the
-    one attribute."""
+    one attribute, and the run's page where the console's address is given."""
     from onetrace import otel
 
     from onetrace_console.checks import materialise
@@ -418,7 +445,8 @@ def trace_of(run, store, check: str) -> bytes:
         where = Path(tmp) / (run.folder or "run")
         with store.reading():
             materialise(run, store, where)
-        return with_check(otel.export(where, service_name="onetrace"), check)
+        exported = otel.export(where, service_name="onetrace")
+    return with_check(exported, check, run_page(console_url, run.key) if console_url else "")
 
 
 def test_trace() -> bytes:
@@ -630,7 +658,9 @@ def _stamp() -> str:
     return time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
 
 
-def attempt(store_root, store, dest: Destination, entry_path: Path, now: float | None = None) -> str:
+def attempt(
+    store_root, store, dest: Destination, entry_path: Path, now: float | None = None, console_url: str = ""
+) -> str:
     """Try one queue entry once: "sent", "again" or "stopped" (or "" where it is not due, or gone)."""
     now = time.time() if now is None else now
     entry = _read_json(entry_path)
@@ -642,7 +672,7 @@ def attempt(store_root, store, dest: Destination, entry_path: Path, now: float |
         answer = Answer(-1, "the run is no longer in the store")
     else:
         try:
-            answer = send(dest, trace_of(run, store, str(entry.get("check", ""))))
+            answer = send(dest, trace_of(run, store, str(entry.get("check", "")), console_url))
         except KeyMissing as e:
             answer = Answer(-2, str(e))
         except Exception as e:  # noqa: BLE001 - a trace that cannot be made stops the entry, by its type
@@ -664,7 +694,7 @@ def attempt(store_root, store, dest: Destination, entry_path: Path, now: float |
     return "stopped"
 
 
-def run_once(store_root, store, now: float | None = None) -> list[str]:
+def run_once(store_root, store, now: float | None = None, console_url: str = "") -> list[str]:
     """One pass over every destination's due entries. Each destination's entries go in order."""
     out: list[str] = []
     try:
@@ -676,24 +706,25 @@ def run_once(store_root, store, now: float | None = None) -> list[str]:
             continue
         q = _queue(store_root, d.id)
         for p in sorted(q.glob("*.json")) if q.is_dir() else []:
-            got = attempt(store_root, store, d, p, now)
+            got = attempt(store_root, store, d, p, now, console_url)
             if got:
                 out.append(got)
     return out
 
 
 class Forwarder(threading.Thread):
-    """The sender, on a thread of its own: a pass over the queue every `every` seconds, until stopped."""
+    """The sender, on a thread of its own: a pass over the queue every `every` seconds, until stopped; each trace links
+    to its run's page under `console_url` where it is given."""
 
-    def __init__(self, store_root, store, every: float = 1.0) -> None:
+    def __init__(self, store_root, store, every: float = 1.0, console_url: str = "") -> None:
         super().__init__(name="onetrace-forwarding", daemon=True)
-        self.store_root, self.store, self.every = store_root, store, every
+        self.store_root, self.store, self.every, self.console_url = store_root, store, every, console_url
         self.stopping = threading.Event()
 
     def run(self) -> None:
         while not self.stopping.wait(self.every):
             try:
-                run_once(self.store_root, self.store)
+                run_once(self.store_root, self.store, console_url=self.console_url)
             except Exception as e:  # noqa: BLE001 - the sender never stops the console; said by its type
                 print(f"onetrace-console: forwarding: a pass failed ({type(e).__name__})", file=sys.stderr, flush=True)
 

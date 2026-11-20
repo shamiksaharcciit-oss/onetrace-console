@@ -96,9 +96,12 @@ L2_CAPTURE = (
 #: A field the record does not hold, in its cell.
 NOT_RECORDED = "not recorded"
 #: The capture settings, folded where every one is identical, open where any differs.
-SETTINGS_SAME = "Capture settings: {n} recorded, all identical"
-SETTINGS_DIFFER = "Capture settings: {d} of {n} differ, shown here; the identical ones folded below."
+#: Each is compared only where both records state it.
+SETTINGS_SAME = "Capture settings: {n} recorded by both, all identical"
+SETTINGS_NONE = "Capture settings: none recorded by both, so none compared"
+SETTINGS_DIFFER = "Capture settings: {d} of the {n} recorded by both differ, shown here; the rest folded below."
 SETTINGS_REST = "{n} identical"
+SETTINGS_UNCOMPARED = "{k} not recorded by both, not compared"
 #: The caveats each part keeps folded under its one short line.
 WHAT_NOT = "What this does not show"
 #: L3's strip of token positions.
@@ -291,9 +294,14 @@ def _capture_rows(ra: dict, rb: dict, fields, part: str = "L3") -> str:
     into one line where every one is identical; where any differs, those rows shown and marked, the rest folded."""
     from onetrace_console.words import scroll_region
 
+    #: Compared only where both records state a value: those alike are identical, those not differ; the rest, stated by
+    #: one record or neither, are not compared, and are neither.
+    both = [value(ra, f) is not None and value(rb, f) is not None for _w, f in fields]
     rows = [(words, shown_value(ra, f), shown_value(rb, f)) for words, f in fields]
-    differ = [r for r in rows if r[1] != r[2]]
-    same = [r for r in rows if r[1] == r[2]]
+    differ = [r for r, b in zip(rows, both, strict=True) if b and r[1] != r[2]]
+    same = [r for r, b in zip(rows, both, strict=True) if b and r[1] == r[2]]
+    rest = [r for r, b in zip(rows, both, strict=True) if not b]
+    uncompared = [SETTINGS_UNCOMPARED.format(k=len(rest))] if rest else []
 
     def table(rs, kind: str) -> str:
         marked = ' data-differs="yes"' if kind == "differ" else ""
@@ -310,15 +318,18 @@ def _capture_rows(ra: dict, rb: dict, fields, part: str = "L3") -> str:
         )
 
     if not differ:
+        said = "; ".join([SETTINGS_SAME.format(n=len(same)) if same else SETTINGS_NONE, *uncompared])
         return (
-            f'<details data-settings="identical"><summary>{escape(SETTINGS_SAME.format(n=len(rows)))}</summary>'
-            f"{table(rows, 'identical')}</details>"
+            f'<details data-settings="identical"><summary>{escape(said)}</summary>'
+            f"{table(same + rest, 'identical')}</details>"
         )
-    out = f"<p data-settings-said>{escape(SETTINGS_DIFFER.format(d=len(differ), n=len(rows)))}</p>{table(differ, 'differ')}"
-    if same:
+    compared = len(differ) + len(same)
+    out = f"<p data-settings-said>{escape(SETTINGS_DIFFER.format(d=len(differ), n=compared))}</p>{table(differ, 'differ')}"
+    if same or rest:
+        said = "; ".join(([SETTINGS_REST.format(n=len(same))] if same else []) + uncompared)
         out += (
-            f'<details data-settings="identical"><summary>{escape(SETTINGS_REST.format(n=len(same)))}</summary>'
-            f"{table(same, 'identical')}</details>"
+            f'<details data-settings="identical"><summary>{escape(said)}</summary>'
+            f"{table(same + rest, 'identical')}</details>"
         )
     return out
 

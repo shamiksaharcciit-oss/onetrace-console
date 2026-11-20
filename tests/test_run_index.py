@@ -213,7 +213,8 @@ def test_each_term_answers_the_runs_the_record_says(demo, examined):
         "first_diff:any:setting": [P1_CANDIDATE, "demo-run-2", "p3-27-t-1-rules2", "p8-43-invoice-tolerance-5pct"],
         "verdict:fail": [r for r, e in by_id.items() if e["verdict"] == "FAIL"],
         "pipeline:p9": ["p9-46-torque-baseline", "p9-47-torque-tool-firmware-changed", "p9-48-torque-one-bolt-low"],
-        "since:pz-53-agent-amount-changed": ["pz-54-agent-amount-changed-subagent"],
+        "since:pz-53-agent-amount-changed": ["pz-54-agent-amount-changed-subagent"]
+        + [r for r in by_id if r.startswith("pzz-")],
         "engine:vllm": ["pz-51-agent-baseline", "pz-53-agent-amount-changed"],
         "benchmark:yes": [r for r, e in by_id.items() if e["benchmark"]],
         "gated:approve_payment": [r for r in by_id if r.startswith("p8-")],
@@ -355,5 +356,8 @@ def test_a_public_console_s_query_writes_nothing_and_answers(shared_cli_demo, tm
     finally:
         c.stop()
     examined(1, "query on a public console")
-    assert status == 200 and "10 runs match every term." in page and 'data-frame="banner"' in page
+    from onetrace_console.demo_store import BENCHMARKS
+
+    #: Each compared pipeline's baseline is its benchmark.
+    assert status == 200 and f"{len(BENCHMARKS)} runs match every term." in page and 'data-frame="banner"' in page
     assert _tree(built) == before

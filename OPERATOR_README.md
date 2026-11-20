@@ -78,6 +78,10 @@ python -m pip install --require-hashes -r requirements-neighbours.lock
   huggingface.co at the pinned revision, each checked against its pinned sha256 before it is kept. Nothing else
   is fetched, and no text leaves the machine. With an embedding endpoint you name instead, the kept inputs and
   outputs are sent to that endpoint, and nothing is fetched.
+- **Runs with near outputs.** On a comparison, beside the runs with near inputs: the runs of run A's configuration
+  whose kept output at the step of the first difference is nearest to run A's, by the same embedder. Only a kept
+  output whose bytes match the digest its receipt gives is read; the section says how many runs were left out, their
+  output there not kept, or kept with bytes that do not match. It is the embedder's reading, never a verdict.
 - **What the ladder's two fixed readings mean.** "1.00 by the record": the two runs' digests for that file are
   equal, so nothing is embedded there. "≥ 0.9995, digests differ": the digests are not equal and the
   embedder's number rounds to 1.000. Neither is a judgement that two runs did the same thing.
@@ -182,6 +186,7 @@ means:
   "compare_wait_seconds": 20.0,
   "compare_verb_seconds": 30,
   "tracing": {},
+  "forwarding": {"console_url": ""},
   "tokenizers": [],
   "close_call_margin": 1.0,
   "teams": {},
@@ -228,6 +233,7 @@ means:
 | `audit` | off by default: the audit log, `{"enabled": true, "head_location": "<a file on a second mounted volume>"}`. With it on, who did what is kept as a hash-chained log under `audit_log/` beside the access log, and each entry's head is also written to `head_location`, which must not lie on the store's volume: the console refuses to start with it on and no `head_location`, or with one on the store's volume. `max_segment_bytes`, 1048576 by default, is where a segment is closed. `onetrace-console audit verify <folder>` checks it. 0.9 is building this. |
 | `scim` | off by default: SCIM 2.0 provisioning from Microsoft Entra ID, served under `/scim/v2` to the token `onetrace-console scim token create [--days <n>]` makes (printed once, kept as its sha256, 90 days by default). It needs `sign_in.enabled` true and `sign_in.method` `oidc`, and refuses to start in local or public mode. `tenant_id`, `sign_in.oidc.tenant_id`'s where empty; `token_max_days`, 180 by default and at most 365; `allowed_sources`, address ranges that may reach `/scim/v2`, any where empty; `max_body_bytes`, 1048576; `max_results`, a list's largest page, 200. 0.9 is building this. |
 | `tracing` | empty by default: a local console's link to your own tracing tool, `{"link": "<http(s) address with {trace_id} and, optionally, {span_id}>"}`. Each recorded trace id becomes "Open in your tracing tool"; the console builds the link and never calls it. A public console shows none. |
+| `forwarding` | `{"console_url": ""}` by default: no link. `console_url` is this console's address as people open it, such as `https://onetrace.example.org` (`https://`, or `http://` only for an address on this machine, as a destination's endpoint; a path is allowed). Set, each forwarded trace's root span carries `onetrace.console_url`, the run's page under that address (`<console_url>/runs/<run key>/case.html`), so a tracing tool links back to the console. It is a pointer, never a claim: the record is checked by onetrace-verify, not by the tool that shows the link. |
 
 **Creating the first (and every) account.** There is no web sign-up page — "whoever
 reaches the first-run page first becomes admin" is a takeover race, not a feature. **A
@@ -667,6 +673,24 @@ or a page's contents.
   on the second volume catch that, since whoever can rewrite the store's volume cannot rewrite them: that is what
   keeping them on another device is for.
 
+## Noise fields
+
+A pipeline can name fields of a step's JSON output that are noise, such as a timestamp or a request id, so that a
+comparison of its runs points first to the first difference that matters. Marking noise changes what the console points to first, never what the record says or what a check reports.
+
+- **Where.** The pipeline's noise page, `/pipelines/<label>/noise`, linked from the pipeline's page. On a local
+  console an admin marks and removes fields there; each change is an audit-log entry (`noise.changed`, with the
+  step and the path). The fields are kept in the store, beside the pipeline: `noise/<the pipeline's stage list
+  digest>.json`. A public console reads them from its build and refuses every change.
+- **A path** names a field from the top of the output: keys joined by dots, such as `meta.read_at`, and `*` for any
+  index of an array, at most once. Nothing else is a wildcard. The page says what each path matches in the
+  pipeline's kept outputs, or that it matches nothing.
+- **Nothing is hidden.** A comparison of the pipeline's runs says which fields are marked and links the list. Where
+  the first difference moves, it shows both, the first difference with the noise fields set aside and the first
+  difference in the record, each linked. Every step's verdict, the record's own and `onetrace diff`'s exit code are
+  unchanged. A difference in an output that isn't kept, or isn't JSON, is never set aside.
+- **The demo** marks P12's `read_invoice` · `read_at`, when each run read its invoice.
+
 ## Forwarding traces
 
 **A trace is a view of a record, never evidence.** A collector or a tracing tool may drop, sample, rewrite and re-time
@@ -679,6 +703,13 @@ from the onetrace the console pins), with one attribute added to its root span, 
 result for the run as the runs list words it ("records agree", "not checked", "couldn't check", or how many rows
 failed). Every id comes from the record, so the same run is always the same trace. No input or output value, error
 text or path is sent; no record is written. A run checked again later is not sent again.
+
+**The link back to the console.** With `forwarding.console_url` set in the configuration file (the console's address
+as people open it), the root span also carries `onetrace.console_url`: the run's page under that address, such as
+`https://onetrace.example.org/runs/<run key>/case.html`, so a tracing tool can link back to the record. It is a
+pointer, never a claim: the record is checked by onetrace-verify, not by the tool that shows the link. Nothing else in
+the trace changes. Without the setting, no trace carries it, and the setup page says the link is off and how to turn
+it on.
 
 **Setting it up.** From the Settings gear, **Forwarding**, or `/forwarding/setup`: an admin's, with the console's own
 sign-in or through Entra ID; a public console and a static export have no such page. Each destination has a name, its
@@ -799,6 +830,7 @@ started from, in local mode. As `serve.py` lays it out:
 | `store/comparisons/` | one record per comparison |
 | `store/drift/` | one record per drift report: what `onetrace drift` wrote over a pipeline's runs (`drift.json`, `drift.txt`, kept as objects) and its exit |
 | `store/beside/` | what was kept beside a run, one record per run that has any: the decision export (`decisions.jsonl`, with its `.sha256`) and the permit issuers (`permit-issuers.json`) found beside its folder, and its trace (OTLP/JSON: `traces/<run folder>.json` given beside it, or `onetrace export otel` of the run), each kept as an object |
+| `store/noise/` | each pipeline's noise fields, one record per pipeline that has any, named by its stage list's digest: the step and path of each field an admin marked as noise (`noise.changed` in the audit log) |
 | `store/x/` | the explanations, one folder per comparison, `x/<first 16 hex of its key>/`: its full key (`key`), the two runs laid out (`a/`, `b/`), the report `onetrace-explain` reads (`r/`), and each explanation, check and verdict of its record that a person asked for on the comparison's page (local mode) |
 | `store/decision_exports/` | one record per decision export, when the decisions extension (configuration key `extensions.onedoor`) is on |
 | `pages/` | the rendered HTML, derived from `store/` and redrawn on every start, upload and compare: `pages/runs/<run key>/` for each run's pages, `pages/diff/` for each comparison's, `pages/incidents/` for each incident's own page |
